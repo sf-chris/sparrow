@@ -1,0 +1,12 @@
+[project]
+name = "sparrow-media"
+version = "0.1.0a1"
+description = "A local agentic media autopilot"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+
+[tool.pyright]
+pythonVersion = "3.11"
+include = ["backend", "tests"]
+exclude = ["data", ".venv", "frontend/node_modules"]

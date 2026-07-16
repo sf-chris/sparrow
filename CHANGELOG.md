@@ -1,0 +1,45 @@
+# Changelog
+
+All notable changes to Sparrow are documented here.
+
+## [0.1.0-alpha.1] - 2026-07-16
+
+### Added
+
+- Persistent Fetch, Media, and Librarian agent sessions.
+- TMDB-backed resolution and job contracts.
+- Agent journal, activity, job, session, and spend surfaces.
+- Torrent-client plumbing and TPB search tools.
+- ffprobe-backed media evidence and filesystem guardrails.
+- Production doctor, macOS LaunchAgent installation, backup script, and alpha
+  confidence suite.
+- Open-source project documentation and CI.
+
+### Security
+
+- Secrets are write-only through the configuration API.
+- Production defaults to loopback, controlled CORS, and no auto-reload.
+- Non-loopback binding requires explicit trusted-LAN opt-in.
+- Retired CWM execution routes return 404 in normal builds.
+- Upgrade swaps verify real media durations and recover safely if placement
+  fails; normal move cannot remove an existing library file.
+
+### Fixed
+
+- Movie and TV TMDB identifiers are treated as separate namespaces throughout
+  resolution, job ownership, inventory, and title-page navigation.
+- Verified inventory quality comes from ffprobe and cannot be overwritten by a
+  legacy filename guess during artwork enrichment.
+- Agent-managed downloads no longer race the legacy landing poller, and a
+  verified Media session promotes its transfer to the organized state.
+- A clean production install can start onboarding before credentials and media
+  folders have been configured.
+- Torrent file inspection accepts both observed APIBay list and keyed-object
+  response shapes instead of failing the agent turn.
+- Existing `.env` files are tightened to owner-only permissions on install and
+  startup, not only when first created.
+
+### Known limitations
+
+- No authentication, built-in player, push notifications, durable subscription
+  contract, signature subtitle workflow, remote relay, or music support.
