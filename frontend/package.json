@@ -1,0 +1,28 @@
+{
+  "name": "sparrow-ui",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "6.30.4",
+    "lucide-react": "^0.344.0",
+    "clsx": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "6.0.3",
+    "typescript": "^5.2.2",
+    "vite": "8.1.4",
+    "tailwindcss": "3.4.19",
+    "autoprefixer": "^10.4.17",
+    "postcss": "8.5.19"
+  }
+}

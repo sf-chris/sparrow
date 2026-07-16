@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a user outcome for Sparrow
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: User scenario
+      description: Describe the request in terms of what the household is trying to accomplish.
+    validations:
+      required: true
+  - type: textarea
+    id: agent
+    attributes:
+      label: Agent and evidence
+      description: Which agent should own uncertainty, and which tools can establish facts?
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance test
+      description: What observable result would prove this works?
+    validations:
+      required: true
