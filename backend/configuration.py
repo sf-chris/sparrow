@@ -99,6 +99,8 @@ def apply_config_update(config: SparrowConfig, values: Mapping[str, Any]) -> Spa
     for field in scalar_fields:
         if values.get(field) is not None:
             setattr(config, field, values[field])
+    if values.get("max_active_transfers") is not None:
+        config.max_active_transfers = max(1, int(values["max_active_transfers"]))
     for field in ("smart_model", "cheap_model"):
         if values.get(field) is not None:
             setattr(config, field, str(values[field]).strip())

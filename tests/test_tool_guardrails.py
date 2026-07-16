@@ -86,7 +86,11 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         download = self.storage.get_download(result["download_id"])
         self.assertTrue(download.metadata["agent_managed"])
         self.assertEqual(download.metadata["job_id"], self.job.id)
-        self.assertEqual(download.staging_path, str(self.staging))
+        # Every download stages in its own isolated folder under the root.
+        own = Path(download.staging_path)
+        self.assertEqual(own.name, download.id)
+        self.assertEqual(own.parent, self.staging.resolve())
+        self.assertTrue(own.is_dir())
 
     async def test_job_cannot_close_before_verified_inventory_exists(self) -> None:
         self.job.media_type = "movie"
