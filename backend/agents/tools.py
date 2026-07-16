@@ -24,7 +24,8 @@ from ..storage import Storage
 from ..services.torrent_client import TorrentManager, build_magnet, start_configured_client
 from ..services.search_engine import _query as apibay_query
 from ..services.release_parser import parse_release_name
-from .models import AgentSession, Event, JournalEntry, JobStatus
+from .models import (AgentKind, AgentSession, Event, JournalEntry, JobStatus,
+                     MonitoringMode)
 from .runtime import ToolCtx, ToolDef, ToolError
 from .store import AgentStore
 
@@ -88,6 +89,20 @@ async def _probe_media_facts(path: Path) -> dict:
 async def _probe_duration_seconds(path: Path) -> float:
     """Read a media duration for a destructive guardrail, not agent judgment."""
     return float((await _probe_media_facts(path))["duration_seconds"])
+
+
+def remove_download_staging(staging_dir: str, download) -> None:
+    """Delete a download's isolated staging folder, and only that folder.
+
+    Refuses anything that isn't a strict subdirectory of the configured
+    staging root, so legacy downloads sharing the root are never touched.
+    """
+    if not staging_dir or not download.staging_path:
+        return
+    base = Path(staging_dir).resolve()
+    own = Path(download.staging_path).resolve()
+    if own != base and base in own.parents and own.exists():
+        shutil.rmtree(own, ignore_errors=True)
 
 
 class Toolbox:
@@ -249,6 +264,53 @@ class Toolbox:
     def job_for(self, session: AgentSession):
         return self.store.get_job(session.job_id) if session.job_id else None
 
+    async def enforce_mandate(self, tmdb_id: int, media_type: str,
+                              wanted_episodes: dict, origin: str) -> None:
+        """Refuse agent-originated work outside the user's recorded authority.
+
+        Agents may reason their way to any conclusion; this check is what
+        actually gates acquisition. Owning episodes is never authority to
+        acquire more — only an explicit user request or monitoring grant is.
+        """
+        mandate = self.store.get_mandate(tmdb_id, media_type)
+        if not mandate:
+            raise ToolError(
+                "Scope refused: the user has never requested this title, so there "
+                "is no authority to acquire it. Files on disk are not a mandate. "
+                "Journal it as a suggestion if you think the user would want it.")
+        if media_type == "movie":
+            return  # the movie itself was user-requested; re-grabs/upgrades ok
+        air_dates: dict[int, dict[int, Optional[float]]] = {}
+        violations: list[str] = []
+        for season_key, episodes in (wanted_episodes or {}).items():
+            season = int(season_key)
+            season_airs: Optional[dict[int, Optional[float]]] = None
+            if mandate.mode == MonitoringMode.KEEP_CURRENT:
+                if season not in air_dates:
+                    data = await self.tmdb_get(f"/tv/{tmdb_id}/season/{season}")
+                    parsed: dict[int, Optional[float]] = {}
+                    for entry in data.get("episodes", []):
+                        raw = entry.get("air_date")
+                        try:
+                            aired = time.mktime(time.strptime(raw, "%Y-%m-%d")) if raw else None
+                        except (TypeError, ValueError):
+                            aired = None
+                        parsed[int(entry.get("episode_number") or 0)] = aired
+                    air_dates[season] = parsed
+                season_airs = air_dates[season]
+            for episode in episodes:
+                aired_at = (season_airs or {}).get(int(episode))
+                if not mandate.allows_episode(season, int(episode), aired_at):
+                    violations.append(f"S{season:02d}E{int(episode):02d}")
+        if violations:
+            sample = ", ".join(violations[:10])
+            suffix = f" and {len(violations) - 10} more" if len(violations) > 10 else ""
+            raise ToolError(
+                f"Scope refused: {sample}{suffix} exceed the user's mandate "
+                f"({mandate.describe()}). Owning other episodes does not grant "
+                "this. If you believe the user wants it, journal the suggestion — "
+                "only the user can widen the scope in Preferences.")
+
     async def journal(self, ctx: ToolCtx, text: str, agent: str) -> JournalEntry:
         entry = JournalEntry(job_id=ctx.session.job_id, session_id=ctx.session.id,
                              agent=agent, text=text.strip())
@@ -256,11 +318,31 @@ class Toolbox:
         await self.broadcast({"type": "journal", "data": entry.to_dict()})
         return entry
 
+    def staging_root(self, session: AgentSession) -> Path:
+        """The staging directory this session may touch.
+
+        Media sessions are confined to their own download's staging folder —
+        one landed download must never be able to see or move another's
+        files. Legacy downloads whose staging_path is the shared root fall
+        back to it.
+        """
+        cfg = self.cfg()
+        if not cfg.staging_dir:
+            raise ToolError("Staging folder isn't configured.")
+        base = Path(cfg.staging_dir).resolve()
+        if session.agent == AgentKind.MEDIA and session.download_id:
+            dl = self.storage.get_download(session.download_id)
+            if dl and dl.staging_path:
+                own = Path(dl.staging_path).resolve()
+                if own != base and base in own.parents:
+                    return own
+        return base
+
     def jail_roots(self, session: AgentSession) -> list[Path]:
         cfg = self.cfg()
         roots = []
         if cfg.staging_dir:
-            roots.append(Path(cfg.staging_dir).resolve())
+            roots.append(self.staging_root(session))
         if cfg.library_dir:
             roots.append(Path(cfg.library_dir).resolve())
         if not roots:
@@ -270,8 +352,8 @@ class Toolbox:
     def jailed(self, session: AgentSession, raw: str, *, must_exist: bool = False) -> Path:
         p = Path(raw).expanduser()
         if not p.is_absolute():
-            # relative paths resolve against staging
-            p = Path(self.cfg().staging_dir) / p
+            # relative paths resolve against this session's staging root
+            p = self.staging_root(session) / p
         p = p.resolve()
         roots = self.jail_roots(session)
         if not any(p == r or r in p.parents for r in roots):
@@ -545,6 +627,21 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
         name = args.get("name") or info_hash
         if len(info_hash) != 40:
             raise ToolError("info_hash must be the 40-char hash from tpb_search.")
+        # Deterministic backpressure: one wake can never flood the client.
+        # The agent still chooses WHAT to get; the tool controls resource
+        # authority.
+        limit = max(1, int(cfg.max_active_transfers or 1))
+        active = [
+            d for d in tb.storage.get_all_downloads()
+            if d.metadata.get("agent_managed")
+            and d.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING)
+        ]
+        if len(active) >= limit:
+            raise ToolError(
+                f"Transfer limit reached: {len(active)} of {limit} allowed transfers "
+                "are already active across all jobs. Do not queue more now — journal "
+                "what you're waiting on and hibernate; you'll be woken as downloads "
+                "finish, then add the next candidate.")
         job = tb.job_for(ctx.session)
         magnet = build_magnet(info_hash, name)
         mgr, connected, recovery = await tb.connect_torrents()
@@ -553,12 +650,17 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
                 f"{recovery} This is an environmental failure — do NOT reject this "
                 "candidate. Give the user one short progress update and retry when the "
                 "client recovers (you'll be woken).")
-        torrent_hash = await mgr.add_magnet(magnet, cfg.staging_dir)
+        download_id = f"dl-{info_hash[:12]}"
+        # Every download gets its own staging folder so the Media Agent that
+        # processes it can only ever see its own files.
+        staging = Path(cfg.staging_dir).resolve() / download_id
+        staging.mkdir(parents=True, exist_ok=True)
+        torrent_hash = await mgr.add_magnet(magnet, str(staging))
         dl = Download(
-            id=f"dl-{info_hash[:12]}", name=name, magnet_url=magnet,
+            id=download_id, name=name, magnet_url=magnet,
             media_type=MediaType(job.media_type) if job else MediaType.UNKNOWN,
             status=DownloadStatus.DOWNLOADING, torrent_hash=torrent_hash or info_hash,
-            staging_path=cfg.staging_dir, tmdb_id=job.tmdb_id if job else None,
+            staging_path=str(staging), tmdb_id=job.tmdb_id if job else None,
             metadata={"job_id": ctx.session.job_id, "session_id": ctx.session.id,
                       "agent_managed": True},
         )
@@ -595,8 +697,11 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
         if not dl or dl.metadata.get("job_id") != ctx.session.job_id:
             raise ToolError("No such download on this job.")
         mgr, connected, _ = await tb.connect_torrents()
+        delete_files = bool(args.get("delete_files", True))
         if connected:
-            await mgr.delete_torrent(dl.torrent_hash, delete_files=bool(args.get("delete_files", True)))
+            await mgr.delete_torrent(dl.torrent_hash, delete_files=delete_files)
+        if delete_files:
+            remove_download_staging(tb.cfg().staging_dir, dl)
         await tb.storage.update_download(dl.id, status=DownloadStatus.ERROR,
                                          error_message=args.get("reason", "removed by agent"))
         await tb.broadcast({"type": "download_update", "data": dl.to_dict()})
@@ -714,7 +819,8 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
 
 def media_tools(tb: Toolbox) -> list[ToolDef]:
     async def fs_list(ctx: ToolCtx, args: dict):
-        p = tb.jailed(ctx.session, args.get("path") or tb.cfg().staging_dir, must_exist=True)
+        p = tb.jailed(ctx.session, args.get("path") or str(tb.staging_root(ctx.session)),
+                      must_exist=True)
         if p.is_file():
             return [{"path": str(p), "size_mb": round(p.stat().st_size / 1e6, 1)}]
         out = []
@@ -992,12 +1098,15 @@ def librarian_tools(tb: Toolbox, create_job) -> list[ToolDef]:
         preferred = cfg.quality_preference.value
         shows = []
         for item in tb.storage.get_library(MediaType.TV):
+            mandate = tb.store.get_mandate(item.tmdb_id, "tv") if item.tmdb_id else None
             shows.append({
                 "tmdb_id": item.tmdb_id, "title": item.title,
                 "seasons_on_disk": {
                     s: {"have": info["have"], "lowest_quality": info["lowest_quality"]}
                     for s, info in item.season_summary().items()},
                 "missing_artwork": not item.poster_path,
+                "mandate": mandate.describe() if mandate else
+                           "No user request on record — you cannot acquire anything.",
             })
         active = [{"job_id": j.id, "tmdb_id": j.tmdb_id, "title": j.title,
                    "state": j.state_line} for j in tb.store.get_jobs(JobStatus.ACTIVE)]
@@ -1005,6 +1114,10 @@ def librarian_tools(tb: Toolbox, create_job) -> list[ToolDef]:
 
     async def spawn(ctx: ToolCtx, args: dict):
         tmdb_id = int(args["tmdb_id"])
+        wanted = args.get("wanted_episodes") or {}
+        if not wanted:
+            raise ToolError("Name the exact episodes, e.g. {\"4\": [11]}. Blanket "
+                            "requests are user decisions, not yours.")
         existing = [
             j for j in tb.store.get_jobs(JobStatus.ACTIVE)
             if j.tmdb_id == tmdb_id and j.media_type == MediaType.TV.value
@@ -1014,7 +1127,7 @@ def librarian_tools(tb: Toolbox, create_job) -> list[ToolDef]:
                             "One owner per show — don't double up.")
         job = await create_job(
             tmdb_id=tmdb_id,
-            wanted_episodes=args.get("wanted_episodes") or {},
+            wanted_episodes=wanted,
             origin=args.get("origin", "librarian"),
             urgency=args.get("urgency", "whenever"),
         )
@@ -1022,13 +1135,16 @@ def librarian_tools(tb: Toolbox, create_job) -> list[ToolDef]:
 
     return [
         _t("library_overview",
-           "Everything on disk: per-show, per-season counts and lowest quality, plus "
-           "currently active jobs (never spawn a duplicate).",
+           "Everything on disk: per-show, per-season counts and lowest quality, the "
+           "user's mandate (your acquisition authority) per show, plus currently "
+           "active jobs (never spawn a duplicate).",
            {}, [], overview),
         _t("spawn_job",
            "Create a job (a Fetch Agent takes it from here). wanted_episodes maps "
            "season to episode numbers, e.g. {\"4\": [11]} for one new episode, or "
-           "episodes below preferred quality for an upgrade job (origin='upgrade').",
+           "episodes below preferred quality for an upgrade job (origin='upgrade'). "
+           "The tool refuses any episode outside the user's recorded mandate — "
+           "owning a show is not permission to extend it.",
            {"tmdb_id": {"type": "integer"},
             "wanted_episodes": {"type": "object"},
             "origin": {"type": "string", "enum": ["librarian", "upgrade"]},

@@ -1,16 +1,56 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowRight, Copy, ExternalLink, Film, FolderOpen, HardDrive, ImageOff, Info,
-  Layers, Loader2, RefreshCw, ScanLine, Search, Sparkles, Star, Trash2, Tv, X,
+  ArrowRight, CheckCircle2, Copy, DownloadCloud, ExternalLink, Film, FolderOpen, HardDrive,
+  ImageOff, Info, Layers, Loader2, RefreshCw, ScanLine, Search, Sparkles, Star, Trash2, Tv, X,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { deleteLibraryItem, getLibrary, scanLibrary } from '../api/client'
-import type { LibraryItem, MediaType } from '../types'
+import { deleteLibraryItem, getLibrary, getLibraryView, scanLibrary, TMDB_POSTER_BASE } from '../api/client'
+import type { LibraryEntryState, LibraryItem, LibraryViewEntry, MediaType } from '../types'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { Badge, Button, Card, SectionHeader } from '../components/ui'
+import { Badge, Button, Card, Progress, RelativeTime, SectionHeader } from '../components/ui'
 
-type LibraryTab = 'all' | 'movie' | 'tv'
+type StateFilter = 'all' | 'ready' | 'in_progress' | 'attention'
+type MediaFilter = 'all' | 'movie' | 'tv'
+
+const IN_PROGRESS_STATES: LibraryEntryState[] = ['requested', 'queued', 'downloading', 'verifying']
+
+const STATE_FILTERS: Array<{ id: StateFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'ready', label: 'Ready' },
+  { id: 'in_progress', label: 'In progress' },
+  { id: 'attention', label: 'Needs attention' },
+]
+
+/** Websocket events that mean the library projection may have changed. */
+const REFRESH_EVENTS = new Set([
+  'library_update', 'library_removed', 'job_added', 'job_update',
+  'download_update', 'download_added', 'mandate_update',
+])
+
+const STATE_META: Record<LibraryEntryState, {
+  label: string
+  tone: 'neutral' | 'success' | 'warning' | 'danger' | 'info'
+  pulse?: boolean
+}> = {
+  requested: { label: 'Requested', tone: 'info' },
+  queued: { label: 'Queued', tone: 'neutral' },
+  downloading: { label: 'Downloading', tone: 'warning', pulse: true },
+  verifying: { label: 'Verifying', tone: 'info' },
+  ready: { label: 'Ready', tone: 'success' },
+  paused: { label: 'Paused', tone: 'warning' },
+}
+
+function needsAttention(entry: LibraryViewEntry): boolean {
+  return entry.needs_attention || entry.state === 'paused'
+}
+
+function matchesFilter(entry: LibraryViewEntry, filter: StateFilter): boolean {
+  if (filter === 'all') return true
+  if (filter === 'ready') return entry.state === 'ready'
+  if (filter === 'in_progress') return IN_PROGRESS_STATES.includes(entry.state)
+  return needsAttention(entry)
+}
 
 function formatSize(bytes: number): string {
   if (!bytes) return 'Unknown'
@@ -21,32 +61,25 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 ** 2).toFixed(0)} MB`
 }
 
-function totalSize(items: LibraryItem[]): number {
-  return items.reduce((acc, item) => acc + (item.size_bytes || 0), 0)
-}
-
 function mediaTypeLabel(type: MediaType): string {
   if (type === 'tv') return 'TV Show'
   if (type === 'movie') return 'Movie'
   return 'Media'
 }
 
+/**
+ * Entries not yet in the library carry a raw TMDB path like "/abc.jpg";
+ * organized items store full URLs. Handle both.
+ */
+function posterUrl(path: string): string {
+  if (!path) return ''
+  return path.startsWith('/') ? `${TMDB_POSTER_BASE}${path}` : path
+}
+
 /** Total episodes on disk from the per-season episode map; null when no data. */
 function episodesOnDisk(item: LibraryItem): number | null {
   if (!item.episodes || Object.keys(item.episodes).length === 0) return null
   return Object.values(item.episodes).reduce((acc, eps) => acc + Object.keys(eps || {}).length, 0)
-}
-
-function CompletenessChip({ item }: { item: LibraryItem }) {
-  if (item.media_type !== 'tv') return null
-  const onDisk = episodesOnDisk(item)
-  if (onDisk === null) return null
-  if (item.episode_count) {
-    return onDisk >= item.episode_count
-      ? <Badge tone="success">Complete</Badge>
-      : <Badge tone="warning">{onDisk} of {item.episode_count}</Badge>
-  }
-  return <Badge tone="neutral">{onDisk} episode{onDisk === 1 ? '' : 's'}</Badge>
 }
 
 function CopyValue({ value, display }: { value: string; display?: string }) {
@@ -93,7 +126,7 @@ function StatCard({
 
 function Poster({ item, className }: { item: LibraryItem; className?: string }) {
   if (item.poster_path) {
-    return <img src={item.poster_path} alt={item.title} className={clsx('h-full w-full object-cover', className)} />
+    return <img src={posterUrl(item.poster_path)} alt={item.title} className={clsx('h-full w-full object-cover', className)} />
   }
   return (
     <div className={clsx('flex h-full w-full flex-col items-center justify-center gap-2 bg-card text-muted', className)}>
@@ -103,35 +136,108 @@ function Poster({ item, className }: { item: LibraryItem; className?: string }) 
   )
 }
 
-function MediaCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) {
+function EntryPoster({ entry, className }: { entry: LibraryViewEntry; className?: string }) {
+  const url = posterUrl(entry.poster_path)
+  if (url) {
+    return <img src={url} alt={entry.title} className={clsx('h-full w-full object-cover', className)} />
+  }
   return (
-    <button type="button" className="group min-w-0 text-left" onClick={onOpen}>
+    <div className={clsx('flex h-full w-full flex-col items-center justify-center gap-2 bg-card text-muted', className)}>
+      {entry.media_type === 'tv' ? <Tv size={26} /> : <Film size={26} />}
+      <span className="px-3 text-center text-xs leading-tight">{entry.title}</span>
+    </div>
+  )
+}
+
+function StateChip({ entry }: { entry: LibraryViewEntry }) {
+  const meta = STATE_META[entry.state]
+  return (
+    <Badge tone={meta.tone} className={clsx('bg-bg/75 backdrop-blur-sm', meta.pulse && 'animate-pulse')}>
+      {meta.label}
+    </Badge>
+  )
+}
+
+function ViewCard({
+  entry,
+  onOpen,
+  onDetails,
+}: {
+  entry: LibraryViewEntry
+  onOpen: () => void
+  onDetails: (() => void) | null
+}) {
+  const totalEpisodes = entry.ready_count + entry.pending_count
+  const transfers = entry.transfers
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className="group min-w-0 cursor-pointer text-left"
+      onClick={onOpen}
+      onKeyDown={event => { if (event.key === 'Enter') onOpen() }}
+    >
       <div className="poster-surface relative aspect-[2/3] transition-all duration-300 group-hover:-translate-y-1 group-hover:scale-[1.018] group-hover:border-primary/35">
-        <Poster item={item} />
-        {item.media_type === 'tv' && (
-          <div className="absolute right-1.5 top-1.5">
-            <CompletenessChip item={item} />
-          </div>
-        )}
+        <EntryPoster entry={entry} />
+        <div className="absolute right-1.5 top-1.5 flex flex-col items-end gap-1">
+          <StateChip entry={entry} />
+          {entry.needs_attention && entry.state !== 'paused' && (
+            <Badge tone="danger" className="bg-bg/75 backdrop-blur-sm">Needs attention</Badge>
+          )}
+          {entry.media_type === 'tv' && totalEpisodes > 0 && (
+            <Badge
+              tone={entry.ready_count >= totalEpisodes ? 'success' : 'neutral'}
+              className="bg-bg/75 backdrop-blur-sm"
+            >
+              {entry.ready_count} of {totalEpisodes} ready
+            </Badge>
+          )}
+        </div>
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-bg/95 via-bg/45 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
           <div className="flex items-center justify-between gap-2">
-            <Badge tone="neutral">{mediaTypeLabel(item.media_type)}</Badge>
-            {item.rating && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-bg/70 px-1.5 py-0.5 text-[11px] text-amber-200">
-                <Star size={10} fill="currentColor" /> {item.rating.toFixed(1)}
+            <Badge tone="neutral">{mediaTypeLabel(entry.media_type)}</Badge>
+            {entry.job && entry.state !== 'ready' && (
+              <span className="truncate rounded-md bg-bg/70 px-1.5 py-0.5 text-[11px] text-muted">
+                {entry.job.state_line}
               </span>
             )}
           </div>
         </div>
       </div>
       <div className="mt-3 min-w-0">
-        <p className="truncate text-sm font-semibold text-text">{item.title}</p>
+        <p className="truncate text-sm font-semibold text-text">{entry.title}</p>
         <p className="mt-0.5 truncate text-xs text-muted">
-          {item.year ? `${item.year} · ` : ''}
-          {item.media_type === 'tv' && item.seasons ? `${item.seasons} season${item.seasons === 1 ? '' : 's'}` : item.genres?.[0] || mediaTypeLabel(item.media_type)}
+          {entry.year ? `${entry.year} · ` : ''}
+          {mediaTypeLabel(entry.media_type)}
         </p>
+        {transfers && transfers.progress !== null && (
+          <div className="mt-2">
+            <Progress value={transfers.progress * 100} className="h-1.5" />
+            {transfers.stale ? (
+              <p className="mt-1 truncate text-[11px] text-amber-200">
+                Out of date — last update <RelativeTime ts={transfers.stats_updated_at} />
+              </p>
+            ) : (
+              <p className="mt-1 truncate text-[11px] text-muted">
+                {Math.round(transfers.progress * 100)}% · updated <RelativeTime ts={transfers.stats_updated_at} />
+              </p>
+            )}
+          </div>
+        )}
+        {onDetails && (
+          <button
+            type="button"
+            className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted transition-colors hover:text-text"
+            onClick={event => {
+              event.stopPropagation()
+              onDetails()
+            }}
+          >
+            <Info size={11} /> Details
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -173,7 +279,7 @@ function DetailDrawer({
           {item.backdrop_path ? (
             <img src={item.backdrop_path} alt="" className="h-full w-full object-cover" />
           ) : item.poster_path ? (
-            <img src={item.poster_path} alt="" className="h-full w-full scale-110 object-cover opacity-45 blur-sm" />
+            <img src={posterUrl(item.poster_path)} alt="" className="h-full w-full scale-110 object-cover opacity-45 blur-sm" />
           ) : (
             <div className="flex h-full items-center justify-center text-border">
               <ImageOff size={42} />
@@ -333,27 +439,42 @@ function DetailDrawer({
 }
 
 export default function Library() {
+  const navigate = useNavigate()
+  const [view, setView] = useState<LibraryViewEntry[]>([])
   const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<LibraryTab>('all')
+  const [filter, setFilter] = useState<StateFilter>('all')
+  const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all')
   const [query, setQuery] = useState('')
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState('')
   const [selected, setSelected] = useState<LibraryItem | null>(null)
+  const refreshTimer = useRef<number | null>(null)
 
-  const loadLibrary = async () => {
-    setLoading(true)
-    try {
-      setItems(await getLibrary())
-    } finally {
-      setLoading(false)
+  const refresh = useCallback(async () => {
+    const [entries, libraryItems] = await Promise.all([getLibraryView(), getLibrary()])
+    setView(entries)
+    setItems(libraryItems)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        await refresh()
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
     }
-  }
-
-  useEffect(() => { loadLibrary() }, [])
+  }, [refresh])
 
   useWebSocket((event) => {
-    if (event.type === 'library_update') {
+    const type = event.type as string
+    if (type === 'library_update') {
       const updated = event.data as LibraryItem
       setItems(prev => {
         const exists = prev.some(item => item.id === updated.id)
@@ -361,28 +482,46 @@ export default function Library() {
       })
       setSelected(prev => prev?.id === updated.id ? { ...prev, ...updated } : prev)
     }
-    if (event.type === 'library_removed') {
+    if (type === 'library_removed') {
       const { id } = event.data as { id: string }
       setItems(prev => prev.filter(item => item.id !== id))
       setSelected(prev => prev?.id === id ? null : prev)
     }
+    if (REFRESH_EVENTS.has(type)) {
+      if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
+      refreshTimer.current = window.setTimeout(() => { refresh() }, 400)
+    }
   })
 
-  const movies = items.filter(item => item.media_type === 'movie')
-  const shows = items.filter(item => item.media_type === 'tv')
+  const readyCount = view.filter(entry => entry.state === 'ready').length
+  const inProgressCount = view.filter(entry => IN_PROGRESS_STATES.includes(entry.state)).length
+  const attentionCount = view.filter(needsAttention).length
+  const storageBytes = view.reduce((acc, entry) => acc + (entry.size_bytes || 0), 0)
   const featured = items.find(item => item.backdrop_path || item.poster_path) || items[0] || null
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return items.filter(item => {
-      const tabMatch = tab === 'all' || item.media_type === tab
-      const queryMatch = !q || [
-        item.title,
-        item.year ? String(item.year) : '',
-        ...(item.genres || []),
-      ].join(' ').toLowerCase().includes(q)
-      return tabMatch && queryMatch
+    return view.filter(entry => {
+      if (!matchesFilter(entry, filter)) return false
+      if (mediaFilter !== 'all' && entry.media_type !== mediaFilter) return false
+      if (q && !`${entry.title} ${entry.year ?? ''}`.toLowerCase().includes(q)) return false
+      return true
     })
-  }, [items, query, tab])
+  }, [view, query, filter, mediaFilter])
+
+  const drawerItemFor = (entry: LibraryViewEntry): LibraryItem | null => {
+    if (!entry.in_library || !entry.library_item_id) return null
+    return items.find(item => item.id === entry.library_item_id) ?? null
+  }
+
+  const openEntry = (entry: LibraryViewEntry) => {
+    if (entry.tmdb_id) {
+      navigate(`/show/${entry.tmdb_id}?type=${entry.media_type === 'movie' ? 'movie' : 'tv'}`)
+      return
+    }
+    const drawerItem = drawerItemFor(entry)
+    if (drawerItem) setSelected(drawerItem)
+  }
 
   const handleScan = async () => {
     setScanning(true)
@@ -390,7 +529,7 @@ export default function Library() {
     try {
       const result = await scanLibrary()
       setScanResult(`Scanned ${result.scanned}; added ${result.added}.`)
-      await loadLibrary()
+      await refresh()
     } catch (e: unknown) {
       setScanResult(e instanceof Error ? e.message : 'Scan failed')
     } finally {
@@ -403,6 +542,7 @@ export default function Library() {
     await deleteLibraryItem(item.id)
     setItems(prev => prev.filter(existing => existing.id !== item.id))
     setSelected(prev => prev?.id === item.id ? null : prev)
+    await refresh()
   }
 
   return (
@@ -414,7 +554,7 @@ export default function Library() {
               {featured.backdrop_path ? (
                 <img src={featured.backdrop_path} alt="" className="h-full w-full object-cover" />
               ) : featured.poster_path ? (
-                <img src={featured.poster_path} alt="" className="h-full w-full scale-110 object-cover blur-sm" />
+                <img src={posterUrl(featured.poster_path)} alt="" className="h-full w-full scale-110 object-cover blur-sm" />
               ) : null}
             </div>
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,7,0.98),rgba(5,5,7,0.75)_48%,rgba(5,5,7,0.35)),linear-gradient(180deg,rgba(5,5,7,0.16),rgba(5,5,7,1))]" />
@@ -425,15 +565,15 @@ export default function Library() {
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
             <div className="min-w-0">
               <div className="cinema-kicker">
-                <Sparkles size={12} /> Verified library
+                <Sparkles size={12} /> Your library
               </div>
               <h1 className="cinema-title">{featured ? featured.title : 'Your private cinema shelf'}</h1>
               <p className="cinema-copy">
-                Finished films and shows, arranged like a streaming library with the file-level truth still one click away.
+                Everything you have asked for — from the moment it is requested until it is ready to watch.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" onClick={loadLibrary}>
+              <Button variant="secondary" size="sm" onClick={refresh}>
                 <RefreshCw size={13} /> Refresh
               </Button>
               <Button variant="primary" size="sm" onClick={handleScan} disabled={scanning}>
@@ -444,41 +584,81 @@ export default function Library() {
           </div>
 
           <div className="mt-10 grid max-w-3xl grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
-            <StatCard icon={<Film size={14} />} label="Movies" value={String(movies.length)} detail={movies.length ? formatSize(totalSize(movies)) : 'None yet'} />
-            <StatCard icon={<Tv size={14} />} label="TV" value={String(shows.length)} detail={shows.length ? formatSize(totalSize(shows)) : 'None yet'} />
-            <StatCard icon={<HardDrive size={14} />} label="Storage" value={formatSize(totalSize(items))} detail={`${items.length} library item${items.length === 1 ? '' : 's'}`} />
+            <StatCard
+              icon={<CheckCircle2 size={14} />}
+              label="Ready"
+              value={String(readyCount)}
+              detail={readyCount ? 'Ready to watch' : 'None yet'}
+            />
+            <StatCard
+              icon={<DownloadCloud size={14} />}
+              label="In progress"
+              value={String(inProgressCount)}
+              detail={attentionCount ? `${attentionCount} need${attentionCount === 1 ? 's' : ''} attention` : 'On the way'}
+            />
+            <StatCard
+              icon={<HardDrive size={14} />}
+              label="Storage"
+              value={formatSize(storageBytes)}
+              detail={`${view.length} title${view.length === 1 ? '' : 's'}`}
+            />
           </div>
         </div>
       </section>
 
       <main className="w-full max-w-7xl space-y-8 overflow-hidden p-4 sm:p-8">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row lg:max-w-2xl">
-            <div className="relative min-w-0 flex-1">
+        <div className="flex flex-col gap-3">
+          <div className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1 lg:max-w-md">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
               <input
                 className="input h-10 pl-9"
                 value={query}
                 onChange={event => setQuery(event.target.value)}
-                placeholder="Search title, year, or genre"
+                placeholder="Search title or year"
               />
             </div>
-            <div className="flex shrink-0 rounded-full border border-white/10 bg-white/[0.06] p-1 backdrop-blur-xl">
-              {(['all', 'movie', 'tv'] as const).map(option => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setTab(option)}
-                  className={clsx(
-                    'flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
-                    tab === option ? 'bg-primary text-bg' : 'text-muted hover:bg-white/[0.06] hover:text-text',
-                  )}
-                >
-                  {option === 'movie' && <Film size={12} />}
-                  {option === 'tv' && <Tv size={12} />}
-                  {option === 'all' ? 'All' : option === 'movie' ? 'Movies' : 'TV'}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex shrink-0 rounded-full border border-white/10 bg-white/[0.06] p-1 backdrop-blur-xl">
+                {STATE_FILTERS.map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setFilter(option.id)}
+                    className={clsx(
+                      'flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
+                      filter === option.id ? 'bg-primary text-bg' : 'text-muted hover:bg-white/[0.06] hover:text-text',
+                    )}
+                  >
+                    {option.label}
+                    {option.id === 'attention' && attentionCount > 0 && (
+                      <span className={clsx(
+                        'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold',
+                        filter === 'attention' ? 'bg-bg/25 text-bg' : 'bg-amber-300/20 text-amber-200',
+                      )}>
+                        {attentionCount}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="flex shrink-0 rounded-full border border-white/10 bg-white/[0.06] p-1 backdrop-blur-xl">
+                {(['all', 'movie', 'tv'] as const).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setMediaFilter(option)}
+                    className={clsx(
+                      'flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
+                      mediaFilter === option ? 'bg-primary text-bg' : 'text-muted hover:bg-white/[0.06] hover:text-text',
+                    )}
+                  >
+                    {option === 'movie' && <Film size={12} />}
+                    {option === 'tv' && <Tv size={12} />}
+                    {option === 'all' ? 'All' : option === 'movie' ? 'Movies' : 'TV'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           {scanResult && <p className="text-xs text-muted">{scanResult}</p>}
@@ -491,16 +671,24 @@ export default function Library() {
         ) : filtered.length === 0 ? (
           <div className="rounded-lg border border-dashed border-white/[0.12] bg-panel/50 p-10 text-center">
             <Film size={36} className="mx-auto text-muted/30" />
-            <p className="mt-3 text-sm font-medium text-text">No matching library items</p>
-            <p className="mt-1 text-sm text-muted">Try a different filter or scan your configured library folder.</p>
+            <p className="mt-3 text-sm font-medium text-text">No matching titles</p>
+            <p className="mt-1 text-sm text-muted">Try a different filter, or request something new — it will appear here right away.</p>
           </div>
         ) : (
           <section>
             <SectionHeader title="Continue browsing" meta={`${filtered.length} shown`} />
             <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {filtered.map(item => (
-                <MediaCard key={item.id} item={item} onOpen={() => setSelected(item)} />
-              ))}
+              {filtered.map(entry => {
+                const drawerItem = drawerItemFor(entry)
+                return (
+                  <ViewCard
+                    key={`${entry.media_type}:${entry.tmdb_id ?? entry.library_item_id ?? entry.title}`}
+                    entry={entry}
+                    onOpen={() => openEntry(entry)}
+                    onDetails={drawerItem ? () => setSelected(drawerItem) : null}
+                  />
+                )
+              })}
             </div>
           </section>
         )}

@@ -208,7 +208,10 @@ function EventRow({
             <KindIcon kind={event.kind} />
           </span>
           <p className="min-w-0 flex-1 break-words text-sm text-text/90">{event.message}</p>
-          <span className="shrink-0 whitespace-nowrap pt-0.5 text-xs text-muted">
+          <span
+            className="shrink-0 cursor-help whitespace-nowrap pt-0.5 text-xs text-muted"
+            title={new Date((event.timestamp > 1e12 ? event.timestamp : event.timestamp * 1000)).toLocaleString()}
+          >
             {relativeTime(event.timestamp)}
           </span>
           {hasDetail && (

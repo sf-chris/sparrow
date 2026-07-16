@@ -183,6 +183,7 @@ from .services import file_organizer
 from .services import cwm_service
 from .services import request_service
 from .services import release_parser
+from .services.library_view import build_library_view
 from .services.curator import Curator
 from .agents.service import AgentService
 from .agents.models import JobStatus
@@ -1572,6 +1573,7 @@ async def get_show(tmdb_id: int):
 
     item = next((i for i in storage.get_library() if i.tmdb_id == tmdb_id and i.media_type == MediaType.TV), None)
     inventory = item.episodes if item else {}
+    mandate = agent_service.store.get_mandate(tmdb_id, "tv")
 
     # Episodes on the way, from this show's goals' active downloads
     in_flight: set[tuple[int, int]] = set()
@@ -1623,6 +1625,9 @@ async def get_show(tmdb_id: int):
         "library_item_id": item.id if item else None,
         "seasons": seasons_out,
         "goals": [g.to_dict() for g in goals],
+        "mandate": mandate.to_dict() if mandate else None,
+        "mandate_summary": (mandate.describe() if mandate
+                            else "Nothing requested yet."),
     }
 
 
@@ -1777,6 +1782,9 @@ class CreateJobRequest(BaseModel):
     min_quality: str = ""
     audio_pref: str = "any"
     urgency: str = "soon"
+    # Standing authority granted with this request. Empty = leave the show's
+    # current monitoring unchanged (new shows default to exact/off).
+    monitoring: Literal["", "exact", "keep_current", "seasons", "backfill"] = ""
 
 
 @app.post("/api/jobs")
@@ -1792,8 +1800,37 @@ async def create_job(req: CreateJobRequest):
         tmdb_id=req.tmdb_id, media_type=req.media_type,
         wanted_episodes=req.wanted_episodes,
         preferred_quality=req.preferred_quality, min_quality=req.min_quality,
-        audio_pref=req.audio_pref, urgency=req.urgency)
+        audio_pref=req.audio_pref, urgency=req.urgency,
+        monitoring=req.monitoring)
     return job.to_dict()
+
+
+class MonitoringRequest(BaseModel):
+    mode: Literal["exact", "keep_current", "seasons", "backfill"]
+    seasons: list[int] = []
+    media_type: Literal["tv", "movie"] = "tv"
+
+
+@app.get("/api/mandates/{tmdb_id}")
+async def get_mandate(tmdb_id: int, media_type: str = "tv"):
+    """The user's recorded authority for a title — what agents may acquire."""
+    mandate = agent_service.store.get_mandate(tmdb_id, media_type)
+    if not mandate:
+        return {"tmdb_id": tmdb_id, "media_type": media_type, "mandate": None,
+                "summary": "Nothing requested yet."}
+    return {"tmdb_id": tmdb_id, "media_type": media_type,
+            "mandate": mandate.to_dict(), "summary": mandate.describe()}
+
+
+@app.put("/api/mandates/{tmdb_id}/monitoring")
+async def set_monitoring(tmdb_id: int, req: MonitoringRequest):
+    """User-only: change how much a show is monitored. Agents never call this."""
+    mandate = agent_service.set_monitoring(
+        tmdb_id, req.media_type, req.mode, req.seasons)
+    await broadcast({"type": "mandate_update", "data": {
+        "tmdb_id": tmdb_id, "media_type": req.media_type,
+        "mandate": mandate.to_dict(), "summary": mandate.describe()}})
+    return {"mandate": mandate.to_dict(), "summary": mandate.describe()}
 
 
 @app.get("/api/jobs")
@@ -2075,6 +2112,14 @@ async def list_library(type: Optional[str] = None):
     media_type = MediaType(type) if type else None
     items = storage.get_library(media_type=media_type)
     return [i.to_dict() for i in items]
+
+
+@app.get("/api/library/view")
+async def library_view():
+    """The Library as the user should see it: organized inventory PLUS
+    requested/queued/downloading/verifying work from active and paused jobs,
+    each title in a plain-language state."""
+    return build_library_view(storage, agent_service.store)
 
 
 @app.get("/api/library/{item_id}")

@@ -45,8 +45,100 @@ class AgentKind(str, Enum):
     LIBRARIAN = "librarian"
 
 
+class MonitoringMode(str, Enum):
+    """How much standing authority the user granted for a show.
+
+    Owning episodes never implies permission to acquire more. Every
+    acquisition must trace back to one of these explicit grants.
+    """
+    EXACT = "exact"                # the exact requested episodes, nothing else
+    KEEP_CURRENT = "keep_current"  # exact request + new episodes as they air
+    SEASONS = "seasons"            # the listed seasons only (past and future)
+    BACKFILL = "backfill"          # explicit: everything available, historical included
+
+
 def _uid() -> str:
     return uuid.uuid4().hex[:12]
+
+
+@dataclass
+class Mandate:
+    """The user's recorded authority for one title.
+
+    Created/updated only by user actions (requesting, changing preferences) —
+    never by an agent. The tool layer checks every librarian-spawned job
+    against this record, so a model that reasons its way to "backfill
+    everything" still cannot act on it.
+    """
+    tmdb_id: int = 0
+    media_type: str = "tv"                 # "tv" | "movie"
+    mode: MonitoringMode = MonitoringMode.EXACT
+    # Union of everything the user explicitly requested: {"1": [1, 2, ...]}.
+    # Always permitted (re-downloads, upgrades) regardless of mode.
+    requested_episodes: dict = field(default_factory=dict)
+    # SEASONS mode: the season numbers the user opted into.
+    seasons: list = field(default_factory=list)
+    # When the current mode was granted. KEEP_CURRENT only covers episodes
+    # that aired on/after this moment.
+    granted_at: float = field(default_factory=time.time)
+    created_at: float = field(default_factory=time.time)
+    updated_at: float = field(default_factory=time.time)
+
+    def merge_request(self, wanted_episodes: dict) -> None:
+        """Record an explicit user request into the standing authority."""
+        for season, episodes in (wanted_episodes or {}).items():
+            have = set(self.requested_episodes.get(str(season), []))
+            have.update(int(e) for e in episodes)
+            self.requested_episodes[str(season)] = sorted(have)
+        self.updated_at = time.time()
+
+    def allows_episode(self, season: int, episode: int,
+                       aired_at: Optional[float] = None) -> bool:
+        """Deterministic authority check for one episode.
+
+        aired_at is the episode's TMDB air date (unix ts) and is only
+        consulted for KEEP_CURRENT; pass None when unknown/unaired.
+        """
+        if int(episode) in {int(e) for e in
+                            self.requested_episodes.get(str(int(season)), [])}:
+            return True
+        if self.mode == MonitoringMode.BACKFILL:
+            return True
+        if self.mode == MonitoringMode.SEASONS:
+            return int(season) in {int(s) for s in self.seasons}
+        if self.mode == MonitoringMode.KEEP_CURRENT:
+            return aired_at is not None and aired_at >= self.granted_at
+        return False  # EXACT: nothing beyond the recorded request
+
+    def describe(self) -> str:
+        """Plain-language contract line, e.g. for the show page header."""
+        seasons = sorted({int(s) for s in self.requested_episodes}) or None
+        if seasons is None:
+            requested = "Nothing yet"
+        elif len(seasons) == 1:
+            requested = f"Season {seasons[0]}"
+        else:
+            requested = "Seasons " + ", ".join(str(s) for s in seasons)
+        monitoring = {
+            MonitoringMode.EXACT: "Off",
+            MonitoringMode.KEEP_CURRENT: "New episodes as they air",
+            MonitoringMode.SEASONS:
+                "Seasons " + ", ".join(str(s) for s in sorted(
+                    int(x) for x in self.seasons)) if self.seasons else "Off",
+            MonitoringMode.BACKFILL: "Everything available",
+        }[self.mode]
+        return f"Requested: {requested} · Future-season monitoring: {monitoring}"
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["mode"] = self.mode.value
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Mandate":
+        d = dict(d)
+        d["mode"] = MonitoringMode(d.get("mode", "exact"))
+        return cls(**d)
 
 
 @dataclass

@@ -19,12 +19,13 @@ from ..models import DownloadStatus, MediaType, TorrentClientType
 from ..storage import Storage
 from ..services.torrent_client import TorrentManager, start_configured_client
 from . import prompts
-from .models import (AgentKind, AgentSession, Event, Job, JobStatus,
-                     SessionStatus, Urgency)
+from .models import (AgentKind, AgentSession, Event, Job, JobStatus, Mandate,
+                     MonitoringMode, SessionStatus, Urgency)
 from .runtime import AgentRuntime, AgentSpec, spend_snapshot
 from .store import AgentStore
 from .tools import (Toolbox, fetch_tools, journal_tool, librarian_tools,
-                    media_tools, memory_tools, tmdb_tools, wake_tool)
+                    media_tools, memory_tools, remove_download_staging,
+                    tmdb_tools, wake_tool)
 
 logger = logging.getLogger("sparrow.agents")
 
@@ -132,8 +133,10 @@ class AgentService:
             job = self.store.get_job(session.job_id) if session.job_id else None
             dl = self.storage.get_download(session.download_id)
             cfg = self.storage.get_config()
+            staging = (dl.staging_path if dl and dl.staging_path
+                       else cfg.staging_dir)
             return prompts.media_system(session, job, dl.name if dl else "(unknown)",
-                                        cfg.staging_dir, cfg.library_dir)
+                                        staging, cfg.library_dir)
 
         async def librarian_system(session: AgentSession) -> str:
             return prompts.librarian_system(session)
@@ -434,25 +437,65 @@ class AgentService:
         self.store.save_session(session)
         self._wake_soon(session.id, event)
 
+    # ─── Mandates ────────────────────────────────────────────────────────
+
+    def record_user_request(self, tmdb_id: int, media_type: str,
+                            wanted_episodes: dict, monitoring: str = "") -> Mandate:
+        """Fold an explicit user request into the show's standing authority."""
+        mandate = (self.store.get_mandate(tmdb_id, media_type)
+                   or Mandate(tmdb_id=tmdb_id, media_type=media_type))
+        mandate.merge_request(wanted_episodes)
+        if monitoring:
+            mandate.mode = MonitoringMode(monitoring)
+            mandate.granted_at = time.time()
+        return self.store.save_mandate(mandate)
+
+    def set_monitoring(self, tmdb_id: int, media_type: str, mode: str,
+                       seasons: Optional[list] = None) -> Mandate:
+        """User changed the monitoring scope from Preferences."""
+        mandate = (self.store.get_mandate(tmdb_id, media_type)
+                   or Mandate(tmdb_id=tmdb_id, media_type=media_type))
+        mandate.mode = MonitoringMode(mode)
+        mandate.seasons = sorted({int(s) for s in (seasons or [])})
+        mandate.granted_at = time.time()
+        mandate.updated_at = time.time()
+        return self.store.save_mandate(mandate)
+
     # ─── Jobs ────────────────────────────────────────────────────────────
 
     async def create_job(self, tmdb_id: int, wanted_episodes: Optional[dict] = None,
                          media_type: str = "tv", origin: str = "user",
                          preferred_quality: str = "", min_quality: str = "",
-                         audio_pref: str = "any", urgency: str = "soon") -> Job:
+                         audio_pref: str = "any", urgency: str = "soon",
+                         monitoring: str = "") -> Job:
         cfg = self.storage.get_config()
         details = await self.toolbox.tmdb_get(f"/{media_type}/{tmdb_id}")
         title = details.get("name") or details.get("title") or f"tmdb-{tmdb_id}"
         year_raw = (details.get("first_air_date") or details.get("release_date") or "")[:4]
 
-        if media_type == "tv" and not wanted_episodes:
-            # Default contract: every episode of every season (per TMDB). The
-            # Fetch Agent handles not-yet-aired episodes by waiting for them.
+        if media_type == "tv" and not wanted_episodes and origin == "user":
+            # A user asking for "the show" with no scope means every episode of
+            # every season (per TMDB). That is still an explicit user request —
+            # it becomes recorded authority below. Agent-originated jobs never
+            # get this default; they must name exact episodes.
             wanted_episodes = {
                 str(s["season_number"]): list(range(1, (s.get("episode_count") or 0) + 1))
                 for s in details.get("seasons", [])
                 if s.get("season_number", 0) > 0 and s.get("episode_count")
             }
+
+        if origin == "user":
+            # User requests create/extend the standing authority the tool
+            # layer enforces against every agent-originated job.
+            self.record_user_request(tmdb_id, media_type, wanted_episodes or {},
+                                     monitoring=monitoring)
+        else:
+            if media_type == "tv" and not wanted_episodes:
+                raise ValueError(
+                    "Agent-originated jobs must name exact episodes; a blanket "
+                    "request is a user decision.")
+            await self.toolbox.enforce_mandate(tmdb_id, media_type,
+                                               wanted_episodes or {}, origin)
 
         job = Job(
             tmdb_id=tmdb_id, media_type=media_type, title=title,
@@ -477,13 +520,38 @@ class AgentService:
         await self.emit(Event(kind="nudge", job_id=job_id, payload={
             "description": "The user asked for a check right now. Reassess and report."}))
 
+    def _job_downloads(self, job_id: str, statuses: tuple) -> list:
+        return [dl for dl in self.storage.get_all_downloads()
+                if dl.metadata.get("job_id") == job_id and dl.status in statuses]
+
+    async def _connected_manager(self) -> Optional[TorrentManager]:
+        cfg = self.storage.get_config()
+        if cfg.torrent_client.type == TorrentClientType.NONE:
+            return None
+        mgr = TorrentManager(cfg.torrent_client)
+        return mgr if await mgr.connect() else None
+
     async def pause_job(self, job_id: str) -> Optional[Job]:
+        """Pause request: stop the agent AND its client transfers. No files
+        are deleted; resume picks everything back up."""
         job = self.store.get_job(job_id)
         if not job:
             return None
         job.status = JobStatus.PAUSED
-        job.state_line = "Paused by you."
+        job.state_line = "Paused — downloads stopped, nothing deleted."
         self.store.save_job(job)
+        mgr = await self._connected_manager()
+        for dl in self._job_downloads(
+                job_id, (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING)):
+            if mgr:
+                try:
+                    await mgr.stop_torrent(dl.torrent_hash)
+                except Exception:
+                    logger.exception("pause: stop_torrent failed for %s", dl.id)
+            await self.storage.update_download(dl.id, status=DownloadStatus.PAUSED)
+            refreshed = self.storage.get_download(dl.id)
+            await self.broadcast({"type": "download_update",
+                                  "data": (refreshed or dl).to_dict()})
         await self.broadcast({"type": "job_update", "data": job.to_dict()})
         return job
 
@@ -494,18 +562,31 @@ class AgentService:
         job.status = JobStatus.ACTIVE
         job.state_line = "Resumed."
         self.store.save_job(job)
+        mgr = await self._connected_manager()
+        for dl in self._job_downloads(job_id, (DownloadStatus.PAUSED,)):
+            if mgr:
+                try:
+                    await mgr.start_torrent(dl.torrent_hash)
+                except Exception:
+                    logger.exception("resume: start_torrent failed for %s", dl.id)
+            await self.storage.update_download(dl.id, status=DownloadStatus.DOWNLOADING)
+            refreshed = self.storage.get_download(dl.id)
+            await self.broadcast({"type": "download_update",
+                                  "data": (refreshed or dl).to_dict()})
         await self.broadcast({"type": "job_update", "data": job.to_dict()})
         await self.emit(Event(kind="resume", job_id=job_id, payload={
             "description": "The user resumed this job. Pick up where you left off."}))
         return job
 
     async def cancel_job(self, job_id: str) -> Optional[Job]:
-        """User cancellation: close the job and its session; stop its downloads."""
+        """Cancel pending work: stop agents, remove unfinished transfers and
+        their partial files. Episodes already verified and organized into the
+        library are kept — removing those is a separate library action."""
         job = self.store.get_job(job_id)
         if not job:
             return None
         job.status = JobStatus.ABANDONED
-        job.state_line = "Cancelled by you."
+        job.state_line = "Cancelled — unfinished downloads removed, finished episodes kept."
         job.next_wake_at = 0.0
         job.closed_at = time.time()
         self.store.save_job(job)
@@ -513,21 +594,27 @@ class AgentService:
             s.status = SessionStatus.CLOSED
             s.close_reason = "job cancelled by user"
             s.closed_at = time.time()
+            s.wake_at = 0.0
+            s.wake_reason = ""
             self.store.save_session(s)
         cfg = self.storage.get_config()
-        if cfg.torrent_client.type != TorrentClientType.NONE:
-            mgr = TorrentManager(cfg.torrent_client)
-            if await mgr.connect():
-                for dl in self.storage.get_all_downloads():
-                    if (dl.metadata.get("job_id") == job_id and
-                            dl.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING)):
-                        try:
-                            await mgr.delete_torrent(dl.torrent_hash, delete_files=True)
-                        except Exception:
-                            pass
-                        await self.storage.update_download(
-                            dl.id, status=DownloadStatus.ERROR,
-                            error_message="job cancelled")
+        mgr = await self._connected_manager()
+        pending = (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING,
+                   DownloadStatus.PAUSED, DownloadStatus.COMPLETED,
+                   DownloadStatus.SEEDING)
+        for dl in self._job_downloads(job_id, pending):
+            if mgr:
+                try:
+                    await mgr.delete_torrent(dl.torrent_hash, delete_files=True)
+                except Exception:
+                    logger.exception("cancel: delete_torrent failed for %s", dl.id)
+            remove_download_staging(cfg.staging_dir, dl)
+            await self.storage.update_download(
+                dl.id, status=DownloadStatus.ERROR,
+                error_message="cancelled by you before it finished")
+            refreshed = self.storage.get_download(dl.id)
+            await self.broadcast({"type": "download_update",
+                                  "data": (refreshed or dl).to_dict()})
         await self.broadcast({"type": "job_update", "data": job.to_dict()})
         return job
 
@@ -575,24 +662,42 @@ class AgentService:
                     if not dl.metadata.get("agent_managed"):
                         continue
                     if dl.status in (DownloadStatus.ORGANIZED, DownloadStatus.ERROR,
-                                     DownloadStatus.COMPLETED):
+                                     DownloadStatus.COMPLETED, DownloadStatus.PAUSED):
                         continue
                     st = await mgr.get_torrent_status(dl.torrent_hash)
                     if st is None:
                         continue
                     progress = float(st.get("progress") or 0.0)
+                    stats = {
+                        "progress": progress,
+                        "size_bytes": int(st.get("size_bytes") or 0),
+                        "downloaded_bytes": int(st.get("downloaded_bytes") or 0),
+                        "download_speed": int(st.get("download_speed") or 0),
+                        "eta_seconds": int(st.get("eta_seconds") if st.get("eta_seconds") is not None else -1),
+                        "stats_updated_at": time.time(),
+                    }
 
                     if progress >= 1.0 and not dl.metadata.get("landed_emitted"):
                         dl.metadata["landed_emitted"] = True
-                        await self.storage.update_download(dl.id, metadata=dl.metadata,
-                                                           status=DownloadStatus.COMPLETED,
-                                                           progress=1.0)
+                        await self.storage.update_download(
+                            dl.id, metadata=dl.metadata,
+                            status=DownloadStatus.COMPLETED, **{**stats, "progress": 1.0})
+                        refreshed = self.storage.get_download(dl.id)
+                        await self.broadcast({"type": "download_update",
+                                              "data": (refreshed or dl).to_dict()})
                         await self.emit(Event(
                             kind="files_landed", job_id=dl.metadata.get("job_id", ""),
                             download_id=dl.id,
                             payload={"description": f"Download finished: \"{dl.name}\". "
                                                     "Files are in staging."}))
                         continue
+
+                    # Persist and broadcast live numbers every poll — active
+                    # downloads must never sit at 0% until completion.
+                    await self.storage.update_download(dl.id, **stats)
+                    refreshed = self.storage.get_download(dl.id)
+                    await self.broadcast({"type": "download_update",
+                                          "data": (refreshed or dl).to_dict()})
 
                     self._detect_stall(dl, progress)
             except asyncio.CancelledError:

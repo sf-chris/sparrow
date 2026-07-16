@@ -113,6 +113,7 @@ class SparrowConfig:
     prefer_smaller_files: bool = False  # prefer smaller encodes (x265/HEVC) over large ones
     prefer_season_packs: bool = True    # prefer full-season packs when they score well
     season_pack_size_limit_gb: float = 0.0  # 0 = automatic size sanity by quality/episode count
+    max_active_transfers: int = 3       # hard cap on concurrent agent-managed transfers
     smart_model: str = "claude-sonnet-5"
     cheap_model: str = "claude-haiku-4-5"
 
@@ -132,6 +133,7 @@ class SparrowConfig:
             "prefer_smaller_files": self.prefer_smaller_files,
             "prefer_season_packs": self.prefer_season_packs,
             "season_pack_size_limit_gb": self.season_pack_size_limit_gb,
+            "max_active_transfers": self.max_active_transfers,
             "smart_model": self.smart_model,
             "cheap_model": self.cheap_model,
         }
@@ -148,6 +150,7 @@ class SparrowConfig:
         d.setdefault("prefer_smaller_files", False)
         d.setdefault("prefer_season_packs", True)
         d.setdefault("season_pack_size_limit_gb", 0.0)
+        d.setdefault("max_active_transfers", 3)
         d.setdefault("smart_model", "claude-sonnet-5")
         d.setdefault("cheap_model", "claude-haiku-4-5")
         return cls(**d)
@@ -220,6 +223,9 @@ class Download:
     completed_at: Optional[float] = None
     error_message: str = ""
     quality: str = ""
+    # When progress/speed/eta were last confirmed against the client. The UI
+    # uses this to show "updated 12s ago" and to flag stale numbers honestly.
+    stats_updated_at: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -242,6 +248,7 @@ class Download:
             "completed_at": self.completed_at,
             "error_message": self.error_message,
             "quality": self.quality,
+            "stats_updated_at": self.stats_updated_at,
         }
 
     @classmethod
