@@ -365,6 +365,19 @@ export default function Settings() {
                 onChange={e => update({ seeding_time_hours: parseFloat(e.target.value) || 0 })}
               />
             </Field>
+            <Field
+              label="Concurrent downloads"
+              hint="Hard cap on Sparrow-managed transfers running at once. Agents queue the rest."
+            >
+              <input
+                className="input"
+                type="number"
+                min="1"
+                step="1"
+                value={config.max_active_transfers}
+                onChange={e => update({ max_active_transfers: Math.max(1, parseInt(e.target.value) || 1) })}
+              />
+            </Field>
           </Card>
         </section>
 

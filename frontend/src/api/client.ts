@@ -4,6 +4,7 @@ import type {
   ShowDetail, ActivityEvent,
   ResolveCard, Job, JobStatus, JobUrgency, JobDetail, JournalEntry, AgentSession,
   UsageLedger, AgentPromptPreview,
+  LibraryViewEntry, Mandate, MonitoringMode,
 } from '../types'
 
 const BASE = '/api'
@@ -132,6 +133,8 @@ export interface CreateJobPayload {
   min_quality?: string
   audio_pref?: string
   urgency?: JobUrgency
+  /** Standing authority granted with this request; omit to leave unchanged */
+  monitoring?: MonitoringMode | ''
 }
 export const createJob = (data: CreateJobPayload) =>
   req<Job>('/jobs', { method: 'POST', body: JSON.stringify(data) })
@@ -174,11 +177,23 @@ export const resumeGoal = (id: string) => req<MediaRequest>(`/goals/${id}/resume
 export const getActivity = (limit = 100, requestId = '') =>
   req<ActivityEvent[]>(`/activity?limit=${limit}${requestId ? `&request_id=${requestId}` : ''}`)
 
+// Mandates (user authority; the tool layer enforces these against agents)
+export const getMandate = (tmdbId: number, mediaType: 'tv' | 'movie' = 'tv') =>
+  req<{ tmdb_id: number; media_type: string; mandate: Mandate | null; summary: string }>(
+    `/mandates/${tmdbId}?media_type=${mediaType}`)
+export const setMonitoring = (tmdbId: number, mode: MonitoringMode, seasons: number[] = [],
+                              mediaType: 'tv' | 'movie' = 'tv') =>
+  req<{ mandate: Mandate; summary: string }>(`/mandates/${tmdbId}/monitoring`, {
+    method: 'PUT',
+    body: JSON.stringify({ mode, seasons, media_type: mediaType }),
+  })
+
 // Library
 export const getLibrary = (type?: MediaType) => {
   const params = type ? `?type=${type}` : ''
   return req<LibraryItem[]>(`/library${params}`)
 }
+export const getLibraryView = () => req<LibraryViewEntry[]>('/library/view')
 export const deleteLibraryItem = (id: string, deleteFiles = false) =>
   req<{ success: boolean }>(`/library/${id}?delete_files=${deleteFiles}`, { method: 'DELETE' })
 export const scanLibrary = () => req<{ scanned: number; added: number }>('/library/scan', { method: 'POST' })

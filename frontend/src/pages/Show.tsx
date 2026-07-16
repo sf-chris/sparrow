@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  ArrowLeft, Check, ChevronDown, Clock, Download, Film, Loader2, Pause, Play,
-  RefreshCw, Sparkles, Star, Trash2, Tv,
+  Activity, AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Download, Film, Loader2,
+  Pause, Play, RefreshCw, ShieldCheck, SlidersHorizontal, Sparkles, Star, Trash2, Tv,
 } from 'lucide-react'
 import clsx from 'clsx'
 import {
-  ApiError, cancelJob, createJob, getJob, getJobs, getShow, nudgeJob, pauseJob, resumeJob,
+  ApiError, cancelJob, createJob, getJob, getJobs, getMandate, getShow, nudgeJob, pauseJob,
+  resumeJob, setMonitoring,
 } from '../api/client'
 import type { CreateJobPayload } from '../api/client'
 import type {
   ActivityEvent, Download as DownloadItem, ExecutionTraceEntry, Job, JobDetail, JournalEntry,
-  ShowDetail, ShowEpisode, ShowSeason,
+  Mandate, MonitoringMode, ShowDetail, ShowEpisode, ShowSeason,
 } from '../types'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { Badge, Button, Card, Progress } from '../components/ui'
+import { Badge, Button, Card, Progress, RelativeTime } from '../components/ui'
 
 const QUALITY_OPTIONS = [
   { value: '', label: 'Best available' },
@@ -22,6 +23,11 @@ const QUALITY_OPTIONS = [
   { value: '1080p', label: 'Full HD' },
   { value: '720p', label: 'HD' },
 ] as const
+
+/** Transfer stats older than this are presented as stale, not current. */
+const STALE_AFTER_SECONDS = 120
+
+type TabId = 'watch' | 'progress' | 'preferences'
 
 function qualityOptionLabel(value: string): string {
   return QUALITY_OPTIONS.find(option => option.value === value)?.label || 'Best available'
@@ -132,7 +138,7 @@ function QualityDisclosure({
   )
 }
 
-// --- Agent panel helpers ---
+// --- Time / formatting helpers ---
 
 function formatCountdown(secondsLeft: number): string {
   if (secondsLeft <= 0) return 'any moment now'
@@ -144,11 +150,29 @@ function formatCountdown(secondsLeft: number): string {
   return `${days}d ${hours % 24}h`
 }
 
-function journalTime(ts: number): string {
-  const date = new Date(ts * 1000)
-  const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-  if (date.toDateString() === new Date().toDateString()) return time
-  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
+function formatSpeed(bytesPerSecond: number): string {
+  if (!bytesPerSecond || bytesPerSecond <= 0) return ''
+  const mb = bytesPerSecond / (1024 * 1024)
+  if (mb >= 1) return `${mb.toFixed(1)} MB/s`
+  return `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`
+}
+
+function formatEtaShort(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60))
+  if (minutes < 60) return `about ${minutes} min left`
+  return `about ${Math.floor(minutes / 60)}h ${minutes % 60}m left`
+}
+
+function formatEtaRemaining(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60))
+  if (minutes < 60) return `about ${minutes} minute${minutes === 1 ? '' : 's'} remaining`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return `about ${hours}h${rest > 0 ? ` ${rest}m` : ''} remaining`
+}
+
+function isStale(dl: DownloadItem, nowSeconds: number): boolean {
+  return dl.stats_updated_at > 0 && nowSeconds - dl.stats_updated_at > STALE_AFTER_SECONDS
 }
 
 function CollapsibleText({ text }: { text: string }) {
@@ -181,7 +205,7 @@ const AGENT_DOT: Record<string, string> = {
   librarian: 'bg-emerald-400',
 }
 
-/** Turn a release string into something a person would say — never show the raw name here. */
+/** Turn a release string into something a person would say — never show the raw name outside Advanced. */
 function humanizeDownloadName(name: string): string {
   let s = name.replace(/[._]/g, ' ').replace(/\[[^\]]*\]/g, ' ')
   const cut = s.search(/\b(2160p|1080p|720p|480p|WEB[- ]?DL|WEBRip|BluRay|BDRip|DVDRip|HDTV|x264|x265|HEVC|H ?26[45]|AAC|AC3|DDP?|REMUX|10bit|PROPER|REPACK)\b/i)
@@ -190,46 +214,282 @@ function humanizeDownloadName(name: string): string {
   return s || 'Download'
 }
 
-function downloadStatusLine(dl: DownloadItem): string {
-  switch (dl.status) {
-    case 'queued': return 'Waiting to start'
-    case 'downloading': {
-      const pct = `${Math.round((dl.progress || 0) * 100)}%`
-      if (dl.eta_seconds > 0) {
-        const minutes = Math.max(1, Math.round(dl.eta_seconds / 60))
-        const eta = minutes < 60
-          ? `about ${minutes} min left`
-          : `about ${Math.floor(minutes / 60)}h ${minutes % 60}m left`
-        return `${pct} — ${eta}`
-      }
-      return pct
-    }
-    case 'seeding':
-    case 'completed':
-    case 'organized': return 'Done'
-    case 'organizing': return 'Tidying up'
-    case 'paused': return 'Paused'
-    case 'error': return 'Hit a snag'
-    default: return ''
-  }
+/** Best-effort season number for a transfer, from metadata or the release name. */
+function downloadSeason(dl: DownloadItem): number | null {
+  const raw = dl.metadata?.season
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  if (typeof raw === 'string' && /^\d+$/.test(raw)) return Number(raw)
+  const match = dl.name.match(/\bS(\d{1,2})(?:E\d{1,3})?\b/i)
+    || dl.name.match(/\bSeason[ ._-]?(\d{1,2})\b/i)
+  if (match) return Number(match[1])
+  return null
 }
 
-function TransferRow({ dl }: { dl: DownloadItem }) {
-  const active = dl.status === 'downloading' || dl.status === 'queued'
+const COMPLETED_STATUSES: DownloadItem['status'][] = ['seeding', 'completed', 'organized']
+
+// --- Contract statement (always visible, in the page header) ---
+
+function ContractStatement({ summary }: { summary: string }) {
+  if (!summary) return null
+  const lines = summary.split(' · ')
+  return (
+    <div className="mt-6 inline-flex max-w-full items-start gap-3 rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-3 backdrop-blur-xl">
+      <ShieldCheck size={16} className="mt-0.5 shrink-0 text-primary-light" />
+      <div className="min-w-0">
+        {lines.map((line, i) => (
+          <p
+            key={i}
+            className={clsx(
+              'break-words',
+              i === 0 ? 'text-sm font-semibold text-text' : 'mt-0.5 text-xs text-muted',
+            )}
+          >
+            {line}
+          </p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// --- Title-level summary ("Downloading Season 1 · 3 of 8 ready · 42% overall · …") ---
+
+interface RequestScope {
+  label: string
+  ready: number
+  total: number
+  hasCounts: boolean
+}
+
+function computeScope(job: Job, show: ShowDetail): RequestScope {
+  if (show.media_type === 'movie') {
+    return { label: 'the movie', ready: show.in_library ? 1 : 0, total: 1, hasCounts: true }
+  }
+  const wanted = job.wanted_episodes || {}
+  const seasonNumbers = Object.keys(wanted)
+    .map(Number)
+    .filter(n => Number.isFinite(n))
+    .sort((a, b) => a - b)
+  const countedSeasons = seasonNumbers.length > 0
+    ? show.seasons.filter(s => seasonNumbers.includes(s.season_number))
+    : show.seasons.filter(s => s.episode_count > 0)
+  let ready = 0
+  let total = 0
+  let hasCounts = false
+  for (const season of countedSeasons) {
+    const wantedEpisodes = seasonNumbers.length > 0 ? wanted[String(season.season_number)] : []
+    if (wantedEpisodes && wantedEpisodes.length > 0 && season.episodes.length > 0) {
+      const wantedSet = new Set(wantedEpisodes)
+      ready += season.episodes.filter(e => wantedSet.has(e.episode) && e.have).length
+      total += wantedEpisodes.length
+      hasCounts = true
+    } else if (season.episode_count > 0) {
+      ready += Math.min(season.have_count, season.episode_count)
+      total += season.episode_count
+      hasCounts = true
+    }
+  }
+  const label = seasonNumbers.length === 0
+    ? 'the whole show'
+    : seasonNumbers.length === 1
+      ? `Season ${seasonNumbers[0]}`
+      : `Seasons ${seasonNumbers.join(', ')}`
+  return { label, ready, total, hasCounts }
+}
+
+/** One honest, compact line. Segments we can't compute are simply omitted. */
+function titleSummaryLine(detail: JobDetail, show: ShowDetail, nowSeconds: number): string {
+  const { job, downloads } = detail
+  const scope = computeScope(job, show)
+  const segments: string[] = []
+
+  const active = downloads.filter(dl => dl.status === 'downloading' || dl.status === 'queued')
+  const anyDownloading = downloads.some(dl => dl.status === 'downloading')
+
+  if (job.status === 'paused') segments.push(`Paused — ${scope.label}`)
+  else if (job.status === 'complete') segments.push(`Finished ${scope.label}`)
+  else if (job.status === 'abandoned') segments.push(`Stopped working on ${scope.label}`)
+  else segments.push(`${anyDownloading ? 'Downloading' : 'Working on'} ${scope.label}`)
+
+  if (scope.hasCounts && scope.total > 0) {
+    segments.push(`${scope.ready} of ${scope.total} ready`)
+  }
+
+  const sized = active.filter(dl => dl.size_bytes > 0)
+  if (sized.length > 0) {
+    const downloaded = sized.reduce((sum, dl) => sum + (dl.downloaded_bytes || 0), 0)
+    const totalBytes = sized.reduce((sum, dl) => sum + dl.size_bytes, 0)
+    if (totalBytes > 0) {
+      segments.push(`${Math.round((downloaded / totalBytes) * 100)}% overall`)
+    }
+  }
+
+  if (job.status === 'active') {
+    const freshEtas = active
+      .filter(dl => !isStale(dl, nowSeconds))
+      .map(dl => dl.eta_seconds)
+      .filter(s => s > 0)
+    if (freshEtas.length > 0) {
+      segments.push(formatEtaRemaining(Math.max(...freshEtas)))
+    }
+  }
+
+  return segments.join(' · ')
+}
+
+// --- Transfers (grouped, plain words; raw evidence lives in Advanced) ---
+
+function transferStatusBits(dl: DownloadItem, nowSeconds: number): string {
+  const pct = Math.round((dl.progress || 0) * 100)
+  if (dl.status === 'queued' && pct === 0) return 'Waiting to start'
+  if (dl.status === 'paused') return `Paused at ${pct}%`
+  if (dl.status === 'organizing') return 'Tidying up'
+  const bits: string[] = [`${pct}%`]
+  if (!isStale(dl, nowSeconds)) {
+    const speed = formatSpeed(dl.download_speed)
+    if (speed) bits.push(speed)
+    if (dl.eta_seconds > 0) bits.push(formatEtaShort(dl.eta_seconds))
+  }
+  return bits.join(' · ')
+}
+
+function ActiveTransferRow({ dl, nowSeconds }: { dl: DownloadItem; nowSeconds: number }) {
+  const stale = isStale(dl, nowSeconds)
+  const showBar = dl.status === 'downloading' || dl.status === 'queued' || dl.status === 'paused'
   return (
     <li className="py-2.5">
       <div className="flex min-w-0 items-center justify-between gap-3">
         <p className="min-w-0 truncate text-sm text-text/90">{humanizeDownloadName(dl.name)}</p>
-        <span className="shrink-0 text-xs text-muted">{downloadStatusLine(dl)}</span>
+        <span className="shrink-0 text-xs text-muted">{transferStatusBits(dl, nowSeconds)}</span>
       </div>
-      {active && <Progress value={(dl.progress || 0) * 100} className="mt-2" />}
-      <details className="mt-1.5 text-[10px] text-muted/60">
-        <summary className="cursor-pointer select-none hover:text-text">Details</summary>
-        <p className="mt-1 break-all font-mono">{dl.name}</p>
-      </details>
+      {showBar && <Progress value={(dl.progress || 0) * 100} className="mt-2" />}
+      <p className="mt-1 text-[10px] text-muted/60">
+        {dl.stats_updated_at > 0 ? (
+          stale ? (
+            <span className="text-amber-200/80">
+              Stale — these numbers were last confirmed <RelativeTime ts={dl.stats_updated_at} />
+            </span>
+          ) : (
+            <>Updated <RelativeTime ts={dl.stats_updated_at} /></>
+          )
+        ) : (
+          'No progress report yet'
+        )}
+      </p>
     </li>
   )
 }
+
+function FailedTransferRow({ dl }: { dl: DownloadItem }) {
+  return (
+    <li className="py-2.5">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <p className="min-w-0 truncate text-sm text-text/90">{humanizeDownloadName(dl.name)}</p>
+        <span className="shrink-0 text-xs text-rose-300">Hit a snag</span>
+      </div>
+      {dl.error_message && (
+        <p className="mt-1 break-words text-xs text-rose-200/80">{dl.error_message}</p>
+      )}
+      <p className="mt-1 text-[10px] text-muted/60">
+        <RelativeTime ts={dl.stats_updated_at || dl.added_at} />
+      </p>
+    </li>
+  )
+}
+
+function CompletedTransferRow({ dl }: { dl: DownloadItem }) {
+  return (
+    <li className="flex min-w-0 items-center justify-between gap-3 py-2">
+      <p className="min-w-0 truncate text-sm text-text/80">{humanizeDownloadName(dl.name)}</p>
+      <span className="inline-flex shrink-0 items-center gap-2 text-xs text-muted">
+        <span className="text-emerald-300">Done</span>
+        <RelativeTime ts={dl.completed_at || dl.added_at} className="text-[11px] text-muted/70" />
+      </span>
+    </li>
+  )
+}
+
+function TransfersSection({ downloads, nowSeconds }: {
+  downloads: DownloadItem[]
+  nowSeconds: number
+}) {
+  const failed = downloads.filter(dl => dl.status === 'error')
+  const completed = downloads.filter(dl => COMPLETED_STATUSES.includes(dl.status))
+  const active = downloads.filter(dl =>
+    dl.status !== 'error' && !COMPLETED_STATUSES.includes(dl.status))
+
+  // Group active transfers by season when determinable; otherwise one group.
+  const activeGroups = useMemo(() => {
+    const bySeason = new Map<number | null, DownloadItem[]>()
+    const anySeason = active.some(dl => downloadSeason(dl) != null)
+    for (const dl of active) {
+      const key = anySeason ? downloadSeason(dl) : null
+      const bucket = bySeason.get(key)
+      if (bucket) bucket.push(dl)
+      else bySeason.set(key, [dl])
+    }
+    return [...bySeason.entries()].sort((a, b) => {
+      if (a[0] == null) return 1
+      if (b[0] == null) return -1
+      return a[0] - b[0]
+    })
+  }, [active])
+
+  if (downloads.length === 0) {
+    return <p className="text-sm text-muted">No transfers yet.</p>
+  }
+
+  return (
+    <div className="space-y-4">
+      {failed.length > 0 && (
+        <div>
+          <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-rose-300">
+            <AlertTriangle size={13} /> Needs attention
+          </p>
+          <ul className="mt-1 divide-y divide-white/[0.06]">
+            {failed.map(dl => <FailedTransferRow key={dl.id} dl={dl} />)}
+          </ul>
+        </div>
+      )}
+
+      {activeGroups.map(([season, items]) => {
+        const label = season != null ? `Season ${season}` : 'On the way'
+        const sized = items.filter(dl => dl.size_bytes > 0)
+        const downloadedBytes = sized.reduce((sum, dl) => sum + (dl.downloaded_bytes || 0), 0)
+        const totalBytes = sized.reduce((sum, dl) => sum + dl.size_bytes, 0)
+        const pct = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : null
+        return (
+          <details
+            key={season ?? 'ungrouped'}
+            open={activeGroups.length === 1}
+            className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2"
+          >
+            <summary className="cursor-pointer select-none text-xs font-semibold text-text/80 hover:text-text">
+              {label} — {items.length} transfer{items.length === 1 ? '' : 's'}
+              {pct != null && <span className="ml-1 text-muted">· {pct}%</span>}
+            </summary>
+            <ul className="mt-1 divide-y divide-white/[0.06]">
+              {items.map(dl => <ActiveTransferRow key={dl.id} dl={dl} nowSeconds={nowSeconds} />)}
+            </ul>
+          </details>
+        )
+      })}
+
+      {completed.length > 0 && (
+        <details className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2">
+          <summary className="cursor-pointer select-none text-xs font-semibold text-muted hover:text-text">
+            {completed.length} finished — show
+          </summary>
+          <ul className="mt-1 divide-y divide-white/[0.06]">
+            {completed.map(dl => <CompletedTransferRow key={dl.id} dl={dl} />)}
+          </ul>
+        </details>
+      )}
+    </div>
+  )
+}
+
+// --- Advanced / technical evidence (raw names, hashes, execution trace) ---
 
 function ExecutionRow({ event }: { event: ActivityEvent }) {
   const [open, setOpen] = useState(false)
@@ -246,7 +506,7 @@ function ExecutionRow({ event }: { event: ActivityEvent }) {
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline justify-between gap-3">
             <p className="min-w-0 break-words text-sm text-text/85">{event.message}</p>
-            <span className="shrink-0 text-[11px] text-muted/70">{journalTime(event.timestamp)}</span>
+            <RelativeTime ts={event.timestamp} className="shrink-0 text-[11px] text-muted/70" />
           </div>
           {hasDetail && (
             <button
@@ -297,8 +557,108 @@ function TraceRow({ entry }: { entry: ExecutionTraceEntry }) {
   )
 }
 
-function AgentPanel({
+function AdvancedSection({ detail }: { detail: JobDetail }) {
+  const execution = detail.activity || []
+  const trace = detail.trace || []
+  const { downloads } = detail
+  return (
+    <details className="mt-5 border-t border-white/[0.08] pt-4">
+      <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted/70 hover:text-text">
+        Advanced — technical evidence
+      </summary>
+
+      {downloads.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted/60">Raw transfer records</p>
+          <ul className="mt-1 divide-y divide-white/[0.06]">
+            {downloads.map(dl => (
+              <li key={dl.id} className="py-2">
+                <p className="break-all font-mono text-[10px] leading-relaxed text-muted">{dl.name}</p>
+                <p className="mt-0.5 break-all font-mono text-[10px] text-muted/60">
+                  {dl.status} · {Math.round((dl.progress || 0) * 100)}%
+                  {dl.torrent_hash ? ` · ${dl.torrent_hash}` : ''}
+                  {dl.quality ? ` · ${dl.quality}` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {execution.length === 0 && trace.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">Detailed steps will appear here on the next agent run.</p>
+      ) : (
+        <div className="mt-3 max-h-96 overflow-y-auto pr-1">
+          {execution.length > 0 && (
+            <>
+              <p className="py-2 text-[10px] font-semibold uppercase tracking-wide text-muted/60">Live execution</p>
+              <ul className="divide-y divide-white/[0.06]">
+                {execution.map(event => <ExecutionRow key={event.id} event={event} />)}
+              </ul>
+            </>
+          )}
+          {trace.length > 0 && (
+            <>
+              <p className="border-t border-white/[0.06] py-2 text-[10px] font-semibold uppercase tracking-wide text-muted/60">
+                Saved session history
+              </p>
+              <ul className="divide-y divide-white/[0.06]">
+                {[...trace].reverse().map(entry => <TraceRow key={entry.id} entry={entry} />)}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+    </details>
+  )
+}
+
+// --- Journal (plain-language latest updates) ---
+
+function JournalSection({ journal }: { journal: JournalEntry[] }) {
+  const newestFirst = useMemo(() => [...journal].reverse(), [journal])
+  const latest = newestFirst.slice(0, 5)
+  const earlier = newestFirst.slice(5)
+
+  if (newestFirst.length === 0) {
+    return <p className="text-sm text-muted">No updates yet — Sparrow will explain its work here as it happens.</p>
+  }
+
+  const renderEntry = (entry: JournalEntry) => (
+    <li key={entry.id} className="flex min-w-0 gap-3">
+      <span className="flex w-3 shrink-0 justify-center pt-1.5">
+        <span
+          title={entry.agent}
+          className={clsx('h-1.5 w-1.5 rounded-full', AGENT_DOT[entry.agent] || 'bg-white/30')}
+        />
+      </span>
+      <div className="min-w-0 flex-1">
+        <RelativeTime ts={entry.ts} className="mb-0.5 block text-[11px] text-muted/70" />
+        <CollapsibleText text={entry.text} />
+      </div>
+    </li>
+  )
+
+  return (
+    <>
+      <ul className="space-y-3">{latest.map(renderEntry)}</ul>
+      {earlier.length > 0 && (
+        <details className="mt-3 border-t border-white/[0.06] pt-3">
+          <summary className="cursor-pointer text-xs font-semibold text-muted hover:text-text">
+            Earlier updates ({earlier.length})
+          </summary>
+          <ul className="mt-3 space-y-3">{earlier.map(renderEntry)}</ul>
+        </details>
+      )}
+    </>
+  )
+}
+
+// --- Progress tab ---
+
+function ProgressTab({
   detail,
+  show,
   now,
   busy,
   onNudge,
@@ -306,7 +666,8 @@ function AgentPanel({
   onResume,
   onCancel,
 }: {
-  detail: JobDetail
+  detail: JobDetail | null
+  show: ShowDetail
   now: number
   busy: string | null
   onNudge: () => void
@@ -314,163 +675,421 @@ function AgentPanel({
   onResume: () => void
   onCancel: () => void
 }) {
-  const { job, journal, session, downloads } = detail
-  const execution = detail.activity || []
-  const trace = detail.trace || []
-  const latestUpdate = journal[journal.length - 1]
-  const earlierUpdates = journal.slice(0, -1).reverse()
+  if (!detail) {
+    return (
+      <div className="rounded-2xl border border-dashed border-white/[0.12] bg-panel/50 p-10 text-center">
+        <Activity size={32} className="mx-auto text-muted/30" />
+        <p className="mt-3 text-sm font-medium text-text">Nothing in progress</p>
+        <p className="mt-1 text-sm text-muted">
+          When you request something from the Watch tab, Sparrow's work shows up here.
+        </p>
+      </div>
+    )
+  }
+
+  const { job, session } = detail
+  const nowSeconds = Math.floor(now / 1000)
   const paused = job.status === 'paused'
   const running = session?.status === 'running'
-
-  const wakeAt = job.next_wake_at || session?.wake_at || 0
-  const secondsLeft = wakeAt > 0 ? wakeAt - Math.floor(now / 1000) : 0
-
-  const journalRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const el = journalRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [journal.length])
-
   const terminal = job.status === 'complete' || job.status === 'abandoned'
-  const activeTransfers = downloads.filter(dl =>
-    ['queued', 'downloading', 'organizing', 'paused'].includes(dl.status))
+  const wakeAt = job.next_wake_at || session?.wake_at || 0
+  const secondsLeft = wakeAt > 0 ? wakeAt - nowSeconds : 0
+  const spinner = <Loader2 size={13} className="animate-spin" />
 
   return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="relative flex h-2.5 w-2.5 shrink-0">
-          {running && !paused && (
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
-          )}
-          <span className={clsx(
-            'relative inline-flex h-2.5 w-2.5 rounded-full',
-            paused ? 'bg-white/30' : running ? 'bg-primary' : 'bg-primary/60',
-          )} />
-        </span>
-        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-text/60">
-          {job.status === 'complete'
-            ? 'Sparrow finished this'
-            : job.status === 'abandoned'
-              ? 'Sparrow stopped this job'
-              : "Sparrow's agent is working on this"}
-        </h2>
-        {paused && <Badge tone="neutral">Paused</Badge>}
-        {!terminal && <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={busy !== null || paused}
-            onClick={onNudge}
-            title="Ask the agent to check right now"
-          >
-            {busy === 'nudge' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-            Check now
-          </Button>
-          {paused ? (
-            <Button variant="ghost" size="icon" title="Resume" disabled={busy !== null} onClick={onResume}>
-              <Play size={14} />
-            </Button>
-          ) : (
-            <Button variant="ghost" size="icon" title="Pause" disabled={busy !== null} onClick={onPause}>
-              <Pause size={14} />
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" title="Stop working on this" disabled={busy !== null} onClick={onCancel}>
-            <Trash2 size={14} />
-          </Button>
-        </div>}
-      </div>
-
-      <p className="mt-3 text-sm text-text/90">{job.state_line || 'Working on it…'}</p>
-      {!paused && !terminal && (
-        <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-muted">
-          <Clock size={12} />
-          {running
-            ? 'Working right now'
-            : wakeAt > 0
-              ? `Checking again in ${formatCountdown(secondsLeft)}`
-              : 'Waiting for something to happen'}
-        </p>
-      )}
-
-      {activeTransfers.length > 0 && (
-        <div className="mt-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted/70">On the way</p>
-          <ul className="mt-1 divide-y divide-white/[0.06]">
-            {activeTransfers.map(dl => (
-              <TransferRow key={dl.id} dl={dl} />
-            ))}
-          </ul>
+    <div className="space-y-3">
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            {running && !paused && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+            )}
+            <span className={clsx(
+              'relative inline-flex h-2.5 w-2.5 rounded-full',
+              paused ? 'bg-white/30' : running ? 'bg-primary' : 'bg-primary/60',
+            )} />
+          </span>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-text/60">
+            {job.status === 'complete'
+              ? 'Sparrow finished this'
+              : job.status === 'abandoned'
+                ? 'Sparrow stopped this job'
+                : "Sparrow's agent is working on this"}
+          </h2>
+          {paused && <Badge tone="neutral">Paused</Badge>}
         </div>
-      )}
 
-      <div className="mt-5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted/70">Latest update</p>
-        {!latestUpdate ? (
-          <p className="mt-2 text-sm text-muted">No update yet — the execution log will show work as it happens.</p>
-        ) : (
-          <div ref={journalRef} className="mt-2 flex min-w-0 gap-3">
-            <span className="flex w-3 shrink-0 justify-center pt-1.5">
-              <span
-                title={latestUpdate.agent}
-                className={clsx('h-1.5 w-1.5 rounded-full', AGENT_DOT[latestUpdate.agent] || 'bg-white/30')}
-              />
-            </span>
-            <div className="min-w-0 flex-1">
-              <span className="mb-0.5 block text-[11px] text-muted/70">{journalTime(latestUpdate.ts)}</span>
-              <CollapsibleText text={latestUpdate.text} />
+        <p className="mt-3 text-base font-medium text-text">
+          {titleSummaryLine(detail, show, nowSeconds)}
+        </p>
+        {!paused && !terminal && (
+          <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted">
+            <Clock size={12} />
+            {running
+              ? 'Working right now'
+              : wakeAt > 0
+                ? `Checking again in ${formatCountdown(secondsLeft)}`
+                : 'Waiting for something to happen'}
+          </p>
+        )}
+
+        {!terminal && (
+          <>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy !== null || paused}
+                onClick={onNudge}
+                title="Ask the agent to check right now"
+              >
+                {busy === 'nudge' ? spinner : <RefreshCw size={13} />}
+                Check now
+              </Button>
+              {paused ? (
+                <Button variant="secondary" size="sm" disabled={busy !== null} onClick={onResume}>
+                  {busy === 'resume' ? spinner : <Play size={13} />}
+                  Resume
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy !== null}
+                  onClick={onPause}
+                  title="Stops downloading. Nothing is deleted."
+                >
+                  {busy === 'pause' ? spinner : <Pause size={13} />}
+                  Pause request
+                </Button>
+              )}
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={busy !== null}
+                onClick={onCancel}
+                title="Stops unfinished downloads and removes their partial files. Episodes already in your library are kept."
+              >
+                {busy === 'cancel' ? spinner : <Trash2 size={13} />}
+                Cancel pending work
+              </Button>
             </div>
-          </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted/80">
+              {paused
+                ? 'Paused — nothing is downloading, and nothing was deleted.'
+                : 'Pause request stops downloading; nothing is deleted. Cancel pending work removes unfinished downloads and their partial files — episodes already in your library are kept.'}
+            </p>
+          </>
         )}
-        {earlierUpdates.length > 0 && (
-          <details className="mt-3 border-t border-white/[0.06] pt-3">
-            <summary className="cursor-pointer text-xs font-semibold text-muted hover:text-text">
-              Earlier updates ({earlierUpdates.length})
-            </summary>
-            <ul className="mt-3 space-y-3">
-              {earlierUpdates.map(entry => (
-                <li key={entry.id} className="flex min-w-0 gap-3">
-                  <span className="w-14 shrink-0 text-[11px] text-muted/70">{journalTime(entry.ts)}</span>
-                  <div className="min-w-0 flex-1"><CollapsibleText text={entry.text} /></div>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </div>
+      </Card>
 
-      <details className="mt-5 border-t border-white/[0.08] pt-4">
-        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted/70 hover:text-text">
-          Execution log ({execution.length + trace.length})
-        </summary>
-        {execution.length === 0 && trace.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">Detailed steps will appear here on the next agent run.</p>
-        ) : (
-          <div className="mt-2 max-h-96 overflow-y-auto pr-1">
-            {execution.length > 0 && (
-              <>
-                <p className="py-2 text-[10px] font-semibold uppercase tracking-wide text-muted/60">Live execution</p>
-                <ul className="divide-y divide-white/[0.06]">
-                  {execution.map(event => <ExecutionRow key={event.id} event={event} />)}
-                </ul>
-              </>
-            )}
-            {trace.length > 0 && (
-              <>
-                <p className="border-t border-white/[0.06] py-2 text-[10px] font-semibold uppercase tracking-wide text-muted/60">
-                  Saved session history
-                </p>
-                <ul className="divide-y divide-white/[0.06]">
-                  {[...trace].reverse().map(entry => <TraceRow key={entry.id} entry={entry} />)}
-                </ul>
-              </>
-            )}
-          </div>
-        )}
-      </details>
-    </Card>
+      <Card className="p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted/70">Latest updates</p>
+        <div className="mt-3">
+          <JournalSection journal={detail.journal} />
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted/70">Transfers</p>
+        <div className="mt-3">
+          <TransfersSection downloads={detail.downloads} nowSeconds={nowSeconds} />
+        </div>
+        <AdvancedSection detail={detail} />
+      </Card>
+    </div>
   )
 }
+
+// --- Preferences tab ---
+
+const MONITORING_CHOICES: Array<{ mode: MonitoringMode; label: string; hint: string }> = [
+  {
+    mode: 'exact',
+    label: 'Exactly what I asked for',
+    hint: 'Sparrow only gets what you explicitly requested — nothing more.',
+  },
+  {
+    mode: 'keep_current',
+    label: 'Keep current — grab new episodes as they air',
+    hint: 'New episodes are picked up automatically; older seasons are left alone.',
+  },
+  {
+    mode: 'seasons',
+    label: 'Selected seasons',
+    hint: 'Sparrow may fetch any episode from the seasons you tick below.',
+  },
+  {
+    mode: 'backfill',
+    label: 'Everything available (backfill)',
+    hint: 'Sparrow may fetch every available episode, past and future.',
+  },
+]
+
+function PreferencesTab({
+  show,
+  quality,
+  onQualityChange,
+  monitoringBusy,
+  monitoringError,
+  onMonitoring,
+}: {
+  show: ShowDetail
+  quality: string
+  onQualityChange: (value: string) => void
+  monitoringBusy: boolean
+  monitoringError: string
+  onMonitoring: (mode: MonitoringMode, seasons: number[]) => void
+}) {
+  const isMovie = show.media_type === 'movie'
+  const currentMode: MonitoringMode = show.mandate?.mode ?? 'exact'
+  const currentSeasons = useMemo(() => show.mandate?.seasons ?? [], [show.mandate])
+
+  const toggleSeason = (seasonNumber: number) => {
+    const next = currentSeasons.includes(seasonNumber)
+      ? currentSeasons.filter(n => n !== seasonNumber)
+      : [...currentSeasons, seasonNumber].sort((a, b) => a - b)
+    onMonitoring('seasons', next)
+  }
+
+  return (
+    <div className="space-y-3">
+      {!isMovie && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted/70">Monitoring</p>
+            {monitoringBusy && <Loader2 size={13} className="animate-spin text-muted" />}
+          </div>
+          <p className="mt-2 text-sm text-muted">
+            This is your standing permission. Sparrow will never download outside it.
+          </p>
+          <div className="mt-4 space-y-2" role="radiogroup" aria-label="Monitoring scope">
+            {MONITORING_CHOICES.map(choice => {
+              const selected = currentMode === choice.mode
+              return (
+                <div key={choice.mode}>
+                  <label
+                    className={clsx(
+                      'flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors',
+                      selected
+                        ? 'border-primary/40 bg-primary/10'
+                        : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]',
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="monitoring-mode"
+                      className="mt-1 accent-current"
+                      checked={selected}
+                      disabled={monitoringBusy}
+                      onChange={() => onMonitoring(
+                        choice.mode,
+                        choice.mode === 'seasons' ? currentSeasons : [],
+                      )}
+                    />
+                    <span className="min-w-0">
+                      <span className={clsx('block text-sm font-semibold', selected ? 'text-text' : 'text-text/85')}>
+                        {choice.label}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted">{choice.hint}</span>
+                    </span>
+                  </label>
+                  {choice.mode === 'seasons' && selected && (
+                    <div className="ml-7 mt-2 flex flex-wrap gap-1.5">
+                      {show.seasons.map(season => {
+                        const checked = currentSeasons.includes(season.season_number)
+                        return (
+                          <label
+                            key={season.season_number}
+                            className={clsx(
+                              'inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                              checked
+                                ? 'border-primary/40 bg-primary/15 text-primary-light'
+                                : 'border-white/10 bg-white/5 text-muted hover:text-text',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={checked}
+                              disabled={monitoringBusy}
+                              onChange={() => toggleSeason(season.season_number)}
+                            />
+                            {checked && <Check size={11} />}
+                            {season.name || `Season ${season.season_number}`}
+                          </label>
+                        )
+                      })}
+                      {show.seasons.length === 0 && (
+                        <p className="text-xs text-muted">No season details available yet.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {monitoringError && <p className="mt-3 text-sm text-rose-300">{monitoringError}</p>}
+          {show.mandate && (
+            <p className="mt-3 text-[11px] text-muted/70">
+              Last changed <RelativeTime ts={show.mandate.updated_at || show.mandate.granted_at} />
+            </p>
+          )}
+        </Card>
+      )}
+
+      <Card className="p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted/70">Quality</p>
+        <p className="mt-2 text-sm text-muted">Applies to new requests you make from this page.</p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {QUALITY_OPTIONS.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onQualityChange(option.value)}
+              className={clsx(
+                'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                quality === option.value
+                  ? 'border-primary/40 bg-primary/15 text-primary-light'
+                  : 'border-white/10 bg-white/5 text-muted hover:text-text',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// --- Watch tab ---
+
+function WatchTab({
+  show,
+  jobDetail,
+  requesting,
+  expandedSeasons,
+  onToggleSeason,
+  onRequestSeason,
+  onOpenProgress,
+}: {
+  show: ShowDetail
+  jobDetail: JobDetail | null
+  requesting: string | null
+  expandedSeasons: Set<number>
+  onToggleSeason: (seasonNumber: number) => void
+  onRequestSeason: (season: ShowSeason) => void
+  onOpenProgress: () => void
+}) {
+  if (show.media_type === 'movie') {
+    return (
+      <Card className="p-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <Film size={20} className="shrink-0 text-muted/60" />
+          {show.in_library ? (
+            <Badge tone="success" className="px-3 py-1.5 text-sm">
+              <Check size={13} /> In your library — ready to watch
+            </Badge>
+          ) : jobDetail ? (
+            <>
+              <Badge tone="info" className="px-3 py-1.5 text-sm">
+                <Sparkles size={13} /> On the way
+              </Badge>
+              <button
+                type="button"
+                className="text-xs font-semibold text-primary-light hover:underline"
+                onClick={onOpenProgress}
+              >
+                See progress
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-muted">
+              Not in your library yet — use “Get movie” above to request it.
+            </p>
+          )}
+        </div>
+      </Card>
+    )
+  }
+
+  if (show.seasons.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-white/[0.12] bg-panel/50 p-10 text-center">
+        <Tv size={32} className="mx-auto text-muted/30" />
+        <p className="mt-3 text-sm text-muted">No season details available for this show yet.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {show.seasons.map(season => {
+        const expanded = expandedSeasons.has(season.season_number)
+        const complete = season.episode_count > 0 && season.have_count >= season.episode_count
+        const partial = season.have_count > 0 && season.have_count < season.episode_count
+        const key = `season-${season.season_number}`
+        return (
+          <Card key={season.season_number} className="overflow-hidden">
+            <div className="flex flex-wrap items-center gap-3 p-4">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                onClick={() => onToggleSeason(season.season_number)}
+                aria-expanded={expanded}
+              >
+                <ChevronDown
+                  size={16}
+                  className={clsx('shrink-0 text-muted transition-transform', expanded && 'rotate-180')}
+                />
+                <span className="text-sm font-semibold text-text">
+                  {season.name || `Season ${season.season_number}`}
+                </span>
+                <SeasonBadge season={season} />
+              </button>
+              {!complete && season.episode_count > 0 && !jobDetail && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="ml-auto shrink-0"
+                  disabled={requesting !== null}
+                  onClick={() => onRequestSeason(season)}
+                >
+                  {requesting === key
+                    ? <Loader2 size={13} className="animate-spin" />
+                    : <Download size={13} />}
+                  {partial ? 'Get missing episodes' : 'Get season'}
+                </Button>
+              )}
+            </div>
+            {expanded && (
+              <div className="border-t border-white/[0.08] p-4">
+                {season.episode_count === 0 ? (
+                  <p className="text-xs text-muted">No episode details yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {seasonEpisodes(season).map(episode => (
+                      <EpisodePill key={episode.episode} episode={episode} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
+// --- Page ---
+
+const TABS: Array<{ id: TabId; label: string; icon: typeof Play }> = [
+  { id: 'watch', label: 'Watch', icon: Play },
+  { id: 'progress', label: 'Progress', icon: Activity },
+  { id: 'preferences', label: 'Preferences', icon: SlidersHorizontal },
+]
 
 export default function Show() {
   const { tmdbId } = useParams()
@@ -483,12 +1102,15 @@ export default function Show() {
   const [overviewExpanded, setOverviewExpanded] = useState(false)
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set())
   const [quality, setQuality] = useState('')
-  const [requesting, setRequesting] = useState<string | null>(null) // 'show' | 'season-N'
+  const [requesting, setRequesting] = useState<string | null>(null) // 'movie' | 'show' | 'season-N'
   const [feedback, setFeedback] = useState('')
   const [requestError, setRequestError] = useState('')
 
+  const [tab, setTab] = useState<TabId>('watch')
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null)
   const [jobBusy, setJobBusy] = useState<string | null>(null)
+  const [monitoringBusy, setMonitoringBusy] = useState(false)
+  const [monitoringError, setMonitoringError] = useState('')
 
   const showId = Number(tmdbId)
   const mediaType = searchParams.get('type') === 'movie' ? 'movie' : 'tv'
@@ -534,10 +1156,20 @@ export default function Show() {
     }
   }, [showId, mediaType])
 
+  const refreshMandate = useCallback(async () => {
+    if (!Number.isFinite(showId)) return
+    try {
+      const res = await getMandate(showId, mediaType)
+      setShow(prev => (prev ? { ...prev, mandate: res.mandate, mandate_summary: res.summary } : prev))
+    } catch {
+      // the next full refresh will reconcile
+    }
+  }, [showId, mediaType])
+
   useEffect(() => { loadShow() }, [loadShow])
   useEffect(() => { loadJob() }, [loadJob])
 
-  // Live tick for the next-wake countdown
+  // Live tick for the next-wake countdown and staleness labels
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!jobDetail) return
@@ -578,7 +1210,34 @@ export default function Show() {
       scheduleRefresh()
       return
     }
-    if (type === 'request_update' || type === 'library_update' || type === 'download_update' || type === 'activity') {
+    if (type === 'download_update') {
+      const dl = event.data as Partial<DownloadItem> & { id?: string }
+      const known = dl?.id && jobDetail?.downloads.some(existing => existing.id === dl.id)
+      if (known) {
+        // Live in-place update — no refetch needed for progress/speed/eta ticks.
+        setJobDetail(prev => (
+          prev
+            ? {
+                ...prev,
+                downloads: prev.downloads.map(existing =>
+                  existing.id === dl.id ? { ...existing, ...dl } : existing),
+              }
+            : prev
+        ))
+        setNow(Date.now())
+        // Status transitions can change the inventory (e.g. organized) — reconcile quietly.
+        if (dl.status && dl.status !== 'downloading') scheduleRefresh()
+      } else {
+        scheduleRefresh()
+      }
+      return
+    }
+    if (type === 'mandate_update') {
+      const data = event.data as { tmdb_id?: number } | undefined
+      if (!data || data.tmdb_id == null || data.tmdb_id === showId) refreshMandate()
+      return
+    }
+    if (type === 'request_update' || type === 'library_update' || type === 'activity') {
       scheduleRefresh()
     }
   })
@@ -655,12 +1314,43 @@ export default function Show() {
   })
   const handleCancel = () => {
     if (!jobDetail) return
-    if (!confirm(`Stop working on "${jobDetail.job.title}"?\n\nAnything already in your library stays there.`)) return
+    if (!confirm(`Cancel pending work on "${jobDetail.job.title}"?\n\nStops unfinished downloads and removes their partial files. Episodes already in your library are kept.`)) return
     withJob('cancel', async (id) => {
       await cancelJob(id)
       setJobDetail(null)
       loadShow(true)
     })
+  }
+
+  const applyMonitoring = async (mode: MonitoringMode, seasons: number[]) => {
+    if (!show) return
+    setMonitoringBusy(true)
+    setMonitoringError('')
+    const previousMandate = show.mandate
+    const previousSummary = show.mandate_summary
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const optimistic: Mandate = {
+      tmdb_id: show.tmdb_id,
+      media_type: show.media_type,
+      mode,
+      seasons,
+      requested_episodes: previousMandate?.requested_episodes ?? {},
+      granted_at: previousMandate?.granted_at ?? nowSeconds,
+      created_at: previousMandate?.created_at ?? nowSeconds,
+      updated_at: nowSeconds,
+    }
+    setShow(prev => (prev ? { ...prev, mandate: optimistic } : prev))
+    try {
+      const res = await setMonitoring(show.tmdb_id, mode, seasons, show.media_type)
+      setShow(prev => (prev ? { ...prev, mandate: res.mandate, mandate_summary: res.summary } : prev))
+    } catch {
+      setShow(prev => (
+        prev ? { ...prev, mandate: previousMandate, mandate_summary: previousSummary } : prev
+      ))
+      setMonitoringError("Couldn't update monitoring — please try again")
+    } finally {
+      setMonitoringBusy(false)
+    }
   }
 
   const toggleSeason = (seasonNumber: number) => {
@@ -671,6 +1361,8 @@ export default function Show() {
       return next
     })
   }
+
+  const needsAttention = jobDetail?.downloads.some(dl => dl.status === 'error') ?? false
 
   if (loading) {
     return (
@@ -765,9 +1457,11 @@ export default function Show() {
                     <Check size={15} /> In your library — complete
                   </Badge>
                 ) : jobDetail ? (
-                  <Badge tone="info" className="px-4 py-2 text-sm">
-                    <Sparkles size={14} /> Sparrow is on it
-                  </Badge>
+                  <button type="button" onClick={() => setTab('progress')} title="See progress">
+                    <Badge tone="info" className="px-4 py-2 text-sm">
+                      <Sparkles size={14} /> Sparrow is on it
+                    </Badge>
+                  </button>
                 ) : (
                   <>
                     <Button
@@ -790,88 +1484,73 @@ export default function Show() {
                 </p>
               )}
               {requestError && <p className="mt-3 text-sm text-rose-300">{requestError}</p>}
+
+              {/* The user's contract — always visible, on every tab */}
+              <ContractStatement summary={show.mandate_summary} />
             </div>
           </div>
         </div>
       </section>
 
-      <main className="mx-auto w-full max-w-7xl space-y-3 p-4 sm:p-6 lg:p-8">
-        {/* Agent workspace */}
-        {jobDetail && (
-          <div className="pb-3">
-            <AgentPanel
-              detail={jobDetail}
-              now={now}
-              busy={jobBusy}
-              onNudge={handleNudge}
-              onPause={handlePause}
-              onResume={handleResume}
-              onCancel={handleCancel}
-            />
-          </div>
+      <main className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
+        {/* Tabs */}
+        <div className="mb-4 inline-flex max-w-full items-center gap-1 rounded-full border border-white/[0.12] bg-white/[0.05] p-1 backdrop-blur-xl">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              aria-pressed={tab === id}
+              className={clsx(
+                'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors',
+                tab === id
+                  ? 'bg-white/[0.14] text-text'
+                  : 'text-muted hover:text-text',
+              )}
+            >
+              <Icon size={13} />
+              {label}
+              {id === 'progress' && needsAttention && (
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-300" title="Needs attention" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'watch' && (
+          <WatchTab
+            show={show}
+            jobDetail={jobDetail}
+            requesting={requesting}
+            expandedSeasons={expandedSeasons}
+            onToggleSeason={toggleSeason}
+            onRequestSeason={requestSeason}
+            onOpenProgress={() => setTab('progress')}
+          />
         )}
 
-        {/* Seasons */}
-        {show.media_type === 'movie' ? null : show.seasons.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/[0.12] bg-panel/50 p-10 text-center">
-            <Tv size={32} className="mx-auto text-muted/30" />
-            <p className="mt-3 text-sm text-muted">No season details available for this show yet.</p>
-          </div>
-        ) : (
-          show.seasons.map(season => {
-            const expanded = expandedSeasons.has(season.season_number)
-            const complete = season.episode_count > 0 && season.have_count >= season.episode_count
-            const partial = season.have_count > 0 && season.have_count < season.episode_count
-            const key = `season-${season.season_number}`
-            return (
-              <Card key={season.season_number} className="overflow-hidden">
-                <div className="flex flex-wrap items-center gap-3 p-4">
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    onClick={() => toggleSeason(season.season_number)}
-                    aria-expanded={expanded}
-                  >
-                    <ChevronDown
-                      size={16}
-                      className={clsx('shrink-0 text-muted transition-transform', expanded && 'rotate-180')}
-                    />
-                    <span className="text-sm font-semibold text-text">
-                      {season.name || `Season ${season.season_number}`}
-                    </span>
-                    <SeasonBadge season={season} />
-                  </button>
-                  {!complete && season.episode_count > 0 && !jobDetail && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="ml-auto shrink-0"
-                      disabled={requesting !== null}
-                      onClick={() => requestSeason(season)}
-                    >
-                      {requesting === key
-                        ? <Loader2 size={13} className="animate-spin" />
-                        : <Download size={13} />}
-                      {partial ? 'Get missing episodes' : 'Get season'}
-                    </Button>
-                  )}
-                </div>
-                {expanded && (
-                  <div className="border-t border-white/[0.08] p-4">
-                    {season.episode_count === 0 ? (
-                      <p className="text-xs text-muted">No episode details yet.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {seasonEpisodes(season).map(episode => (
-                          <EpisodePill key={episode.episode} episode={episode} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Card>
-            )
-          })
+        {tab === 'progress' && (
+          <ProgressTab
+            detail={jobDetail}
+            show={show}
+            now={now}
+            busy={jobBusy}
+            onNudge={handleNudge}
+            onPause={handlePause}
+            onResume={handleResume}
+            onCancel={handleCancel}
+          />
+        )}
+
+        {tab === 'preferences' && (
+          <PreferencesTab
+            show={show}
+            quality={quality}
+            onQualityChange={setQuality}
+            monitoringBusy={monitoringBusy}
+            monitoringError={monitoringError}
+            onMonitoring={applyMonitoring}
+          />
         )}
       </main>
     </div>

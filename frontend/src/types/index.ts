@@ -39,6 +39,7 @@ export interface Config {
   prefer_smaller_files: boolean
   prefer_season_packs: boolean
   season_pack_size_limit_gb: number
+  max_active_transfers: number
   smart_model: string
   cheap_model: string
 }
@@ -79,6 +80,8 @@ export interface Download {
   completed_at: number | null
   error_message: string
   quality: string
+  /** When progress/speed/eta were last confirmed against the client; 0 = never */
+  stats_updated_at: number
 }
 
 export type RequestStatus =
@@ -186,6 +189,74 @@ export interface ShowDetail {
   library_item_id: string | null
   seasons: ShowSeason[]
   goals: MediaRequest[]
+  mandate: Mandate | null
+  /** Plain-language contract line, e.g. "Requested: Season 1 only · Future-season monitoring: Off" */
+  mandate_summary: string
+}
+
+// The user's recorded authority for a title. Agents can never widen it.
+export type MonitoringMode = 'exact' | 'keep_current' | 'seasons' | 'backfill'
+
+export interface Mandate {
+  tmdb_id: number
+  media_type: 'tv' | 'movie'
+  mode: MonitoringMode
+  requested_episodes: Record<string, number[]>
+  seasons: number[]
+  granted_at: number
+  created_at: number
+  updated_at: number
+}
+
+// Plain-language episode/title states in the Library projection.
+export type LibraryEntryState =
+  | 'requested'
+  | 'queued'
+  | 'downloading'
+  | 'verifying'
+  | 'ready'
+  | 'paused'
+
+export interface LibraryViewEpisode {
+  state: LibraryEntryState
+  quality: string
+  verified?: boolean
+  updated_at: number | null
+}
+
+export interface LibraryViewTransfers {
+  progress: number | null
+  speed_bps: number
+  eta_seconds: number | null
+  stats_updated_at: number | null
+  stale: boolean
+}
+
+export interface LibraryViewEntry {
+  tmdb_id: number | null
+  media_type: MediaType
+  title: string
+  year: number | null
+  poster_path: string
+  in_library: boolean
+  library_item_id: string | null
+  episodes: Record<string, Record<string, LibraryViewEpisode>>
+  ready_count: number
+  pending_count: number
+  state: LibraryEntryState
+  needs_attention: boolean
+  job: {
+    id: string
+    status: JobStatus
+    state_line: string
+    next_wake_at: number
+    updated_at: number
+    origin: string
+  } | null
+  transfers: LibraryViewTransfers | null
+  size_bytes: number
+  quality?: string
+  verified?: boolean
 }
 
 export interface ActivityEvent {

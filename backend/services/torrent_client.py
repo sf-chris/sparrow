@@ -162,6 +162,14 @@ class QBittorrentClient:
             )
             return resp.status_code == 200
 
+    async def start_torrent(self, torrent_hash: str) -> bool:
+        async with httpx.AsyncClient(timeout=5.0, cookies=self._cookies) as client:
+            resp = await client.post(
+                f"{self.base_url}/api/v2/torrents/resume",
+                data={"hashes": torrent_hash},
+            )
+            return resp.status_code == 200
+
     def map_status(self, qbt_state: str) -> DownloadStatus:
         mapping = {
             "downloading": DownloadStatus.DOWNLOADING,
@@ -254,6 +262,14 @@ class TransmissionClient:
         for t in torrents:
             if t.get("hashString", "").lower() == torrent_hash.lower():
                 await self._rpc("torrent-stop", {"ids": [t["id"]]})
+                return True
+        return False
+
+    async def start_torrent(self, torrent_hash: str) -> bool:
+        torrents = await self.get_torrents()
+        for t in torrents:
+            if t.get("hashString", "").lower() == torrent_hash.lower():
+                await self._rpc("torrent-start", {"ids": [t["id"]]})
                 return True
         return False
 
@@ -415,6 +431,18 @@ class TorrentManager:
                 return await self._qbt.stop_torrent(torrent_hash)
             elif self._tr:
                 return await self._tr.stop_torrent(torrent_hash)
+        except Exception:
+            pass
+        return False
+
+    async def start_torrent(self, torrent_hash: str) -> bool:
+        """Resume a previously stopped torrent."""
+        try:
+            if self._qbt:
+                await self._qbt.login()
+                return await self._qbt.start_torrent(torrent_hash)
+            elif self._tr:
+                return await self._tr.start_torrent(torrent_hash)
         except Exception:
             pass
         return False

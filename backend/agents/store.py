@@ -13,7 +13,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from .models import Job, JournalEntry, AgentSession, JobStatus, SessionStatus, AgentKind
+from .models import (Job, JournalEntry, AgentSession, JobStatus, Mandate,
+                     SessionStatus, AgentKind)
 
 
 class AgentStore:
@@ -58,6 +59,13 @@ class AgentStore:
                     wake_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS mandates (
+                    tmdb_id INTEGER NOT NULL,
+                    media_type TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    updated_at REAL NOT NULL,
+                    PRIMARY KEY (tmdb_id, media_type)
+                );
             """)
 
     # ─── Jobs ────────────────────────────────────────────────────────────
@@ -97,6 +105,31 @@ class AgentStore:
         with self._connect() as conn:
             conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             conn.execute("DELETE FROM journal_entries WHERE job_id = ?", (job_id,))
+
+    # ─── Mandates (user authority; agents read, never write) ────────────
+
+    def save_mandate(self, mandate: Mandate) -> Mandate:
+        mandate.updated_at = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO mandates (tmdb_id, media_type, data, updated_at) "
+                "VALUES (?, ?, ?, ?)",
+                (mandate.tmdb_id, mandate.media_type,
+                 json.dumps(mandate.to_dict()), mandate.updated_at),
+            )
+        return mandate
+
+    def get_mandate(self, tmdb_id: int, media_type: str = "tv") -> Optional[Mandate]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT data FROM mandates WHERE tmdb_id = ? AND media_type = ?",
+                (tmdb_id, media_type)).fetchone()
+        return Mandate.from_dict(json.loads(row["data"])) if row else None
+
+    def get_mandates(self) -> list[Mandate]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT data FROM mandates ORDER BY updated_at DESC").fetchall()
+        return [Mandate.from_dict(json.loads(r["data"])) for r in rows]
 
     # ─── Journal ─────────────────────────────────────────────────────────
 
