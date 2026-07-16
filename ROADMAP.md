@@ -169,14 +169,14 @@ cannot complete a request.
 
 ## Gate B — Open-source v0.1.0-alpha
 
-**Status: Release candidate complete; Git tag awaits the new repository**
+**Status: Complete (2026-07-16)**
 **Target: achieved (2026-07-16)**
 
 Evidence: a source-only temporary checkout with no `.env`, state, virtualenv,
 frontend build, or node modules installed successfully, passed the full suite,
 and served the onboarding UI. The release tree scan passes and npm reports zero
-known vulnerabilities. Git history and a release tag cannot exist until the
-repository the owner is creating is initialized.
+known vulnerabilities. The private Git repository is initialized and the
+release is tagged `v0.1.0-alpha.1`.
 
 ### Outcome
 
@@ -226,7 +226,7 @@ This is an honest alpha, not the finished Grandma installer.
 - [x] Add a code of conduct and issue/feature-request templates.
 - [x] Link DESIGN.md prominently and state the agent/tool architecture rules.
 - [x] Add CHANGELOG.md and version metadata for `v0.1.0-alpha.1`.
-- [ ] Create the `v0.1.0-alpha.1` Git tag after the GitHub repository exists.
+- [x] Create the `v0.1.0-alpha.1` Git tag after the GitHub repository exists.
 - [x] Clearly distinguish the v3 agentic product from demoted legacy screens.
 - [x] State lawful-use and operator-responsibility expectations plainly.
 
