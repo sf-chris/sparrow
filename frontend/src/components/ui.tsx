@@ -1,5 +1,47 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import clsx from 'clsx'
+
+export function formatRelativeTime(ts: number, now = Date.now() / 1000): string {
+  const delta = now - ts
+  const abs = Math.abs(delta)
+  const suffix = delta >= 0 ? ' ago' : ' from now'
+  if (abs < 45) return delta >= 0 ? 'just now' : 'in under a minute'
+  const units: Array<[number, string]> = [
+    [60, 'minute'], [60, 'hour'], [24, 'day'], [7, 'week'],
+  ]
+  let value = abs / 60
+  let label = 'minute'
+  for (let i = 1; i < units.length; i++) {
+    if (value < units[i][0]) break
+    value /= units[i][0]
+    label = units[i][1]
+  }
+  const rounded = Math.round(value)
+  return `${rounded} ${label}${rounded === 1 ? '' : 's'}${suffix}`
+}
+
+/**
+ * Friendly relative time ("4 minutes ago") with the exact local date and
+ * time on hover. Every user-visible operation should carry one of these.
+ */
+export function RelativeTime({ ts, className }: { ts: number | null | undefined; className?: string }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => tick(t => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  if (!ts) return <span className={clsx('text-muted', className)}>—</span>
+  const exact = new Date(ts * 1000).toLocaleString(undefined, {
+    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+  return (
+    <time title={exact} dateTime={new Date(ts * 1000).toISOString()} className={clsx('cursor-help', className)}>
+      {formatRelativeTime(ts)}
+    </time>
+  )
+}
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md' | 'icon'

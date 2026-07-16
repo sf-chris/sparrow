@@ -10,7 +10,7 @@ import {
 import type { PreviewCandidate, RequestPreview, SuggestResponse } from '../api/client'
 import type { Download as DL, MediaRequest, RequestStatus, SearchResult } from '../types'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { Badge, Button, Card, Progress, SectionHeader } from '../components/ui'
+import { Badge, Button, Card, Progress, RelativeTime, SectionHeader } from '../components/ui'
 import clsx from 'clsx'
 
 function formatSize(bytes: number): string {
@@ -149,6 +149,17 @@ function DownloadRow({
           <span>{formatSize(dl.size_bytes)}</span>
           {dl.download_speed > 0 && <span>{formatSpeed(dl.download_speed)}</span>}
           <span>{Math.round(dl.progress * 100)}%</span>
+          {dl.stats_updated_at > 0 && (
+            Date.now() / 1000 - dl.stats_updated_at > 120 &&
+            ['queued', 'downloading', 'seeding'].includes(dl.status) ? (
+              <span className="text-amber-300">
+                stale — last update <RelativeTime ts={dl.stats_updated_at} />
+              </span>
+            ) : (
+              <span>updated <RelativeTime ts={dl.stats_updated_at} /></span>
+            )
+          )}
+          {!dl.stats_updated_at && <span>added <RelativeTime ts={dl.added_at} /></span>}
         </div>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
           <div className="h-full rounded-full bg-sky-300" style={{ width: `${Math.max(4, Math.round(dl.progress * 100))}%` }} />
