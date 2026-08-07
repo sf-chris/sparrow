@@ -67,7 +67,10 @@ def fetch_system(session: AgentSession, job: Job, inventory_hint: str,
             "quality_preference": cfg.quality_preference.value,
             "prefer_season_packs": cfg.prefer_season_packs,
             "prefer_smaller_files": cfg.prefer_smaller_files,
-            "season_pack_size_limit_gb": cfg.season_pack_size_limit_gb,
+            "season_pack_size_limit_gb": (
+                cfg.season_pack_size_limit_gb or
+                "automatic — use your own size judgment for the quality and episode count"
+            ),
         }
         settings_block = f"""
 
