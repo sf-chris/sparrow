@@ -4,10 +4,8 @@ import { getOnboardingStatus } from './api/client'
 import Onboarding from './pages/Onboarding'
 import Layout from './components/Layout'
 import Search from './pages/Search'
-import Downloads from './pages/Downloads'
 import Library from './pages/Library'
 import Settings from './pages/Settings'
-import Logs from './pages/Logs'
 import Home from './pages/Home'
 import Show from './pages/Show'
 import Activity from './pages/Activity'
@@ -44,10 +42,8 @@ export default function App() {
             <Route path="/activity" element={<Activity />} />
             <Route path="/library" element={<Library />} />
             <Route path="/settings" element={<Settings />} />
-            {/* Power-user surfaces, reachable from Settings → Advanced */}
+            {/* Power-user surface, reachable from Settings → Advanced */}
             <Route path="/search" element={<Search />} />
-            <Route path="/downloads" element={<Downloads />} />
-            <Route path="/logs" element={<Logs />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}

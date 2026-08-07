@@ -127,7 +127,8 @@ class AgentService:
 
         async def fetch_system(session: AgentSession) -> str:
             job = self.store.get_job(session.job_id)
-            return prompts.fetch_system(session, job, "")
+            return prompts.fetch_system(session, job, "",
+                                        cfg=self.storage.get_config())
 
         async def media_system(session: AgentSession) -> str:
             job = self.store.get_job(session.job_id) if session.job_id else None
@@ -262,7 +263,8 @@ class AgentService:
                 "label": "Fetch Agent",
                 "model": self.smart_model(),
                 "context": f"Rendered with the latest job contract: {job.title}",
-                "prompt": prompts.fetch_system(fetch_session, job, ""),
+                "prompt": prompts.fetch_system(fetch_session, job, "",
+                                               cfg=self.storage.get_config()),
                 "tools": tools_for("fetch"),
             },
             {

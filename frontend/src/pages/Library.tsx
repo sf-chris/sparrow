@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowRight, CheckCircle2, Copy, DownloadCloud, ExternalLink, Film, FolderOpen, HardDrive,
-  ImageOff, Info, Layers, Loader2, RefreshCw, ScanLine, Search, Sparkles, Star, Trash2, Tv, X,
+  ArrowRight, Clock, Copy, DownloadCloud, ExternalLink, Film, FolderOpen,
+  ImageOff, Info, Layers, Loader2, RefreshCw, ScanLine, Search, Star, Trash2, Tv, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { deleteLibraryItem, getLibrary, getLibraryView, scanLibrary, TMDB_POSTER_BASE } from '../api/client'
 import type { LibraryEntryState, LibraryItem, LibraryViewEntry, MediaType } from '../types'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { Badge, Button, Card, Progress, RelativeTime, SectionHeader } from '../components/ui'
+import { Badge, Button, Card, RelativeTime, SectionHeader } from '../components/ui'
 
 type StateFilter = 'all' | 'ready' | 'in_progress' | 'attention'
 type MediaFilter = 'all' | 'movie' | 'tv'
@@ -28,27 +28,28 @@ const REFRESH_EVENTS = new Set([
   'download_update', 'download_added', 'mandate_update',
 ])
 
-const STATE_META: Record<LibraryEntryState, {
-  label: string
-  tone: 'neutral' | 'success' | 'warning' | 'danger' | 'info'
-  pulse?: boolean
-}> = {
-  requested: { label: 'Requested', tone: 'info' },
-  queued: { label: 'Queued', tone: 'neutral' },
-  downloading: { label: 'Downloading', tone: 'warning', pulse: true },
-  verifying: { label: 'Verifying', tone: 'info' },
-  ready: { label: 'Ready', tone: 'success' },
-  paused: { label: 'Paused', tone: 'warning' },
+/** Short human state labels + dot accents for the poster corner chip. */
+const STATE_META: Record<LibraryEntryState, { label: string; dot: string; pulse?: boolean }> = {
+  requested: { label: 'Requested', dot: 'bg-sky-300' },
+  queued: { label: 'Queued', dot: 'bg-muted' },
+  downloading: { label: 'Downloading', dot: 'bg-primary', pulse: true },
+  verifying: { label: 'Verifying', dot: 'bg-sky-300', pulse: true },
+  ready: { label: 'Ready', dot: 'bg-emerald-300' },
+  paused: { label: 'Paused', dot: 'bg-amber-300' },
 }
 
 function needsAttention(entry: LibraryViewEntry): boolean {
   return entry.needs_attention || entry.state === 'paused'
 }
 
+function isInProgress(entry: LibraryViewEntry): boolean {
+  return IN_PROGRESS_STATES.includes(entry.state)
+}
+
 function matchesFilter(entry: LibraryViewEntry, filter: StateFilter): boolean {
   if (filter === 'all') return true
   if (filter === 'ready') return entry.state === 'ready'
-  if (filter === 'in_progress') return IN_PROGRESS_STATES.includes(entry.state)
+  if (filter === 'in_progress') return isInProgress(entry)
   return needsAttention(entry)
 }
 
@@ -59,6 +60,14 @@ function formatSize(bytes: number): string {
   const gb = bytes / 1024 ** 3
   if (gb >= 1) return `${gb.toFixed(1)} GB`
   return `${(bytes / 1024 ** 2).toFixed(0)} MB`
+}
+
+function formatEta(seconds: number): string {
+  if (seconds < 60) return 'under a minute left'
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes} min left`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${minutes % 60}m left`
 }
 
 function mediaTypeLabel(type: MediaType): string {
@@ -82,6 +91,10 @@ function episodesOnDisk(item: LibraryItem): number | null {
   return Object.values(item.episodes).reduce((acc, eps) => acc + Object.keys(eps || {}).length, 0)
 }
 
+function entryKey(entry: LibraryViewEntry): string {
+  return `${entry.media_type}:${entry.tmdb_id ?? entry.library_item_id ?? entry.title}`
+}
+
 function CopyValue({ value, display }: { value: string; display?: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -98,29 +111,6 @@ function CopyValue({ value, display }: { value: string; display?: string }) {
       <Copy size={11} className="shrink-0" />
       <span className="truncate">{copied ? 'Copied' : (display || value)}</span>
     </button>
-  )
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  detail: string
-}) {
-  return (
-    <Card className="bg-panel/75 p-3 sm:p-4">
-      <div className="flex items-center gap-1.5 text-muted sm:gap-2">
-        {icon}
-        <span className="truncate text-[11px] font-medium sm:text-xs">{label}</span>
-      </div>
-      <p className="mt-2 text-xl font-semibold tracking-tight text-text sm:text-2xl">{value}</p>
-      <p className="mt-0.5 truncate text-[11px] text-muted sm:text-xs">{detail}</p>
-    </Card>
   )
 }
 
@@ -149,85 +139,143 @@ function EntryPoster({ entry, className }: { entry: LibraryViewEntry; className?
   )
 }
 
+/** Corner chip: one short human state label. Silent for clean, ready titles. */
 function StateChip({ entry }: { entry: LibraryViewEntry }) {
+  const attention = entry.needs_attention && entry.state !== 'paused'
+  if (entry.state === 'ready' && !attention) return null
   const meta = STATE_META[entry.state]
+  const pct = entry.transfers?.progress
   return (
-    <Badge tone={meta.tone} className={clsx('bg-bg/75 backdrop-blur-sm', meta.pulse && 'animate-pulse')}>
-      {meta.label}
-    </Badge>
+    <span
+      className={clsx(
+        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md',
+        attention
+          ? 'border-rose-400/40 bg-rose-950/70 text-rose-200'
+          : entry.state === 'paused'
+            ? 'border-amber-300/35 bg-amber-950/60 text-amber-200'
+            : 'border-white/15 bg-bg/80 text-text/90',
+      )}
+    >
+      <span className={clsx('h-1.5 w-1.5 rounded-full', attention ? 'bg-rose-300' : meta.dot, (meta.pulse || attention) && 'animate-pulse')} />
+      {attention ? 'Needs attention' : meta.label}
+      {entry.state === 'downloading' && pct !== null && pct !== undefined && (
+        <span className="text-primary-light">{Math.round(pct * 100)}%</span>
+      )}
+    </span>
   )
 }
 
-function ViewCard({
+/** One-line status under the title for anything that is not simply ready. */
+function StatusLine({ entry }: { entry: LibraryViewEntry }) {
+  const transfers = entry.transfers
+  if (entry.needs_attention && entry.state !== 'paused') {
+    return <p className="mt-0.5 truncate text-xs font-medium text-rose-300">Needs attention</p>
+  }
+  if (entry.state === 'paused') {
+    return <p className="mt-0.5 truncate text-xs font-medium text-amber-200">Paused</p>
+  }
+  if (entry.state === 'downloading' && transfers && transfers.progress !== null) {
+    if (transfers.stale) {
+      return (
+        <p className="mt-0.5 truncate text-xs text-amber-200">
+          Stalled — updated <RelativeTime ts={transfers.stats_updated_at} />
+        </p>
+      )
+    }
+    return (
+      <p className="mt-0.5 truncate text-xs text-muted">
+        {Math.round(transfers.progress * 100)}%
+        {transfers.eta_seconds ? ` · ${formatEta(transfers.eta_seconds)}` : ''}
+      </p>
+    )
+  }
+  if (isInProgress(entry)) {
+    return <p className="mt-0.5 truncate text-xs text-muted">{STATE_META[entry.state].label}</p>
+  }
+  return (
+    <p className="mt-0.5 truncate text-xs text-muted">
+      {entry.year ? `${entry.year} · ` : ''}
+      {mediaTypeLabel(entry.media_type)}
+    </p>
+  )
+}
+
+function PosterCard({
   entry,
   onOpen,
   onDetails,
+  className,
 }: {
   entry: LibraryViewEntry
   onOpen: () => void
   onDetails: (() => void) | null
+  className?: string
 }) {
+  const attention = needsAttention(entry)
+  const active = isInProgress(entry)
   const totalEpisodes = entry.ready_count + entry.pending_count
   const transfers = entry.transfers
+  const showProgress = active && transfers && transfers.progress !== null
   return (
     <div
       role="button"
       tabIndex={0}
-      className="group min-w-0 cursor-pointer text-left"
+      className={clsx('group min-w-0 cursor-pointer text-left', className)}
       onClick={onOpen}
       onKeyDown={event => { if (event.key === 'Enter') onOpen() }}
     >
-      <div className="poster-surface relative aspect-[2/3] transition-all duration-300 group-hover:-translate-y-1 group-hover:scale-[1.018] group-hover:border-primary/35">
-        <EntryPoster entry={entry} />
-        <div className="absolute right-1.5 top-1.5 flex flex-col items-end gap-1">
+      <div
+        className={clsx(
+          'relative aspect-[2/3] overflow-hidden rounded-xl border bg-white/[0.05] shadow-lg shadow-black/40',
+          'transition-all duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] group-hover:shadow-poster',
+          attention
+            ? entry.needs_attention && entry.state !== 'paused'
+              ? 'border-rose-400/40 group-hover:border-rose-300/60'
+              : 'border-amber-300/35 group-hover:border-amber-200/55'
+            : 'border-white/10 group-hover:border-primary/40',
+          entry.state === 'downloading' && 'poster-shimmer',
+        )}
+      >
+        <EntryPoster entry={entry} className={clsx(active && 'opacity-90')} />
+
+        <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-0.75rem)] flex-col items-start gap-1">
           <StateChip entry={entry} />
-          {entry.needs_attention && entry.state !== 'paused' && (
-            <Badge tone="danger" className="bg-bg/75 backdrop-blur-sm">Needs attention</Badge>
-          )}
-          {entry.media_type === 'tv' && totalEpisodes > 0 && (
-            <Badge
-              tone={entry.ready_count >= totalEpisodes ? 'success' : 'neutral'}
-              className="bg-bg/75 backdrop-blur-sm"
-            >
-              {entry.ready_count} of {totalEpisodes} ready
-            </Badge>
-          )}
         </div>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-bg/95 via-bg/45 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-          <div className="flex items-center justify-between gap-2">
-            <Badge tone="neutral">{mediaTypeLabel(entry.media_type)}</Badge>
-            {entry.job && entry.state !== 'ready' && (
-              <span className="truncate rounded-md bg-bg/70 px-1.5 py-0.5 text-[11px] text-muted">
-                {entry.job.state_line}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="mt-3 min-w-0">
-        <p className="truncate text-sm font-semibold text-text">{entry.title}</p>
-        <p className="mt-0.5 truncate text-xs text-muted">
-          {entry.year ? `${entry.year} · ` : ''}
-          {mediaTypeLabel(entry.media_type)}
-        </p>
-        {transfers && transfers.progress !== null && (
-          <div className="mt-2">
-            <Progress value={transfers.progress * 100} className="h-1.5" />
-            {transfers.stale ? (
-              <p className="mt-1 truncate text-[11px] text-amber-200">
-                Out of date — last update <RelativeTime ts={transfers.stats_updated_at} />
-              </p>
-            ) : (
-              <p className="mt-1 truncate text-[11px] text-muted">
-                {Math.round(transfers.progress * 100)}% · updated <RelativeTime ts={transfers.stats_updated_at} />
-              </p>
-            )}
+
+        {entry.media_type === 'tv' && totalEpisodes > 0 && entry.ready_count < totalEpisodes && (
+          <span className="absolute bottom-2.5 right-1.5 rounded-full border border-white/15 bg-bg/80 px-2 py-0.5 text-[10px] font-semibold text-text/90 backdrop-blur-md">
+            {entry.ready_count}/{totalEpisodes} eps
+          </span>
+        )}
+
+        {entry.job && entry.state !== 'ready' && (
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-bg/95 via-bg/55 to-transparent p-2 pb-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <p className="line-clamp-2 text-[11px] leading-snug text-text/85">{entry.job.state_line}</p>
           </div>
         )}
+
+        {showProgress && (
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-black/60">
+            <div
+              className={clsx(
+                'h-full rounded-r-full transition-all duration-500',
+                transfers.stale
+                  ? 'bg-amber-300/80'
+                  : 'bg-gradient-to-r from-primary-dark via-primary to-primary-light',
+              )}
+              style={{ width: `${Math.max(2, Math.min(100, transfers.progress! * 100))}%` }}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-2.5 min-w-0 px-0.5">
+        <p className="truncate text-sm font-semibold text-text">{entry.title}</p>
+        <StatusLine entry={entry} />
         {onDetails && (
           <button
             type="button"
-            className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted transition-colors hover:text-text"
+            className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted/80 transition-colors hover:text-text"
             onClick={event => {
               event.stopPropagation()
               onDetails()
@@ -238,6 +286,27 @@ function ViewCard({
         )}
       </div>
     </div>
+  )
+}
+
+function Shelf({
+  title,
+  icon,
+  meta,
+  children,
+}: {
+  title: string
+  icon?: React.ReactNode
+  meta?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="min-w-0">
+      <SectionHeader title={title} icon={icon} meta={meta} />
+      <div className="nav-scroll -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 pt-1 sm:-mx-8 sm:px-8">
+        {children}
+      </div>
+    </section>
   )
 }
 
@@ -494,10 +563,12 @@ export default function Library() {
   })
 
   const readyCount = view.filter(entry => entry.state === 'ready').length
-  const inProgressCount = view.filter(entry => IN_PROGRESS_STATES.includes(entry.state)).length
+  const inProgressCount = view.filter(isInProgress).length
   const attentionCount = view.filter(needsAttention).length
   const storageBytes = view.reduce((acc, entry) => acc + (entry.size_bytes || 0), 0)
-  const featured = items.find(item => item.backdrop_path || item.poster_path) || items[0] || null
+
+  /** True when nothing is narrowing the view — shelves only appear here. */
+  const browsing = query.trim() === '' && filter === 'all' && mediaFilter === 'all'
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -508,6 +579,33 @@ export default function Library() {
       return true
     })
   }, [view, query, filter, mediaFilter])
+
+  /** Active work first: anything moving or stuck, most urgent (attention) leading. */
+  const onTheWay = useMemo(() => {
+    const active = view.filter(entry => isInProgress(entry) || needsAttention(entry))
+    return [...active].sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a)))
+  }, [view])
+
+  const recentlyAdded = useMemo(() => {
+    const addedAt = new Map(items.map(item => [item.id, item.added_at]))
+    return view
+      .filter(entry => entry.state === 'ready' && entry.library_item_id && addedAt.has(entry.library_item_id))
+      .sort((a, b) => (addedAt.get(b.library_item_id!) ?? 0) - (addedAt.get(a.library_item_id!) ?? 0))
+      .slice(0, 12)
+  }, [view, items])
+
+  const collection = useMemo(() => {
+    const byTitle = (a: LibraryViewEntry, b: LibraryViewEntry) => a.title.localeCompare(b.title)
+    if (!browsing) {
+      return [{ title: 'Results', entries: [...filtered].sort(byTitle) }]
+    }
+    const shows = filtered.filter(entry => entry.media_type === 'tv').sort(byTitle)
+    const movies = filtered.filter(entry => entry.media_type !== 'tv').sort(byTitle)
+    return [
+      { title: 'Shows', entries: shows },
+      { title: 'Movies', entries: movies },
+    ].filter(section => section.entries.length > 0)
+  }, [filtered, browsing])
 
   const drawerItemFor = (entry: LibraryViewEntry): LibraryItem | null => {
     if (!entry.in_library || !entry.library_item_id) return null
@@ -545,80 +643,57 @@ export default function Library() {
     await refresh()
   }
 
+  const renderCard = (entry: LibraryViewEntry, className?: string) => {
+    const drawerItem = drawerItemFor(entry)
+    return (
+      <PosterCard
+        key={entryKey(entry)}
+        entry={entry}
+        className={className}
+        onOpen={() => openEntry(entry)}
+        onDetails={drawerItem ? () => setSelected(drawerItem) : null}
+      />
+    )
+  }
+
   return (
     <div className="cinema-page">
-      <section className="cinema-hero min-h-[560px] border-b border-white/[0.08]">
-        {featured && (
-          <>
-            <div className="absolute inset-0 opacity-55">
-              {featured.backdrop_path ? (
-                <img src={featured.backdrop_path} alt="" className="h-full w-full object-cover" />
-              ) : featured.poster_path ? (
-                <img src={posterUrl(featured.poster_path)} alt="" className="h-full w-full scale-110 object-cover blur-sm" />
-              ) : null}
-            </div>
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,7,0.98),rgba(5,5,7,0.75)_48%,rgba(5,5,7,0.35)),linear-gradient(180deg,rgba(5,5,7,0.16),rgba(5,5,7,1))]" />
-          </>
-        )}
-        {!featured && <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(244,193,93,0.18),transparent_26rem),linear-gradient(180deg,rgba(12,10,12,0.8),rgba(5,5,7,1))]" />}
-        <div className="cinema-shell">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+      <main className="mx-auto w-full max-w-[1600px] space-y-9 px-4 pb-16 pt-20 sm:px-8 sm:pt-24">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="min-w-0">
-              <div className="cinema-kicker">
-                <Sparkles size={12} /> Your library
-              </div>
-              <h1 className="cinema-title">{featured ? featured.title : 'Your private cinema shelf'}</h1>
-              <p className="cinema-copy">
-                Everything you have asked for — from the moment it is requested until it is ready to watch.
+              <h1 className="text-2xl font-semibold tracking-tight text-text sm:text-3xl">Library</h1>
+              <p className="mt-1 text-xs text-muted sm:text-sm">
+                {view.length} title{view.length === 1 ? '' : 's'} · {readyCount} ready
+                {inProgressCount > 0 && ` · ${inProgressCount} on the way`}
+                {attentionCount > 0 && (
+                  <span className="text-amber-200"> · {attentionCount} need{attentionCount === 1 ? 's' : ''} attention</span>
+                )}
+                {storageBytes > 0 && ` · ${formatSize(storageBytes)}`}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" onClick={refresh}>
+            <div className="flex shrink-0 gap-2">
+              <Button variant="ghost" size="sm" onClick={refresh}>
                 <RefreshCw size={13} /> Refresh
               </Button>
-              <Button variant="primary" size="sm" onClick={handleScan} disabled={scanning}>
+              <Button variant="secondary" size="sm" onClick={handleScan} disabled={scanning}>
                 {scanning ? <Loader2 size={13} className="animate-spin" /> : <ScanLine size={13} />}
                 Scan
               </Button>
             </div>
           </div>
 
-          <div className="mt-10 grid max-w-3xl grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
-            <StatCard
-              icon={<CheckCircle2 size={14} />}
-              label="Ready"
-              value={String(readyCount)}
-              detail={readyCount ? 'Ready to watch' : 'None yet'}
-            />
-            <StatCard
-              icon={<DownloadCloud size={14} />}
-              label="In progress"
-              value={String(inProgressCount)}
-              detail={attentionCount ? `${attentionCount} need${attentionCount === 1 ? 's' : ''} attention` : 'On the way'}
-            />
-            <StatCard
-              icon={<HardDrive size={14} />}
-              label="Storage"
-              value={formatSize(storageBytes)}
-              detail={`${view.length} title${view.length === 1 ? '' : 's'}`}
-            />
-          </div>
-        </div>
-      </section>
-
-      <main className="w-full max-w-7xl space-y-8 overflow-hidden p-4 sm:p-8">
-        <div className="flex flex-col gap-3">
-          <div className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative min-w-0 flex-1 lg:max-w-md">
+          <div className="flex w-full min-w-0 flex-col gap-2.5 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1 lg:max-w-xs">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
               <input
-                className="input h-10 pl-9"
+                className="input h-9 pl-9 text-sm"
                 value={query}
                 onChange={event => setQuery(event.target.value)}
-                placeholder="Search title or year"
+                placeholder="Search titles"
               />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="nav-scroll flex items-center gap-2 overflow-x-auto">
               <div className="flex shrink-0 rounded-full border border-white/10 bg-white/[0.06] p-1 backdrop-blur-xl">
                 {STATE_FILTERS.map(option => (
                   <button
@@ -626,7 +701,7 @@ export default function Library() {
                     type="button"
                     onClick={() => setFilter(option.id)}
                     className={clsx(
-                      'flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
+                      'flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
                       filter === option.id ? 'bg-primary text-bg' : 'text-muted hover:bg-white/[0.06] hover:text-text',
                     )}
                   >
@@ -649,7 +724,7 @@ export default function Library() {
                     type="button"
                     onClick={() => setMediaFilter(option)}
                     className={clsx(
-                      'flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
+                      'flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
                       mediaFilter === option ? 'bg-primary text-bg' : 'text-muted hover:bg-white/[0.06] hover:text-text',
                     )}
                   >
@@ -668,29 +743,54 @@ export default function Library() {
           <div className="flex items-center gap-2 text-sm text-muted">
             <Loader2 size={14} className="animate-spin" /> Loading library...
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-white/[0.12] bg-panel/50 p-10 text-center">
+        ) : view.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/[0.12] bg-panel/50 p-12 text-center">
             <Film size={36} className="mx-auto text-muted/30" />
-            <p className="mt-3 text-sm font-medium text-text">No matching titles</p>
-            <p className="mt-1 text-sm text-muted">Try a different filter, or request something new — it will appear here right away.</p>
+            <p className="mt-3 text-sm font-medium text-text">Your library is empty</p>
+            <p className="mt-1 text-sm text-muted">Request something from Discover, or scan your library folder to import what is already there.</p>
           </div>
         ) : (
-          <section>
-            <SectionHeader title="Continue browsing" meta={`${filtered.length} shown`} />
-            <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {filtered.map(entry => {
-                const drawerItem = drawerItemFor(entry)
-                return (
-                  <ViewCard
-                    key={`${entry.media_type}:${entry.tmdb_id ?? entry.library_item_id ?? entry.title}`}
-                    entry={entry}
-                    onOpen={() => openEntry(entry)}
-                    onDetails={drawerItem ? () => setSelected(drawerItem) : null}
+          <>
+            {browsing && onTheWay.length > 0 && (
+              <Shelf
+                title="On the way"
+                icon={<DownloadCloud size={14} className="text-primary-light" />}
+                meta={`${onTheWay.length} active`}
+              >
+                {onTheWay.map(entry => renderCard(entry, 'w-32 shrink-0 sm:w-36 lg:w-40'))}
+              </Shelf>
+            )}
+
+            {browsing && recentlyAdded.length > 0 && (
+              <Shelf
+                title="Recently added"
+                icon={<Clock size={14} className="text-primary-light" />}
+              >
+                {recentlyAdded.map(entry => renderCard(entry, 'w-32 shrink-0 sm:w-36 lg:w-40'))}
+              </Shelf>
+            )}
+
+            {filtered.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/[0.12] bg-panel/50 p-10 text-center">
+                <Film size={36} className="mx-auto text-muted/30" />
+                <p className="mt-3 text-sm font-medium text-text">No matching titles</p>
+                <p className="mt-1 text-sm text-muted">Try a different filter, or request something new — it will appear here right away.</p>
+              </div>
+            ) : (
+              collection.map(section => (
+                <section key={section.title} className="min-w-0">
+                  <SectionHeader
+                    title={section.title}
+                    icon={section.title === 'Shows' ? <Tv size={14} className="text-primary-light" /> : <Film size={14} className="text-primary-light" />}
+                    meta={`${section.entries.length} title${section.entries.length === 1 ? '' : 's'}`}
                   />
-                )
-              })}
-            </div>
-          </section>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-7 pt-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
+                    {section.entries.map(entry => renderCard(entry))}
+                  </div>
+                </section>
+              ))
+            )}
+          </>
         )}
       </main>
 

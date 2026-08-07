@@ -97,3 +97,27 @@
     box-shadow: 0 28px 80px rgba(0, 0, 0, 0.62);
   }
 }
+
+/* Library: soft light sweep across posters with an active transfer. */
+@keyframes poster-sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  55%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+.poster-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 42%,
+    rgba(255, 247, 234, 0.09) 50%,
+    transparent 58%
+  );
+  animation: poster-sheen 2.8s ease-in-out infinite;
+}

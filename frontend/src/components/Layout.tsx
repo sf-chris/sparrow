@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Search, Film, Settings, Sparkles, ListChecks } from 'lucide-react'
+import { Search, Film, Settings, ListChecks } from 'lucide-react'
 import clsx from 'clsx'
 
 const navItems = [
@@ -55,11 +55,6 @@ export default function Layout() {
             </NavLink>
           ))}
           </nav>
-
-          <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.055] px-3 py-2 text-xs text-muted lg:flex">
-            <Sparkles size={13} className="text-primary-light" />
-            Local-first
-          </div>
         </div>
       </header>
 

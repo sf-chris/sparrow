@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity, Bot, Check, ChevronRight, DownloadCloud, Gauge, HardDrive,
-  KeyRound, ListChecks, Loader2, RefreshCw, Save, ScrollText, SlidersHorizontal, Wifi,
+  Bot, Check, ChevronRight, DownloadCloud, Gauge, HardDrive,
+  KeyRound, Loader2, RefreshCw, Save, ScrollText, SlidersHorizontal, Wifi,
 } from 'lucide-react'
 import { discoverClients, getAgentPrompts, getConfig, testClient, updateConfig } from '../api/client'
 import type { AgentPromptPreview, Config, TorrentClientInfo } from '../types'
@@ -487,18 +487,6 @@ export default function Settings() {
               icon={<ScrollText size={13} />}
               title="Release browser"
               description="Browse and pick individual releases by hand."
-            />
-            <BackstageLink
-              to="/downloads"
-              icon={<ListChecks size={13} />}
-              title="Requests (classic)"
-              description="The classic request and transfer view."
-            />
-            <BackstageLink
-              to="/logs"
-              icon={<Activity size={13} />}
-              title="Logs"
-              description="The studio log for searches, downloads, artwork, and organization."
             />
           </div>
         </section>

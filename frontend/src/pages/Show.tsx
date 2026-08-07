@@ -831,6 +831,7 @@ function PreferencesTab({
   quality,
   onQualityChange,
   monitoringBusy,
+  monitoringSaved,
   monitoringError,
   onMonitoring,
 }: {
@@ -838,6 +839,7 @@ function PreferencesTab({
   quality: string
   onQualityChange: (value: string) => void
   monitoringBusy: boolean
+  monitoringSaved: boolean
   monitoringError: string
   onMonitoring: (mode: MonitoringMode, seasons: number[]) => void
 }) {
@@ -858,7 +860,13 @@ function PreferencesTab({
         <Card className="p-5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted/70">Monitoring</p>
-            {monitoringBusy && <Loader2 size={13} className="animate-spin text-muted" />}
+            {monitoringBusy ? (
+              <Loader2 size={13} className="animate-spin text-muted" />
+            ) : monitoringSaved ? (
+              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-300">
+                <Check size={12} /> Saved
+              </span>
+            ) : null}
           </div>
           <p className="mt-2 text-sm text-muted">
             This is your standing permission. Sparrow will never download outside it.
@@ -1110,7 +1118,9 @@ export default function Show() {
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null)
   const [jobBusy, setJobBusy] = useState<string | null>(null)
   const [monitoringBusy, setMonitoringBusy] = useState(false)
+  const [monitoringSaved, setMonitoringSaved] = useState(false)
   const [monitoringError, setMonitoringError] = useState('')
+  const monitoringSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const showId = Number(tmdbId)
   const mediaType = searchParams.get('type') === 'movie' ? 'movie' : 'tv'
@@ -1343,6 +1353,9 @@ export default function Show() {
     try {
       const res = await setMonitoring(show.tmdb_id, mode, seasons, show.media_type)
       setShow(prev => (prev ? { ...prev, mandate: res.mandate, mandate_summary: res.summary } : prev))
+      setMonitoringSaved(true)
+      if (monitoringSavedTimer.current) clearTimeout(monitoringSavedTimer.current)
+      monitoringSavedTimer.current = setTimeout(() => setMonitoringSaved(false), 1800)
     } catch {
       setShow(prev => (
         prev ? { ...prev, mandate: previousMandate, mandate_summary: previousSummary } : prev
@@ -1548,6 +1561,7 @@ export default function Show() {
             quality={quality}
             onQualityChange={setQuality}
             monitoringBusy={monitoringBusy}
+            monitoringSaved={monitoringSaved}
             monitoringError={monitoringError}
             onMonitoring={applyMonitoring}
           />

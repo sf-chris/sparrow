@@ -49,7 +49,8 @@ SHARED_RULES = """
 """
 
 
-def fetch_system(session: AgentSession, job: Job, inventory_hint: str) -> str:
+def fetch_system(session: AgentSession, job: Job, inventory_hint: str,
+                 cfg=None) -> str:
     contract = {
         "title": job.title, "year": job.year, "tmdb_id": job.tmdb_id,
         "media_type": job.media_type,
@@ -60,12 +61,26 @@ def fetch_system(session: AgentSession, job: Job, inventory_hint: str) -> str:
         "urgency": job.urgency.value,
         "origin": job.origin,
     }
+    settings_block = ""
+    if cfg is not None:
+        settings = {
+            "quality_preference": cfg.quality_preference.value,
+            "prefer_season_packs": cfg.prefer_season_packs,
+            "prefer_smaller_files": cfg.prefer_smaller_files,
+            "season_pack_size_limit_gb": cfg.season_pack_size_limit_gb,
+        }
+        settings_block = f"""
+
+## System settings
+The user's app-wide preferences. Follow them unless the contract above
+explicitly says otherwise — the contract always wins on conflict.
+{json.dumps(settings, indent=2)}"""
     return f"""You are Sparrow's Fetch Agent — a careful, resourceful librarian's
 buyer. You own ONE job from creation until the library provably matches its
 spec. It is {_now()}.
 
 ## The contract
-{json.dumps(contract, indent=2)}
+{json.dumps(contract, indent=2)}{settings_block}
 
 The job is done when library inventory contains the verified movie, or a
 verified file for every wanted episode, within the quality window — not when a

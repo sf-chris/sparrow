@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Check, ChevronDown, Clock, Download, Film, Loader2, Search, Sparkles, Star, Tv, X,
+  Check, ChevronDown, Download, Film, Loader2, Search, Sparkles, Star, Tv, X,
 } from 'lucide-react'
 import clsx from 'clsx'
-import {
-  ApiError, createJob, getJobs, getLibrary, resolveSearch, TMDB_POSTER_BASE,
-} from '../api/client'
+import { ApiError, createJob, getLibrary, resolveSearch } from '../api/client'
 import type { CreateJobPayload } from '../api/client'
-import type { Job, JobUrgency, LibraryItem, ResolveCard } from '../types'
+import type { JobUrgency, LibraryItem, ResolveCard } from '../types'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { Badge, Button, Card, SectionHeader } from '../components/ui'
+import { Badge, Button, SectionHeader } from '../components/ui'
 
 const QUALITY_OPTIONS = [
   { value: '', label: 'Best available' },
@@ -120,7 +118,6 @@ function ResolveCardTile({
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [knobs, setKnobs] = useState<Knobs>(DEFAULT_KNOBS)
 
-  const hasJob = Boolean(card.active_job)
   const posterClickable = true
 
   const openShow = () => navigate(`/show/${card.tmdb_id}?type=${card.media_type}`)
@@ -161,16 +158,7 @@ function ResolveCardTile({
         </p>
 
         <div className="mt-2 space-y-2">
-          {hasJob ? (
-            <button type="button" className="block w-full text-left" onClick={openShow}>
-              <Badge tone="info" className="max-w-full">
-                <Sparkles size={11} className="shrink-0" />
-                <span className="line-clamp-2 whitespace-normal text-left">
-                  {card.active_job!.state_line || 'Sparrow is on it'}
-                </span>
-              </Badge>
-            </button>
-          ) : gotten ? (
+          {gotten ? (
             <Badge tone="success" className="max-w-full">
               <Sparkles size={11} className="shrink-0" /> Sparrow is on it
             </Badge>
@@ -232,10 +220,6 @@ function ResolveCardTile({
   )
 }
 
-function jobPosterUrl(job: Job): string | null {
-  return job.poster_path ? `${TMDB_POSTER_BASE}${job.poster_path}` : null
-}
-
 export default function Home() {
   const navigate = useNavigate()
 
@@ -243,7 +227,6 @@ export default function Home() {
   const [cards, setCards] = useState<ResolveCard[]>([])
   const [searching, setSearching] = useState(false)
 
-  const [jobs, setJobs] = useState<Job[]>([])
   const [library, setLibrary] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -253,11 +236,10 @@ export default function Home() {
 
   // Initial load
   useEffect(() => {
-    Promise.allSettled([getJobs('active'), getLibrary()]).then(([activeJobs, lib]) => {
-      if (activeJobs.status === 'fulfilled') setJobs(activeJobs.value)
-      if (lib.status === 'fulfilled') setLibrary(lib.value)
-      setLoading(false)
-    })
+    getLibrary()
+      .then(setLibrary)
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   // Debounced resolution search
@@ -297,7 +279,6 @@ export default function Home() {
     if (refreshTimer.current) return
     refreshTimer.current = setTimeout(() => {
       refreshTimer.current = null
-      getJobs('active').then(setJobs).catch(() => {})
       getLibrary().then(setLibrary).catch(() => {})
     }, 1200)
   })
@@ -322,7 +303,6 @@ export default function Home() {
       if (knobs.urgency) payload.urgency = knobs.urgency
       await createJob(payload)
       setGottenIds(prev => new Set(prev).add(cardKey))
-      getJobs('active').then(setJobs).catch(() => {})
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 409) {
         // Sparrow is already working on this one — show the workspace.
@@ -413,47 +393,6 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-10">
-            {jobs.length > 0 && (
-              <section>
-                <SectionHeader
-                  title="In progress"
-                  icon={<Clock size={14} className="text-primary-light" />}
-                  meta={`${jobs.length} item${jobs.length === 1 ? '' : 's'}`}
-                />
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {jobs.map(job => (
-                    <Card
-                      key={job.id}
-                      className="cursor-pointer p-4 transition-colors hover:border-primary/35"
-                      onClick={() => navigate(`/show/${job.tmdb_id}?type=${job.media_type}`)}
-                    >
-                      <div className="flex items-start gap-3">
-                        {jobPosterUrl(job) && (
-                          <img
-                            src={jobPosterUrl(job)!}
-                            alt=""
-                            loading="lazy"
-                            className="h-16 w-11 shrink-0 rounded-lg object-cover"
-                          />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <p className="min-w-0 break-words text-sm font-semibold text-text">{job.title}</p>
-                            <Badge tone="neutral" className="shrink-0">
-                              {job.media_type === 'tv' ? 'Show' : 'Movie'}
-                            </Badge>
-                          </div>
-                          <p className="mt-2 text-xs text-muted">
-                            {job.state_line || 'Working on it…'}
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </section>
-            )}
-
             <section>
               <SectionHeader
                 title="Recently added"
