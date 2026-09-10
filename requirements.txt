@@ -10,3 +10,7 @@ websockets==16.0
 Pillow==12.2.0
 beautifulsoup4==4.14.3
 lxml==6.0.4
+
+# Bundled subtitle alignment and local speech inspection; no separate subtitle service.
+ffsubsync==0.5.1
+faster-whisper==1.2.1

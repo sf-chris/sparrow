@@ -16,3 +16,6 @@ venv/
 frontend/dist/
 *.log
 backups/
+packaging/build/
+packaging/output/
+build/

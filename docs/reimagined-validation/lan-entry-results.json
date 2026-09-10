@@ -1,0 +1,34 @@
+{
+  "passed": true,
+  "setup": false,
+  "signout": true,
+  "protected_link": true,
+  "retained_input": true,
+  "errors": [],
+  "layouts": [
+    {
+      "name": "sign-in-error",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "sign-in-error",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "sign-in-error",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "sign-in-error",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    }
+  ]
+}
