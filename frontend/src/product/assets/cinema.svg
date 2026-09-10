@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 740" fill="none">
+  <defs>
+    <linearGradient id="frame" x1="150" y1="640" x2="640" y2="80" gradientUnits="userSpaceOnUse"><stop stop-color="#2b3458"/><stop offset=".55" stop-color="#8896be"/><stop offset="1" stop-color="#e6eacb"/></linearGradient>
+    <linearGradient id="floor" x1="450" y1="380" x2="450" y2="720" gradientUnits="userSpaceOnUse"><stop stop-color="#acbb88" stop-opacity=".18"/><stop offset="1" stop-color="#acbb88" stop-opacity="0"/></linearGradient>
+    <radialGradient id="moon"><stop stop-color="#edf6ca"/><stop offset=".75" stop-color="#dfefaa"/><stop offset="1" stop-color="#bdcf84"/></radialGradient>
+    <radialGradient id="glow"><stop stop-color="#b7d683" stop-opacity=".16"/><stop offset="1" stop-color="#b7d683" stop-opacity="0"/></radialGradient>
+    <pattern id="grain" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".5" fill="#f5f5db" opacity=".15"/></pattern>
+  </defs>
+  <ellipse cx="495" cy="360" rx="330" ry="280" fill="url(#glow)"/>
+  <path d="M370 394 618 395 860 730H35L370 394Z" fill="url(#floor)"/>
+  <g stroke="#6b7798" stroke-opacity=".18">
+    <path d="M0 648H900M30 598H870M95 554H819M165 515H758M230 480H709M286 449H668M335 421H633"/>
+    <path d="M100 740 411 394M272 740 450 394M450 740 490 394M630 740 530 394M810 740 570 394"/>
+  </g>
+  <g stroke="url(#frame)" stroke-width="1.4">
+    <path d="M157 603V222Q157 67 314 97L654 161Q726 174 726 247V522Z" opacity=".3"/>
+    <path d="M193 578V234Q193 93 335 119L643 176Q710 188 710 256V510Z" opacity=".4"/>
+    <path d="M229 552V246Q229 120 356 142L632 191Q694 202 694 265V498Z" opacity=".5"/>
+    <path d="M265 527V258Q265 146 377 164L621 206Q678 216 678 274V486Z" opacity=".6"/>
+    <path d="M301 501V270Q301 173 398 187L610 221Q662 230 662 283V474Z" opacity=".7"/>
+    <path d="M337 476V282Q337 199 419 209L599 236Q646 244 646 292V462Z" opacity=".8"/>
+    <path d="M373 450V294Q373 226 440 232L588 251Q630 258 630 301V450Z" opacity=".9"/>
+  </g>
+  <circle cx="505" cy="342" r="89" fill="url(#moon)"/>
+  <circle cx="505" cy="342" r="89" fill="url(#grain)"/>
+  <g fill="#101626">
+    <path d="m444 340 58 12 67-44-36 67-59 14 12-25-42-24Z"/>
+    <path d="m502 352 31 23-47-11 16-12Z" fill="#55623e"/>
+  </g>
+  <g fill="#d8eab0">
+    <path d="m611 173 20 4 23-15-12 23-21 5 5-9-15-8Z" opacity=".8"/>
+    <path d="m679 114 13 3 15-10-8 15-13 3 3-5-10-6Z" opacity=".55"/>
+    <path d="m731 75 9 2 10-7-5 10-9 2 2-4-7-3Z" opacity=".35"/>
+  </g>
+  <g stroke="#d4ddb8" stroke-opacity=".5"><path d="M112 212h12m-6-6v12M768 462h12m-6-6v12"/><circle cx="216" cy="393" r="2"/></g>
+  <path d="M156 635 726 549" stroke="#9da8c8" stroke-opacity=".3"/>
+</svg>

@@ -20,7 +20,7 @@ export class ApiError extends Error {
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Sparrow-Request': '1' },
     ...opts,
   })
   if (!res.ok) {
@@ -33,7 +33,7 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 // Config
 export const getConfig = () => req<Config>('/config')
 export const updateConfig = (data: Partial<Config>) =>
-  req<Config>('/config', { method: 'PATCH', body: JSON.stringify(data) })
+  req<Config>('/config', { method: 'PATCH', body: JSON.stringify(Object.fromEntries(Object.entries(data).filter(([key]) => !key.endsWith('_configured')))) })
 export const getOnboardingStatus = () => req<OnboardingStatus>('/config/onboarding-status')
 
 // Torrent clients

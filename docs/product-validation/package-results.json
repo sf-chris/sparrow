@@ -1,0 +1,12 @@
+{
+  "container": "sparrow-verified",
+  "import": true,
+  "direct_range": true,
+  "converted_segment": true,
+  "restart_resume": true,
+  "pwa_assets": true,
+  "bundled_speech_model": true,
+  "image": "sha256:766e24c44165321d54b28f43b70a74d63bbe45e5565894f84500861aa2bb7d57",
+  "date": "2026-09-10",
+  "existing_data_volume": true
+}

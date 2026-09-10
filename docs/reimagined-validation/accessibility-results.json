@@ -1,0 +1,57 @@
+[
+  {
+    "route": "/",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/library",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/discover",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/activity",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/settings",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/settings/storage",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/settings/people",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/settings/defaults",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/settings/server",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "/title/tv/101",
+    "violations": [],
+    "overflow": []
+  },
+  {
+    "route": "episode-dialog",
+    "violations": [],
+    "overflow": []
+  }
+]

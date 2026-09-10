@@ -1,0 +1,459 @@
+{
+  "passed": true,
+  "errors": [],
+  "new_behaviors": [
+    "public landing, optional sign-in and back navigation",
+    "persistent library filters and sorting",
+    "return to filtered collection",
+    "return to discovery",
+    "keyboard search shortcut and discovery tabs",
+    "persistent assisted search draft",
+    "cleared search recovery",
+    "season filtering",
+    "dialog escape and focus restoration",
+    "storage/import/matching/access forms",
+    "missing artwork fallback"
+  ],
+  "results": [
+    {
+      "name": "landing",
+      "width": 360,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "landing",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "landing",
+      "width": 768,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "landing",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "sign-in",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "sign-in",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "home",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "home",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "library",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "library",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "discover",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "discover",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "activity",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "activity",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "movie",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "movie",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "series",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "series",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "preferences",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "preferences",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "storage",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "storage",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "people",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "people",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "defaults",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "defaults",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "server",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "server",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "library-filtered",
+      "width": 360,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "library-filtered",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "library-filtered",
+      "width": 768,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "library-filtered",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "assisted-search",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "assisted-search",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "search-results",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "search-results",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "episode-request",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "episode-request",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "storage-pair",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "storage-pair",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "storage-folders",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "storage-folders",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "import-preview",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "import-preview",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "import-match",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "import-match",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "invite-person",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "invite-person",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "person-access",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "person-access",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "password-change",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "first-collection",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "first-collection",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "artwork-fallback",
+      "width": 390,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    },
+    {
+      "name": "artwork-fallback",
+      "width": 1440,
+      "overflow": false,
+      "brokenImages": 0,
+      "clipped": [],
+      "violations": []
+    }
+  ]
+}

@@ -1,164 +1,98 @@
 # Sparrow
 
-Sparrow is a local media autopilot. You choose a film or show; a persistent
-agent searches, acquires, verifies, and organises it, then keeps responsibility
-for the job until the library actually satisfies the request.
+Sparrow brings your movies and TV shows into one collection: find something,
+choose exactly what to request, let its agents organise the result, and watch
+from a phone or desktop browser. A Linux server coordinates storage nodes;
+media can stay on a Windows machine.
 
-This repository is an early alpha. The v3 agent loop works and is suitable for
-a technical private deployment. First-class subscriptions, Sparrow-native
-playback, automatic subtitles, remote access, and music are on the
-[roadmap](ROADMAP.md), not silently implied features.
+This checkout implements the household product foundation. It is still an
+alpha: Linux/container and Chrome checks are recorded in
+[the implementation record](docs/IMPLEMENTATION.md). Physical Windows, Safari/iOS
+and real-provider quality checks must pass before those deployments are called
+validated. No Windows installer has been published by this working-tree change.
 
-## Why Sparrow
+![Sparrow collection](docs/product-validation/home-desktop.png)
 
-Traditional media automation makes the operator assemble search managers,
-indexer protocols, downloaders, library managers, and recovery rules. Sparrow
-puts uncertain decisions in persistent tool-using agents while deterministic
-tools establish facts and enforce safety.
+## What is included
 
-- A job is a contract against TMDB, not a "download started" flag.
-- Torrent listings and ffprobe verify what actually exists.
-- A Media Agent reports landed-file evidence back to the Fetch Agent.
-- Sessions hibernate and recover across restarts.
-- The journal explains progress in ordinary language.
-- The filesystem jail and verified upgrade swap live below the model.
+- Owner onboarding, invitations, roles, scoped storage access and revocable
+  browser sessions. Household preferences are inherited, with personal and
+  explicit request overrides inside the server's limits.
+- Exact movie/episode requests, visible progress, pause/cancel/retry and revisions
+  that invalidate stale agent actions. Publication verifies actual media and
+  preserves staging originals and previous library copies.
+- Portable outbound storage-node commands, pairing, import previews and match
+  correction. An unavailable drive stays in the catalogue with saved progress.
+- Responsive browser playback, seeking, audio/caption selection, per-person
+  resume state and bounded format conversion. The web app can be installed where
+  the browser has a trusted secure context.
+- Built-in subtitle discovery, audio alignment and independent local speech
+  checks, followed by a bounded quality-review agent. Originals survive; required
+  subtitles cannot silently pass readiness. One-tap repair, file upload and
+  personal delay controls are in the player. Automatic verification currently
+  requires captions in the spoken language; translated tracks need further work.
+- Tool-using conversational discovery and personal collection-care subscriptions.
+  Follow new episodes, chosen seasons or all aired episodes; explicitly opt into
+  quality upgrades. Unchanged idle collection state makes no model calls.
 
-Read [DESIGN.md](DESIGN.md) before changing the architecture.
+Guided external DNS/HTTPS/sharing (roadmap stage 7), TV/Emby/casting and the setup
+agent are excluded from this implementation. Music and broader source support
+remain later work. Discovery does not initiate acquisition without a request.
 
-## Alpha preview
+## Install
 
-The current alpha has a guided local setup and a plain-language agent journal
-that only declares a title ready after file and inventory verification.
+With Docker Engine and Compose on Linux:
 
-![Sparrow onboarding readiness screen](docs/assets/alpha-onboarding.png)
-
-![A verified Big Buck Bunny job ready to watch](docs/assets/alpha-ready.png)
-
-## Alpha requirements
-
-- Python 3.11+
-- Node.js 20+ for installation/frontend builds
-- ffmpeg/ffprobe
-- Transmission 4 or qBittorrent with its RPC/Web UI enabled
-- A TMDB API key
-- An Anthropic API key
-
-Sparrow currently uses TPB as its first search source. Operate Sparrow only with
-media you are legally entitled to acquire and store.
-
-## Quick start
-
-### macOS
-
-```bash
-brew install ffmpeg transmission-cli
-brew services start transmission-cli
-./scripts/install.sh
-./start.sh
+```sh
+docker compose up -d --build
+docker compose exec -T sparrow python -m backend.agents.setup_info --url http://localhost:8888
 ```
 
-Open <http://127.0.0.1:8888>, complete onboarding, and run the doctor:
+The second command prints a setup link with the code already filled in, plus the
+code for manual entry. Open the link and choose **Create administrator account**.
+This creates the first administrator for your server; subsequent users join through
+invitations. The code also appears in startup logs while setup is incomplete.
+Installation agents should return the link and code to the owner, as described in
+[AGENTS.md](AGENTS.md#installation-handoff). Use the owner's actual browser address
+with `--url` when connecting over a LAN or SSH tunnel.
 
-```bash
-.venv/bin/python -m backend.doctor
+The container includes Python, the built frontend, FFmpeg and subtitle/speech
+components. You do not operate a separate subtitle application.
+
+Follow [the installation guide](docs/INSTALLATION.md) for LAN binding, Windows
+node packaging/pairing, folder access, existing-media import and recovery.
+Accounts, collection mappings and progress persist in the named data volume.
+
+TMDB supplies title information, Anthropic supplies reasoning, and OpenSubtitles
+can supply additional caption files. Add credentials in Server settings when
+needed. Watching imported media does not require a model. Acquisition uses the
+built-in source and a configured Transmission/qBittorrent connection. Use media
+you are entitled to acquire and store.
+
+## Develop and verify
+
+Python 3.11, a maintained Node.js 22 installation and FFmpeg/ffprobe are required
+for a source checkout:
+
+```sh
+python3.11 -m venv .venv
+.venv/bin/pip install --require-hashes -r requirements.lock
+cd frontend
+npm ci
+cd ..
+scripts/check.sh
 ```
 
-If Transmission uses a different download location, set it to Sparrow's staging
-folder. For the default private layout:
+`./dev.sh` starts the development interface; `./start.sh` builds and runs it.
+The tests use isolated state and generated/licensed speech fixtures. Optional
+paid-model evaluations are skipped by default. Browser tests and screenshots
+live in `tests/browser` and `docs/product-validation`.
 
-```bash
-transmission-remote 127.0.0.1:9091 \
-  --download-dir "$HOME/Sparrow/Temp"
-```
+The persistent tool runtime, job authority, node protocol and subtitle processing
+are documented in [DESIGN.md](DESIGN.md), [the product design](docs/PRODUCT_DESIGN.md)
+and [the roadmap](ROADMAP.md). Read [AGENTS.md](AGENTS.md) before contributing.
+Packaging inputs and their provenance are in `packaging/sources.json`; media
+packages include corresponding FFmpeg/x264 sources and build instructions.
 
-To start Sparrow automatically at login:
-
-```bash
-./scripts/install-launchd.sh
-```
-
-### Debian/Ubuntu (documented, not manually validated yet)
-
-```bash
-sudo apt-get update
-sudo apt-get install -y python3 python3-venv nodejs npm ffmpeg transmission-daemon
-./scripts/install.sh
-./start.sh
-```
-
-Distribution Node.js packages vary; use a maintained Node 20+ installation if
-the packaged version is older. CI validates the Python and frontend build on
-Ubuntu; the complete daemon/client flow has only been manually exercised on
-macOS for this alpha.
-
-## Home-network use
-
-Sparrow defaults to loopback. To open it from a phone on a trusted home network,
-set the following in `.env` and restart:
-
-```dotenv
-SPARROW_HOST=0.0.0.0
-SPARROW_ALLOW_LAN=1
-```
-
-Then open `http://<computer-lan-ip>:8888`. Do not port-forward Sparrow or expose
-it to the public internet. Authentication and the hosted relay are not part of
-this alpha.
-
-## Development
-
-```bash
-./scripts/install.sh
-./dev.sh
-```
-
-The backend runs at <http://localhost:8888> and Vite at
-<http://localhost:3000>.
-
-Run the confidence suite:
-
-```bash
-./scripts/check.sh
-```
-
-The important API surfaces are:
-
-- `GET /api/resolve?q=`
-- `POST /api/jobs`
-- `GET /api/jobs/{id}`
-- `GET /api/journal`
-- `GET /api/agent-sessions`
-- `GET /api/doctor`
-- WebSocket `/ws`
-
-Stored credentials are write-only through the browser API. `GET /api/config`
-returns configured flags and blank secret fields.
-
-## State, logs, and recovery
-
-Private state lives under `data/` by default. Agent jobs/sessions and legacy
-records share `data/sparrow.db`; agent notes live under `data/memory/`.
-
-```bash
-./scripts/backup.sh
-tail -f data/logs/launchd.err.log
-```
-
-See [deployment and recovery](docs/DEPLOYMENT.md) and
-[troubleshooting](docs/TROUBLESHOOTING.md).
-
-## Security and limitations
-
-- Public-internet exposure is unsupported.
-- Retired CWM code-execution routes are disabled in normal builds.
-- The first source connector is TPB; the connector SDK is not ready.
-- There is no built-in player or push notification yet.
-- Monitoring exists only as early Librarian behavior, not the durable
-  subscription contract described in the roadmap.
-
-Please report vulnerabilities according to [SECURITY.md](SECURITY.md).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Sparrow is licensed under the GNU Affero
-General Public License v3.0 or later; see [LICENSE](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [LICENSE](LICENSE).

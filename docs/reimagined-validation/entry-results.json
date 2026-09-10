@@ -1,0 +1,82 @@
+{
+  "passed": true,
+  "setup": true,
+  "signout": true,
+  "protected_link": true,
+  "retained_input": true,
+  "errors": [],
+  "layouts": [
+    {
+      "name": "administrator-setup",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "administrator-setup",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "administrator-setup",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "administrator-setup",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "first-preferences",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "first-preferences",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "first-preferences",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "first-preferences",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "sign-in-error",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "sign-in-error",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "sign-in-error",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "sign-in-error",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    }
+  ]
+}

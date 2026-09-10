@@ -5,9 +5,16 @@ and the system finds it, downloads it, organises it into a clean library, and
 keeps curating (filling gaps, upgrading quality) forever.
 
 **Read DESIGN.md first.** It is the authority on architecture and philosophy.
+For the current owner-approved target and acceptance criteria also read
+`docs/PRODUCT_PLAN.md` and `ROADMAP.md`. The stage 1–6 implementation and measured
+validation boundaries are in `docs/IMPLEMENTATION.md`; use `docs/PRODUCT_DESIGN.md`
+for the shared interface contract. Stage 7 is excluded from the current work.
 The short version: an agent is an LLM in a tool-use loop — nothing else
-qualifies. Intelligence lives in the loop; deterministic code lives in the
-tool belt and decides nothing.
+qualifies. Agents own uncertain discovery/acquisition/curation decisions and
+quality review. Predictable subtitle processing runs automatically under resolved
+policy; tools establish facts and enforce limits. The setup agent and all
+TV/Emby/casting work are parked; do not treat retained TV option notes as active
+implementation requirements. Follow the delivery sequence at the top of ROADMAP.md.
 
 ## Architecture (v3 — agentic)
 
@@ -26,10 +33,17 @@ Everything new lives in `backend/agents/`:
 - `service.py` — `AgentService`: event routing, the plumbing poller
   (files_landed / download_stalled / client_recovered / timers), job
   lifecycle, boot recovery. Plumbing makes zero decisions.
-- `store.py` — sqlite for jobs/journal/sessions; plain markdown memory
-  notes in `data/memory/` (global.md + shows/<tmdb_id>.md).
-- `resolution.py` — the search box (NOT an agent): TMDB direct, one cheap
-  LLM call for fuzzy descriptions, poster cards out.
+- `store.py` — sqlite for jobs/journal/sessions and reasoning reservations;
+  markdown memory is scoped to the requesting person.
+- `discovery.py` — persistent, scoped Discovery tool loop with inspected title
+  proposals. Fast TMDB suggestions remain alongside it; `resolution.py` retains
+  the legacy description route.
+- `curation.py` — personal subscriptions, versioned authority and changed-fact
+  checks that wake the Librarian only for eligible work.
+- `accounts.py`, `nodes.py`, `node_executor.py`, `catalogue.py`, `playback.py` —
+  household preferences/permissions, durable portable storage and media delivery.
+- `subtitles.py`, `subtitle_worker.py` — built-in preparation and independent
+  speech evidence, followed by the bounded subtitle-review tool loop.
 
 ### The agents
 
@@ -42,8 +56,9 @@ Everything new lives in `backend/agents/`:
   runtimes, detects samples/fakes, names and places files, updates
   inventory, and **reports back to the Fetch Agent** — that closed loop is
   what makes "done means spec met" real.
-- **Librarian** (cheap tier, standing session): watches air dates for owned
-  shows and spawns jobs for new episodes, creates upgrade jobs, flags gaps.
+- **Librarian** (cheap tier, personal subscription sessions): reasons over eligible
+  aired episodes, gaps and explicitly authorized upgrades. Unchanged idle facts
+  cause no model calls; tools enforce the current subscription revision.
 
 ## Key API surfaces
 
@@ -55,15 +70,20 @@ Everything new lives in `backend/agents/`:
 
 ## Rules
 
-- **The journal is the product.** Agents narrate in plain language; the UI
-  renders it verbatim. Never let hashes, seeder counts, codecs, or release
-  names reach a primary surface.
+- **Watching is the product; the journal explains the work.** Prioritise
+  playback, exact user intent and actionable state. Agents narrate progress in
+  plain language. Never let hashes, seeder counts, codecs or release names reach
+  a primary surface.
 - **Verify reality; never trust names.** TMDB, torrent file listings, and
   ffprobe are the only ground truth.
 - **Guardrails live in the tool layer**, not in agent judgment.
-- Model tiering is per agent, not per call: Fetch smart, Media cheap with
-  self-escalation, Librarian cheap, resolution one cheap call. Override with
-  `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
+- **Resolve preferences centrally.** Admin defaults, personal overrides and
+  explicit request choices form a versioned effective contract, within admin
+  policy. Pass relevant values to agents and use the same contract in UI/tools.
+- Current model defaults: Fetch smart, Media cheap with self-escalation,
+  Librarian, Discovery and subtitle review cheap with bounded turns and spend.
+  Routine subtitle processing is built in; no setup-agent implementation is planned now.
+  Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
 - Agent-managed downloads carry `metadata.agent_managed` — the legacy
   enrich/auto-organize path must skip them (the Media Agent owns landing).
 
@@ -81,3 +101,25 @@ Everything new lives in `backend/agents/`:
 - Dev: `./dev.sh` (backend :8888 + vite :3000)
 - Prod: `./start.sh` (builds frontend, serves from backend)
 - Env: `ANTHROPIC_API_KEY`, `TMDB_API_KEY` (or set both in Settings).
+
+## Installation handoff
+
+When installing Sparrow for its owner, finish by returning the working browser
+address, the one-time setup code and a link that fills that code automatically.
+The owner creates their own administrator account and password. This is the
+first-account setup step; do not describe a separate "claim" or activation process.
+
+After the server is healthy, retrieve the handoff with:
+
+```sh
+docker compose exec -T sparrow python -m backend.agents.setup_info --url http://localhost:8888
+```
+
+Use the address the owner will actually open. `localhost` is correct for a local
+installation or the owner's SSH tunnel; use the server's reachable LAN address
+for a LAN installation. Do not present server-local connectivity as proof that
+the owner's device can connect. For a source installation, use
+`.venv/bin/python -m backend.agents.setup_info --url <browser-address>`.
+Startup logs also show the code until setup is complete. The command reads the
+existing code and does not create an account or rotate it. Return this handoff
+privately to the owner; household invitations are generated separately in People.

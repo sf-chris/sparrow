@@ -272,7 +272,7 @@ def scan_show_episodes(series_folder: Path) -> dict:
                 "path": str(video),
                 "size_bytes": size,
                 "group": parsed.group,
-                "verified": True,
+                "verified": False,
             }
     return inventory
 

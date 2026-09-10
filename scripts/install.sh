@@ -36,7 +36,7 @@ if [ ! -d .venv ]; then
 fi
 
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install --require-hashes -r requirements.lock
 
 if [ ! -f .env ]; then
   cp .env.example .env

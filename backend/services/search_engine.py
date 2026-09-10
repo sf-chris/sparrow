@@ -32,11 +32,12 @@ SEARCH_LOG = "search_log.json"
 
 # ─── apibay ──────────────────────────────────────────────────────────────────
 
-async def _query(q: str, cat: str = "0") -> list[dict]:
+async def _query(q: str, cat: str = "0", *, strict: bool = False) -> list[dict]:
     url = f"{APIBAY}/q.php?q={urllib.parse.quote(q)}&cat={cat}"
     try:
         async with httpx.AsyncClient(timeout=6.0) as client:
             r = await client.get(url)
+            r.raise_for_status()
             data = r.json()
             if isinstance(data, list):
                 return [
@@ -44,8 +45,9 @@ async def _query(q: str, cat: str = "0") -> list[dict]:
                     if x.get("info_hash") and x["info_hash"] != "0" * 40
                     and int(x.get("seeders", 0)) > 0
                 ]
+            if strict:raise ValueError('The title source returned an invalid response.')
     except Exception:
-        pass
+        if strict:raise
     return []
 
 

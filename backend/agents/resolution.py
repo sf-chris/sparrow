@@ -61,6 +61,7 @@ async def _describe_to_titles(query: str, api_key: str, model: str) -> list[str]
         client = anthropic.AsyncAnthropic(api_key=api_key)
         msg = await asyncio.wait_for(client.messages.create(
             model=(os.getenv("SPARROW_CHEAP_MODEL") or model or DEFAULT_CHEAP_MODEL),
+            max_tokens=600,
             tools=[{
                 "name": "identify_titles",
                 "description": "Return the canonical movie/TV titles the user is describing",

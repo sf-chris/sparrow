@@ -1,40 +1,30 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 
 type Handler = (event: Record<string, unknown>) => void
 
+/** One connection per mounted subscriber; reconnect asks for a fresh snapshot. */
 export function useWebSocket(onMessage: Handler) {
-  const ws = useRef<WebSocket | null>(null)
-  const onMessageRef = useRef(onMessage)
-  onMessageRef.current = onMessage
-
-  const connect = useCallback(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host
-    const url = `${protocol}//${host}/ws`
-
-    ws.current = new WebSocket(url)
-
-    ws.current.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        onMessageRef.current(data)
-      } catch {}
-    }
-
-    ws.current.onclose = () => {
-      // Reconnect after 3s
-      setTimeout(connect, 3000)
-    }
-
-    ws.current.onerror = () => {
-      ws.current?.close()
-    }
-  }, [])
-
+  const handler = useRef(onMessage)
+  handler.current = onMessage
   useEffect(() => {
+    let disposed = false
+    let socket: WebSocket | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const connect = () => {
+      if (disposed) return
+      socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`)
+      socket.onopen = () => handler.current({ type: 'reconnected' })
+      socket.onmessage = event => {
+        try { handler.current(JSON.parse(event.data)) } catch { /* Ignore malformed events. */ }
+      }
+      socket.onclose = () => { if (!disposed) timer = setTimeout(connect, 3000) }
+      socket.onerror = () => socket?.close()
+    }
     connect()
     return () => {
-      ws.current?.close()
+      disposed = true
+      clearTimeout(timer)
+      if (socket) { socket.onclose = null; socket.close() }
     }
-  }, [connect])
+  }, [])
 }

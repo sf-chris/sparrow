@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -212,7 +212,12 @@ async def broadcast(event: dict) -> None:
     dead = set()
     for ws in ws_clients:
         try:
-            await ws.send_json(event)
+            user = accounts.from_session(ws.cookies.get(COOKIE))
+            if not user:
+                await ws.close(code=1008)
+                dead.add(ws)
+                continue
+            await ws.send_json(event if user['role'] == 'admin' else {'type': 'refresh'})
         except Exception:
             dead.add(ws)
     ws_clients.difference_update(dead)
@@ -295,18 +300,27 @@ async def lifespan(app: FastAPI):
     await storage.load_all()
     curator = Curator(storage, DATA_DIR, broadcast)
     agent_service = AgentService(storage, DATA_DIR, broadcast)
+    subtitles.attach(agent_service)
+    subtitles.recover()
+    discovery.register()
     task1 = asyncio.create_task(download_progress_loop())
     task2 = asyncio.create_task(artwork_enrichment_loop())
     task3 = asyncio.create_task(seeding_enforcer_loop())
     await agent_service.start()
+    from .agents.setup_info import log_setup
+    log_setup(DATA_DIR)
+    migration_task=asyncio.create_task(catalogue.migrate_verified_legacy(broadcast))
     # v3: the deterministic curator is demoted — its loop only runs if
     # explicitly re-enabled. Agents own decisions now.
     task4 = None
     if os.getenv("SPARROW_LEGACY_CURATOR") == "1":
         task4 = asyncio.create_task(curator.run_forever())
     yield
+    await subtitles.stop()
+    migration_task.cancel()
     curator.stop()
-    agent_service.stop()
+    await agent_service.shutdown()
+    await nodes.local().shutdown()
     task1.cancel()
     task2.cancel()
     task3.cancel()
@@ -329,6 +343,10 @@ app.add_middleware(
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     if not websocket_origin_allowed(websocket.headers.get("origin"), websocket.headers.get("host", "")):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    user = accounts.from_session(websocket.cookies.get(COOKIE))
+    if not user:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     await websocket.accept()
@@ -393,18 +411,6 @@ async def download_progress_loop():
                 if new_status == DownloadStatus.SEEDING and dl.status == DownloadStatus.DOWNLOADING:
                     updates["completed_at"] = time.time()
                     updates["staging_path"] = status_data.get("save_path", "")
-
-                    # If seeding is disabled (ratio_limit == 0), remove from torrent client immediately
-                    if config.seeding_ratio_limit == 0:
-                        try:
-                            await manager.delete_torrent(dl.torrent_hash, delete_files=False)
-                            log.info("Torrent removed (seeding disabled)", extra={
-                                "dl_name": dl.name, "hash": dl.torrent_hash, "reason": "seeding_ratio_limit=0",
-                            })
-                        except Exception:
-                            pass
-                        updates["status"] = DownloadStatus.COMPLETED
-                        new_status = DownloadStatus.COMPLETED
 
                     # v3: agent-managed downloads belong to the Media Agent —
                     # enrich_download would clobber the job metadata, and
@@ -770,30 +776,7 @@ async def seeding_enforcer_loop():
     log = logging.getLogger("sparrow.seeding")
     await asyncio.sleep(10)  # short initial delay for startup sweep
 
-    # Startup sweep: if seeding is disabled, remove any torrent that Sparrow has already
-    # organized/completed but that may still be registered in the torrent client.
-    try:
-        config = storage.get_config()
-        if config.seeding_ratio_limit == 0 and config.torrent_client.type != TorrentClientType.NONE:
-            manager = tc_svc.TorrentManager(config.torrent_client)
-            done_downloads = [
-                dl for dl in storage.get_all_downloads()
-                if dl.status in (DownloadStatus.ORGANIZED, DownloadStatus.COMPLETED) and dl.torrent_hash
-            ]
-            for dl in done_downloads:
-                try:
-                    status = await manager.get_torrent_status(dl.torrent_hash)
-                    if status:
-                        await manager.delete_torrent(dl.torrent_hash, delete_files=False)
-                        log.info("Startup sweep: removed stale torrent", extra={
-                            "dl_name": dl.name, "hash": dl.torrent_hash, "sparrow_status": dl.status.value,
-                        })
-                except Exception:
-                    pass
-    except Exception:
-        pass
-
-    await asyncio.sleep(50)  # remainder of original 60s delay
+    # Zero means unlimited, including after a server restart.
 
     while True:
         try:
@@ -812,7 +795,7 @@ async def seeding_enforcer_loop():
             manager = tc_svc.TorrentManager(config.torrent_client)
             seeding_downloads = [
                 dl for dl in storage.get_all_downloads()
-                if dl.status == DownloadStatus.SEEDING and dl.torrent_hash
+                if dl.status == DownloadStatus.SEEDING and dl.torrent_hash and not dl.metadata.get('node_id')
             ]
 
             for dl in seeding_downloads:
@@ -852,6 +835,7 @@ async def seeding_enforcer_loop():
 # ─── Pydantic request models ──────────────────────────────────────────────────
 
 class ConfigUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
     staging_dir: Optional[str] = None
     library_dir: Optional[str] = None
     torrent_client: Optional[dict] = None
@@ -860,11 +844,13 @@ class ConfigUpdate(BaseModel):
     anthropic_api_key: Optional[str] = None
     onboarding_complete: Optional[bool] = None
     auto_organize: Optional[bool] = None
-    seeding_ratio_limit: Optional[float] = None
-    seeding_time_hours: Optional[float] = None
+    seeding_ratio_limit: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
+    seeding_time_hours: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
     prefer_smaller_files: Optional[bool] = None
     prefer_season_packs: Optional[bool] = None
-    season_pack_size_limit_gb: Optional[float] = None
+    season_pack_size_limit_gb: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
+    max_active_transfers: Optional[int] = Field(default=None, ge=1, le=50)
+    preferred_search_engines: Optional[list[str]] = None
     smart_model: Optional[str] = None
     cheap_model: Optional[str] = None
     clear_tmdb_api_key: bool = False
@@ -1775,9 +1761,10 @@ async def resolve_query(q: str):
 
 
 class CreateJobRequest(BaseModel):
+    model_config = {"extra": "forbid"}
     tmdb_id: int
     media_type: Literal["tv", "movie"] = "tv"
-    wanted_episodes: Optional[dict] = None   # {"1": [1,2,...]}; omit = whole show
+    wanted_episodes: Optional[dict] = None   # explicit episode scope required for TV
     preferred_quality: str = ""
     min_quality: str = ""
     audio_pref: str = "any"
@@ -1796,12 +1783,15 @@ async def create_job(req: CreateJobRequest):
     if existing:
         raise HTTPException(409, f"There's already an active job for this title "
                                  f"(job {existing[0].id}).")
-    job = await agent_service.create_job(
-        tmdb_id=req.tmdb_id, media_type=req.media_type,
-        wanted_episodes=req.wanted_episodes,
-        preferred_quality=req.preferred_quality, min_quality=req.min_quality,
-        audio_pref=req.audio_pref, urgency=req.urgency,
-        monitoring=req.monitoring)
+    try:
+        job = await agent_service.create_job(
+            tmdb_id=req.tmdb_id, media_type=req.media_type,
+            wanted_episodes=req.wanted_episodes,
+            preferred_quality=req.preferred_quality, min_quality=req.min_quality,
+            audio_pref=req.audio_pref, urgency=req.urgency,
+            monitoring=req.monitoring)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
     return job.to_dict()
 
 
@@ -2204,7 +2194,12 @@ async def scan_library():
             item = existing[0]
             disk_eps = item_data.get("episodes") or {}
             if item.media_type == MediaType.TV and disk_eps != item.episodes:
-                await storage.update_library_item(item.id, episodes=disk_eps)
+                merged = {season: dict(episodes) for season, episodes in item.episodes.items()}
+                for season, episodes in disk_eps.items():
+                    for episode, record in episodes.items():
+                        old = item.episodes.get(season, {}).get(episode)
+                        merged.setdefault(season, {})[episode] = old if old and old.get("path") == record.get("path") else record
+                await storage.update_library_item(item.id, episodes=merged)
                 refreshed += 1
             continue
 
@@ -2492,6 +2487,22 @@ async def stream_logs():
     )
 
 
+# Product routes are registered before the SPA fallback.
+from .agents.account_api import install_accounts, COOKIE
+accounts = install_accounts(app, storage, lambda: agent_service)
+from .agents.nodes import install_nodes
+nodes = install_nodes(app, storage, lambda: agent_service)
+from .agents.product_api import install_product
+catalogue = install_product(app, storage, accounts, nodes, lambda: agent_service)
+from .agents.subtitles import install_subtitles
+from .agents.curation import install_curation
+install_curation(app, accounts, lambda: agent_service)
+subtitles = install_subtitles(app, accounts, nodes, catalogue, lambda: agent_service)
+from .agents.playback import install_playback
+playback = install_playback(app, storage, accounts, nodes, catalogue)
+from .agents.discovery import install_discovery
+discovery = install_discovery(app, accounts, catalogue, lambda: agent_service)
+
 # ─── Static file serving ──────────────────────────────────────────────────────
 
 # Serve cached artwork
@@ -2506,6 +2517,12 @@ if frontend_dist.exists():
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
+        if full_path.startswith(('api/','art/')): raise HTTPException(404,'Not found.')
+        if full_path in {'sw.js','manifest.webmanifest','icon.svg'}:
+            file=frontend_dist/full_path
+            if not file.is_file(): raise HTTPException(404,'Not found.')
+            media={'sw.js':'application/javascript','manifest.webmanifest':'application/manifest+json','icon.svg':'image/svg+xml'}[full_path]
+            return FileResponse(file,media_type=media,headers={'Cache-Control':'no-cache'})
         index = frontend_dist / "index.html"
         if index.exists():
             return FileResponse(str(index))

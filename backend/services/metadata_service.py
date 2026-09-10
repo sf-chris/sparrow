@@ -18,7 +18,7 @@ TMDB_BASE = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p"
 
 
-async def tmdb_quick_suggest(query: str, api_key: str) -> list[dict]:
+async def tmdb_quick_suggest(query: str, api_key: str, *, strict: bool = False) -> list[dict]:
     """
     Lightweight /search/multi call for the suggestion dropdown.
     Returns slim objects — no image downloading, no full details fetch.
@@ -31,6 +31,7 @@ async def tmdb_quick_suggest(query: str, api_key: str) -> list[dict]:
                 f"{TMDB_BASE}/search/multi",
                 params={"api_key": api_key, "query": query, "include_adult": "false", "page": "1"},
             )
+            resp.raise_for_status()
             items = []
             for r in resp.json().get("results", [])[:8]:
                 mt = r.get("media_type")
@@ -50,6 +51,7 @@ async def tmdb_quick_suggest(query: str, api_key: str) -> list[dict]:
                 })
             return items
     except Exception:
+        if strict:raise
         return []
 
 

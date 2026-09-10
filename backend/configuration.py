@@ -1,4 +1,5 @@
 """Configuration boundaries: path normalization and secret-safe API views."""
+
 from __future__ import annotations
 
 import os
@@ -29,7 +30,11 @@ def validate_media_roots(config: SparrowConfig) -> None:
         raise ValueError("Staging and library cannot be a filesystem root.")
     if len(roots) == 2:
         staging, library = roots
-        if staging == library or staging in library.parents or library in staging.parents:
+        if (
+            staging == library
+            or staging in library.parents
+            or library in staging.parents
+        ):
             raise ValueError(
                 "Staging and library must be separate sibling roots; neither may contain the other."
             )
@@ -60,7 +65,9 @@ def public_config(config: SparrowConfig) -> dict[str, Any]:
     return data
 
 
-def apply_config_update(config: SparrowConfig, values: Mapping[str, Any]) -> SparrowConfig:
+def apply_config_update(
+    config: SparrowConfig, values: Mapping[str, Any]
+) -> SparrowConfig:
     """Apply an API patch while treating blank secret fields as "keep existing"."""
     if values.get("staging_dir") is not None:
         config.staging_dir = normalize_media_path(str(values["staging_dir"]))
@@ -92,10 +99,21 @@ def apply_config_update(config: SparrowConfig, values: Mapping[str, Any]) -> Spa
         config.anthropic_api_key = ""
 
     scalar_fields = (
-        "onboarding_complete", "auto_organize", "seeding_ratio_limit",
-        "seeding_time_hours", "prefer_smaller_files", "prefer_season_packs",
+        "onboarding_complete",
+        "auto_organize",
+        "seeding_ratio_limit",
+        "seeding_time_hours",
+        "prefer_smaller_files",
+        "prefer_season_packs",
         "season_pack_size_limit_gb",
+        "preferred_search_engines",
     )
+    if values.get("preferred_search_engines") is not None and values[
+        "preferred_search_engines"
+    ] != ["apibay"]:
+        raise ValueError(
+            "This release supports the built-in title source only (apibay). Other source connectors are not installed."
+        )
     for field in scalar_fields:
         if values.get(field) is not None:
             setattr(config, field, values[field])
