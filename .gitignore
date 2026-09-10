@@ -19,3 +19,4 @@ backups/
 packaging/build/
 packaging/output/
 build/
+tests/browser/artifacts/

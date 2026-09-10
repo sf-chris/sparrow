@@ -2,15 +2,16 @@ const {chromium}=require(process.env.SPARROW_PLAYWRIGHT||require.resolve('playwr
 const AxeBuilder=require(require.resolve('@axe-core/playwright',{paths:[process.cwd()+'/frontend']})).default;
 const fs=require('node:fs');
 const out=process.env.SPARROW_VISUAL_OUT || 'docs/product-validation';
+const base=process.env.SPARROW_BROWSER_URL || 'http://127.0.0.1:8891';
 fs.mkdirSync(out,{recursive:true});
 (async()=>{
  const browser=await chromium.launch({executablePath:process.env.SPARROW_CHROME||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
  const context=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});
- const login=await context.request.post('http://127.0.0.1:8891/api/v1/auth/login',{headers:{'X-Sparrow-Request':'1'},data:{username:'owner',password:'fixture-password-123'}});
+ const login=await context.request.post(base+'/api/v1/auth/login',{headers:{'X-Sparrow-Request':'1'},data:{username:'owner',password:'fixture-password-123'}});
  if(login.status()!==200)throw new Error('Fixture login failed: '+await login.text());
  const page=await context.newPage();const results=[];
  for(const route of ['/','/library','/discover','/activity','/settings','/settings/storage','/settings/people','/settings/defaults','/settings/server','/title/tv/101']){
-  await page.goto('http://127.0.0.1:8891'+route);await page.locator('h1').waitFor();await page.waitForTimeout(150);
+  await page.goto(base+route);await page.locator('h1').waitFor();await page.waitForTimeout(150);
   const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
   const overflow=[];for(const width of [360,390,768,1440]){await page.setViewportSize({width,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))overflow.push(width)}
   results.push({route,violations:audit.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})),overflow});

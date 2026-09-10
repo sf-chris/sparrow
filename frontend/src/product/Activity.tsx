@@ -1,19 +1,14 @@
 import CollectionCare from "./CollectionCare";
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import {
-  Pause,
-  Play,
-  Check,
-  CircleDot,
-  AlertCircle,
-  ChevronDown,
-} from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Pause, Play, ChevronDown } from "lucide-react";
 import { api, post, type Job } from "./api";
 import { Empty, ErrorNote, Loading, Page, Status, useResource } from "./ui";
 import { useWebSocket } from "../hooks/useWebSocket";
 
 export default function Activity() {
+  const [params, setParams] = useSearchParams();
+  const selectedRequest = params.get("request");
   const resource = useResource(() => api<Job[]>("/jobs"));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -33,53 +28,27 @@ export default function Activity() {
       setBusy("");
     }
   }
-  const jobs = (resource.data || []).filter(
-    (j) => filter === "all" || j.status !== "complete",
+  const jobs = (resource.data || []).filter((j) =>
+    selectedRequest
+      ? j.id === selectedRequest
+      : filter === "all" || j.status !== "complete",
   );
   return (
     <Page
       className="sp-activity-page"
       title="Activity"
-      eyebrow="BEHIND THE SCENES"
-      description="You pick the stories. Sparrow takes care of the rest."
+      description="Your requests, on their way to movie night."
+      action={
+        <Link className="sp-button quiet" to="/settings/logs">
+          View logs
+        </Link>
+      }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
-      {resource.data && (
-        <div className="sp-activity-summary" aria-label="Request overview">
-          <div>
-            <strong>
-              {resource.data.filter((job) => job.status === "active").length}
-            </strong>
-            <span>
-              <CircleDot />
-              In progress
-            </span>
-          </div>
-          <div>
-            <strong>
-              {
-                resource.data.filter(
-                  (job) =>
-                    job.needs_attention ||
-                    ["abandoned", "failed"].includes(job.status),
-                ).length
-              }
-            </strong>
-            <span>
-              <AlertCircle />
-              Needs attention
-            </span>
-          </div>
-          <div>
-            <strong>
-              {resource.data.filter((job) => job.status === "complete").length}
-            </strong>
-            <span>
-              <Check />
-              Completed
-            </span>
-          </div>
-        </div>
+      {selectedRequest && (
+        <button className="sp-button quiet" onClick={() => setParams({})}>
+          Show all requests
+        </button>
       )}
       <div className="sp-tabs" role="tablist" aria-label="Request history">
         {[
@@ -90,7 +59,10 @@ export default function Activity() {
             key={value}
             role="tab"
             aria-selected={filter === value}
-            onClick={() => setFilter(value)}
+            onClick={() => {
+              setFilter(value);
+              if (selectedRequest) setParams({});
+            }}
           >
             {label}
           </button>
@@ -102,7 +74,11 @@ export default function Activity() {
       ) : jobs.length ? (
         <div className="sp-form">
           {jobs.map((job) => (
-            <article className={`sp-panel sp-job ${job.status}`} key={job.id}>
+            <article
+              id={`request-${job.id}`}
+              className={`sp-panel sp-job sp-request-card ${job.status}`}
+              key={job.id}
+            >
               <div className="sp-row" style={{ paddingTop: 0 }}>
                 <div>
                   <Status value={job.status} />
@@ -179,14 +155,20 @@ export default function Activity() {
         </div>
       ) : (
         <Empty
-          title="Nothing needs your attention."
+          title={
+            selectedRequest
+              ? "This request is no longer available."
+              : "Nothing needs your attention."
+          }
           action={
             <Link to="/discover" className="sp-button secondary">
               Find something to watch
             </Link>
           }
         >
-          New requests and their progress will appear here.
+          {selectedRequest
+            ? "It may have been removed or your access may have changed. Use Show all requests to return to your activity."
+            : "New requests and their progress will appear here."}
         </Empty>
       )}
       <CollectionCare />

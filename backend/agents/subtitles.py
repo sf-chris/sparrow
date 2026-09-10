@@ -60,7 +60,20 @@ class Subtitles:
             )
             if not changed.rowcount:
                 raise ToolError("This subtitle request was cancelled.")
+        previous_state = task["state"]
         task["state"], task["data"] = state, data
+        if state != previous_state and state in (
+            "ready",
+            "needs_attention",
+            "failed",
+            "review_pending",
+        ):
+            user = self.accounts.user(task["user_id"])
+            asset = self.catalogue.asset(user, task["asset_id"]) if user else None
+            if asset:
+                self.catalogue.storage.operations.media(
+                    "subtitle_" + state, user, asset, self.catalogue.storage
+                )
 
     def authority(self, task):
         user = self.accounts.user(task["user_id"])

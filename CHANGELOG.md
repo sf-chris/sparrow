@@ -2,7 +2,22 @@
 
 All notable changes to Sparrow are documented here.
 
-## Unreleased — household product foundation
+## Unreleased — bright Sparrow and household product foundation
+
+- Approved bright design across the actual application: public welcome page,
+  compact Continue watching shelf, poster-led library, discovery, titles,
+  browser player, settings and dialogs on desktop and phones.
+- Dedicated operational Logs with scoped history, grouped repeats, filters,
+  stable pagination and useful failure/recovery context.
+- Focused account/security page, current-browser identification, session
+  revocation, password dialog and visible sign-out in settings.
+- Clearer optional playback conversion and one Discover destination in navigation.
+- Refreshed open-source README, desktop/phone gallery and reproducible screenshot
+  capture using fictional media. Isolated browser runs preserve existing previews.
+- Browser checks accept both native and MediaSource HLS; release checks require
+  ripgrep explicitly, and CI retains results and server logs for diagnosis.
+- Opt-in nearby-service discovery prototype with bounded mDNS queries; no
+  automatic scanning, device pairing or mounted shares.
 
 - Owner accounts, invitations, storage permissions, inherited preferences and
   personal sessions/progress.

@@ -7,7 +7,7 @@ const browser=await chromium.launch({executablePath:process.env.SPARROW_CHROME||
 const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
 const page=await context.newPage();const errors=[];const responses=[];
 page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400&&r.url().includes('/api/'))responses.push({path:new URL(r.url()).pathname,status:r.status()})});
-const url='http://127.0.0.1:8891';
+const url=process.env.SPARROW_BROWSER_URL || 'http://127.0.0.1:8891';
 await page.goto(url);await page.getByRole('link',{name:/^(Sign in|Set up Sparrow)$/}).click();await page.getByLabel('Username',{exact:true}).waitFor();
 const needsSetup=await page.getByLabel('Setup code',{exact:true}).count();
 if(needsSetup){
@@ -33,7 +33,7 @@ if(needsSetup){
 }
 await page.getByLabel('Username',{exact:true}).fill('owner');await page.getByLabel('Password',{exact:true}).fill('fixture-password-123');await page.getByRole('button',{name:needsSetup?'Create administrator account':'Sign in',exact:true}).click();
 if(await page.getByRole('button',{name:'Continue to Sparrow'}).isVisible().catch(()=>false)){await page.screenshot({path:path.join(out,'owner-defaults-desktop.png')});await page.getByRole('button',{name:'Continue to Sparrow'}).click();}
-await page.getByRole('heading',{name:'Hello, Chris. What’s on?'}).waitFor({timeout:10000}).catch(async()=>{const welcome=page.getByRole('button',{name:'Continue to Sparrow'});if(await welcome.isVisible())await welcome.click();});
+await page.getByRole('heading',{name:'What’s on tonight, Chris?'}).waitFor({timeout:10000}).catch(async()=>{const welcome=page.getByRole('button',{name:'Continue to Sparrow'});if(await welcome.isVisible())await welcome.click();});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).waitFor();
 await page.screenshot({path:path.join(out,'home-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).click();await page.getByRole('heading',{name:'The Quiet Planet',exact:true}).waitFor();
@@ -47,7 +47,8 @@ await page.waitForFunction(()=>Array.from(document.querySelector('video').textTr
 await page.screenshot({path:path.join(out,'player-desktop.png'),fullPage:true});
 // Switch to the second audio track: the real node must prepare HLS and retain the seek.
 await page.getByLabel('Audio',{exact:true}).selectOption({index:1});
-await page.waitForFunction(()=>document.querySelector('video')?.src.includes('blob:')&&document.querySelector('video').readyState>=2,{timeout:25000});
+// Chrome may use native HLS or MediaSource. Both must load the converted audio.
+await page.waitForFunction(()=>{const v=document.querySelector('video');return v&&(/blob:|\/hls\//.test(v.src))&&v.readyState>=2},null,{timeout:25000});
 await page.locator('video').evaluate(v=>{v.pause();v.currentTime=18;});
 await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2&&!document.querySelector('video')?.seeking,{timeout:15000});
 await page.screenshot({path:path.join(out,'player-converted-desktop.png'),fullPage:true});
