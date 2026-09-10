@@ -11,5 +11,4 @@ coordinate copyright infringement or other abuse.
 
 Maintainers may edit or remove contributions and restrict participation when
 needed to protect the community. Report conduct concerns privately to the
-repository owner or, once available, through the repository's private contact
-channel. Reports will be handled as confidentially as practical.
+repository owner through your existing private collaboration channel. Reports will be handled as confidentially as practical.
