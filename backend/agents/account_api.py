@@ -1,6 +1,7 @@
 """Authenticated local setup and household preferences; no external access wizard."""
 
 import asyncio
+import time
 import hmac
 import json
 from pathlib import Path
@@ -293,10 +294,14 @@ def install_accounts(app, storage, get_service):
     def sessions(request: Request):
         with accounts.connect() as db:
             return [
-                dict(r)
+                {key: r[key] for key in ("id", "created", "expires", "label")}
+                | {
+                    "current": r["token_hash"]
+                    == digest(request.cookies.get(COOKIE, ""))
+                }
                 for r in db.execute(
-                    "SELECT id, created, expires, label FROM login_sessions WHERE user_id=?",
-                    (request.state.user["id"],),
+                    "SELECT id, created, expires, label, token_hash FROM login_sessions WHERE user_id=? AND expires>? ORDER BY created DESC",
+                    (request.state.user["id"], time.time()),
                 )
             ]
 

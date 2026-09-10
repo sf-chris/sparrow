@@ -99,7 +99,6 @@ export default function Storage() {
   return (
     <Page
       title="Storage & import"
-      eyebrow="Your collection’s home"
       description="Keep files where you want them. Pair a storage node, or use folders on this server."
       action={
         <button

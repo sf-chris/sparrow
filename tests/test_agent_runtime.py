@@ -89,6 +89,9 @@ class AgentPersistenceTests(unittest.IsolatedAsyncioTestCase):
             event = service.emit.call_args.args[0]
             self.assertEqual(event.kind, "download_stalled")
             self.assertEqual(event.job_id, "job-1")
+            service._detect_stall(download, 0.50)
+            await __import__("asyncio").sleep(0)
+            service.emit.assert_called_once()  # Logging recovery adds no model wake.
 
     async def test_closed_sessions_do_not_keep_stale_wake_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

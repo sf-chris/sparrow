@@ -185,7 +185,9 @@ decisions.
 - **Library**: find and curate owned/followed media, import with correction,
   understand availability and manage copies deliberately.
 - **Settings / Sharing**: accounts, preferences, devices, storage and guided
-  access; technical diagnostics remain available without dominating normal use.
+  access. Dedicated Logs provides scoped operational history; account/security
+  controls are separate. Technical diagnostics remain available without
+  dominating normal use.
 
 Phone responsiveness applies throughout. TV/Emby integration, casting and
 native TV applications are parked, as is the setup agent. Guided setup and

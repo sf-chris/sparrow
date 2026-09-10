@@ -310,7 +310,7 @@ fs.mkdirSync(out, { recursive: true });
     await snapshot("person-access", true);
     await closeDialog();
   }
-  await go("/settings");
+  await go("/settings/security");
   await page.getByText("Change your password", { exact: true }).click();
   await page
     .getByLabel("Current password", { exact: true })

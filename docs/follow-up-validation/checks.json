@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-10",
+  "repository": {
+    "command": "scripts/check.sh",
+    "environment": "SPARROW_FFMPEG and SPARROW_FFPROBE point to the available test binaries",
+    "tests": 118,
+    "passed": 116,
+    "skipped": 2,
+    "skip_reason": "Opt-in live-model evaluations",
+    "compile": "passed",
+    "dependency_consistency": "passed",
+    "frontend_build": "passed",
+    "npm_audit_vulnerabilities": 0,
+    "release_tree": "passed"
+  },
+  "browser": {
+    "viewing": "passed; 24 screenshots; no failed API responses",
+    "household": "passed; invitations, passwords, access, collection care and subtitle recovery",
+    "existing_accessibility": "passed; no violations or overflow",
+    "public_entry": "passed; 4 layouts, sign-out and protected links",
+    "reimagined": "passed before compact-layout refinement; 55 layouts and 11 behaviors",
+    "follow_up": "passed; 40 layouts; compact headings, Discover navigation, password dialog and logs; see results.json",
+    "compact_review": "passed; live port 3000, four public-landing accessibility layouts, aligned security, conversion with original hash unchanged, password validation, horizontal row and offline resume; see preview-results.json"
+  },
+  "nearby_prototype": {
+    "unit_tests": "passed; validation, scope, bounds, cleanup and minimal advertisements",
+    "live_protocol_check": "zeroconf 0.151.3 advertiser and two-second browser on 127.0.0.1/8",
+    "result": "Fixture cinema discovered with trusted=false",
+    "lan_interfaces_used": false,
+    "pairing_or_mounts": false
+  },
+  "deployment": "Updated built preview at port 3000; existing installation at port 8888 not redeployed; physical LAN/NAS/Windows checks remain open"
+}

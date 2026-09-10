@@ -36,6 +36,9 @@ class AgentStore:
         self.memory_dir = self.data_dir / "memory"
         (self.memory_dir / "shows").mkdir(parents=True, exist_ok=True)
         self._init_db()
+        from .operations import Operations
+
+        self.operations = Operations(self.data_dir)
 
     @contextmanager
     def _connect(self):
@@ -90,6 +93,10 @@ class AgentStore:
     def save_job(self, job: Job) -> Job:
         job.updated_at = time.time()
         with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            previous = conn.execute(
+                "SELECT status FROM jobs WHERE id=?", (job.id,)
+            ).fetchone()
             conn.execute(
                 "INSERT OR REPLACE INTO jobs (id, data, tmdb_id, status, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
@@ -102,6 +109,15 @@ class AgentStore:
                     job.updated_at,
                 ),
             )
+            from .operations import EVENTS
+
+            code = (
+                "request_submitted" if not previous else "request_" + job.status.value
+            )
+            if (
+                not previous or previous["status"] != job.status.value
+            ) and code in EVENTS:
+                self.operations.job(code, job, db=conn)
         return job
 
     def get_job(self, job_id: str) -> Optional[Job]:

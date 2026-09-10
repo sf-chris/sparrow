@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "Release checks require ripgrep (rg). Install it and rerun this check." >&2
+  exit 1
+fi
+
 for required in README.md LICENSE SECURITY.md CONTRIBUTING.md CODE_OF_CONDUCT.md CHANGELOG.md DESIGN.md ROADMAP.md; do
   if [ ! -s "$required" ]; then
     echo "Missing required release file: $required" >&2

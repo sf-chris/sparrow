@@ -247,6 +247,9 @@ class Catalogue:
                 "INSERT INTO import_scans VALUES (?, ?, ?, ?, ?)",
                 (identity, node_id, root_id, canonical(candidates), time.time()),
             )
+        self.storage.operations.record(
+            "import_preview", library_id=node_id, subject=identity
+        )
         return {
             "id": identity,
             "node_id": node_id,
@@ -275,6 +278,9 @@ class Catalogue:
                 )
             except (NodeError, ValueError, ToolError) as exc:
                 failed.append({"id": selection["id"], "message": str(exc)})
+                self.storage.operations.record(
+                    "import_failed", library_id=row["node_id"], subject=scan_id
+                )
         return {"imported": results, "failed": failed}
 
     async def _import_one(self, row, candidates, selection, get_title, get_episode):
@@ -410,6 +416,13 @@ class Catalogue:
                     await self.storage.delete_library_item(previous_item.id)
                 else:
                     await self.storage.add_library_item(previous_item)
+        self.storage.operations.record(
+            "import_corrected" if previous else "import_matched",
+            library_id=row["node_id"],
+            item_id=item.id,
+            title=title,
+            subject=asset_id,
+        )
         return {
             "id": selection["id"],
             "item_id": item.id,

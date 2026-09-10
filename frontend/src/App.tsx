@@ -16,6 +16,8 @@ import Collection from "./product/Collection";
 import Title from "./product/Title";
 import Activity from "./product/Activity";
 import Preferences from "./product/Preferences";
+import Security from "./product/Security";
+import Logs from "./product/Logs";
 import Storage from "./product/Storage";
 import { Defaults, People, ServerSettings } from "./product/Administration";
 import Discover from "./product/Discover";
@@ -78,20 +80,22 @@ export default function App() {
   return (
     <BrowserRouter key="signed-in">
       <Routes>
-        <Route element={<Shell user={user} />}>
+        <Route
+          element={
+            <Shell
+              user={user}
+              onLogout={() => {
+                window.history.replaceState(null, "", "/");
+                auth.setData({ user: null, preferences: null });
+              }}
+            />
+          }
+        >
           {!user.welcomed ? (
             <Route
               path="*"
               element={
-                <Preferences
-                  user={user}
-                  welcome
-                  onChanged={auth.refresh}
-                  onLogout={() => {
-                    window.history.replaceState(null, "", "/");
-                    void auth.refresh();
-                  }}
-                />
+                <Preferences user={user} welcome onChanged={auth.refresh} />
               }
             />
           ) : (
@@ -108,17 +112,10 @@ export default function App() {
               <Route path="/discover" element={<Discover />} />
               <Route
                 path="/settings"
-                element={
-                  <Preferences
-                    user={user}
-                    onChanged={auth.refresh}
-                    onLogout={() => {
-                      window.history.replaceState(null, "", "/");
-                      void auth.refresh();
-                    }}
-                  />
-                }
+                element={<Preferences user={user} onChanged={auth.refresh} />}
               />
+              <Route path="/settings/security" element={<Security />} />
+              <Route path="/settings/logs" element={<Logs user={user} />} />
               {user.role === "admin" && (
                 <>
                   <Route path="/settings/storage" element={<Storage />} />

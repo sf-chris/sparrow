@@ -7,7 +7,7 @@ const path = require('node:path');
   const browser = await chromium.launch({ executablePath: process.env.SPARROW_CHROME || '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
   const page = await context.newPage(), results = [], errors = [];
-  const base = 'http://127.0.0.1:8891', out = process.env.SPARROW_VISUAL_OUT || 'docs/product-validation';
+  const base = process.env.SPARROW_BROWSER_URL || 'http://127.0.0.1:8891', out = process.env.SPARROW_VISUAL_OUT || 'docs/product-validation';
   page.on('pageerror', error => errors.push(error.message));
   const setup = (await (await context.request.get(base + '/api/v1/auth/status')).json()).needs_setup;
   fs.mkdirSync(out, { recursive: true });

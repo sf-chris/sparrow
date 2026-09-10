@@ -9,5 +9,9 @@ backups
 *.log
 docs/product-review
 docs/product-validation
+docs/reimagined-validation
+docs/follow-up-validation
+docs/screenshots
+tests/browser/artifacts
 packaging/build
 packaging/output

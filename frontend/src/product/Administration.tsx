@@ -55,7 +55,6 @@ export function Defaults() {
   return (
     <Page
       title="Household defaults"
-      eyebrow="Server settings"
       description="The starting point for everyone. Personal overrides stay personal; server limits always apply."
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
@@ -198,7 +197,6 @@ export function ServerSettings() {
   return (
     <Page
       title="Server settings"
-      eyebrow="Administration"
       description="Connect Sparrow to title information and its reasoning service. Storage lives in Storage & import."
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
@@ -467,7 +465,6 @@ export function People({ currentUser }: { currentUser: User }) {
   return (
     <Page
       title="People"
-      eyebrow="Your household"
       description="Good stories are better shared. Give everyone a space of their own."
       action={
         <button

@@ -1,0 +1,33 @@
+{
+  "url": "http://192.168.1.103:3000",
+  "landing": [
+    {
+      "width": 360,
+      "gap": 28,
+      "violations": []
+    },
+    {
+      "width": 390,
+      "gap": 22.3125,
+      "violations": []
+    },
+    {
+      "width": 768,
+      "gap": 28,
+      "violations": []
+    },
+    {
+      "width": 1440,
+      "gap": 28,
+      "violations": []
+    }
+  ],
+  "securityAligned": true,
+  "compactHome": true,
+  "playbackConversion": true,
+  "originalUnchanged": true,
+  "passwordValidation": true,
+  "horizontalRow": true,
+  "offlineResumeHidden": true,
+  "errors": []
+}

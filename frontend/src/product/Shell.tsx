@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   NavLink,
   Link,
@@ -14,13 +14,16 @@ import {
   Settings,
   HardDrive,
   Users,
-  Search,
   SlidersHorizontal,
   Server,
   ChevronDown,
   ArrowUpRight,
+  LogOut,
+  ShieldCheck,
+  ScrollText,
 } from "lucide-react";
-import type { User } from "./api";
+import { post, type User } from "./api";
+import { ErrorNote } from "./ui";
 import { Mark } from "./Brand";
 
 const navigation = [
@@ -31,6 +34,8 @@ const navigation = [
 ];
 const management = [
   { to: "/settings", label: "My preferences", icon: Settings },
+  { to: "/settings/security", label: "Account & security", icon: ShieldCheck },
+  { to: "/settings/logs", label: "Logs", icon: ScrollText },
   { to: "/settings/people", label: "People", icon: Users },
   { to: "/settings/storage", label: "Storage & import", icon: HardDrive },
   {
@@ -41,7 +46,26 @@ const management = [
   { to: "/settings/server", label: "Server settings", icon: Server },
 ];
 
-export default function Shell({ user }: { user: User }) {
+export default function Shell({
+  user,
+  onLogout,
+}: {
+  user: User;
+  onLogout: () => void;
+}) {
+  const [signingOut, setSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  async function logout() {
+    setSigningOut(true);
+    setLogoutError("");
+    try {
+      await post("/auth/logout");
+      onLogout();
+    } catch (error) {
+      setLogoutError((error as Error).message);
+      setSigningOut(false);
+    }
+  }
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const settings = pathname.startsWith("/settings") && user.welcomed;
@@ -84,16 +108,6 @@ export default function Shell({ user }: { user: User }) {
             ))}
           </nav>
           <div className="sp-topbar-actions">
-            <Link
-              className="sp-header-search"
-              to="/discover"
-              aria-label="Search movies and shows"
-            >
-              <Search size={19} />
-              <span>Find something</span>
-              <kbd>⌘ K</kbd>
-            </Link>
-            <span className="sp-header-divider" />
             <NavLink
               to="/settings"
               className="sp-account"
@@ -111,11 +125,10 @@ export default function Shell({ user }: { user: User }) {
       <div className={`sp-workspace ${settings ? "sp-settings-layout" : ""}`}>
         {settings && (
           <aside className="sp-settings-nav">
-            <p className="sp-eyebrow">Make it yours</p>
             <h2>Settings</h2>
             <nav aria-label="Settings navigation">
               {management
-                .filter((_, index) => index === 0 || user.role === "admin")
+                .filter((_, index) => index < 3 || user.role === "admin")
                 .map(({ to, label, icon: Icon }) => (
                   <NavLink key={to} to={to} end>
                     <Icon size={18} />
@@ -123,15 +136,30 @@ export default function Shell({ user }: { user: User }) {
                   </NavLink>
                 ))}
             </nav>
-            <div className="sp-settings-note">
-              <Mark />
-              <p>
-                Your collection.
-                <br />
-                Your rules.
-              </p>
+            <div className="sp-settings-signout">
+              <button
+                className="sp-button quiet"
+                onClick={logout}
+                disabled={signingOut}
+              >
+                <LogOut size={18} />
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
+              <ErrorNote error={logoutError} />
             </div>
           </aside>
+        )}
+        {!user.welcomed && (
+          <div className="sp-welcome-signout">
+            <button
+              className="sp-button quiet"
+              onClick={logout}
+              disabled={signingOut}
+            >
+              Sign out
+            </button>
+            <ErrorNote error={logoutError} />
+          </div>
         )}
         <Outlet />
       </div>

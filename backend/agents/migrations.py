@@ -7,7 +7,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-SCHEMA_GENERATION = "household-nodes-1"
+SCHEMA_GENERATION = "operational-history-2"
 
 
 def prepare(data_dir):
