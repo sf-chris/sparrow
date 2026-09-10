@@ -541,6 +541,19 @@ class AgentService:
     # ─── Event routing (zero decisions, only delivery) ───────────────────
 
     async def emit(self, event: Event) -> None:
+        codes = {
+            "download_stalled": "download_stalled",
+            "download_recovered": "download_recovered",
+            "files_landed": "media_checking",
+            "client_down": "client_down",
+            "client_recovered": "client_recovered",
+        }
+        if event.kind in codes:
+            job = self.store.get_job(event.job_id) if event.job_id else None
+            if job:
+                self.storage.operations.job(
+                    codes[event.kind], job, subject=event.download_id
+                )
         try:
             await self._route(event)
         except Exception:
@@ -924,6 +937,7 @@ class AgentService:
         from .node_executor import NodeError
 
         nodes, _ = components(self.toolbox)
+        nodes.observe_availability()
         cfg = self.storage.get_config()
         if cfg.seeding_ratio_limit > 0 or cfg.seeding_time_hours > 0:
             for download in self.storage.get_all_downloads():
@@ -1095,6 +1109,13 @@ class AgentService:
         last_progress, last_change = self._progress_seen.get(dl.id, (None, now))
         if last_progress is None or progress > last_progress + 1e-4:
             self._progress_seen[dl.id] = (progress, now)
+            if dl.id in self._stall_flagged:
+                job = self.store.get_job(dl.metadata.get("job_id", ""))
+                if job:
+                    # History alone must not introduce an extra reasoning wake.
+                    self.storage.operations.job(
+                        "download_recovered", job, subject=dl.id
+                    )
             self._stall_flagged.discard(dl.id)
             return
         if now - last_change >= STALL_AFTER and dl.id not in self._stall_flagged:

@@ -68,6 +68,29 @@ class Nodes:
             for r in rows
         ]
 
+    def observe_availability(self):
+        for node in self.list():
+            if node["disabled"]:
+                continue
+            library_roots = [
+                root
+                for root in (node["capabilities"].get("roots") or [])
+                if isinstance(root, dict) and root.get("id") == "library"
+            ]
+            available = (
+                node["online"]
+                and bool(library_roots)
+                and all(root.get("available", False) for root in library_roots)
+            )
+            self.storage.operations.observe(
+                "storage:" + node["id"],
+                str(bool(available)),
+                "storage_online" if available else "storage_offline",
+                initial=not available,
+                library_id=node["id"],
+                title=node["name"],
+            )
+
     def info(self, node_id):
         return next((n for n in self.list() if n["id"] == node_id), None)
 

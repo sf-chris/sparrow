@@ -25,6 +25,13 @@ browser and Linux-package checks from pending native Windows, physical-device
 and live-provider acceptance. The table below remains the deployment acceptance
 contract; code presence alone does not complete its physical Windows gates.
 
+Design integration, 2026-09-11: the approved bright interface and compact Home,
+settings, account/security and Logs refinements are now the installed product.
+The README and [screenshot gallery](docs/screenshots/README.md) show this direction.
+The next phase concentrates on feature reliability and the still-open device,
+storage and provider acceptance gates, as recorded in
+[the implementation record](docs/IMPLEMENTATION.md#design-integration--11-september-2026).
+
 Gate A and Gate B below retain the repository's historical July completion
 record. They do not establish readiness for the new Linux/Windows deployment,
 public access or the complete viewing experience. Current review reproductions

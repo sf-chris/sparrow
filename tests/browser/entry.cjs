@@ -130,7 +130,7 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
       .click();
   }
   await page
-    .getByRole("heading", { name: "Hello, Chris. What’s on?", exact: true })
+    .getByRole("heading", { name: "What’s on tonight, Chris?", exact: true })
     .waitFor();
   await page.goto(base + "/settings");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();

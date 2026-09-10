@@ -46,6 +46,19 @@ def install_playback(app, storage, accounts, nodes, catalogue):
         """)
     router = APIRouter(prefix="/api/v1")
 
+    def report(request, asset, phase, failed):
+        captions = phase == "captions"
+        code = ("captions" if captions else "playback") + (
+            "_failed" if failed else "_recovered"
+        )
+        storage.operations.media(
+            code,
+            request.state.user,
+            asset,
+            storage,
+            observed=(phase, "failed" if failed else "ready"),
+        )
+
     def session(request, session_id):
         user = request.state.user
         with accounts.connect() as db:
@@ -64,6 +77,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             )
         data = json.loads(row["data"])
         if data["version"] != asset["facts"]["version"]:
+            report(request, asset, "start", True)
             raise HTTPException(
                 409,
                 "This media copy changed. Start playback again to use the new copy.",
@@ -83,6 +97,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 timeout=20,
             )
         except NodeError as exc:
+            report(request, asset, "delivery", True)
             raise HTTPException(409, str(exc)) from exc
         size = version["size_bytes"]
         try:
@@ -119,21 +134,27 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 user = accounts.from_session(request.cookies.get(COOKIE))
                 if not user or not accounts.can_access(user, asset["node_id"]):
                     return
-                result = await nodes.execute(
-                    asset["node_id"],
-                    "read",
-                    {
-                        "root_id": root_id,
-                        "path": path,
-                        "version": version,
-                        "offset": offset,
-                        "length": min(READ_CHUNK, end - offset + 1),
-                    },
-                    timeout=30,
-                )
-                block = base64.b64decode(result["bytes"], validate=True)
-                if not block or len(block) > end - offset + 1:
-                    raise NodeError("Storage returned an incomplete media range.")
+                try:
+                    result = await nodes.execute(
+                        asset["node_id"],
+                        "read",
+                        {
+                            "root_id": root_id,
+                            "path": path,
+                            "version": version,
+                            "offset": offset,
+                            "length": min(READ_CHUNK, end - offset + 1),
+                        },
+                        timeout=30,
+                    )
+                    block = base64.b64decode(result["bytes"], validate=True)
+                    if not block or len(block) > end - offset + 1:
+                        raise NodeError("Storage returned an incomplete media range.")
+                except (NodeError, ValueError, OSError):
+                    report(request, asset, "delivery", True)
+                    raise
+                if offset == start:
+                    report(request, asset, "delivery", False)
                 offset += len(block)
                 yield block
 
@@ -183,6 +204,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
         if not asset:
             raise HTTPException(404, "This media is not available to your account.")
         if asset["state"] != "ready":
+            report(request, asset, "start", True)
             raise HTTPException(
                 409,
                 "This copy is not available. Reconnect its storage or verify the changed file.",
@@ -199,6 +221,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 timeout=20,
             )
         except NodeError as exc:
+            report(request, asset, "start", True)
             raise HTTPException(409, str(exc)) from exc
         facts = asset["facts"]
         audio = facts["audio_tracks"]
@@ -251,6 +274,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
         mode = "direct" if direct else "hls"
         node = nodes.info(asset["node_id"])
         if mode == "hls" and not (node or {}).get("capabilities", {}).get("transcode"):
+            report(request, asset, "start", True)
             raise HTTPException(
                 422,
                 "This browser needs a compatible playback copy. Enable the packaged media tools on this storage node.",
@@ -301,6 +325,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             if prepared
             else []
         )
+        report(request, asset, "start", False)
         return {
             "id": identity,
             "mode": mode,
@@ -390,6 +415,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 },
                 timeout=90,
             )
+            report(request, asset, "preparation", False)
             return await read_response(
                 request,
                 asset,
@@ -399,6 +425,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 content_type="video/mp2t",
             )
         except NodeError as exc:
+            report(request, asset, "preparation", True)
             raise HTTPException(503, str(exc)) from exc
 
     @router.get("/playback/{session_id}/subtitles/{index}.vtt")
@@ -418,8 +445,10 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 },
                 timeout=60,
             )
+            report(request, asset, "captions", False)
             return Response(result["vtt"], media_type="text/vtt")
         except NodeError as exc:
+            report(request, asset, "captions", True)
             raise HTTPException(422, str(exc)) from exc
 
     @router.put("/playback/{session_id}/progress")

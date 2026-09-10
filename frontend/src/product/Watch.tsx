@@ -41,7 +41,6 @@ export default function Watch() {
     <Page
       className="sp-player-page"
       title={resource.data?.title || "Your player"}
-      eyebrow="LIGHTS DOWN. SOUND UP."
     >
       <Link
         className="sp-back"
@@ -258,7 +257,9 @@ function Player({
           onError={() => {
             if (session && !busy)
               setError(
-                "This copy could not play. Try preparing a compatible version, or reconnect its storage.",
+                transcode
+                  ? "This copy still could not play. Check that its storage is connected, then try again."
+                  : "This copy could not play. Open Playback help to try another format, or reconnect its storage.",
               );
           }}
         >
@@ -328,11 +329,19 @@ function Player({
       <div className="sp-savebar">
         <span className="sp-muted">
           {session?.mode === "hls"
-            ? "Preparing a browser-compatible stream on your storage."
+            ? "Converting video for this browser."
             : "Plays directly from your collection."}{" "}
           Your progress saves automatically.
         </span>
-        {!transcode && (
+      </div>
+      {!transcode && (
+        <details className="sp-playback-help">
+          <summary>Playback help</summary>
+          <p className="sp-muted">
+            Video won’t play, or there’s no sound? Try converting it to a format
+            this browser can play. This may take a moment; your original file
+            stays unchanged.
+          </p>
           <button
             className="sp-button quiet"
             onClick={() => {
@@ -341,10 +350,10 @@ function Player({
             }}
           >
             <RefreshCw size={15} />
-            Prepare compatible version
+            Try another playback format
           </button>
-        )}
-      </div>
+        </details>
+      )}
       {session && (
         <SubtitleRepair
           assetId={asset.id}

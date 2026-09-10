@@ -1,19 +1,9 @@
 import InstallApp from "./InstallApp";
-import PasswordSettings from "./PasswordSettings";
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import {
-  ArrowRight,
-  Check,
-  LogOut,
-  Server,
-  Users,
-  HardDrive,
-} from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import {
   api,
   patch,
-  post,
   type Preferences as Values,
   type Effective,
   type User,
@@ -231,12 +221,10 @@ export default function Preferences({
   user,
   welcome = false,
   onChanged,
-  onLogout,
 }: {
   user: User;
   welcome?: boolean;
   onChanged: () => void;
-  onLogout: () => void;
 }) {
   const ownerSetup = welcome && user.role === "admin";
   const resource = useResource(async () => {
@@ -311,7 +299,6 @@ export default function Preferences({
             : "Make it your own."
           : "Your settings"
       }
-      eyebrow={welcome ? "Welcome to Sparrow" : user.name}
       description={
         ownerSetup
           ? "These are the starting preferences for everyone on this server. Each person can make their own changes later."
@@ -375,91 +362,7 @@ export default function Preferences({
           </Section>
         )
       )}
-      {!welcome && user.role === "admin" && (
-        <Section
-          title="Manage your server"
-          description="Storage, household defaults and access for the people you share with."
-        >
-          <div className="sp-inline-links">
-            <Link className="sp-button secondary" to="/settings/storage">
-              <HardDrive size={17} />
-              Storage & import
-            </Link>
-            <Link className="sp-button secondary" to="/settings/people">
-              <Users size={17} />
-              People
-            </Link>
-            <Link className="sp-button secondary" to="/settings/server">
-              <Server size={17} />
-              Server settings
-            </Link>
-            <Link className="sp-button secondary" to="/settings/defaults">
-              Household defaults
-            </Link>
-          </div>
-        </Section>
-      )}
-      {!welcome && (
-        <>
-          <InstallApp />
-          <AccountSessions onLogout={onLogout} />
-        </>
-      )}
+      {!welcome && <InstallApp />}
     </Page>
-  );
-}
-function AccountSessions({ onLogout }: { onLogout: () => void }) {
-  const resource = useResource(() =>
-    api<{ id: string; label: string; created: number }[]>("/sessions"),
-  );
-  const [error, setError] = useState("");
-  async function logout() {
-    try {
-      await post("/auth/logout");
-      onLogout();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  return (
-    <Section title="Your account">
-      <ErrorNote error={error} />
-      <div className="sp-panel">
-        <p className="sp-muted">
-          {resource.data?.length || 1} signed-in browser sessions. Signing out
-          ends this session.
-        </p>
-        <div className="sp-actions mt-4">
-          <button className="sp-button secondary" onClick={logout}>
-            <LogOut size={16} />
-            Sign out
-          </button>
-        </div>
-        <PasswordSettings />
-        {resource.data?.map((s) => (
-          <div className="sp-row" key={s.id}>
-            <div>
-              <h3>
-                {s.label.includes("Mobile") ? "Mobile browser" : "Browser"}
-              </h3>
-              <p>Signed in {new Date(s.created * 1000).toLocaleDateString()}</p>
-            </div>
-            <button
-              className="sp-button quiet"
-              onClick={async () => {
-                try {
-                  await api(`/sessions/${s.id}`, { method: "DELETE" });
-                  await resource.refresh();
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
-            >
-              End session
-            </button>
-          </div>
-        ))}
-      </div>
-    </Section>
   );
 }

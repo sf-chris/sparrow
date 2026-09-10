@@ -26,6 +26,9 @@ def image_url(path, size="w500"):
 
 
 def install_product(app, storage, accounts, nodes, get_service):
+    from .operations import install_operations
+
+    install_operations(app, storage)
     catalogue = Catalogue(storage, nodes)
     router = APIRouter(prefix="/api/v1")
     job_lock = asyncio.Lock()
@@ -346,6 +349,7 @@ def install_product(app, storage, accounts, nodes, get_service):
         try:
             return await catalogue.scan(body.node_id, body.root_id, body.path)
         except NodeError as exc:
+            storage.operations.record("import_failed", library_id=body.node_id)
             raise HTTPException(422, str(exc)) from exc
 
     @router.post("/admin/imports/{scan_id}/confirm")

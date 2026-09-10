@@ -181,4 +181,4 @@ m.app.router.lifespan_context = lifespan
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(m.app, host="127.0.0.1", port=8891)
+    uvicorn.run(m.app, host="127.0.0.1", port=int(os.environ.get("SPARROW_BROWSER_PORT", "8891")))

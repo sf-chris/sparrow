@@ -9,7 +9,7 @@ import {
   Compass,
   Plus,
 } from "lucide-react";
-import { Backdrop, PlayroomArt, Doodle } from "./Brand";
+import { Backdrop, PlayroomArt } from "./Brand";
 import { api, type Item, type User, type Asset } from "./api";
 import {
   ActionLink,
@@ -86,43 +86,15 @@ export default function Collection({
         .map((asset) => ({ item, asset })),
     )
     .sort((a, b) => b.asset.watch!.updated - a.asset.watch!.updated)
-    .slice(0, 3);
-  const featured =
-    continuing.find(({ asset }) => asset.state === "ready")?.item ||
-    (resource.data || []).find((item) =>
-      item.assets.some((asset) => asset.state === "ready"),
-    );
-  const featureAsset =
-    featured?.assets.find(
-      (asset) =>
-        asset.state === "ready" &&
-        asset.watch &&
-        !asset.watch.watched &&
-        asset.watch.position > 5,
-    ) ||
-    featured?.assets.find(
-      (asset) => asset.state === "ready" && !asset.watch?.watched,
-    ) ||
-    featured?.assets.find((asset) => asset.state === "ready");
+    .slice(0, 12);
   const empty = resource.data?.length === 0;
   return (
     <Page
       className={home ? "sp-home-page" : "sp-library-page"}
-      eyebrow={
-        home ? "YOUR LITTLE WATCH-WORLD" : "THE GOOD STUFF, ALL TOGETHER"
-      }
       title={
-        home ? `Hello, ${user.name.split(" ")[0]}. What’s on?` : "Your library."
-      }
-      description={
         home
-          ? "A little something to look forward to."
-          : "All your favourites. A few future ones, too."
-      }
-      action={
-        <ActionLink to="/discover">
-          {home ? "Find something new" : "Find a title"}
-        </ActionLink>
+          ? `What’s on tonight, ${user.name.split(" ")[0]}?`
+          : "Your library."
       }
     >
       <ErrorNote error={resource.error} retry={resource.refresh} />
@@ -130,62 +102,6 @@ export default function Collection({
         resource.loading && <Loading />
       ) : (
         <>
-          {home && featured && featureAsset && (
-            <div className="sp-home-feature-grid">
-              <section className="sp-feature" aria-label="From your collection">
-                <div className="sp-feature-copy">
-                  <p className="sp-eyebrow">SAVED YOU A SPOT</p>
-                  <h2>{featured.title}</h2>
-                  <p>
-                    {featured.year ? `${featured.year} · ` : ""}
-                    {featured.media_type === "tv" ? "Series" : "Film"} · Ready
-                    to watch
-                  </p>
-                  {featured.overview && (
-                    <p className="sp-feature-overview">{featured.overview}</p>
-                  )}
-                  <div className="sp-actions">
-                    <Link
-                      className="sp-button primary"
-                      to={`/watch/${featureAsset.id}`}
-                    >
-                      <Play size={15} fill="currentColor" />
-                      {featureAsset.watch?.position &&
-                      !featureAsset.watch.watched
-                        ? "Resume watching"
-                        : "Start watching"}
-                    </Link>
-                    <Link className="sp-button quiet" to={itemLink(featured)}>
-                      Explore title <ArrowUpRight size={15} />
-                    </Link>
-                  </div>
-                </div>
-                <Link
-                  className="sp-feature-image"
-                  to={itemLink(featured)}
-                  aria-label={`View ${featured.title}`}
-                >
-                  <Backdrop
-                    className="sp-feature-art"
-                    src={featured.backdrop_url || featured.poster_url}
-                  />
-                </Link>
-              </section>
-              <aside className="sp-curiosity-card">
-                <Doodle kind="spark" />
-                <p className="sp-eyebrow">A HAPPY LITTLE DETOUR</p>
-                <h2>
-                  In the mood
-                  <br />
-                  for a maybe?
-                </h2>
-                <p>Let’s find something that feels just right.</p>
-                <Link className="sp-button secondary" to="/discover">
-                  Wander a little <ArrowRight size={15} />
-                </Link>
-              </aside>
-            </div>
-          )}
           {home && empty && (
             <section
               className="sp-feature sp-feature-empty"
@@ -223,14 +139,18 @@ export default function Collection({
           )}
           {home && continuing.length > 0 && (
             <Section
-              title="A little more of a good thing"
+              title="Continue watching"
               action={
                 <Link className="sp-button quiet" to="/library">
                   Your library <ArrowRight size={16} />
                 </Link>
               }
             >
-              <div className="sp-continue-grid">
+              <div
+                className="sp-continue-grid"
+                role="region"
+                aria-label="Continue watching titles"
+              >
                 {continuing.map(({ item, asset }) => (
                   <article className="sp-continue" key={asset.id}>
                     <div className="sp-continue-art">
@@ -313,7 +233,7 @@ export default function Collection({
           ) : (
             <Section
               title={
-                home ? "Your shelf of good things" : "The whole collection"
+                home ? "Now showing in your library" : "The whole collection"
               }
               action={
                 home ? (
@@ -373,7 +293,7 @@ export default function Collection({
                 </div>
               )}
               {items.length ? (
-                <div className="sp-grid">
+                <div className={home ? "sp-grid sp-poster-shelf" : "sp-grid"}>
                   {(home ? items.slice(0, 12) : items).map((item) => (
                     <MediaCard key={item.id} item={item} />
                   ))}

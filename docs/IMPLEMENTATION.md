@@ -4,7 +4,7 @@ Owner instruction: implement roadmap stages 1–6, work systematically, test the
 results and finish with a cohesive product design. Stage 7 (guided external
 DNS/HTTPS/sharing), TV/Emby/casting and the setup agent are excluded.
 
-## Delivered in this working tree
+## Implemented product foundation
 
 | Stage | Implementation | Validation boundary |
 | --- | --- | --- |
@@ -18,14 +18,16 @@ DNS/HTTPS/sharing), TV/Emby/casting and the setup agent are excluded.
 The shared visual contract is [PRODUCT_DESIGN.md](PRODUCT_DESIGN.md). Installation
 and release commands are in [INSTALLATION.md](INSTALLATION.md). This is an alpha
 implementation, not a claim that every roadmap deployment acceptance gate passed.
-No source changes were committed or pushed and no installer was published during
-this work. Real acquisition and paid model calls were not started.
+The foundation and bright redesign were merged into `main` on 10 September 2026.
+The later design follow-up and integration checks are recorded below. No Windows
+installer was published; real acquisition and paid model calls were not started
+by these validation runs.
 
 ## Measured checks
 
 - Original baseline: 42 tests, 40 passed and two opt-in live-model checks skipped.
 - Foundation expansion: 54 tests, 52 passed and two skipped.
-- Latest repository checks: **107 tests, 105 passed and two opt-in live-model
+- Latest repository checks: **118 tests, 116 passed and two opt-in live-model
   checks skipped**. Python compilation, dependency consistency, frontend production
   build and the required release-tree checks pass. Ruff's undefined-name and
   syntax checks pass across backend, tests and packaging.
@@ -189,3 +191,102 @@ Existing local work is preserved. The same isolated backend on 8891 and Vite
 preview on 3000 serve this branch; the existing installation on 8888 was not
 redeployed. No new runtime dependency or paid acquisition/model call was added.
 Physical-device, Windows and live-provider release gates remain unchanged.
+
+
+## Personal cinema and operational history — 10 September 2026
+
+The follow-ups in [DESIGN_FOLLOW_UP.md](DESIGN_FOLLOW_UP.md) are implemented in
+this working tree. The bright palette, small controls and public landing page
+remain. Home uses a short greeting, compact horizontal Continue watching cards,
+then library posters. The owner review removed the oversized playable feature,
+decorative page-header lines and excess space below navigation. Activity leads
+with title/request progress instead of metric cards.
+
+Settings no longer repeats administration shortcuts or browser-session rows.
+Account & security contains a compact password row opening a focused dialog,
+current-browser identification and session revocation. Sign out sits below the settings navigation on desktop and
+above the settings content on phones; it immediately returns to the public root.
+Discover is the single search entry in navigation; Ctrl/Cmd+K still opens it.
+Playback help explains the optional browser-format conversion and that the
+original file remains unchanged.
+
+A dedicated Logs API/page records request state, download start/stall/completion
+and recovery, import/matching, measured storage availability, and playback and
+subtitle preparation/review failures and recovery. Fixed summaries and scoped
+context avoid copying raw exceptions, paths, credentials or release names into
+the feed. Current account/library permissions are applied before queries/counts;
+administrators additionally see system events and expandable identifiers.
+Successful sign-ins and routine polling do not create rows. Recording a transfer
+recovery does not cause an extra reasoning wake.
+
+The SQLite history uses the `operational-history-2` migration generation, with a
+pre-change snapshot through the existing migration mechanism. It keeps at most
+50,000 events / 90 days and begins collecting new changes; there is no invented
+historical backfill. Repeats group in five-minute windows. Time, category,
+severity and title/request filters persist in the URL, while a fixed event-id
+snapshot keeps new arrivals from shifting pagination. Refresh opens the latest
+first page; retention can expire old records during very long browsing sessions.
+
+Repository checks pass with **118 tests: 116 passed, two opt-in live-model tests
+skipped**, using the available FFmpeg/ffprobe binaries. Compilation, dependency
+consistency, the production frontend build, npm audit and release-tree checks
+pass. Targeted coverage checks scope/revocation, repeat grouping, filtered
+pagination through concurrent arrivals and restart, state transitions and
+playback/subtitle recovery. The browser evidence and screenshots are in
+[follow-up-validation](follow-up-validation/README.md).
+
+[NEARBY_DISCOVERY.md](NEARBY_DISCOVERY.md) documents a separate, executable mDNS
+prototype in the server/node layer. Controlled tests and an actual loopback-only
+zeroconf exchange pass. The prototype is opt-in, limits service types/interface/
+duration, returns untrusted candidates, and cannot pair devices or mount storage.
+It adds no normal-runtime dependency or LAN scan. An authenticated chooser and
+physical LAN/NAS/Windows validation remain release work. This work did not
+redeploy the existing installation or resume stage 7 or TV/client work.
+
+## Design integration — 11 September 2026
+
+The approved bright design and personal-cinema follow-ups are integrated into
+the normal application routes. The Linux installation was rebuilt from this
+source and updated with the existing named volume. A private stopped-state
+backup and the previous image were retained before replacement. Before/after
+database fingerprints confirmed unchanged accounts, browser sessions, settings,
+requests, collection mappings and watch state. SQLite integrity checks pass;
+the operational-history migration also created its normal local snapshot.
+
+The README now introduces the product with current desktop/phone captures,
+complete clone/install instructions, an explicit alpha status and links to
+contribution, licensing and the remaining feature work. The
+[public gallery](screenshots/README.md) contains 12 captures from the real
+production frontend with fictional fixture media. The existing AGPL-3.0-or-later
+license is retained; three accidental shell-banner lines were removed from its
+file. No release tag or Windows installer was published.
+
+Checks performed for this integration:
+
+- `scripts/check.sh`: **118 tests, 116 passed, two opt-in live-model checks
+  skipped**; compilation, Python dependency consistency, frontend build, npm
+  audit (zero advisories) and release-tree checks passed.
+- Isolated Chrome journeys passed owner entry, playback/audio/captions/seeking,
+  exact episode requests and pause, household access and recovery, public entry,
+  settings/security and Logs. The redesign suite passed **55 layouts and 11
+  behaviors**; the follow-up suite passed **40 layouts**, with zero reported
+  automated accessibility violations, overflow or page errors.
+- The Linux image passed `tests/package_check.py`: import, authenticated media
+  ranges, converted segments, login/resume across restart, PWA assets and loading
+  its bundled speech model.
+- The updated installation passed live Chrome welcome/sign-in checks at **390
+  and 1440px**, with no page errors, overflow or automated WCAG A/AA violations.
+  This was checked from the server, not from a physical phone on another network.
+
+Browser runs now create isolated state, reject an occupied fixture port and
+write results/server logs into ignored `tests/browser/artifacts/`, which CI
+uploads. They support a separate port for an existing preview. Documentation
+capture is reproducible and opt-in for checked-in files. The playback test
+accepts both native HLS and MediaSource delivery instead of assuming a `blob:`
+URL. Release checks fail if ripgrep is unavailable, and CI installs it explicitly.
+
+The next phase is feature-quality work: native Windows storage and recovery,
+physical mobile/Safari playback, and live subtitle/provider/model evaluations.
+Nearby discovery remains an opt-in prototype. Stage 7, TV/casting, music and
+the setup agent remain deferred. The product's accepted visual direction is
+established; open platform/provider gates above remain open.

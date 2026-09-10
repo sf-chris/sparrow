@@ -24,14 +24,12 @@ import type { Item } from "./api";
 
 export function Page({
   title,
-  eyebrow,
   description,
   action,
   className = "",
   children,
 }: {
   title: string;
-  eyebrow?: string;
   description?: string;
   action?: ReactNode;
   className?: string;
@@ -42,7 +40,6 @@ export function Page({
       {title && (
         <header className="sp-page-heading">
           <div>
-            {eyebrow && <p className="sp-eyebrow">{eyebrow}</p>}
             <h1>{title}</h1>
             {description && <p className="sp-description">{description}</p>}
           </div>

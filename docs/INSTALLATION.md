@@ -88,6 +88,8 @@ and administrators. Do not share `node.json`, which contains its pairing credent
 
 ## Checks and local development
 
+Install Python 3.11, Node.js 22.12 or newer, FFmpeg/ffprobe and ripgrep first.
+
 ```sh
 python3.11 -m venv .venv
 .venv/bin/pip install --require-hashes -r requirements.lock
@@ -101,6 +103,32 @@ Media tests require FFmpeg/ffprobe on PATH or `SPARROW_FFMPEG` and
 `SPARROW_FFPROBE`. Tests skip live paid model evaluation unless explicitly enabled.
 The measured speech benchmark additionally needs the pinned local model. See
 `tests/subtitle_benchmark.py` and its fixture attribution.
+
+The [contributor guide](../CONTRIBUTING.md#browser-journeys-and-screenshots)
+describes Chrome journeys and reproducible screenshots.
+
+## Upgrade and back up
+
+For a Compose installation, keep the checkout's directory name (and therefore
+its Compose project/volume identity) the same when upgrading:
+
+```sh
+git pull --ff-only origin main
+docker compose build
+docker compose stop sparrow
+mkdir -p backups
+chmod 700 backups
+docker compose run --rm --no-deps --entrypoint tar sparrow -czf - -C /data . > "backups/sparrow-state-$(date +%Y%m%d-%H%M%S).tar.gz"
+chmod 600 backups/*.tar.gz
+docker compose up -d
+docker compose ps
+```
+
+The archive contains accounts, settings and credentials; keep it private.
+Back up media separately if it lives in bind-mounted folders or paired nodes.
+Keep the previous image available for rollback and restore the matching state
+backup before reverting a schema change. Do not remove the named data volume
+when updating. These local steps do not configure external access.
 
 Before a schema generation changes, Sparrow snapshots existing SQLite databases
 using SQLite's backup API and copies legacy JSON into `data/backups`. A failed

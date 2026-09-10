@@ -14,12 +14,11 @@ if ! "$PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11)
   exit 1
 fi
 if ! command -v node >/dev/null 2>&1; then
-  echo "Node.js 20 or newer is required to build the frontend." >&2
+  echo "Node.js 22.12 or newer is required to build the frontend." >&2
   exit 1
 fi
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "$NODE_MAJOR" -lt 20 ]; then
-  echo "Node.js 20 or newer is required; found $(node --version)." >&2
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 12) ? 0 : 1)'; then
+  echo "Node.js 22.12 or newer is required; found $(node --version)." >&2
   exit 1
 fi
 if ! command -v npm >/dev/null 2>&1; then

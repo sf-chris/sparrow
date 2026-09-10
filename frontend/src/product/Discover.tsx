@@ -132,12 +132,7 @@ export default function Discover() {
     }
   }
   return (
-    <Page
-      className="sp-discover-page"
-      eyebrow="FOLLOW YOUR CURIOSITY"
-      title="Find your next watch."
-      description="Search for a title, or describe what you have in mind."
-    >
+    <Page className="sp-discover-page" title="Find your next watch.">
       <div className="sp-discover-console">
         <div
           className="sp-tabs"
