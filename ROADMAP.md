@@ -32,6 +32,11 @@ The next phase concentrates on feature reliability and the still-open device,
 storage and provider acceptance gates, as recorded in
 [the implementation record](docs/IMPLEMENTATION.md#design-integration--11-september-2026).
 
+Agent audit and proposal, 2026-09-11: [the agentic reliability plan](docs/AGENTIC_PLAN.md)
+records the actual CWM retirement boundary, current agent capabilities, lessons
+from Mogged, proposed intelligence tiers and evaluation-led work packages. It
+is a discussion draft; its proposed changes have not been implemented.
+
 Gate A and Gate B below retain the repository's historical July completion
 record. They do not establish readiness for the new Linux/Windows deployment,
 public access or the complete viewing experience. Current review reproductions
