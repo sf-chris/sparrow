@@ -13,6 +13,7 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const base = process.env.SPARROW_BROWSER_URL || "http://127.0.0.1:8891";
 const out = process.env.SPARROW_VISUAL_OUT || "docs/reimagined-validation";
+const { expect } = require(require.resolve("@playwright/test", { paths: [process.cwd() + "/frontend"] }));
 fs.mkdirSync(out, { recursive: true });
 (async () => {
   const browser = await chromium.launch({
@@ -158,7 +159,7 @@ fs.mkdirSync(out, { recursive: true });
   await page.getByLabel("Media type", { exact: true }).selectOption("movie");
   await page.getByLabel("Sort titles", { exact: true }).selectOption("title");
   await page.getByLabel("Search your library", { exact: true }).fill("quiet");
-  assert.equal(await page.locator(".sp-media-card").count(), 1);
+  await expect(page.locator(".sp-media-card")).toHaveCount(1);
   await page
     .getByRole("link", { name: "Open The Quiet Planet", exact: true })
     .click();
@@ -187,11 +188,10 @@ fs.mkdirSync(out, { recursive: true });
   await page
     .getByRole("button", { name: "Clear filters", exact: true })
     .click();
-  assert.equal(await page.locator(".sp-media-card").count(), 6);
+  await expect(page.locator(".sp-media-card")).toHaveCount(6);
   await page.getByLabel("Sort titles").selectOption("title");
   const names = await page.locator(".sp-media-card h3").allTextContents();
-  assert.deepEqual(
-    names,
+  await expect(page.locator(".sp-media-card h3")).toHaveText(
     [...names].sort((a, b) => a.localeCompare(b)),
   );
 
@@ -243,11 +243,11 @@ fs.mkdirSync(out, { recursive: true });
   await page
     .getByRole("searchbox", { name: "Movie or TV title", exact: true })
     .fill("");
-  assert.equal(await page.getByRole("status").count(), 0);
+  await expect(page.getByRole("status")).toHaveCount(0);
 
   await go("/title/tv/101");
   await page.getByLabel("Show episodes from").selectOption("1");
-  assert.equal(await page.locator(".sp-episode").count(), 1);
+  await expect(page.locator(".sp-episode")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Choose episodes", exact: true })
     .click();
@@ -255,7 +255,7 @@ fs.mkdirSync(out, { recursive: true });
   await page.getByRole("checkbox").first().check();
   await snapshot("episode-request", true);
   await page.keyboard.press("Escape");
-  assert.equal(await page.getByRole("dialog").count(), 0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   assert.equal(
     await page
       .getByRole("button", { name: "Choose episodes", exact: true })
