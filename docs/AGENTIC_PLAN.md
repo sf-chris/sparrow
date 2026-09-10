@@ -7,6 +7,10 @@ removal of obsolete design documents, obsolete issues/dependencies and dead
 code. Model profiles and the framework choice remain evaluation candidates.
 This document does not record a runtime migration or a completed model evaluation.
 
+The [consolidated implementation issue #3](https://github.com/sf-chris/sparrow/issues/3)
+owns work tracking, dependency updates, cleanup dispositions and final acceptance.
+It includes the context needed by a fresh agent and links this audit and its evidence.
+
 Sparrow should use agents to own uncertain outcomes, with ordinary code doing
 measurement, processing, scheduling and enforcement. Its normal application
 already follows that architecture. The next step is to make those agents more

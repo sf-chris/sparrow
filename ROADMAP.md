@@ -35,7 +35,10 @@ storage and provider acceptance gates, as recorded in
 Agent audit and proposal, 2026-09-11: [the agentic reliability plan](docs/AGENTIC_PLAN.md)
 records the actual CWM retirement boundary, current agent capabilities, lessons
 from Mogged, proposed intelligence tiers and evaluation-led work packages. It
-is a discussion draft; its proposed changes have not been implemented.
+is an implementation proposal; its changes have not been implemented.
+[Issue #3](https://github.com/sf-chris/sparrow/issues/3) consolidates the handoff,
+acceptance criteria and required removal of obsolete documents, issues/dependencies
+and dead code. Track the next phase there rather than creating competing backlogs.
 
 Gate A and Gate B below retain the repository's historical July completion
 record. They do not establish readiness for the new Linux/Windows deployment,
