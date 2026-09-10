@@ -1,0 +1,41 @@
+{
+  "errors": [],
+  "results": [
+    {
+      "name": "administrator-setup",
+      "width": 360,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "administrator-setup",
+      "width": 390,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "administrator-setup",
+      "width": 768,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "administrator-setup",
+      "width": 1440,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    }
+  ]
+}

@@ -28,6 +28,8 @@ from .models import (AgentKind, AgentSession, Event, JournalEntry, JobStatus,
                      MonitoringMode)
 from .runtime import ToolCtx, ToolDef, ToolError
 from .store import AgentStore
+from .accounts import Accounts
+from .media_state import media_state, file_version, audio_satisfies
 
 TMDB = "https://api.themoviedb.org/3"
 
@@ -48,13 +50,15 @@ async def _probe_media_facts(path: Path) -> dict:
     try:
         proc = await asyncio.create_subprocess_exec(
             "ffprobe", "-v", "error", "-show_entries",
-            "format=duration:stream=codec_type,width,height", "-of", "json", str(path),
+            "format=duration:stream=index,codec_name,codec_type,width,height:stream_tags=language,title", "-of", "json", str(path),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
     except FileNotFoundError as exc:
         raise ToolError("ffprobe is required before Sparrow can replace library media.") from exc
     except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.communicate()
         raise ToolError(f"ffprobe timed out while verifying {path.name}.") from exc
     if proc.returncode != 0:
         raise ToolError(f"Cannot replace library media: {path.name} is not readable media.")
@@ -83,7 +87,13 @@ async def _probe_media_facts(path: Path) -> dict:
     else:
         quality = "unknown"
     return {"duration_seconds": duration, "width": width, "height": height,
-            "quality": quality}
+            "quality": quality,
+            "audio_languages": [(s.get("tags") or {}).get("language", "und")
+                                for s in payload.get("streams", []) if s.get("codec_type") == "audio"],
+            "audio_tracks": [{"index": s.get("index"), "codec": s.get("codec_name"),
+                              "language": (s.get("tags") or {}).get("language", "und"),
+                              "title": (s.get("tags") or {}).get("title", "")}
+                             for s in payload.get("streams", []) if s.get("codec_type") == "audio"]}
 
 
 async def _probe_duration_seconds(path: Path) -> float:
@@ -112,12 +122,31 @@ class Toolbox:
                  emit: Callable[[Event], "asyncio.Future | None"],
                  broadcast: Callable[[dict], "asyncio.Future | None"]):
         self.storage = storage
+        self.accounts = Accounts(storage.data_dir)
         self.store = store
         self.emit = emit              # async callable: push an Event onto the bus
         self.broadcast = broadcast    # async callable: websocket fanout to the UI
+        self.transfer_lock = asyncio.Lock()
         self._search_times: list[float] = []   # indexer rate limiting (global)
 
     # ─── shared helpers ──────────────────────────────────────────────────
+
+    def require_authority(self, ctx: ToolCtx):
+        job = self.job_for(ctx.session)
+        if not job or job.status != JobStatus.ACTIVE or job.revision != ctx.job_revision:
+            raise ToolError("This request is paused, cancelled or changed. Its previous authority has expired.")
+        if job.user_id:
+            user = self.accounts.user(job.user_id)
+            if not user or user['role'] not in ('admin', 'requester') or not self.accounts.can_access(user, job.library_id):
+                raise ToolError("The requesting account no longer has permission to manage this library.")
+            policy=self.accounts.server_settings()['policy']
+            snapshot=job.preferences.get('policy',{})
+            if policy.get('max_quality')!=snapshot.get('max_quality') or policy.get('max_file_size_gb')!=snapshot.get('max_file_size_gb'):
+                raise ToolError('Server media limits changed. Update this request to apply the current policy before continuing acquisition or publication.')
+        current = self.store.get_session(ctx.session.id)
+        if current and current.status.value == "closed":
+            raise ToolError("This agent session is closed.")
+        return job
 
     def cfg(self):
         return self.storage.get_config()
@@ -407,14 +436,14 @@ def memory_tools(tb: Toolbox) -> list[ToolDef]:
         scope = args.get("scope", "show")
         job = tb.job_for(ctx.session)
         tmdb_id = args.get("tmdb_id") or (job.tmdb_id if job else None)
-        content = tb.store.read_memory(scope, tmdb_id)
+        content = tb.store.read_memory(scope, tmdb_id, user_id=job.user_id if job else ctx.session.user_id)
         return content or "(no notes yet)"
 
     async def write(ctx: ToolCtx, args: dict):
         scope = args.get("scope", "show")
         job = tb.job_for(ctx.session)
         tmdb_id = args.get("tmdb_id") or (job.tmdb_id if job else None)
-        tb.store.write_memory(scope, args.get("content", ""), tmdb_id)
+        tb.store.write_memory(scope, args.get("content", ""), tmdb_id, user_id=job.user_id if job else ctx.session.user_id)
         return "Memory saved."
 
     return [
@@ -571,7 +600,11 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
     async def search(ctx: ToolCtx, args: dict):
         await tb.rate_limit_search()
         ctx.session.spend.searches += 1
-        raw = await apibay_query(args["query"])
+        if tb.cfg().preferred_search_engines != ['apibay']:
+            raise ToolError('The configured acquisition source is not installed. Choose the built-in source in Server settings.')
+        try:raw = await apibay_query(args["query"],strict=True)
+        except Exception as exc:
+            raise ToolError('The acquisition source is unavailable. This is not an empty search result; wait for the source to recover before trying more queries.') from exc
         out = []
         for r in raw[:60]:
             try:
@@ -620,54 +653,55 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
         return files[:200]
 
     async def add(ctx: ToolCtx, args: dict):
-        cfg = tb.cfg()
-        if not cfg.staging_dir:
-            raise ToolError("Staging folder isn't configured.")
-        info_hash = (args.get("info_hash") or "").strip().lower()
-        name = args.get("name") or info_hash
-        if len(info_hash) != 40:
-            raise ToolError("info_hash must be the 40-char hash from tpb_search.")
-        # Deterministic backpressure: one wake can never flood the client.
-        # The agent still chooses WHAT to get; the tool controls resource
-        # authority.
-        limit = max(1, int(cfg.max_active_transfers or 1))
-        active = [
-            d for d in tb.storage.get_all_downloads()
-            if d.metadata.get("agent_managed")
-            and d.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING)
-        ]
-        if len(active) >= limit:
-            raise ToolError(
-                f"Transfer limit reached: {len(active)} of {limit} allowed transfers "
-                "are already active across all jobs. Do not queue more now — journal "
-                "what you're waiting on and hibernate; you'll be woken as downloads "
-                "finish, then add the next candidate.")
-        job = tb.job_for(ctx.session)
-        magnet = build_magnet(info_hash, name)
-        mgr, connected, recovery = await tb.connect_torrents()
-        if not connected:
-            raise ToolError(
-                f"{recovery} This is an environmental failure — do NOT reject this "
-                "candidate. Give the user one short progress update and retry when the "
-                "client recovers (you'll be woken).")
-        download_id = f"dl-{info_hash[:12]}"
-        # Every download gets its own staging folder so the Media Agent that
-        # processes it can only ever see its own files.
-        staging = Path(cfg.staging_dir).resolve() / download_id
-        staging.mkdir(parents=True, exist_ok=True)
-        torrent_hash = await mgr.add_magnet(magnet, str(staging))
-        dl = Download(
-            id=download_id, name=name, magnet_url=magnet,
-            media_type=MediaType(job.media_type) if job else MediaType.UNKNOWN,
-            status=DownloadStatus.DOWNLOADING, torrent_hash=torrent_hash or info_hash,
-            staging_path=str(staging), tmdb_id=job.tmdb_id if job else None,
-            metadata={"job_id": ctx.session.job_id, "session_id": ctx.session.id,
-                      "agent_managed": True},
-        )
-        await tb.storage.add_download(dl)
-        await tb.broadcast({"type": "download_added", "data": dl.to_dict()})
-        return {"download_id": dl.id, "hash": dl.torrent_hash,
-                "note": "Added. You'll be woken when it finishes, stalls, or errors."}
+        # Reserve durably before external work. The shared lock makes the cap
+        # atomic across sessions and lets pause/cancel reconcile an in-flight add.
+        async with tb.transfer_lock:
+            job = tb.require_authority(ctx)
+            cfg = tb.cfg()
+            if not cfg.staging_dir:
+                raise ToolError("Staging folder isn't configured.")
+            info_hash = (args.get("info_hash") or "").strip().lower()
+            if len(info_hash) != 40 or any(c not in "0123456789abcdef" for c in info_hash):
+                raise ToolError("info_hash must be a 40-character hexadecimal hash.")
+            name = args.get("name") or info_hash
+            download_id = f"dl-{info_hash}"
+            existing = tb.storage.get_download(download_id)
+            if existing and existing.status != DownloadStatus.ERROR:
+                if existing.metadata.get("job_id") != job.id:
+                    raise ToolError("This transfer already belongs to another request.")
+                return {"download_id": existing.id, "note": "This transfer is already recorded."}
+            limit = max(1, int(cfg.max_active_transfers or 1))
+            active = [d for d in tb.storage.get_all_downloads()
+                      if d.metadata.get("agent_managed") and d.status in
+                      (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED)]
+            if len(active) >= limit:
+                raise ToolError(f"Transfer limit reached: {len(active)} of {limit} slots reserved. "
+                                "Wait for an existing transfer to finish.")
+            mgr, connected, recovery = await tb.connect_torrents()
+            tb.require_authority(ctx)
+            if not connected:
+                raise ToolError(f"{recovery} Wait for the download app to recover; keep this candidate.")
+            staging = Path(cfg.staging_dir).resolve() / download_id
+            staging.mkdir(parents=True, exist_ok=True)
+            magnet = build_magnet(info_hash, name)
+            dl = Download(id=download_id, name=name, magnet_url=magnet,
+                media_type=MediaType(job.media_type), status=DownloadStatus.QUEUED,
+                torrent_hash=info_hash, staging_path=str(staging), tmdb_id=job.tmdb_id,
+                metadata={"job_id": job.id, "session_id": ctx.session.id,
+                          "job_revision": job.revision, "agent_managed": True})
+            await tb.storage.add_download(dl)
+            try:
+                torrent_hash = await mgr.add_magnet(magnet, str(staging))
+            except Exception as exc:
+                # The client may have accepted it before the connection broke.
+                # Keep the hash/receipt for reconciliation rather than add twice.
+                await tb.storage.update_download(dl.id, error_message="Confirming download-app response.")
+                raise ToolError("Download result is uncertain; checking the recorded transfer before retrying.") from exc
+            await tb.storage.update_download(dl.id, status=DownloadStatus.DOWNLOADING,
+                                             torrent_hash=torrent_hash or info_hash)
+            await tb.broadcast({"type": "download_added", "data": dl.to_dict()})
+            return {"download_id": dl.id, "hash": dl.torrent_hash,
+                    "note": "Added. Progress and completion will wake this request."}
 
     async def status(ctx: ToolCtx, args: dict):
         mgr, connected, recovery = await tb.connect_torrents()
@@ -739,7 +773,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
                 "note": "episodes is {season: {episode: {quality, path, size_bytes, verified}}}"}
 
     async def close(ctx: ToolCtx, args: dict):
-        job = tb.job_for(ctx.session)
+        job = tb.require_authority(ctx)
         if not job:
             raise ToolError("No job attached to this session.")
         outcome = args["outcome"]
@@ -748,8 +782,10 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
             if not item:
                 raise ToolError("Completion refused: there is no library inventory for this job.")
             if job.media_type == "movie":
-                if item.media_type != MediaType.MOVIE or not item.metadata.get("verified"):
+                if item.media_type != MediaType.MOVIE or media_state(item.metadata, item.path) != "ready":
                     raise ToolError("Completion refused: the movie is not verified in library inventory.")
+                if not audio_satisfies(item.metadata, job.audio_pref, job.original_language):
+                    raise ToolError("Completion refused: verified audio does not satisfy this request.")
                 if quality_rank(item.metadata.get("quality", "")) < quality_rank(job.min_quality):
                     raise ToolError("Completion refused: the verified movie is below the job's minimum quality.")
             else:
@@ -757,7 +793,8 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
                 for season, episodes in job.wanted_episodes.items():
                     for episode in episodes:
                         record = item.episode_file(int(season), int(episode))
-                        if (not record or not record.get("verified") or
+                        if (not record or media_state(record) != "ready" or
+                                not audio_satisfies(record, job.audio_pref, job.original_language) or
                                 quality_rank(record.get("quality", "")) < quality_rank(job.min_quality)):
                             missing.append(f"S{int(season):02d}E{int(episode):02d}")
                 if missing:
@@ -929,6 +966,7 @@ def media_tools(tb: Toolbox) -> list[ToolDef]:
                                 (job.media_type if job else "tv")))
         path = tb.jailed(ctx.session, args["path"], must_exist=True)
         verified = bool(args.get("verified", False))
+        facts = {}
         actual_duration = None
         actual_quality = args.get("quality", "unknown")
         if verified:
@@ -960,6 +998,9 @@ def media_tools(tb: Toolbox) -> list[ToolDef]:
             item.size_bytes = path.stat().st_size
             item.metadata.update({
                 "verified": verified,
+                "file_version": file_version(path),
+                "audio_languages": facts.get("audio_languages", []),
+                "audio_tracks": facts.get("audio_tracks", []),
                 "duration_minutes": round(actual_duration, 2) if actual_duration else None,
                 "quality": actual_quality,
                 "added_at": time.time(),
@@ -1008,6 +1049,9 @@ def media_tools(tb: Toolbox) -> list[ToolDef]:
             "size_bytes": path.stat().st_size,
             "added_at": time.time(),
             "verified": verified,
+            "file_version": file_version(path),
+            "audio_languages": facts.get("audio_languages", []),
+            "audio_tracks": facts.get("audio_tracks", []),
             "duration_minutes": round(actual_duration, 2) if actual_duration else None,
             "source_download_id": ctx.session.download_id if verified else "",
         })

@@ -1,0 +1,31 @@
+{
+  "errors": [],
+  "audits": [
+    {
+      "name": "invite-link",
+      "violations": []
+    },
+    {
+      "name": "collection-care-dialog",
+      "violations": []
+    },
+    {
+      "name": "following-show",
+      "violations": []
+    },
+    {
+      "name": "subtitle-repair",
+      "violations": []
+    },
+    {
+      "name": "subtitle-repair-failure",
+      "violations": []
+    }
+  ],
+  "invitation": true,
+  "personal_preferences": true,
+  "password_change": true,
+  "scope_revocation": true,
+  "subscription": true,
+  "repair_failure": true
+}

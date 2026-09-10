@@ -1,0 +1,1240 @@
+{
+  "review": {
+    "date": "2026-09-09",
+    "commit": "b84450c",
+    "viewports": {
+      "desktop": [
+        1440,
+        1000
+      ],
+      "phone": [
+        390,
+        844
+      ]
+    },
+    "baseline_captures": 22,
+    "external_services": "Synthetic metadata and downloader responses; autonomous acquisition disabled.",
+    "limits": "No real acquisition, paid model run, playback, Windows node or large-library benchmark.",
+    "fixture_note": "Progress screenshots recaptured after supplying consistent fixture downloaded-byte counters. No finding relies on the initial fixture discrepancy."
+  },
+  "browser_baseline": [
+    {
+      "name": "onboarding",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1769
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "description": "Ensure all page content is contained by landmarks",
+          "count": 17,
+          "nodes": [
+            {
+              "html": "<div class=\"flex items-center gap-3\">",
+              "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+            },
+            {
+              "html": "<span class=\"inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold border-sky-400/20 bg-sky-400/10 text-sky-200 cinema-kicker border-primary/25 bg-primary/10 text-primary-light\">",
+              "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+            },
+            {
+              "html": "<h2 class=\"cinema-title max-w-4xl\">Build your private streaming room.</h2>",
+              "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "Prefer season packsTry complete-season releases first, then use individual episodes only when the pack is missing or unsuitable.",
+        "Organize silentlyMove completed files automatically and verify the library result after the move.",
+        "Auto-detect",
+        "Test",
+        "Try fix",
+        "Try fix",
+        "Try fix",
+        "Start using Sparrow"
+      ]
+    },
+    {
+      "name": "home",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1000
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "landmark-main-is-top-level",
+          "impact": "moderate",
+          "description": "Ensure the main landmark is at top level",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"mx-auto w-full max-w-7xl p-4 pt-24 sm:p-6 sm:pt-28 lg:p-8 lg:pt-28\">",
+              "summary": "Fix any of the following:\n  The main landmark is contained in another landmark."
+            }
+          ]
+        },
+        {
+          "id": "landmark-no-duplicate-main",
+          "impact": "moderate",
+          "description": "Ensure the document has at most one main landmark",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  Document has more than one main landmark"
+            }
+          ]
+        },
+        {
+          "id": "landmark-unique",
+          "impact": "moderate",
+          "description": "Ensure landmarks are unique",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  The landmark must have a unique aria-label, aria-labelledby, or title to make landmarks distinguishable"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "Harbour Lights2024 \u00b7 Show",
+        "The Long Way Home2024 \u00b7 Show",
+        "The Quiet Planet2024 \u00b7 Movie",
+        "An Unchecked Copy2024 \u00b7 Movie",
+        "The Missing File2024 \u00b7 Movie"
+      ]
+    },
+    {
+      "name": "library",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1997
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "landmark-main-is-top-level",
+          "impact": "moderate",
+          "description": "Ensure the main landmark is at top level",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"mx-auto w-full max-w-[1600px] space-y-9 px-4 pb-16 pt-20 sm:px-8 sm:pt-24\">",
+              "summary": "Fix any of the following:\n  The main landmark is contained in another landmark."
+            }
+          ]
+        },
+        {
+          "id": "landmark-no-duplicate-main",
+          "impact": "moderate",
+          "description": "Ensure the document has at most one main landmark",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  Document has more than one main landmark"
+            }
+          ]
+        },
+        {
+          "id": "landmark-unique",
+          "impact": "moderate",
+          "description": "Ensure landmarks are unique",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  The landmark must have a unique aria-label, aria-labelledby, or title to make landmarks distinguishable"
+            }
+          ]
+        },
+        {
+          "id": "nested-interactive",
+          "impact": "serious",
+          "description": "Ensure interactive controls are not nested as they are not always announced by screen readers or can cause focus problems for assistive technologies",
+          "count": 10,
+          "nodes": [
+            {
+              "html": "<div role=\"button\" tabindex=\"0\" class=\"group min-w-0 cursor-pointer text-left w-32 shrink-0 sm:w-36 lg:w-40\">",
+              "summary": "Fix any of the following:\n  Element has focusable descendants"
+            },
+            {
+              "html": "<div role=\"button\" tabindex=\"0\" class=\"group min-w-0 cursor-pointer text-left w-32 shrink-0 sm:w-36 lg:w-40\">",
+              "summary": "Fix any of the following:\n  Element has focusable descendants"
+            },
+            {
+              "html": "<div role=\"button\" tabindex=\"0\" class=\"group min-w-0 cursor-pointer text-left w-32 shrink-0 sm:w-36 lg:w-40\">",
+              "summary": "Fix any of the following:\n  Element has focusable descendants"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        " Refresh",
+        "Scan",
+        "All",
+        "Ready",
+        "In progress",
+        "Needs attention1",
+        "All",
+        "Movies",
+        "TV",
+        "PausedPaused by you.Paused JourneyPaused",
+        "Downloading42%1/3 epsDownloading Season 1. One episode is ready.Harbour Lights42% \u00b7 8 min left Details",
+        " Details",
+        "The Long Way Home2024 \u00b7 TV Show Details",
+        " Details",
+        "The Quiet Planet2024 \u00b7 Movie Details",
+        " Details",
+        "An Unchecked Copy2024 \u00b7 Movie Details",
+        " Details",
+        "The Missing File2024 \u00b7 Movie Details",
+        " Details",
+        "Downloading42%1/3 epsDownloading Season 1. One episode is ready.Harbour Lights42% \u00b7 8 min left Details",
+        " Details",
+        "The Long Way Home2024 \u00b7 TV Show Details",
+        " Details",
+        "An Unchecked Copy2024 \u00b7 Movie Details",
+        " Details",
+        "PausedPaused by you.Paused JourneyPaused",
+        "The Missing File2024 \u00b7 Movie Details",
+        " Details",
+        "The Quiet Planet2024 \u00b7 Movie Details",
+        " Details"
+      ]
+    },
+    {
+      "name": "show-active",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1000
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "landmark-main-is-top-level",
+          "impact": "moderate",
+          "description": "Ensure the main landmark is at top level",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8\">",
+              "summary": "Fix any of the following:\n  The main landmark is contained in another landmark."
+            }
+          ]
+        },
+        {
+          "id": "landmark-no-duplicate-main",
+          "impact": "moderate",
+          "description": "Ensure the document has at most one main landmark",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  Document has more than one main landmark"
+            }
+          ]
+        },
+        {
+          "id": "landmark-unique",
+          "impact": "moderate",
+          "description": "Ensure landmarks are unique",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  The landmark must have a unique aria-label, aria-labelledby, or title to make landmarks distinguishable"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "",
+        "more",
+        " Sparrow is on it",
+        "Watch",
+        "Progress",
+        "Preferences",
+        "Season 11 of 3 episodes",
+        "Season 2Not in library",
+        "Season 3Not in library"
+      ]
+    },
+    {
+      "name": "show-progress",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1219
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "count": 6,
+          "nodes": [
+            {
+              "html": "<p class=\"text-xs font-semibold uppercase tracking-wide text-muted/70\">Latest updates</p>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.08 (foreground color: #7b7777, background color: #161618, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "html": "<time title=\"Wed, 9 Sept 2026, 20:24\" datetime=\"2026-09-09T08:24:29.145Z\" class=\"cursor-help mb-0.5 block text-[11px] text-muted/70\">just now</time>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.08 (foreground color: #7b7777, background color: #161618, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "html": "<p class=\"text-xs font-semibold uppercase tracking-wide text-muted/70\">Transfers</p>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.08 (foreground color: #7b7777, background color: #161618, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        },
+        {
+          "id": "landmark-main-is-top-level",
+          "impact": "moderate",
+          "description": "Ensure the main landmark is at top level",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8\">",
+              "summary": "Fix any of the following:\n  The main landmark is contained in another landmark."
+            }
+          ]
+        },
+        {
+          "id": "landmark-no-duplicate-main",
+          "impact": "moderate",
+          "description": "Ensure the document has at most one main landmark",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  Document has more than one main landmark"
+            }
+          ]
+        },
+        {
+          "id": "landmark-unique",
+          "impact": "moderate",
+          "description": "Ensure landmarks are unique",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  The landmark must have a unique aria-label, aria-labelledby, or title to make landmarks distinguishable"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "",
+        "more",
+        " Sparrow is on it",
+        "Watch",
+        "Progress",
+        "Preferences",
+        "Check now",
+        "Pause request",
+        "Cancel pending work"
+      ]
+    },
+    {
+      "name": "show-preferences",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1200
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "count": 4,
+          "nodes": [
+            {
+              "html": "<p class=\"text-xs font-semibold uppercase tracking-wide text-muted/70\">Monitoring</p>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.08 (foreground color: #7b7777, background color: #161618, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "html": "<p class=\"mt-3 text-[11px] text-muted/70\">Last changed <time title=\"Wed, 9 Sept 2026, 20:24\" datetime=\"2026-09-09T08:24:29.142Z\" class=\"cursor-help\">just now</time></p>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.08 (foreground color: #7b7777, background color: #161618, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "html": "<time title=\"Wed, 9 Sept 2026, 20:24\" datetime=\"2026-09-09T08:24:29.142Z\" class=\"cursor-help\">just now</time>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.08 (foreground color: #7b7777, background color: #161618, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        },
+        {
+          "id": "landmark-main-is-top-level",
+          "impact": "moderate",
+          "description": "Ensure the main landmark is at top level",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8\">",
+              "summary": "Fix any of the following:\n  The main landmark is contained in another landmark."
+            }
+          ]
+        },
+        {
+          "id": "landmark-no-duplicate-main",
+          "impact": "moderate",
+          "description": "Ensure the document has at most one main landmark",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  Document has more than one main landmark"
+            }
+          ]
+        },
+        {
+          "id": "landmark-unique",
+          "impact": "moderate",
+          "description": "Ensure landmarks are unique",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  The landmark must have a unique aria-label, aria-labelledby, or title to make landmarks distinguishable"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "",
+        "more",
+        " Sparrow is on it",
+        "Watch",
+        "Progress",
+        "Preferences",
+        "Best available",
+        "4K",
+        "Full HD",
+        "HD"
+      ]
+    },
+    {
+      "name": "show-completed-season",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1000
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "landmark-main-is-top-level",
+          "impact": "moderate",
+          "description": "Ensure the main landmark is at top level",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8\">",
+              "summary": "Fix any of the following:\n  The main landmark is contained in another landmark."
+            }
+          ]
+        },
+        {
+          "id": "landmark-no-duplicate-main",
+          "impact": "moderate",
+          "description": "Ensure the document has at most one main landmark",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  Document has more than one main landmark"
+            }
+          ]
+        },
+        {
+          "id": "landmark-unique",
+          "impact": "moderate",
+          "description": "Ensure landmarks are unique",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  The landmark must have a unique aria-label, aria-labelledby, or title to make landmarks distinguishable"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "",
+        "more",
+        " Sparrow is on it",
+        "Watch",
+        "Progress",
+        "Preferences",
+        "Season 1 Complete",
+        "Season 2Not in library"
+      ]
+    },
+    {
+      "name": "movie-ready",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1000
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "landmark-main-is-top-level",
+          "impact": "moderate",
+          "description": "Ensure the main landmark is at top level",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8\">",
+              "summary": "Fix any of the following:\n  The main landmark is contained in another landmark."
+            }
+          ]
+        },
+        {
+          "id": "landmark-no-duplicate-main",
+          "impact": "moderate",
+          "description": "Ensure the document has at most one main landmark",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  Document has more than one main landmark"
+            }
+          ]
+        },
+        {
+          "id": "landmark-unique",
+          "impact": "moderate",
+          "description": "Ensure landmarks are unique",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  The landmark must have a unique aria-label, aria-labelledby, or title to make landmarks distinguishable"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "",
+        "more",
+        "Watch",
+        "Progress",
+        "Preferences"
+      ]
+    },
+    {
+      "name": "settings",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 2144
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "Save changes",
+        "Prefer season packsSearch full-season packs first, then fall back to individual episodes when the pack is missing or poor.",
+        "Prefer smaller filesPrioritize x265/HEVC encodes and compact releases when scores are otherwise close.",
+        "Organize silentlyMove completed files to the library automatically, then verify the result after the fact.",
+        "Auto-detect",
+        "Test"
+      ]
+    },
+    {
+      "name": "activity",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1467
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "count": 10,
+          "nodes": [
+            {
+              "html": "<p class=\"text-[10px] font-semibold uppercase tracking-wide text-muted/70\">Total cost</p>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.02 (foreground color: #7b787a, background color: #161921, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "html": "<p class=\"text-[10px] font-semibold uppercase tracking-wide text-muted/70\">Input tokens</p>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.02 (foreground color: #7b787a, background color: #161921, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "html": "<p class=\"text-[10px] font-semibold uppercase tracking-wide text-muted/70\">Output tokens</p>",
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.02 (foreground color: #7b787a, background color: #161921, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "Execution log(5)",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "release-browser",
+      "mobile": false,
+      "dimensions": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "height": 1000,
+        "scrollHeight": 1000
+      },
+      "errors": [],
+      "violations": [
+        {
+          "id": "landmark-main-is-top-level",
+          "impact": "moderate",
+          "description": "Ensure the main landmark is at top level",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full max-w-7xl space-y-7 overflow-hidden p-4 sm:p-8\">",
+              "summary": "Fix any of the following:\n  The main landmark is contained in another landmark."
+            }
+          ]
+        },
+        {
+          "id": "landmark-no-duplicate-main",
+          "impact": "moderate",
+          "description": "Ensure the document has at most one main landmark",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  Document has more than one main landmark"
+            }
+          ]
+        },
+        {
+          "id": "landmark-unique",
+          "impact": "moderate",
+          "description": "Ensure landmarks are unique",
+          "count": 1,
+          "nodes": [
+            {
+              "html": "<main class=\"w-full min-w-0 max-w-full overflow-x-hidden\">",
+              "summary": "Fix any of the following:\n  The landmark must have a unique aria-label, aria-labelledby, or title to make landmarks distinguishable"
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "Search",
+        "All",
+        "Movies",
+        "TV Shows",
+        "4K",
+        "1080p",
+        "720p",
+        "Any"
+      ]
+    },
+    {
+      "name": "onboarding",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 3208
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "Prefer season packsTry complete-season releases first, then use individual episodes only when the pack is missing or unsuitable.",
+        "Organize silentlyMove completed files automatically and verify the library result after the move.",
+        "Auto-detect",
+        "Test",
+        "Try fix",
+        "Try fix",
+        "Try fix",
+        "Start using Sparrow"
+      ]
+    },
+    {
+      "name": "home",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 1388
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "Harbour Lights2024 \u00b7 Show",
+        "The Long Way Home2024 \u00b7 Show",
+        "The Quiet Planet2024 \u00b7 Movie",
+        "An Unchecked Copy2024 \u00b7 Movie",
+        "The Missing File2024 \u00b7 Movie"
+      ]
+    },
+    {
+      "name": "library",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 2189
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        " Refresh",
+        "Scan",
+        "All",
+        "Ready",
+        "In progress",
+        "Needs attention1",
+        "All",
+        "Movies",
+        "TV",
+        "PausedPaused by you.Paused JourneyPaused",
+        "Downloading42%1/3 epsDownloading Season 1. One episode is ready.Harbour Lights42% \u00b7 8 min left Details",
+        " Details",
+        "The Long Way Home2024 \u00b7 TV Show Details",
+        " Details",
+        "The Quiet Planet2024 \u00b7 Movie Details",
+        " Details",
+        "An Unchecked Copy2024 \u00b7 Movie Details",
+        " Details",
+        "The Missing File2024 \u00b7 Movie Details",
+        " Details",
+        "Downloading42%1/3 epsDownloading Season 1. One episode is ready.Harbour Lights42% \u00b7 8 min left Details",
+        " Details",
+        "The Long Way Home2024 \u00b7 TV Show Details",
+        " Details",
+        "An Unchecked Copy2024 \u00b7 Movie Details",
+        " Details",
+        "PausedPaused by you.Paused JourneyPaused",
+        "The Missing File2024 \u00b7 Movie Details",
+        " Details",
+        "The Quiet Planet2024 \u00b7 Movie Details",
+        " Details"
+      ]
+    },
+    {
+      "name": "show-active",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 1043
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "",
+        "more",
+        " Sparrow is on it",
+        "Watch",
+        "Progress",
+        "Preferences",
+        "Season 11 of 3 episodes",
+        "Season 2Not in library",
+        "Season 3Not in library"
+      ]
+    },
+    {
+      "name": "show-progress",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 1549
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "",
+        "more",
+        " Sparrow is on it",
+        "Watch",
+        "Progress",
+        "Preferences",
+        "Check now",
+        "Pause request",
+        "Cancel pending work"
+      ]
+    },
+    {
+      "name": "show-preferences",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 1492
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "",
+        "more",
+        " Sparrow is on it",
+        "Watch",
+        "Progress",
+        "Preferences",
+        "Best available",
+        "4K",
+        "Full HD",
+        "HD"
+      ]
+    },
+    {
+      "name": "show-completed-season",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 970
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "",
+        "more",
+        " Sparrow is on it",
+        "Watch",
+        "Progress",
+        "Preferences",
+        "Season 1 Complete",
+        "Season 2Not in library"
+      ]
+    },
+    {
+      "name": "movie-ready",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 844
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "",
+        "more",
+        "Watch",
+        "Progress",
+        "Preferences"
+      ]
+    },
+    {
+      "name": "settings",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 3246
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "Save changes",
+        "Prefer season packsSearch full-season packs first, then fall back to individual episodes when the pack is missing or poor.",
+        "Prefer smaller filesPrioritize x265/HEVC encodes and compact releases when scores are otherwise close.",
+        "Organize silentlyMove completed files to the library automatically, then verify the result after the fact.",
+        "Auto-detect",
+        "Test"
+      ]
+    },
+    {
+      "name": "activity",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 1703
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "Execution log(5)",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "release-browser",
+      "mobile": true,
+      "dimensions": {
+        "width": 390,
+        "scrollWidth": 390,
+        "height": 844,
+        "scrollHeight": 879
+      },
+      "errors": [],
+      "violations": [],
+      "buttons": [
+        "Search",
+        "All",
+        "Movies",
+        "TV Shows",
+        "4K",
+        "1080p",
+        "720p",
+        "Any"
+      ]
+    }
+  ],
+  "browser_interactions": {
+    "config_patch": {
+      "status": 200,
+      "requested": {
+        "max_active_transfers": 1,
+        "smart_model": "review-custom-model",
+        "cheap_model": "review-cheap-model"
+      },
+      "returned": {
+        "max_active_transfers": 3,
+        "smart_model": "review-custom-model",
+        "cheap_model": "review-cheap-model"
+      }
+    },
+    "library_states": [
+      {
+        "id": 1001,
+        "title": "Harbour Lights",
+        "state": "downloading",
+        "ready_count": 1,
+        "pending_count": 2
+      },
+      {
+        "id": 2004,
+        "title": "Paused Journey",
+        "state": "paused",
+        "ready_count": 0,
+        "pending_count": 1
+      },
+      {
+        "id": 2002,
+        "title": "An Unchecked Copy",
+        "state": "ready",
+        "verified": false,
+        "ready_count": 1,
+        "pending_count": 0
+      },
+      {
+        "id": 1002,
+        "title": "The Long Way Home",
+        "state": "ready",
+        "ready_count": 3,
+        "pending_count": 0
+      },
+      {
+        "id": 2003,
+        "title": "The Missing File",
+        "state": "ready",
+        "verified": true,
+        "ready_count": 1,
+        "pending_count": 0
+      },
+      {
+        "id": 2001,
+        "title": "The Quiet Planet",
+        "state": "ready",
+        "verified": true,
+        "ready_count": 1,
+        "pending_count": 0
+      }
+    ],
+    "unverified_movie_detail": false,
+    "missing_movie_detail": true,
+    "pending_tv_detail": [
+      {
+        "season_number": 1,
+        "name": "Season 1",
+        "episode_count": 3,
+        "have_count": 1,
+        "in_flight_count": 0,
+        "episodes": [
+          {
+            "episode": 1,
+            "have": true,
+            "quality": "1080p",
+            "in_flight": false
+          },
+          {
+            "episode": 2,
+            "have": false,
+            "quality": "",
+            "in_flight": false
+          },
+          {
+            "episode": 3,
+            "have": false,
+            "quality": "",
+            "in_flight": false
+          }
+        ]
+      },
+      {
+        "season_number": 2,
+        "name": "Season 2",
+        "episode_count": 3,
+        "have_count": 0,
+        "in_flight_count": 0,
+        "episodes": [
+          {
+            "episode": 1,
+            "have": false,
+            "quality": "",
+            "in_flight": false
+          },
+          {
+            "episode": 2,
+            "have": false,
+            "quality": "",
+            "in_flight": false
+          },
+          {
+            "episode": 3,
+            "have": false,
+            "quality": "",
+            "in_flight": false
+          }
+        ]
+      },
+      {
+        "season_number": 3,
+        "name": "Season 3",
+        "episode_count": 3,
+        "have_count": 0,
+        "in_flight_count": 0,
+        "episodes": [
+          {
+            "episode": 1,
+            "have": false,
+            "quality": "",
+            "in_flight": false
+          },
+          {
+            "episode": 2,
+            "have": false,
+            "quality": "",
+            "in_flight": false
+          },
+          {
+            "episode": 3,
+            "have": false,
+            "quality": "",
+            "in_flight": false
+          }
+        ]
+      }
+    ],
+    "mandate_unowned": {
+      "tmdb_id": 1004,
+      "media_type": "tv",
+      "mandate": {
+        "tmdb_id": 1004,
+        "media_type": "tv",
+        "mode": "keep_current",
+        "requested_episodes": {},
+        "seasons": [],
+        "granted_at": 1788942269.2153451,
+        "created_at": 1788942269.2153454,
+        "updated_at": 1788942269.215349
+      },
+      "summary": "Requested: Nothing yet \u00b7 Future-season monitoring: New episodes as they air"
+    },
+    "settings_save": {
+      "value": "3",
+      "savedVisible": 1
+    },
+    "invalid_settings": {
+      "errors": [
+        "Staging and library must be separate sibling roots; neither may contain the other."
+      ],
+      "visibleAlerts": [],
+      "text": false
+    },
+    "search_get": {
+      "payload": {
+        "tmdb_id": 1005,
+        "media_type": "tv"
+      },
+      "response": {
+        "id": "571fd4b65c8f",
+        "tmdb_id": 1005,
+        "media_type": "tv",
+        "title": "Another Season",
+        "year": 2024,
+        "poster_path": "/art/1005.svg",
+        "wanted_episodes": {
+          "1": [
+            1,
+            2,
+            3
+          ],
+          "2": [
+            1,
+            2,
+            3
+          ],
+          "3": [
+            1,
+            2,
+            3
+          ]
+        },
+        "preferred_quality": "1080p",
+        "min_quality": "720p",
+        "audio_pref": "any",
+        "urgency": "soon",
+        "status": "active",
+        "origin": "user",
+        "state_line": "Getting started\u2026",
+        "next_wake_at": 0,
+        "session_id": "a50c726339a7",
+        "created_at": 1788942551.7503364,
+        "updated_at": 1788942551.7534719,
+        "closed_at": null
+      }
+    },
+    "quality_before": "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors border-primary/40 bg-primary/15 text-primary-light",
+    "quality_after": "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors border-white/10 bg-white/5 text-muted hover:text-text",
+    "search_outage_text": "S\nSparrow\nCinema autopilot\nDiscover\nLibrary\nActivity\nSettings\nWhat do you want to watch?\n\nA title works. So does \u201cthe show where the teacher cooks meth\u201d.\n\nNothing found for \u201cHarbour Lights\u201d\n\nCheck the spelling or try describing it differently.",
+    "settings_outage_text": "S\nSparrow\nCinema autopilot\nDiscover\nLibrary\nActivity\nSettings\nLoading settings...",
+    "bootstrap_outage": {
+      "url": "http://127.0.0.1:18889/onboarding",
+      "text": "S\nSparrow\n\nOne local autopilot for requests, downloads, and cleanup.\n\nCONSUMER SETUP\nBuild your private streaming room.\n\nPoint Sparrow at your downloader and library once. After that, a single request becomes release selection, handoff, organization, and verification.\n\nSeason packs first\n\nFallback only when needed\n\nVerify before grab\n\nChecks what a result actually contains\n\nSelf-healing setup\n\nFixes and clear guidance\n\nSetup readiness\n\n6/6 essentials configured\n\nReady\n\nStaging folder\n\nWhere down"
+    },
+    "empty_library_text": "S\nSparrow\nCinema autopilot\nDiscover\nLibrary\nActivity\nSettings\nLibrary\n\n0 titles \u00b7 0 ready\n\nRefresh\nScan\nAll\nReady\nIn progress\nNeeds attention\nAll\nMovies\nTV\n\nYour library is empty\n\nRequest something from Discover, or scan your library folder to import what is already there."
+  },
+  "browser_additional": {
+    "keyboard_details": {
+      "url": "http://127.0.0.1:18889/show/1001?type=tv",
+      "drawers": 0
+    },
+    "mouse_details": {
+      "url": "http://127.0.0.1:18889/library",
+      "drawers": 1,
+      "dialogRole": 0,
+      "focusedInside": false
+    },
+    "initial_sockets": 1,
+    "settings_sockets": 3,
+    "active_search_text": "S\nDiscover\nLibrary\nActivity\nSettings\nWhat do you want to watch?\n\nA title works. So does \u201cthe show where the teacher cooks meth\u201d.\n\nHarbour Lights\n\n2024 \u00b7 Show\n8.2\n\nGet\nOptions",
+    "abandoned_title_text": "S\nDiscover\nLibrary\nActivity\nSettings\nShow\n2024\n8.2\nNorthern Signal\n\nDrama \u00b7 Mystery\n\nA fictional title used to review Sparrow. This fixture contains representative library and request states; no media has been acquired.\n\nmore\nGet the whole show\nOptions \u00b7 Best available\n\nRequested: Season 1\n\nFuture-season monitoring: Off\n\nWatch\nProgress\nPreferences\nSeason 1\nNot in library\nGet season\nSeason 2\nNot in library\nGet season",
+    "episode_buttons": [
+      "",
+      "more",
+      " Sparrow is on it",
+      "Watch",
+      "Progress",
+      "Preferences",
+      "Season 11 of 3 episodes",
+      "Season 2Not in library",
+      "Season 3Not in library"
+    ],
+    "invalid_onboarding_start_enabled": true,
+    "invalid_onboarding_final_url": "http://127.0.0.1:18888/"
+  },
+  "isolated_backend": {
+    "concurrent_limit": {
+      "configured": 1,
+      "actual_active": 2
+    },
+    "add_after_pause": "Accepted while job status was paused",
+    "add_after_cancel": "Accepted while job status was abandoned and stored session was closed",
+    "complete_missing_file_wrong_audio": {
+      "path_exists": false,
+      "job_status": "complete",
+      "audio_preference": "english",
+      "recorded_audio": [
+        "fra"
+      ]
+    },
+    "scan_text_file": {
+      "1": {
+        "1": {
+          "quality": "1080p",
+          "path": "/tmp/tmpxm3qbece/library/TV Shows/Fixture Show/Fixture.Show.S01E01.1080p.mkv",
+          "size_bytes": 24,
+          "group": "",
+          "verified": true
+        }
+      }
+    },
+    "scan_agent_layout_found": [
+      "Fixture Show"
+    ],
+    "unowned_monitor_visible_to_librarian": false,
+    "single_episode_summary": "Requested: Season 1 \u00b7 Future-season monitoring: Off",
+    "wake_step_limit": {
+      "declared_limit": 40,
+      "observed_api_calls": 46,
+      "model_stopped_voluntarily": true
+    }
+  },
+  "additional_backend": {
+    "description_search_result": [],
+    "description_search_failure": "describe_to_titles failed\nTraceback (most recent call last):\n  File \"/home/oem/sparrow/backend/agents/resolution.py\", line 62, in _describe_to_titles\n    msg = await asyncio.wait_for(client.messages.create(\n                                 ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oem/sparrow/.venv/lib/python3.11/site-packages/anthropic/_utils/_utils.py\", line 282, in wrapper\n    raise TypeError(msg)\nTypeError: Missing required arguments; Expected either ('max_tokens', 'messages' and 'model') or ('max_tokens', 'messages', 'model' and 'stream') arguments to be given\n",
+    "unmatched_library": {
+      "stored_items": 2,
+      "projected_items": 1,
+      "projected_titles": [
+        "Unmatched Film A"
+      ]
+    }
+  }
+}

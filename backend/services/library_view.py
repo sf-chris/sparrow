@@ -17,6 +17,7 @@ from typing import Optional
 
 from ..models import DownloadStatus, MediaType
 from ..agents.models import JobStatus
+from ..agents.media_state import media_state
 
 # Plain-language episode/title states, in order of advancement.
 REQUESTED = "requested"
@@ -32,6 +33,8 @@ STALE_AFTER_SECONDS = 120
 
 def _job_pending_state(job, downloads: list) -> str:
     """The plain-language state for work a job hasn't finished yet."""
+    if job.status == JobStatus.ABANDONED:
+        return "needs_attention"
     if job.status == JobStatus.PAUSED:
         return PAUSED
     statuses = {dl.status for dl in downloads}
@@ -46,7 +49,7 @@ def _job_pending_state(job, downloads: list) -> str:
 
 def _needs_attention(job, downloads: list) -> bool:
     """Paused work, or errors with nothing else moving, need the user."""
-    if job.status == JobStatus.PAUSED:
+    if job.status in (JobStatus.PAUSED, JobStatus.ABANDONED):
         return True
     if job.status != JobStatus.ACTIVE:
         return False
@@ -92,8 +95,8 @@ def build_library_view(storage, agent_store, now: Optional[float] = None) -> lis
     entries: dict[tuple[str, int], dict] = {}
 
     def entry_for(media_type: str, tmdb_id: Optional[int], title: str,
-                  year=None, poster_path: str = "") -> dict:
-        key = (media_type, tmdb_id or 0)
+                  year=None, poster_path: str = "", identity: str = "") -> dict:
+        key = (media_type, tmdb_id or identity or title)
         if key not in entries:
             entries[key] = {
                 "tmdb_id": tmdb_id,
@@ -116,21 +119,21 @@ def build_library_view(storage, agent_store, now: Optional[float] = None) -> lis
 
     for item in storage.get_library():
         e = entry_for(item.media_type.value, item.tmdb_id, item.title,
-                      item.year, item.poster_path)
+                      item.year, item.poster_path, identity=item.id)
         e["in_library"] = True
         e["library_item_id"] = item.id
         e["size_bytes"] = item.size_bytes
         if item.media_type == MediaType.MOVIE:
-            e["ready_count"] = 1
+            e["state"] = media_state(item.metadata, item.path)
+            e["ready_count"] = int(e["state"] == READY)
+            e["needs_attention"] = e["state"] != READY
             e["quality"] = item.metadata.get("quality", "")
             e["verified"] = bool(item.metadata.get("verified"))
         else:
             for season, eps in item.episodes.items():
                 for episode, info in eps.items():
-                    # On disk means watchable — "verifying" is reserved for
-                    # landed downloads the Media Agent is still processing.
                     e["episodes"].setdefault(str(season), {})[str(episode)] = {
-                        "state": READY,
+                        "state": media_state(info),
                         "quality": info.get("quality", ""),
                         "verified": bool(info.get("verified")),
                         "updated_at": info.get("added_at"),
@@ -139,13 +142,15 @@ def build_library_view(storage, agent_store, now: Optional[float] = None) -> lis
 
     downloads = storage.get_all_downloads()
     for job in agent_store.get_jobs():
-        if job.status not in (JobStatus.ACTIVE, JobStatus.PAUSED):
+        if job.status not in (JobStatus.ACTIVE, JobStatus.PAUSED, JobStatus.ABANDONED):
             continue
         job_downloads = [dl for dl in downloads
                          if dl.metadata.get("job_id") == job.id]
         pending_state = _job_pending_state(job, job_downloads)
         e = entry_for(job.media_type, job.tmdb_id, job.title, job.year,
                       job.poster_path)
+        if e["job"]:
+            continue  # newest request wins; history remains available on the title
         e["job"] = {
             "id": job.id,
             "status": job.status.value,
@@ -164,7 +169,7 @@ def build_library_view(storage, agent_store, now: Optional[float] = None) -> lis
             for season, eps in job.wanted_episodes.items():
                 for episode in eps:
                     existing = e["episodes"].get(str(season), {}).get(str(episode))
-                    if existing and existing["state"] == READY:
+                    if existing and existing["state"] in (READY, "unavailable", VERIFYING):
                         continue
                     e["episodes"].setdefault(str(season), {})[str(episode)] = {
                         "state": pending_state,
@@ -181,12 +186,13 @@ def build_library_view(storage, agent_store, now: Optional[float] = None) -> lis
             e["ready_count"] = sum(1 for s in states if s == READY)
             e["pending_count"] = sum(1 for s in states if s not in (READY,))
             active_states = [s for s in states if s != READY]
-            order = [PAUSED, VERIFYING, DOWNLOADING, QUEUED, REQUESTED]
+            order = ["needs_attention", PAUSED, VERIFYING, DOWNLOADING, QUEUED, REQUESTED, "unavailable"]
             e["state"] = next((s for s in order if s in active_states), READY)
         elif e["pending_count"]:
             pass  # movie state already set from the job
         else:
             e["state"] = READY if e["ready_count"] else e["state"]
+        e["needs_attention"] = e["needs_attention"] or e["state"] in ("unavailable", "needs_attention")
         out.append(e)
 
     out.sort(key=lambda e: (e["state"] == READY, e["title"].lower()))

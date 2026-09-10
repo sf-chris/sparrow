@@ -1,0 +1,131 @@
+{
+  "errors": [],
+  "results": [
+    {
+      "name": "landing",
+      "width": 360,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "landing",
+      "width": 390,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "landing",
+      "width": 768,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "landing",
+      "width": 1440,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "sign-in",
+      "width": 360,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "sign-in",
+      "width": 390,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "sign-in",
+      "width": 768,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "sign-in",
+      "width": 1440,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "discovery-prompt",
+      "width": 390,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "discovery-prompt",
+      "width": 1440,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "empty-library",
+      "width": 390,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "empty-library",
+      "width": 1440,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "library-error",
+      "width": 390,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    },
+    {
+      "name": "library-error",
+      "width": 1440,
+      "overflow": false,
+      "fonts": true,
+      "brokenImages": 0,
+      "clippedControls": [],
+      "violations": []
+    }
+  ]
+}

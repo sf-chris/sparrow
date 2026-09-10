@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Sparrow · The bright direction</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #faf9f6;
+      color: #302d3c;
+      font:
+        14px/1.5 system-ui,
+        sans-serif;
+    }
+    header {
+      padding: 24px 30px;
+      border-bottom: 1px solid #dedbe5;
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: center;
+    }
+    h1 {
+      margin: 0;
+      font-size: 23px;
+      letter-spacing: -0.6px;
+    }
+    header p {
+      margin: 5px 0 0;
+      color: #696372;
+      font-size: 12px;
+    }
+    a {
+      color: #7050b5;
+    }
+    header > a {
+      border: 1px solid #dedbe5;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      text-decoration: none;
+      background: white;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 200px minmax(0, 1fr);
+      max-width: 1500px;
+      margin: auto;
+    }
+    nav {
+      padding: 20px 12px;
+      border-right: 1px solid #dedbe5;
+      max-height: calc(100vh - 104px);
+      overflow: auto;
+      position: sticky;
+      top: 0;
+    }
+    button {
+      font: inherit;
+      cursor: pointer;
+      border: 1px solid transparent;
+      color: inherit;
+      background: transparent;
+      border-radius: 7px;
+    }
+    nav button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+    button[aria-pressed="true"] {
+      background: #eee8f8;
+      color: #60428c;
+    }
+    button:focus-visible,
+    a:focus-visible {
+      outline: 2px solid #7050b5;
+      outline-offset: 3px;
+    }
+    section {
+      padding: 24px;
+      min-width: 0;
+    }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .toolbar p {
+      font-size: 12px;
+      color: #696372;
+      margin: 5px 0 0;
+    }
+    .views {
+      display: flex;
+      gap: 4px;
+      border: 1px solid #dedbe5;
+      padding: 4px;
+      border-radius: 9px;
+    }
+    .views button {
+      font-size: 12px;
+      padding: 6px 12px;
+    }
+    .views button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    .frame {
+      height: calc(100vh - 265px);
+      min-height: 400px;
+      overflow: auto;
+      border: 1px solid #dedbe5;
+      border-radius: 12px;
+      background: #eae6f0;
+      text-align: center;
+      padding: 15px;
+    }
+    .frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: auto;
+      border-radius: 5px;
+      box-shadow: 0 2px 12px #302d3c14;
+    }
+    .frame.phone img {
+      width: min(390px, 100%);
+    }
+    .meta {
+      font-size: 11px;
+      color: #696372;
+      margin-top: 15px;
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+    }
+    @media (max-width: 760px) {
+      header {
+        padding: 20px;
+        flex-wrap: wrap;
+      }
+      main {
+        display: block;
+      }
+      nav {
+        position: static;
+        max-height: 180px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        border-bottom: 1px solid #dedbe5;
+      }
+      nav button {
+        width: auto;
+        padding: 6px 9px;
+        font-size: 11px;
+      }
+      .toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      section {
+        padding: 20px;
+      }
+      .frame {
+        padding: 8px;
+        height: 650px;
+      }
+      .meta {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+  <header>
+    <div>
+      <h1>sparrow · a brighter little world</h1>
+      <p>
+        A fresh welcome, smaller controls, and a little whimsy across the whole
+        app.
+      </p>
+    </div>
+    <a href="http://192.168.1.103:3000">Open the working preview ↗</a>
+  </header>
+  <main>
+    <nav aria-label="Screen gallery" id="screens"></nav>
+    <section>
+      <div class="toolbar">
+        <div>
+          <h2 id="title"></h2>
+          <p id="description"></p>
+        </div>
+        <div class="views" aria-label="Viewport">
+          <button id="desktop" type="button">Desktop</button
+          ><button id="mobile" type="button">Phone</button>
+        </div>
+      </div>
+      <div class="frame" id="frame"><img id="screen" alt="" /></div>
+      <div class="meta">
+        <span>Actual Chrome renders · fictional test collection</span
+        ><a id="full" target="_blank" rel="noopener">Open full screenshot ↗</a
+        ><a href="README.md">Validation details</a>
+      </div>
+    </section>
+  </main>
+  <script>
+    const screens = [
+      {
+        title: "Landing",
+        description: "A public welcome, before any account form.",
+        files: { desktop: "landing-desktop.png", mobile: "landing-mobile.png" },
+      },
+      {
+        title: "Sign in",
+        description: "Compact optional account entry.",
+        files: { desktop: "sign-in-desktop.png", mobile: "sign-in-mobile.png" },
+      },
+      {
+        title: "Set up Sparrow",
+        description: "The existing owner setup handoff, with a smaller form.",
+        files: {
+          desktop: "administrator-setup-desktop.png",
+          mobile: "administrator-setup-mobile.png",
+        },
+      },
+      {
+        title: "First preferences",
+        description: "Choose preferences before opening the collection.",
+        files: {
+          desktop: "first-preferences-desktop.png",
+          mobile: "first-preferences-mobile.png",
+        },
+      },
+      {
+        title: "Sign-in error",
+        description:
+          "Helpful error feedback that preserves the entered username.",
+        files: {
+          desktop: "sign-in-error-desktop.png",
+          mobile: "sign-in-error-mobile.png",
+        },
+      },
+      {
+        title: "Home",
+        description: "A short greeting, a playable feature, and your shelves.",
+        files: {
+          desktop: "tour-home-desktop.png",
+          mobile: "tour-home-mobile.png",
+        },
+      },
+      {
+        title: "Library",
+        description: "Search, filters and sorting in one compact bar.",
+        files: {
+          desktop: "tour-library-desktop.png",
+          mobile: "tour-library-mobile.png",
+        },
+      },
+      {
+        title: "Filtered library",
+        description: "Filters and title-return context persist in the URL.",
+        files: {
+          desktop: "tour-library-filtered-desktop.png",
+          mobile: "tour-library-filtered-mobile.png",
+        },
+      },
+      {
+        title: "Discover",
+        description: "A small search console and illustrated starting points.",
+        files: {
+          desktop: "tour-discover-desktop.png",
+          mobile: "tour-discover-mobile.png",
+        },
+      },
+      {
+        title: "Assisted discovery",
+        description: "Editable prompts, with deliberate submission.",
+        files: {
+          desktop: "tour-assisted-search-desktop.png",
+          mobile: "tour-assisted-search-mobile.png",
+        },
+      },
+      {
+        title: "Search results",
+        description: "Open a title to choose what to watch or request.",
+        files: {
+          desktop: "tour-search-results-desktop.png",
+          mobile: "tour-search-results-mobile.png",
+        },
+      },
+      {
+        title: "Activity",
+        description: "Pastel status summaries and clear next actions.",
+        files: {
+          desktop: "tour-activity-desktop.png",
+          mobile: "tour-activity-mobile.png",
+        },
+      },
+      {
+        title: "Movie",
+        description: "Poster, details and playback on a light title card.",
+        files: {
+          desktop: "tour-movie-desktop.png",
+          mobile: "tour-movie-mobile.png",
+        },
+      },
+      {
+        title: "Series",
+        description: "Season selection and exact episode actions.",
+        files: {
+          desktop: "tour-series-desktop.png",
+          mobile: "tour-series-mobile.png",
+        },
+      },
+      {
+        title: "Player",
+        description: "A dark video surface inside the lighter interface.",
+        files: { desktop: "player-desktop.png" },
+      },
+      {
+        title: "Preferences",
+        description: "Smaller grouped controls with inheritance and reset.",
+        files: {
+          desktop: "tour-preferences-desktop.png",
+          mobile: "tour-preferences-mobile.png",
+        },
+      },
+      {
+        title: "People",
+        description: "Your household and its permissions.",
+        files: {
+          desktop: "tour-people-desktop.png",
+          mobile: "tour-people-mobile.png",
+        },
+      },
+      {
+        title: "Storage",
+        description: "Connected storage and import actions.",
+        files: {
+          desktop: "tour-storage-desktop.png",
+          mobile: "tour-storage-mobile.png",
+        },
+      },
+      {
+        title: "Household defaults",
+        description: "Shared preferences and server policy.",
+        files: {
+          desktop: "tour-defaults-desktop.png",
+          mobile: "tour-defaults-mobile.png",
+        },
+      },
+      {
+        title: "Server settings",
+        description: "The same light form system for configuration.",
+        files: {
+          desktop: "tour-server-desktop.png",
+          mobile: "tour-server-mobile.png",
+        },
+      },
+      {
+        title: "Request episodes",
+        description: "Explicit scope with a visible confirmation footer.",
+        files: {
+          desktop: "tour-episode-request-desktop.png",
+          mobile: "tour-episode-request-mobile.png",
+        },
+      },
+      {
+        title: "Collection care",
+        description: "Future care stays within the scope you choose.",
+        files: { mobile: "collection-care-dialog-mobile.png" },
+      },
+      {
+        title: "Pair storage",
+        description: "Storage pairing uses the shared dialog.",
+        files: {
+          desktop: "tour-storage-pair-desktop.png",
+          mobile: "tour-storage-pair-mobile.png",
+        },
+      },
+      {
+        title: "Storage folders",
+        description: "Folder access and status.",
+        files: {
+          desktop: "tour-storage-folders-desktop.png",
+          mobile: "tour-storage-folders-mobile.png",
+        },
+      },
+      {
+        title: "Import preview",
+        description: "Review before importing.",
+        files: {
+          desktop: "tour-import-preview-desktop.png",
+          mobile: "tour-import-preview-mobile.png",
+        },
+      },
+      {
+        title: "Match a title",
+        description: "Correct a title from within the import preview.",
+        files: {
+          desktop: "tour-import-match-desktop.png",
+          mobile: "tour-import-match-mobile.png",
+        },
+      },
+      {
+        title: "Invite someone",
+        description: "Create a household invitation.",
+        files: {
+          desktop: "tour-invite-person-desktop.png",
+          mobile: "tour-invite-person-mobile.png",
+        },
+      },
+      {
+        title: "Invitation",
+        description: "A personal account from an invitation link.",
+        files: { mobile: "invitation-mobile.png" },
+      },
+      {
+        title: "Edit access",
+        description: "Permissions remain explicit.",
+        files: {
+          desktop: "tour-person-access-desktop.png",
+          mobile: "tour-person-access-mobile.png",
+        },
+      },
+      {
+        title: "Change password",
+        description: "Account controls use the same compact fields.",
+        files: { mobile: "tour-password-change-mobile.png" },
+      },
+      {
+        title: "Empty collection",
+        description: "An illustrated welcome and useful next steps.",
+        files: {
+          desktop: "tour-first-collection-desktop.png",
+          mobile: "tour-first-collection-mobile.png",
+        },
+      },
+      {
+        title: "Library error",
+        description: "Failure is distinct from an empty library.",
+        files: {
+          desktop: "library-error-desktop.png",
+          mobile: "library-error-mobile.png",
+        },
+      },
+      {
+        title: "Missing artwork",
+        description: "Local geometric artwork when an image cannot load.",
+        files: {
+          desktop: "tour-artwork-fallback-desktop.png",
+          mobile: "tour-artwork-fallback-mobile.png",
+        },
+      },
+      {
+        title: "Subtitle repair",
+        description: "Captions and their preparation status.",
+        files: { mobile: "subtitle-repair-mobile.png" },
+      },
+      {
+        title: "Subtitle repair error",
+        description: "Truthful status and a recovery path.",
+        files: { mobile: "subtitle-repair-failure-mobile.png" },
+      },
+    ];
+    let current = 0,
+      view = "desktop";
+    const nav = document.getElementById("screens");
+    screens.forEach((s, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = s.title;
+      b.onclick = () => {
+        current = i;
+        render();
+      };
+      nav.append(b);
+    });
+    for (const v of ["desktop", "mobile"])
+      document.getElementById(v).onclick = () => {
+        view = v;
+        render();
+      };
+    function render() {
+      const s = screens[current];
+      if (!s.files[view]) view = Object.keys(s.files)[0];
+      document.getElementById("title").textContent = s.title;
+      document.getElementById("description").textContent = s.description;
+      document.getElementById("screen").src = s.files[view];
+      document.getElementById("screen").alt = s.title + " on " + view;
+      document
+        .getElementById("frame")
+        .classList.toggle("phone", view === "mobile");
+      document.getElementById("frame").scrollTop = 0;
+      document.getElementById("full").href = s.files[view];
+      [...nav.children].forEach((b, i) =>
+        b.setAttribute("aria-pressed", i === current),
+      );
+      for (const v of ["desktop", "mobile"]) {
+        const b = document.getElementById(v);
+        b.disabled = !s.files[v];
+        b.setAttribute("aria-pressed", view === v);
+      }
+    }
+    render();
+  </script>
+</html>

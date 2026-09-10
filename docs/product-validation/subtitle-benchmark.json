@@ -1,0 +1,352 @@
+{
+  "fixture": "LibriSpeech test-clean, chapter 6930-75918; eight labelled clips",
+  "scope": "English same-language speech; five fixtures, not a multilingual or commercial-film quality claim",
+  "seconds": 53.14,
+  "results": [
+    {
+      "case": "good",
+      "accepted": true,
+      "unchanged": true,
+      "alignment": {
+        "offset_seconds": 0,
+        "scale": 1
+      },
+      "quality": {
+        "passed": true,
+        "reasons": [],
+        "sample_count": 5,
+        "strong_matches": 5,
+        "content_fraction": 1.0,
+        "median_timing_error": 0.491,
+        "max_timing_error": 0.631,
+        "matches": [
+          {
+            "score": 0.857,
+            "start_error": -0.325,
+            "end_error": 0.26,
+            "same_language": true,
+            "cue_index": 1,
+            "heard": "Congratulations, report in upon the princess everywhere during her journey."
+          },
+          {
+            "score": 1.0,
+            "start_error": 0.093,
+            "end_error": 0.588,
+            "same_language": true,
+            "cue_index": 2,
+            "heard": "You will be frank with me. I always am."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.324,
+            "end_error": 0.491,
+            "same_language": true,
+            "cue_index": 4,
+            "heard": "I can perceive love clearly enough."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.345,
+            "end_error": 0.39,
+            "same_language": true,
+            "cue_index": 5,
+            "heard": "I am convinced of what I say said the count"
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.631,
+            "end_error": 0.429,
+            "same_language": true,
+            "cue_index": 6,
+            "heard": "It is annoyance, then."
+          }
+        ],
+        "thresholds": {
+          "text_score": 0.65,
+          "content_fraction": 0.8,
+          "median_error_seconds": 0.65,
+          "max_error_seconds": 1.25
+        }
+      },
+      "labelled_median_error": 4.440892098500626e-16,
+      "labelled_max_error": 7.105427357601002e-15
+    },
+    {
+      "case": "offset",
+      "accepted": true,
+      "unchanged": false,
+      "alignment": {
+        "offset_seconds": -6.91,
+        "scale": 0.9957600597767297
+      },
+      "quality": {
+        "passed": true,
+        "reasons": [],
+        "sample_count": 5,
+        "strong_matches": 5,
+        "content_fraction": 1.0,
+        "median_timing_error": 0.551,
+        "max_timing_error": 0.746,
+        "matches": [
+          {
+            "score": 0.857,
+            "start_error": -0.304,
+            "end_error": 0.26,
+            "same_language": true,
+            "cue_index": 1,
+            "heard": "Congratulations, report in upon the princess everywhere during her journey."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.33,
+            "end_error": 0.571,
+            "same_language": true,
+            "cue_index": 2,
+            "heard": "You will be frank with me. I always am."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.411,
+            "end_error": 0.411,
+            "same_language": true,
+            "cue_index": 4,
+            "heard": "I can perceive love clearly enough."
+          },
+          {
+            "score": 0.947,
+            "start_error": -0.43,
+            "end_error": 0.551,
+            "same_language": true,
+            "cue_index": 5,
+            "heard": "am convinced of what I say, said the Count."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.746,
+            "end_error": 0.306,
+            "same_language": true,
+            "cue_index": 6,
+            "heard": "It is annoyance, then."
+          }
+        ],
+        "thresholds": {
+          "text_score": 0.65,
+          "content_fraction": 0.8,
+          "median_error_seconds": 0.65,
+          "max_error_seconds": 1.25
+        }
+      },
+      "labelled_median_error": 0.07000000000000206,
+      "labelled_max_error": 0.1489999999999938
+    },
+    {
+      "case": "drift",
+      "accepted": true,
+      "unchanged": false,
+      "alignment": {
+        "offset_seconds": 0.05,
+        "scale": 0.956767703803312
+      },
+      "quality": {
+        "passed": true,
+        "reasons": [],
+        "sample_count": 5,
+        "strong_matches": 5,
+        "content_fraction": 1.0,
+        "median_timing_error": 0.453,
+        "max_timing_error": 0.592,
+        "matches": [
+          {
+            "score": 0.857,
+            "start_error": -0.304,
+            "end_error": 0.266,
+            "same_language": true,
+            "cue_index": 1,
+            "heard": "Congratulations, report in upon the princess everywhere during her journey."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.053,
+            "end_error": 0.592,
+            "same_language": true,
+            "cue_index": 2,
+            "heard": "You will be frank with me. I always am."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.333,
+            "end_error": 0.453,
+            "same_language": true,
+            "cue_index": 4,
+            "heard": "I can perceive love clearly enough."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.413,
+            "end_error": 0.592,
+            "same_language": true,
+            "cue_index": 5,
+            "heard": "I am convinced of what I say, said the Count."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.367,
+            "end_error": 0.347,
+            "same_language": true,
+            "cue_index": 6,
+            "heard": "It is annoyance, then."
+          }
+        ],
+        "thresholds": {
+          "text_score": 0.65,
+          "content_fraction": 0.8,
+          "median_error_seconds": 0.65,
+          "max_error_seconds": 1.25
+        }
+      },
+      "labelled_median_error": 0.047499999999998765,
+      "labelled_max_error": 0.09999999999999432
+    },
+    {
+      "case": "wrong_cut",
+      "accepted": false,
+      "unchanged": false,
+      "alignment": {
+        "offset_seconds": -0.08,
+        "scale": 0.9989999999999999
+      },
+      "quality": {
+        "passed": false,
+        "reasons": [
+          "Some captions extend beyond this media copy.",
+          "Timing still differs from the spoken words in one or more samples."
+        ],
+        "sample_count": 5,
+        "strong_matches": 5,
+        "content_fraction": 1.0,
+        "median_timing_error": 5.276,
+        "max_timing_error": 5.346,
+        "matches": [
+          {
+            "score": 0.857,
+            "start_error": -0.415,
+            "end_error": 0.165,
+            "same_language": true,
+            "cue_index": 1,
+            "heard": "Congratulations, report in upon the princess everywhere during her journey."
+          },
+          {
+            "score": 1.0,
+            "start_error": -0.156,
+            "end_error": 0.496,
+            "same_language": true,
+            "cue_index": 2,
+            "heard": "You will be frank with me. I always am."
+          },
+          {
+            "score": 1.0,
+            "start_error": 4.694,
+            "end_error": 5.346,
+            "same_language": true,
+            "cue_index": 4,
+            "heard": "I can perceive love clearly enough."
+          },
+          {
+            "score": 1.0,
+            "start_error": 4.644,
+            "end_error": 5.276,
+            "same_language": true,
+            "cue_index": 5,
+            "heard": "I am convinced of what I say, said the count."
+          },
+          {
+            "score": 1.0,
+            "start_error": 4.661,
+            "end_error": 5.279,
+            "same_language": true,
+            "cue_index": 6,
+            "heard": "It is annoyance, then."
+          }
+        ],
+        "thresholds": {
+          "text_score": 0.65,
+          "content_fraction": 0.8,
+          "median_error_seconds": 0.65,
+          "max_error_seconds": 1.25
+        }
+      },
+      "labelled_median_error": 2.4880000000000013,
+      "labelled_max_error": 4.884
+    },
+    {
+      "case": "wrong_text",
+      "accepted": false,
+      "unchanged": false,
+      "alignment": {
+        "offset_seconds": 0.06,
+        "scale": 0.9958506805474866
+      },
+      "quality": {
+        "passed": false,
+        "reasons": [
+          "The subtitle text does not reliably match the sampled audio."
+        ],
+        "sample_count": 5,
+        "strong_matches": 0,
+        "content_fraction": 0.0,
+        "median_timing_error": null,
+        "max_timing_error": null,
+        "matches": [
+          {
+            "score": 0.118,
+            "start_error": 6.517,
+            "end_error": 8.921,
+            "same_language": true,
+            "cue_index": 1,
+            "heard": "Concorde returned to its place amidst the"
+          },
+          {
+            "score": 0.118,
+            "start_error": 12.599,
+            "end_error": 13.321,
+            "same_language": true,
+            "cue_index": 2,
+            "heard": "Concorde returned to its place amidst the"
+          },
+          {
+            "score": 0.118,
+            "start_error": -5.171,
+            "end_error": -4.209,
+            "same_language": true,
+            "cue_index": 4,
+            "heard": "convinced of what I say, said the"
+          },
+          {
+            "score": 0.118,
+            "start_error": -0.551,
+            "end_error": 0.571,
+            "same_language": true,
+            "cue_index": 5,
+            "heard": "convinced of what I say said the"
+          },
+          {
+            "score": 0.118,
+            "start_error": 6.404,
+            "end_error": 6.276,
+            "same_language": true,
+            "cue_index": 6,
+            "heard": "convinced of what I say,\" said the"
+          }
+        ],
+        "thresholds": {
+          "text_score": 0.65,
+          "content_fraction": 0.8,
+          "median_error_seconds": 0.65,
+          "max_error_seconds": 1.25
+        }
+      },
+      "labelled_median_error": 0.06799999999999962,
+      "labelled_max_error": 0.14399999999999125
+    }
+  ]
+}

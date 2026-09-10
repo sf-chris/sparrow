@@ -4,120 +4,25 @@
 
 @layer base {
   body {
-    @apply bg-bg text-text;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    overflow-x: hidden;
-    background:
-      radial-gradient(circle at 18% -10%, rgba(194, 90, 46, 0.22), transparent 30rem),
-      radial-gradient(circle at 80% 4%, rgba(244, 193, 93, 0.14), transparent 28rem),
-      linear-gradient(180deg, #070709 0%, #050507 48%, #08080b 100%);
+    margin: 0;
+    background: #faf9f6;
   }
-  html, #root {
-    width: 100%;
-    max-width: 100vw;
-    overflow-x: hidden;
+  html,
+  #root {
+    min-height: 100%;
   }
   * {
-    @apply border-border;
+    box-sizing: border-box;
   }
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-surface;
+    background: #faf9f6;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
+    background: #b7acc7;
+    border-radius: 6px;
   }
-}
-
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
-  }
-  .btn-primary {
-    @apply btn bg-primary text-bg shadow-glow hover:-translate-y-0.5 hover:bg-primary-light active:translate-y-0 active:bg-primary-dark;
-  }
-  .btn-secondary {
-    @apply btn border border-white/[0.15] bg-white/[0.08] text-text backdrop-blur-xl hover:-translate-y-0.5 hover:bg-white/[0.14];
-  }
-  .btn-ghost {
-    @apply btn text-muted hover:bg-white/[0.08] hover:text-text;
-  }
-  .btn-danger {
-    @apply btn bg-rose-600/20 text-rose-300 hover:bg-rose-600/30;
-  }
-  .icon-btn {
-    @apply inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.07] text-muted transition-colors hover:bg-white/[0.15] hover:text-text;
-  }
-  .card {
-    @apply min-w-0 max-w-full rounded-2xl border border-white/10 bg-white/[0.065] shadow-2xl shadow-black/25 backdrop-blur-xl;
-  }
-  .input {
-    @apply w-full min-w-0 max-w-full rounded-full border border-white/[0.15] bg-black/[0.35] px-4 py-2 text-sm text-text placeholder-muted backdrop-blur-xl focus:outline-none focus:ring-1 focus:ring-primary;
-  }
-  .label {
-    @apply block text-xs font-medium text-muted mb-1;
-  }
-  .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
-  }
-  .nav-scroll {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .nav-scroll::-webkit-scrollbar {
-    display: none;
-  }
-  .cinema-page {
-    @apply min-h-screen max-w-full overflow-x-hidden bg-transparent text-text;
-  }
-  .cinema-hero {
-    @apply relative max-w-full overflow-hidden px-4 pb-10 pt-20 sm:px-8 sm:pb-14 sm:pt-24 lg:px-10;
-  }
-  .cinema-kicker {
-    @apply inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary-light;
-  }
-  .cinema-title {
-    @apply mt-4 w-full max-w-[20rem] break-words text-3xl font-semibold leading-tight tracking-tight text-text sm:w-auto sm:max-w-4xl sm:text-6xl sm:leading-[0.94] lg:text-7xl;
-  }
-  .cinema-copy {
-    @apply mt-4 w-full max-w-[19.5rem] break-words text-base leading-7 text-text/[0.72] sm:w-auto sm:max-w-2xl sm:text-lg;
-  }
-  .glass-panel {
-    @apply rounded-2xl border border-white/[0.12] bg-black/30 shadow-2xl shadow-black/[0.35] backdrop-blur-2xl;
-  }
-  .cinema-shell {
-    @apply relative w-full max-w-[calc(100vw-2rem)] min-w-0 sm:max-w-7xl;
-  }
-  .poster-surface {
-    @apply overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06];
-    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.62);
-  }
-}
-
-/* Library: soft light sweep across posters with an active transfer. */
-@keyframes poster-sheen {
-  0% {
-    transform: translateX(-100%);
-  }
-  55%,
-  100% {
-    transform: translateX(100%);
-  }
-}
-.poster-shimmer::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    105deg,
-    transparent 42%,
-    rgba(255, 247, 234, 0.09) 50%,
-    transparent 58%
-  );
-  animation: poster-sheen 2.8s ease-in-out infinite;
 }

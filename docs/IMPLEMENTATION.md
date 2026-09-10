@@ -1,0 +1,191 @@
+# Implementation record
+
+Owner instruction: implement roadmap stages 1–6, work systematically, test the
+results and finish with a cohesive product design. Stage 7 (guided external
+DNS/HTTPS/sharing), TV/Emby/casting and the setup agent are excluded.
+
+## Delivered in this working tree
+
+| Stage | Implementation | Validation boundary |
+| --- | --- | --- |
+| 1. Trustworthy requests | Verified file availability, exact episode scope, revision fences, real transfer controls, global limits, visible recovery/history, strict provider failures | Regression tests exercise cancellations, stale responses, retry/restart, settings and file preservation |
+| 2. Household accounts | Owner onboarding, invitations, roles/storage scope, central inherited preferences, explicit request overrides, session revocation and password changes | HTTP tests and actual Chrome household flows; no externally hosted deployment claim |
+| 3. Portable storage | Outbound pairing and credential rotation, durable commands/results, safe publication, import/correction, Linux container, Windows setup/service/installer workflow | Linux container and portable protocol/media tests pass; Windows FFmpeg binaries compile; native installer/service execution and physical Windows remain pending |
+| 4. Watching | Responsive collection/player, authenticated ranges, audio/captions, conversion, personal progress, PWA assets/install guidance | Real Chrome and generated-media HTTP checks, Linux container restart/resume; physical phone/Safari/iOS validation remains pending |
+| 5. Subtitle care | Included/local/provider candidates, FFsubsync timing, independent local speech samples, durable preparation and agent review, repair/upload, personal delay, mandatory readiness | Five labelled English speech cases reproduce successfully; review loop tested with controlled model responses; no live provider or translated-caption quality claim |
+| 6. Discovery and care | Tool-using conversational Discovery, personal subscriptions, aired scope, gap filling, explicit upgrades, private memory and bounded reasoning | Tool-loop evidence, authority, revision, upgrade and zero-idle-call tests; no paid live-model quality evaluation |
+
+The shared visual contract is [PRODUCT_DESIGN.md](PRODUCT_DESIGN.md). Installation
+and release commands are in [INSTALLATION.md](INSTALLATION.md). This is an alpha
+implementation, not a claim that every roadmap deployment acceptance gate passed.
+No source changes were committed or pushed and no installer was published during
+this work. Real acquisition and paid model calls were not started.
+
+## Measured checks
+
+- Original baseline: 42 tests, 40 passed and two opt-in live-model checks skipped.
+- Foundation expansion: 54 tests, 52 passed and two skipped.
+- Latest repository checks: **107 tests, 105 passed and two opt-in live-model
+  checks skipped**. Python compilation, dependency consistency, frontend production
+  build and the required release-tree checks pass. Ruff's undefined-name and
+  syntax checks pass across backend, tests and packaging.
+- Actual FFmpeg fixtures test direct and suffix/ranged media reads, selected audio,
+  embedded captions, browser conversion/seek, per-person progress and access
+  revocation. Node tests cover durable replay, missed acknowledgements, interrupted
+  transfers, publication provenance and refusal to overwrite existing media.
+- `tests/package_check.py` passed against the actual Linux image: owner bootstrap,
+  import, authenticated range reads, a converted segment, persistent login and
+  resume after container restart, PWA assets, and loading the bundled local model.
+- `tests/browser/check.cjs` completed the real Chrome viewing flow and exact
+  episode/pause behavior with no page errors or failed API responses.
+- `tests/browser/accessibility.cjs` found no WCAG A/AA violations across ten
+  screens and the request dialog, with no overflow at 360, 390, 768 and 1440 px.
+- `tests/browser/household.cjs` passed invitation/join, inherited personal settings,
+  password change, permission revocation, subscription editing, subtitle repair
+  failure and honest mandatory-caption readiness. Five additional mobile states
+  had zero automated accessibility violations.
+- `tests/subtitle_benchmark.py` reproduces the checked-in LibriSpeech fixtures:
+  already-correct captions stay unchanged; a seven-second offset and 4.2% drift
+  are corrected; a changed cut and unrelated caption text are rejected. Metrics,
+  independent speech-match evidence and labelled timing residuals are in
+  `product-validation/subtitle-benchmark.json`. This is English speech with known
+  labels, not a general film/multilingual accuracy claim. Fixture attribution and
+  the CC BY 4.0 licence are in `tests/fixtures/subtitles/ATTRIBUTION.md`.
+- The Windows FFmpeg/ffprobe build produced x86-64 PE executables from pinned
+  sources. That proves compilation, not execution on NTFS or Windows services.
+- The node setup's scrollable form and fixed action area were checked at 620×740
+  and 500×640 using Linux Tk under Xvfb. The last field remained reachable and
+  the primary action remained visible. Native Windows DPI/font checks remain open.
+- Frontend audit has reported zero advisories. Production Python dependencies
+  are resolved for supported platform markers and hash-locked in requirements.lock.
+- Controlled provider HTTP checks verify title/episode/language/style matching,
+  three-candidate limits, account quota errors, download-host credential isolation,
+  redirect refusal and the two-megabyte download limit. These complement the
+  local speech benchmark; no live OpenSubtitles account was used.
+- Final browser refinements cover keyboard containment after a dialog changes
+  to its success state, accessible phone dialog actions, subscription loading
+  states, and readable player language names. Successful household logins no
+  longer consume the shared IP's failed-login allowance; regression checks retain
+  protection against actual failed attempts.
+
+Evidence screenshots and JSON results are under `docs/product-validation`.
+Automated accessibility checks complement visual inspection; they do not replace
+manual screen-reader or physical-device acceptance.
+
+## Administrator setup refinement
+
+First-run copy now says **Set up your Sparrow server** and **Create administrator
+account**. The setup field explains that its code comes from the installation
+agent or startup logs. Startup logs print the existing code while no administrator
+exists; `python -m backend.agents.setup_info --url <browser-address>` returns the
+code and a link that fills it automatically. The command reads existing state
+without creating an account or regenerating credentials, and suppresses the code
+after setup. Installation handoff instructions are explicit in `AGENTS.md`.
+
+The browser reads the code from the URL fragment and removes it from the address
+bar. Opening the link leaves account creation to the owner. Checks cover fresh
+navigation, an already-open setup tab, the normal first-account flow, private
+local retrieval and suppression after an administrator exists. The running Linux
+instance was rebuilt and updated with its existing data volume preserved.
+
+## Picture house redesign — 10 September 2026
+
+The owner's visual references prompted a new identity across the active product:
+midnight blue, ivory and citron; DM Sans and Instrument Serif; an original
+folded-bird mark and projection-frame artwork. Entry forms use a split desktop
+layout and compact phone header. A persistent desktop rail, collection feature,
+poster grid, discovery prompts, titles, player, settings, dialogs and empty/error
+states share the new tokens. Fonts and art ship inside the application.
+
+Passwords accept 8–1,024 characters without character-class requirements. A shared
+show/hide control supports password-manager autocomplete. Account API coverage
+checks eight-character owner/join/change flows, seven-character rejection,
+existing authentication and revocation of other sessions after a change.
+
+The browser checks cover setup-link prefill, password visibility and length,
+editable discovery prompts and reload, loading-error recovery and empty states.
+The visual review corrected a cramped phone filter and stopped an initial load
+failure from masquerading as an empty filtered collection. Progress bars expose
+proper accessible values. `tests/browser/design.cjs` records four setup layouts
+and ten further entry/discovery/empty/error layouts. The existing viewing,
+household and accessibility journeys also exercise the new UI. Evidence files
+are linked from `product-validation/README.md`; physical-device and live-provider
+limits below remain unchanged.
+
+The running Linux instance was rebuilt and redeployed with its existing data
+volume preserved. Its sign-in screen and bundled artwork/fonts pass live Chrome
+checks at 390px and 1440px with no overflow or automated accessibility violations.
+The container is healthy and the running backend accepts eight-character
+passwords. No owner account was created by the validation check.
+
+## Engineering decisions and limits
+
+The existing persistent tool runtime remains the agent boundary. Discovery and
+collection care now perform genuine model/tool loops; subtitle processing does
+not depend on a model, while its quality-review role does. An SDK migration is
+not required to obtain tool use and would still need Sparrow's durable session,
+permission, job-revision and node contracts. Provider adaptation remains small;
+this turn validates the existing runtime with controlled responses, not a live
+head-to-head SDK/model evaluation. No reasoning key is configured here.
+
+Reasoning uses step limits and persistent conservative cost reservations before
+calls, including possible retries. Uncertain/interrupted calls retain an
+allowance. Dollar totals depend on the model-rate table and are estimates rather
+than the provider's final invoice. Media conversion is bounded to two producers
+per node with free-space checks and cache retention; subtitle work is serialized
+per node with an isolated, timed worker.
+
+The existing scheduled Sonnet 5 price increase was removed after checking
+[Anthropic's current price table](https://platform.claude.com/docs/en/about-claude/pricing)
+on 2026-09-10. Historical usage entries retain the rates originally applied.
+
+Local migration snapshots precede schema generation changes. SQLite is the
+established source of truth, JSON mirrors are atomic, malformed legacy state
+stops migration, and rescans/corrections retain file identity and personal history.
+Windows setup runs the service as LocalService with access granted to its unique
+service SID for the approved folders. The workflow still needs to be run on a
+Windows host; no remote Windows address or connection has been supplied.
+
+Automatic subtitle validation currently supports text that matches the spoken
+language. Translated/image subtitles may require an existing embedded track or
+manual alternatives; the automatic pipeline does not label them verified from
+speech-activity correlation alone. OpenSubtitles authentication, quotas and its
+real response contract require a configured-account check before deployment.
+
+The remaining release gates are native Windows installer/service/NTFS execution,
+the owner's Windows-to-phone journey, physical mobile/Safari checks, and live
+subtitle-provider/model-quality evaluation. The code and CI workflows make those
+checks concrete and reproducible; they are not marked passed without evidence.
+
+
+## Bright visual reimagining — 10 September 2026
+
+The owner rejected the initial dark cinematic proposal and requested a brighter,
+more whimsical interface with a public landing page and smaller typography and
+controls. The same `design/sparrow-reimagined` branch now uses light paper, plum,
+lilac, mint and pink; bundled DM Sans; and original SVG bird/television and doodle
+illustrations. The rejected WebP artwork and Archivo asset were removed.
+
+The public root introduces Sparrow; sign-in is a deliberate action at `/login`.
+Unconfigured servers link to `/setup`, and setup-code/invitation links still go
+directly to their form. Account entry is compact, and sign-out returns to the
+landing page. Home, library, discovery, title, activity, player settings,
+preferences, defaults, server settings, people, storage/import, and all dialogs
+and states use the new shared system. Video retains a dark viewing surface.
+
+The functional improvements from the previous iteration remain: persistent
+library filters/sorting, contextual title return links, keyboard discovery tabs,
+assisted drafts, and season filtering. Scoped local backdrop permissions and
+the Vite proxy's preserved Host header remain necessary integration fixes.
+
+Validation evidence for the current interface is recorded in
+[reimagined-validation](reimagined-validation/README.md). The browser tests now
+exercise the public landing before account entry and its back navigation,
+alongside the existing playback, request, household, storage and accessibility
+journeys. The fixture server uses original geometric covers for fictional test
+titles; production continues to use real catalogue images.
+
+Existing local work is preserved. The same isolated backend on 8891 and Vite
+preview on 3000 serve this branch; the existing installation on 8888 was not
+redeployed. No new runtime dependency or paid acquisition/model call was added.
+Physical-device, Windows and live-provider release gates remain unchanged.

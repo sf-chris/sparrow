@@ -3,40 +3,96 @@
 > A local media autopilot: ask for something once, then Sparrow owns the
 > outcome until the requested media is verified, ready, and pleasant to use.
 
-This roadmap records the product decisions made so far and puts them in a
-dependency order. It is deliberately split into two immediate release gates:
+Updated 2026-09-09 after the owner's acceptance of the product review and
+additions covering subtitle synchronisation, agentic discovery/management,
+mobile use, accounts and guided self-hosting. TV work was subsequently parked.
 
-1. Make Sparrow useful for its owner on a private deployment.
-2. Turn that working build into a safe, reproducible open-source alpha.
+The detailed decisions, option comparisons, references and user journeys are in
+[the product plan](docs/PRODUCT_PLAN.md). The
+[product review](docs/PRODUCT_REVIEW.md) records current defects and missing
+capabilities. The [node plan](docs/DISTRIBUTED_NODES_PLAN.md) covers Linux
+coordination and Windows/macOS/Linux execution.
 
-Everything after those gates improves the product without holding up the first
-real use.
+Latest owner refinements: ship subtitle processing inside Sparrow and use an
+agent for quality review/exceptions; establish admin defaults with personal
+inheritance/overrides; park both the setup agent and all TV work, including
+Emby integration, compatibility research, casting and native TV applications.
 
-## Committed delivery order
+Implementation update, 2026-09-10: the owner authorized stages **1–6** and excluded
+**stage 7**. Code, packaging and the shared interface now cover those six stages.
+[The implementation record](docs/IMPLEMENTATION.md) separates passing local,
+browser and Linux-package checks from pending native Windows, physical-device
+and live-provider acceptance. The table below remains the deployment acceptance
+contract; code presence alone does not complete its physical Windows gates.
 
-Milestone numbers remain stable so issues and prior discussion keep their
-meaning. The execution order is now:
+Gate A and Gate B below retain the repository's historical July completion
+record. They do not establish readiness for the new Linux/Windows deployment,
+public access or the complete viewing experience. Current review reproductions
+identify issues that must be resolved despite those historical checkboxes.
 
-1. **Milestone 1 — first-class monitoring**
-2. **Milestone 2 — Sparrow playback**
-3. **Milestone 3 — subtitles that simply work**
-4. **Milestone 5 — remote household access and hosted relay**
+## Current implementation sequence
 
-Milestone 4 (automatic source expansion) and Milestone 6 (music) are explicitly
-deferred until that sequence is complete. TPB remains sufficient for the
-near-term product work; remote household use is more important than broadening
-the source ecosystem first.
+The stages below are the delivery order. Existing milestone numbers further
+down remain backlog references, not a second delivery order; the broad
+Milestone 0 spans several stages. This replaces the previous acceptance path.
+These are acceptance gates, not calendar estimates. Consult the implementation
+record for current evidence and outstanding deployment checks.
+
+| Stage | Deliverable | Done when | Backlog references |
+| --- | --- | --- | --- |
+| 1. Make the existing product trustworthy | Correct readiness, exact episode scope, ignored settings, pause/cancel, concurrency limits, recovery and missing history. Simplify Home, Library, Activity and title actions around the next useful action. | Reviewed correctness/control defects have regression coverage; missing or unverified files cannot appear ready; cancelled work cannot start stale acquisitions; failed work has a visible recovery action on mobile and desktop. | Milestone 0; product review |
+| 2. Establish accounts and preferences | Owner onboarding, local accounts, roles, invitations and personal settings. One effective-settings resolver combines admin defaults, explicit personal overrides and request choices within admin policy. | Two users can inherit, customise and reset preferences; agents and validation receive the same effective contract; users cannot read or change each other's private state; running intent changes only through an explicit revision. | Milestones 0 and 5 |
+| 3. Connect Linux to Windows storage | Installable Linux server and Windows node, pairing, durable commands/events, asset identity, safe import/correction and acquisition to the chosen destination. Prove the authenticated video path while building the node. | A clean Windows install pairs without a development environment; a movie and episode survive scans, retries and restarts; interrupted work reconciles; a sleeping node shows unavailable rather than deleted. Real Windows/NTFS checks pass. | Milestone 0; node plan |
+| 4. Make the collection watchable | Responsive library and episode views, Play/Resume, audio and existing subtitle-track selection, personal progress, direct play and bounded format fallback. Installable PWA. | The owner imports a Windows-stored movie, plays and seeks from a phone, resumes on desktop, and recovers from a node interruption. A restricted user cannot bypass permissions through media URLs. Existing media plays with the model provider down. | Milestone 2 |
+| 5. Deliver subtitles that simply work | Built-in discovery, alignment against actual audio, validation and track preparation using selected bundled/vendored components. Agent review of evidence/samples and exception handling; one-tap repair. | Labelled offset, drift, wrong-cut/episode and already-good fixtures meet measured acceptance thresholds; originals survive; repaired tracks render correctly in supported browsers; mandatory subtitle readiness is reported honestly. | Milestone 3 |
+| 6. Complete agentic discovery and collection care | Tool-using Discovery with precise request proposals, stronger Fetch/Media/Librarian flows, visible subscriptions, gap filling, upgrades and recoverable failures. | A description becomes the intended title and exact scope; a followed show gets eligible new episodes without repeated requests; curation respects each user's preferences and authority, preserves good files and spends no tokens on unchanged idle state. | Milestones 0 and 1; curation findings |
+| 7. Finish guided self-hosting and sharing | Connections/Sharing flows, concrete DNS and port-forwarding instructions, HTTPS, private-network and supported relay alternatives, recovery, upgrades and backup/restore. | An invited viewer on another network can log in, play, seek and use subtitles at the supplied address; revocation works; blocked inbound access has a tested alternative; restore and upgrade preserve permissions, intent and media mappings. | Milestone 5; node hardening |
+
+**First usable release: stages 1–4.** The owner can install Linux Sparrow,
+pair Windows storage, import the existing collection and browse/play/resume on
+phone and desktop with accounts and preferences. Existing acquisition agents
+remain operational. This is an intermediate release; the complete agreed
+authorized implementation also includes stages 5–6. Stage 7 remains deferred.
+
+**Resolve uncertainty early without expanding the first release.** Start a
+small labelled subtitle benchmark during the foundation work. After the
+preference contract exists, evaluate Discovery and an SDK adapter against real
+scoped requests. During the first Windows node slice, prove authenticated
+seeking/streaming rather than assuming command connectivity is sufficient.
+These evaluations inform stages 3–6; subtitle and SDK experiments do not block
+the first import-and-watch journey or require a wholesale agent-runtime rewrite.
+
+**The first implementation slice** fixes readiness and request/control truth:
+file evidence and availability, exact episode requests, enforced saved limits,
+and pause/cancel revision checks, together with their affected screens and
+regression cases from the review. Schema changes include migrations and restart
+checks. Finish that reviewable slice before expanding the account/node model.
+
+Mobile responsiveness, accessibility, clear empty/error/offline states, file
+preservation and bounded agent costs apply at every stage. Deliver UI and
+backend together for each journey. Authentication and permission checks start
+in stage 2 and cover each later endpoint; stage 7 completes external access
+and diagnostics. Backup/migration safety and installation checks begin when
+persistent state and packaging change, rather than waiting until stage 7.
+
+**Parked:** all TV/Emby/casting work and the setup/deployment agent. Retain the
+TV option notes in the product plan, but do not investigate or implement them
+as dependencies of this sequence. Normal guided setup remains core. Source
+expansion, music, native phone apps and an operated relay service remain later
+scope. All-platform node support follows the same protocol and platform gates;
+Windows is the first required storage-node deployment.
 
 ## Status legend
 
-- **Now** — required for today's private or open-source alpha gate.
-- **Next** — the first product milestone after the alpha gates.
-- **Later** — committed direction, ordered after the foundations it needs.
+- **Now** — required for the current owner foundation and integration proofs.
+- **Next** — part of the complete owner experience, ordered by dependencies.
+- **Later** — expansion after the complete owner experience.
 - **Parked** — intentionally deferred; do not accidentally pull it into an
   earlier milestone.
 
-Checkboxes are the source of truth for progress. A milestone is complete only
-when its acceptance test passes, not when its code merely exists.
+Current milestone checkboxes record progress; historical gate checkboxes retain
+their original scope. A current milestone is complete only when its acceptance
+test passes on the supported deployment, not when its code merely exists.
 
 ## North star
 
@@ -45,10 +101,11 @@ The complete Sparrow experience is:
 > Request -> acquire -> verify -> enrich -> notify -> play
 
 The dinner scenario is the primary product test: someone asks for a film or TV
-show from a phone, Sparrow obtains the best practical first item quickly, checks
-what actually arrived, prepares correct subtitles, sends a "ready to watch"
-notification, and opens directly into Sparrow's player. The job may continue in
-the background to complete the season or improve quality.
+show from a phone, Sparrow preserves the exact request, obtains the best
+practical first item, checks what arrived, prepares subtitles against its actual
+audio, and makes it easy to play in a phone or desktop browser. Resume state follows the
+person across devices. Remaining authorised work may continue in the background.
+The Linux coordinator and Windows final storage must support this whole journey.
 
 The equivalent music scenario is: ask for an artist at the gym, receive a
 notification when music is ready, and listen in Sparrow without managing files.
@@ -69,15 +126,17 @@ wrapper around an existing automation stack.
    season.
 4. **No idle intelligence bill.** A monitored show with no changed facts should
    consume no model tokens.
-5. **Grandma-friendly usage first.** Initial installation may be technical, but
-   requesting, monitoring, recovering, and playing media must not be.
-6. **The journal is the product.** Primary surfaces explain progress in ordinary
-   language. Release names, hashes, codecs, and source trivia stay in advanced
-   views.
+5. **Effortless use includes setup.** Guide supported installation, accounts,
+   storage and connectivity. Requesting, monitoring, recovering and watching
+   must work well from phone and desktop browsers.
+6. **Watching is the product; the journal explains the work.** Lead with Play,
+   Resume, exact requests and actionable problems. Use ordinary language for
+   progress; keep release names, hashes and source trivia in advanced views.
 7. **Verify reality; never trust a filename.** "Done" means the files on disk
    satisfy the request contract.
-8. **Own the watching experience.** Jellyfin and Emby are not product
-   dependencies. Sparrow will have its own player and watch state.
+8. **Own the watching experience.** Sparrow has its own web player and watch
+   state as target capabilities. TV/Emby integration is parked and does not
+   determine the current player or watch-state acceptance gates.
 9. **Measure request-to-first-frame.** Breadth matters less than reliably making
    the requested first item watchable quickly.
 
@@ -86,13 +145,24 @@ wrapper around an existing automation stack.
 - TPB is sufficient as the first source. More sources come through a Sparrow
   connector contract, not through a mandatory Prowlarr/Torznab architecture.
 - Prowlarr/Torznab may eventually exist as optional compatibility bridges.
-- Setup can remain technical for the first private and open-source alphas;
-  everyday use cannot.
-- A separately hosted relay for remote access and setup is acceptable later,
-  but is not part of the first release.
-- First-class subtitles are a signature feature, but do not block the first
-  usable alpha.
-- Existing-library import is useful and explicitly deferred.
+- Guided setup, mobile responsiveness, accounts/sharing, inherited preferences
+  and browser playback are part of the complete current owner experience.
+- All TV work is parked, including the installed Emby app, real-server bridges,
+  protocol compatibility, casting and a dedicated Sparrow TV app.
+- Bundle or vendor selected subtitle-processing components so the owner manages
+  one feature; agents review results and handle uncertainty rather than driving
+  every predictable processing step.
+- The setup agent is parked; normal guided setup and diagnostics remain core.
+- Supported direct HTTPS and private-network modes come before operating a
+  universal hosted relay service. Relay deployment remains an option for
+  otherwise unreachable homes; it must have a tested media path and explicit costs.
+- Finding and synchronising subtitles is a signature core feature. A timing
+  tool's success or an agent's confidence alone cannot establish a correct track.
+- Existing-library import and correction are core collection-management work.
+- Discovery becomes a genuine tool-using agent; instant title suggestions remain
+  useful. Existing Fetch, Media and Librarian loops already provide agentic work.
+- Evaluate a Claude Agent SDK adapter for discovery, preserving durable domain
+  state and tool guardrails. SDK migration is conditional on demonstrated parity.
 - Video comes first. Music and a mobile listening experience are a later
   product expansion.
 - Asynchronous provider batch APIs are a cost optimization for non-urgent work,
@@ -104,6 +174,9 @@ wrapper around an existing automation stack.
 
 **Status: Complete (2026-07-16)**
 **Target: achieved**
+
+Historical record for the original deployment; revalidation for the new owner
+experience is tracked in Milestone 0 and the node acceptance gates.
 
 Evidence: the configured macOS host passes all 10 required doctor checks, runs
 under a persistent LaunchAgent, and serves the production UI over the trusted
@@ -171,6 +244,9 @@ cannot complete a request.
 
 **Status: Complete (2026-07-16)**
 **Target: achieved (2026-07-16)**
+
+Historical alpha release record; this does not claim current authentication,
+remote sharing, native playback or Windows-node readiness.
 
 Evidence: a source-only temporary checkout with no `.env`, state, virtualenv,
 frontend build, or node modules installed successfully, passed the full suite,
@@ -253,9 +329,56 @@ On a clean machine or clean account:
 
 ---
 
+## Milestone 0 — Reliable, agent-managed owner foundation
+
+**Status: Now; new scope from the September product review**
+
+- [ ] Resolve reviewed readiness, ignored-setting, scope, completed-job,
+  abandoned-history, pause/cancel, resource-limit and error-state defects.
+- [ ] Introduce accounts, user/role authority and personal preferences with the
+  identity work from Milestone 5; protect every API and media path.
+- [ ] Add admin-onboarding preference defaults and a brief defaults/customise
+  step for invited users; retain discoverable personal settings and reset actions.
+- [ ] Resolve server defaults, explicit personal/title overrides and request
+  choices in one typed contract constrained by admin policy; retain value sources.
+- [ ] Inject relevant effective settings, principal and version into Discovery,
+  Fetch, Media, subtitle review and subscription work, using the same contract in
+  UI and verification. Keep running job intent stable until explicitly revised.
+- [ ] Test inherited-default changes, reset, two-user isolation, hard limits and
+  compatible shared media/subtitle needs without destructive preference conflicts.
+- [ ] Separate title/episode identity, media edition/file version, location,
+  request intent, subscription and user watch state.
+- [ ] Prove Linux coordination and Windows node pairing, durable operations,
+  capability/evidence reporting and the actual video transport path.
+- [ ] Import existing media with preview, uncertain-match correction, distinct
+  unmatched identities and rescans that preserve verification evidence.
+- [ ] Add a Discovery Agent that searches/refines using tools and returns title
+  cards plus exact scope/language/monitoring intent for user-authorised requests.
+- [ ] Evaluate the Claude Agent SDK behind an adapter using cancellation,
+  restart, cost, restricted-tool and structured-result acceptance checks.
+- [ ] Keep the existing management agents operational while proving migration
+  parity; add subtitle quality-review sessions over the built-in processing
+  pipeline. Retain setup-agent extension points without implementing that agent.
+- [ ] Enforce hard reasoning/action budgets and concurrent reservations; persist
+  operation identity and revision checks across retries and cancellation.
+- [ ] Establish responsive Home, Library, Activity and title flows with explicit
+  empty/error/offline states and keyboard-accessible controls.
+
+### Acceptance test
+
+Create the owner, pair a Windows node, import a known movie and preserve it
+through two scans and a restart. Submit an ambiguous show description from a
+phone, refine the correct edition and exact episode scope, then pause/cancel
+with running work and verify no stale action acquires more. Verify permission
+boundaries with a second restricted user. Reproduce the Essential correctness
+and control defects and demonstrate their corrected behaviour. Missing playback
+and subtitle capabilities are completed under Milestones 2 and 3.
+
+---
+
 ## Milestone 1 — Ask once: first-class monitoring
 
-**Status: Next**
+**Status: Core; build on the corrected intent model, complete after the first viewing journey**
 
 ### Product behavior
 
@@ -349,7 +472,7 @@ verify the episode, notify the household, and return to zero-token idle state.
 
 ## Milestone 2 — Ready for dinner: Sparrow playback
 
-**Status: Queued second, after monitoring is reliable**
+**Status: Next; stage 4 delivers browser playback, stage 5 adds automatic subtitle preparation**
 
 - [ ] Build a mobile-responsive Sparrow library and title/episode view.
 - [ ] Add direct play for compatible media.
@@ -364,21 +487,28 @@ verify the episode, notify the household, and return to zero-token idle state.
 - [ ] Add household profiles and sensible shared/private watch state.
 - [ ] Package the web app as an installable PWA before committing to native
   mobile clients.
+- [ ] Verify direct play, remux/transcode fallback, subtitle rendering and resume
+  on supported physical phones and desktop browsers using Windows-node media.
+- [ ] Keep playback and controls operational when the model provider is down.
 
 Partial-torrent streaming is a later optimization. The initial player begins
 when the first item is fully landed and verified.
 
 ### Acceptance test
 
-Request episode one from a phone, receive "ready to watch," tap it, and reach the
-first frame inside Sparrow with the correct audio/subtitle controls. Remaining
-episodes may continue downloading in the background.
+Request episode one from a phone, receive "ready to watch," and play it inside
+Sparrow with the correct audio/subtitle controls. Resume as the same user on a
+desktop browser, then return to the phone without corrupting progress. Verify
+subtitle changes refresh and access revocation holds for media and subtitle
+endpoints. Remaining authorised episodes may continue downloading. Interrupt
+storage connectivity and verify useful recovery; test with the model service
+unavailable. TV compatibility is outside this acceptance gate.
 
 ---
 
 ## Milestone 3 — Subtitles that simply work
 
-**Status: Queued third; signature feature**
+**Status: Next with playback; signature feature, evaluated early**
 
 Subtitle requirements become part of the media contract: language, full versus
 forced, hearing-impaired preference, and synchronization confidence.
@@ -397,16 +527,40 @@ forced, hearing-impaired preference, and synchronization confidence.
   task with that evidence.
 - [ ] Integrate the best track automatically into Sparrow's player while keeping
   manual selection available.
+- [ ] Build automatic inspect/search/align/validate/prepare operations inside
+  Sparrow using selected pinned/bundled or vendored components; retain upstream
+  provenance, required notices, conformance tests and a maintenance/update path.
+- [ ] Add a cheap verification agent that reviews evidence and representative
+  cue/audio samples, investigates ambiguous outcomes and requests targeted repairs.
+  Do not replace media inspection with a model approving tool exit codes.
+- [ ] Record measured checks and agent review separately, including sample
+  coverage and pending review when the provider is unavailable.
+- [ ] Evaluate ffsubsync and alass against the actual audio and labelled fixtures;
+  do not equate speech-activity correlation with correct dialogue/episode identity.
+- [ ] Associate confidence and timing derivatives with the exact file version,
+  edition and audio track; invalidate evidence after replacing the media copy.
+- [ ] Preserve originals and good timing; validate proposed changes before
+  promotion and distinguish personal offsets from shared-track repairs.
+- [ ] Distinguish media playable from mandatory subtitle requirements satisfied;
+  retain a deliberate user option to play before subtitle preparation completes.
+- [ ] Run alignment near storage where practical, with resource limits; make
+  transcription/translation fallbacks explicit and retain provenance.
 
-Most timing analysis should be local signal processing. The Media Agent reasons
-about ambiguity and chooses recovery actions; deterministic checks measure the
-result.
+Routine subtitle processing runs automatically under the resolved policy.
+Independent checks and a bounded agent review evaluate the output; ambiguous
+matches or failed repairs reopen targeted agent work. Native processing and
+playback do not require an agent call for each step. Use audio-capable review
+or appropriate sample/transcript tools when actual dialogue must be examined.
 
 ### Acceptance test
 
-For a fixture set containing good, offset, drifting, wrong-episode, and missing
-subtitles, Sparrow selects or produces the correct-language track, rejects bad
-tracks, and starts playback in sync without manual file handling.
+For labelled good, offset, drifting, edited-cut, wrong-episode, missing, forced,
+SDH and multilingual fixtures, select or prepare a suitable track and measure
+the result against independently checked cues. Reject low-confidence mismatches,
+preserve good originals, and test actual rendering/seeking in supported phone
+and desktop browsers. A
+one-tap out-of-sync report must reopen the right asset/track task and produce a
+recoverable result. See the product plan for tool candidates and limits.
 
 ---
 
@@ -453,23 +607,50 @@ default.
 
 ---
 
-## Milestone 5 — Remote household and hosted relay
+## Milestone 5 — Accounts, guided self-hosting and household access
 
-**Status: Queued fourth, after subtitles and the required authentication work**
+**Status: Core; identity starts with Milestone 0, remote access follows verified permission boundaries**
 
-- [ ] Add authentication, passkeys, household invitations, sessions, and audit
-  history before any supported internet exposure.
-- [ ] Design a small independently hosted relay for discovery/bootstrap and
-  encrypted peer-to-peer connectivity where direct access is unavailable.
-- [ ] Keep media and credentials on the home server; the relay should not become
-  a central media host.
-- [ ] Add QR-assisted phone setup and connection diagnostics.
-- [ ] Add reliable push notifications with player deep links.
-- [ ] Threat-model relay compromise, account recovery, malicious connectors,
-  and household authorization.
+- [ ] Add owner bootstrap, local accounts, roles/library permissions, personal
+  history/preferences, recovery, expiring invitations and revocable device sessions.
+- [ ] Enforce user authority on APIs, WebSockets and every media/subtitle/HLS
+  endpoint; distinguish user identities and node credentials.
+- [ ] Support passkeys or optional OIDC as additional sign-in methods without
+  requiring an external identity service for a normal self-hosted installation.
+- [ ] Provide a validated Linux installation and Windows pairing flow with
+  real access/probe checks, service restart behaviour and preserved media.
+- [ ] Build a mobile-usable Connections/Sharing page for local, private-network,
+  direct-domain and relay access modes.
+- [ ] Detect candidate LAN/public addresses and likely routing obstacles; show
+  evidence and uncertainty instead of assuming an egress IP is reachable.
+- [ ] Generate exact DNS and port-forwarding instructions for the selected
+  hostname/host, including dynamic-address updates and verified IPv6 handling.
+- [ ] Manage Caddy HTTPS or validate an existing reverse proxy; verify DNS,
+  certificate trust/renewal and reachability independently.
+- [ ] Offer a private-network route and a supported relay configuration for
+  blocked inbound access; measure media throughput and state any relay costs.
+- [ ] Deliver guided setup and deterministic diagnostic/configuration tools
+  with useful errors, concrete changes and recovery; leave an extension point
+  for the parked setup/support agent.
+- [ ] Verify external login, playback, seeking, subtitles and session revocation
+  from outside the LAN; preserve a local recovery path.
+- [ ] Add in-app and supported push notifications with authenticated player
+  deep links; document browser/device limitations.
+- [ ] Test backup/restore, upgrades, credential recovery and account isolation.
 
-The relay improves Grandma setup later. It is not needed to make Grandma usage
-good on a manually configured first deployment.
+An operated Sparrow relay service and general autonomous router/cloud
+administration are later options. Basic guided self-hosting is core. An
+outbound node/control tunnel alone does not establish a video path, and free
+web tunnels must not be assumed suitable for sustained media traffic. See the
+product plan for verified access options and their limits.
+
+### Acceptance test
+
+An owner completes supported setup, pairs storage, invites a restricted viewer
+and supplies a working HTTPS address. The viewer signs in from another network,
+watches and seeks with subtitles, and has separate resume state. Revoke that
+viewer/device and verify access is removed. Exercise an unreachable home-network
+case and demonstrate an honest diagnosis plus a working supported alternative.
 
 ---
 
@@ -502,15 +683,22 @@ play a verified album continuously in Sparrow without touching files or tags.
 
 ## Parked migrations and convenience work
 
-- [ ] Validate and publish a one-command Docker/Compose beta deployment.
-- [ ] Import and verify an existing media library.
+- [ ] Setup/support agent over the normal diagnostic/configuration tools.
+- [ ] All TV playback work: installed Emby/Samsung evaluation, real-server
+  integration, protocol compatibility, casting and native TV applications.
+  Retained options and future tests are in the product plan; none is an active
+  acceptance criterion or prerequisite.
+
 - [ ] Import selected intent/history from existing automation tools.
-- [ ] Full one-click installer and automatic home-network discovery.
+- [ ] Universal one-click deployment across arbitrary routers/cloud providers.
+- [ ] Operate a hosted Sparrow relay service beyond the supported self-hosted
+  or private-network configurations.
 - [ ] Native iOS/Android apps, if the PWA cannot meet playback requirements.
 - [ ] Agent-drafted connector experiment described above.
 
-These are valuable, but none should displace acquisition correctness,
-monitoring, playback, subtitles, or source reliability.
+Validated Linux setup, guided network diagnosis and existing-library import are
+now core milestones above. The remaining expansion work should not displace
+the complete owner viewing/curation experience.
 
 ## Cross-cutting workstreams
 
@@ -553,13 +741,12 @@ monitoring, playback, subtitles, or source reliability.
 
 When roadmap items compete, choose in this order:
 
-1. Make a real request reach a verified ready state.
-2. Prevent unsafe behavior, data loss, or secret exposure.
-3. Reduce manual intervention and improve recovery.
-4. Reduce request-to-first-frame.
-5. Reduce recurring model cost without weakening judgment.
-6. Expand sources and media types.
-7. Improve installation convenience.
+1. Preserve files, permissions, exact user intent and truthful state.
+2. Complete the request/import-to-first-frame journey on phone and desktop.
+3. Satisfy language/subtitle requirements and make failures recoverable.
+4. Make supported setup, household sharing and recurring curation effortless.
+5. Bound resource use and reduce recurring model cost without weakening judgment.
+6. Expand sources, devices and media types after the core experience is proven.
 
 ## Current foundation
 
@@ -573,11 +760,11 @@ The repository already contains substantial v3 groundwork:
 - [x] ffprobe-based media evidence tooling.
 - [x] Resolution, job, journal, session, and WebSocket API surfaces.
 - [x] A frontend for search, jobs, journal/activity, and settings.
-- [ ] A proven private end-to-end deployment.
-- [ ] A safe and reproducible public alpha.
+- [ ] A revalidated Linux/Windows owner deployment with actual media playback.
+- [ ] Authenticated, reproducible household remote access.
 - [ ] Durable first-class monitoring semantics.
 - [ ] Sparrow-native playback, subtitles, remote access, and music.
 
-The immediate job is not to redesign this foundation. It is to prove it, remove
-the dangerous release edges, publish an honest alpha, and then work down this
-file one acceptance-tested milestone at a time.
+Retain useful v3 groundwork while correcting the reviewed contracts and
+completing the viewing experience. Historical completion and source-code
+presence are not substitutes for the current acceptance tests.

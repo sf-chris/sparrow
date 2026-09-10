@@ -1,0 +1,13 @@
+.git
+.venv
+**/__pycache__
+frontend/node_modules
+frontend/dist
+data
+backups
+.env
+*.log
+docs/product-review
+docs/product-validation
+packaging/build
+packaging/output
