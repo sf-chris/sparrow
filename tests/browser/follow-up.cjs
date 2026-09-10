@@ -11,6 +11,7 @@ const AxeBuilder = require(
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
 const base = process.env.SPARROW_BROWSER_URL || "http://127.0.0.1:8891";
+const { expect } = require(require.resolve("@playwright/test", { paths: [process.cwd() + "/frontend"] }));
 const out = process.env.SPARROW_VISUAL_OUT || "docs/follow-up-validation";
 fs.mkdirSync(out, { recursive: true });
 (async () => {
@@ -165,22 +166,23 @@ fs.mkdirSync(out, { recursive: true });
   await go("/settings/logs?limit=1");
   await page.locator(".sp-log-entry").first().waitFor();
   await audit("logs");
-  const first = await page.locator(".sp-log-entry").first().innerText();
+  const firstEntry = page.locator(".sp-log-entry").first();
+  const pageStatus = page.getByRole("navigation", { name: "Log pages" }).getByRole("status");
+  // Different events can share a summary and displayed second. Include the
+  // collapsed context, and wait for the response's page number to be rendered.
+  const first = await firstEntry.textContent();
   await page.getByRole("button", { name: "Next", exact: true }).click();
   assert.equal(new URL(page.url()).searchParams.get("page"), "2");
   assert(new URL(page.url()).searchParams.has("snapshot"));
-  await page.locator(".sp-log-entry").first().waitFor();
-  assert.notEqual(
-    await page.locator(".sp-log-entry").first().innerText(),
-    first,
-  );
+  await expect(pageStatus).toContainText("Page 2 of");
+  await expect.poll(() => firstEntry.textContent()).not.toBe(first);
   await page.getByRole("button", { name: "Previous", exact: true }).click();
-  await page.locator(".sp-log-entry").first().waitFor();
-  assert.equal(await page.locator(".sp-log-entry").first().innerText(), first);
+  await expect(pageStatus).toContainText("Page 1 of");
+  await expect.poll(() => firstEntry.textContent()).toBe(first);
   await page.getByLabel("Category", { exact: true }).selectOption("request");
   await page.getByLabel("Title or request", { exact: true }).fill("Harbour");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  await page.locator(".sp-log-entry").first().waitFor();
+  await expect(firstEntry.locator("h2")).toHaveText("Harbour Lights");
   assert(!new URL(page.url()).searchParams.has("page"));
   await page.getByRole("button", { name: "Next", exact: true }).click();
   const parameters = new URL(page.url()).searchParams;
