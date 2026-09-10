@@ -16,6 +16,13 @@ policy; tools establish facts and enforce limits. The setup agent and all
 TV/Emby/casting work are parked; do not treat retained TV option notes as active
 implementation requirements. Follow the delivery sequence at the top of ROADMAP.md.
 
+The next agentic reliability phase is tracked in
+[issue #3](https://github.com/sf-chris/sparrow/issues/3), with the source audit and
+reproductions in [docs/AGENTIC_PLAN.md](docs/AGENTIC_PLAN.md). Read that handoff
+before changing the runtime or retiring legacy paths. It includes model-evaluation
+work and the owner's required cleanup of obsolete docs, issues/dependencies and
+dead code; its proposed model profiles are not completed evaluations.
+
 ## Architecture (v3 — agentic)
 
 Everything new lives in `backend/agents/`:
