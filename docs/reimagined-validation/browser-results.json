@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "errors": [],
+  "responses": [],
+  "watching": {
+    "asset_id": "b3858f1e374b0b7648d9fc5b37a1d944",
+    "position": 18,
+    "duration": 24,
+    "watched": 0,
+    "updated": 1789031233.9781225
+  },
+  "exact_scope": {
+    "1": [
+      1
+    ]
+  }
+}

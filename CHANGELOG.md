@@ -2,6 +2,22 @@
 
 All notable changes to Sparrow are documented here.
 
+## Unreleased — household product foundation
+
+- Owner accounts, invitations, storage permissions, inherited preferences and
+  personal sessions/progress.
+- Responsive collection, exact requests, activity recovery, native browser
+  player, audio/captions, format conversion and PWA assets.
+- Portable storage commands, safe import/correction, acquisition/publication,
+  Linux container and Windows node installer/service build workflow.
+- Built-in subtitle discovery/alignment/local speech evidence, agent review,
+  repair, required-track readiness and per-person offsets.
+- Tool-using Discovery and scoped collection subscriptions with no idle model
+  polling, preserved upgrade copies and bounded reasoning/resource use.
+- Migration snapshots and regression, actual-media, browser/accessibility and
+  container acceptance checks. Platform/provider limitations are recorded in
+  `docs/IMPLEMENTATION.md`; Windows installation is not yet physically verified.
+
 ## [0.1.0-alpha.1] - 2026-07-16
 
 ### Added

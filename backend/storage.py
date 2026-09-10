@@ -9,8 +9,11 @@ import uuid
 import time
 import asyncio
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
+
+from .agents.migrations import prepare, atomic_text
 
 from .models import (
     SparrowConfig, Download, LibraryItem, CWMLog, MediaRequest, ActivityEvent,
@@ -24,6 +27,7 @@ class Storage:
     def __init__(self, data_dir: str = "./data"):
         self.data_dir = Path(data_dir).expanduser().resolve(strict=False)
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        prepare(self.data_dir)
         try:
             self.data_dir.chmod(0o700)
         except OSError:
@@ -51,26 +55,35 @@ class Storage:
     async def load_all(self) -> None:
         """Load all data from disk into memory."""
         self._init_db()
-        self._config = self._load_config_sqlite() or self._load_config()
-        self._downloads = self._load_downloads_sqlite() or self._load_downloads()
-        self._library = self._load_library_sqlite() or self._load_library()
-        self._requests = self._load_requests_sqlite() or self._load_requests()
-        self._cwm_logs = self._load_cwm_logs_sqlite() or self._load_cwm_logs()
-        self._activity = self._load_activity()
-
-        # Seed/refresh SQLite from the in-memory state so older JSON installs are migrated.
-        await self._save_config_sqlite(self._config)
-        await self._save_downloads_sqlite()
-        await self._save_library_sqlite()
-        await self._save_requests_sqlite()
-        await self._save_cwm_logs_sqlite()
+        stored_config = self._load_config_sqlite()
+        established = stored_config is not None
+        self._config = stored_config if established else self._load_config()
+        # An empty established table is intentional. A stale JSON mirror must
+        # never resurrect removed records or replace a corrupt SQLite database.
+        self._downloads = self._load_downloads_sqlite() if established else self._load_downloads()
+        self._library = self._load_library_sqlite() if established else self._load_library()
+        self._requests = self._load_requests_sqlite() if established else self._load_requests()
+        self._cwm_logs = self._load_cwm_logs_sqlite() if established else self._load_cwm_logs()
+        self._activity = self._load_activity(sqlite_only=established)
+        if not established:
+            # Commit imported tables first; config is the final migration marker.
+            # A crash before that marker repeats import from the untouched JSON.
+            await self._save_downloads_sqlite()
+            await self._save_library_sqlite()
+            await self._save_requests_sqlite()
+            await self._save_cwm_logs_sqlite()
+            await self._save_config_sqlite(self._config)
 
     # ─── SQLite ──────────────────────────────────────────────────────────
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
+    @contextmanager
+    def _connect(self):
+        conn = sqlite3.connect(self._db_path, timeout=15)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn: yield conn
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._connect() as conn:
@@ -128,8 +141,8 @@ class Storage:
             with self._connect() as conn:
                 row = conn.execute("SELECT data FROM config WHERE id = 1").fetchone()
             return SparrowConfig.from_dict(json.loads(row["data"])) if row else None
-        except Exception:
-            return None
+        except Exception as exc:
+            raise ValueError('Could not load stored state; the database has been preserved for recovery.') from exc
 
     async def _save_config_sqlite(self, config: SparrowConfig) -> None:
         with self._connect() as conn:
@@ -143,8 +156,8 @@ class Storage:
             with self._connect() as conn:
                 rows = conn.execute("SELECT data FROM downloads").fetchall()
             return {d.id: d for d in (Download.from_dict(json.loads(r["data"])) for r in rows)}
-        except Exception:
-            return {}
+        except Exception as exc:
+            raise ValueError('Could not load stored state; the database has been preserved for recovery.') from exc
 
     async def _save_downloads_sqlite(self) -> None:
         with self._connect() as conn:
@@ -159,8 +172,8 @@ class Storage:
             with self._connect() as conn:
                 rows = conn.execute("SELECT data FROM library_items").fetchall()
             return {i.id: i for i in (LibraryItem.from_dict(json.loads(r["data"])) for r in rows)}
-        except Exception:
-            return {}
+        except Exception as exc:
+            raise ValueError('Could not load stored state; the database has been preserved for recovery.') from exc
 
     async def _save_library_sqlite(self) -> None:
         with self._connect() as conn:
@@ -175,8 +188,8 @@ class Storage:
             with self._connect() as conn:
                 rows = conn.execute("SELECT data FROM media_requests").fetchall()
             return {r.id: r for r in (MediaRequest.from_dict(json.loads(row["data"])) for row in rows)}
-        except Exception:
-            return {}
+        except Exception as exc:
+            raise ValueError('Could not load stored state; the database has been preserved for recovery.') from exc
 
     async def _save_requests_sqlite(self) -> None:
         with self._connect() as conn:
@@ -199,8 +212,8 @@ class Storage:
             with self._connect() as conn:
                 rows = conn.execute("SELECT data FROM cwm_logs ORDER BY timestamp ASC").fetchall()
             return [CWMLog(**json.loads(r["data"])) for r in rows]
-        except Exception:
-            return []
+        except Exception as exc:
+            raise ValueError('Could not load stored state; the database has been preserved for recovery.') from exc
 
     async def _save_cwm_logs_sqlite(self) -> None:
         with self._connect() as conn:
@@ -216,8 +229,8 @@ class Storage:
         if self._config_path.exists():
             try:
                 return SparrowConfig.from_dict(json.loads(self._config_path.read_text()))
-            except Exception:
-                pass
+            except Exception as exc:
+                raise ValueError("Cannot migrate malformed config.json; original data was preserved.") from exc
         return SparrowConfig()
 
     def get_config(self) -> SparrowConfig:
@@ -229,7 +242,7 @@ class Storage:
         async with self._lock:
             self._config = config
             await self._save_config_sqlite(config)
-            self._config_path.write_text(json.dumps(config.to_dict(), indent=2))
+            atomic_text(self._config_path, json.dumps(config.to_dict(), indent=2))
             try:
                 self._config_path.chmod(0o600)
                 self._db_path.chmod(0o600)
@@ -243,14 +256,14 @@ class Storage:
             try:
                 raw = json.loads(self._downloads_path.read_text())
                 return {d["id"]: Download.from_dict(d) for d in raw}
-            except Exception:
-                pass
+            except Exception as exc:
+                raise ValueError("Cannot migrate malformed downloads.json; original data was preserved.") from exc
         return {}
 
     async def _save_downloads(self) -> None:
         data = [d.to_dict() for d in self._downloads.values()]
         await self._save_downloads_sqlite()
-        self._downloads_path.write_text(json.dumps(data, indent=2))
+        atomic_text(self._downloads_path, json.dumps(data, indent=2))
 
     async def add_download(self, download: Download) -> Download:
         async with self._lock:
@@ -296,14 +309,14 @@ class Storage:
             try:
                 raw = json.loads(self._library_path.read_text())
                 return {i["id"]: LibraryItem.from_dict(i) for i in raw}
-            except Exception:
-                pass
+            except Exception as exc:
+                raise ValueError("Cannot migrate malformed library.json; original data was preserved.") from exc
         return {}
 
     async def _save_library(self) -> None:
         data = [i.to_dict() for i in self._library.values()]
         await self._save_library_sqlite()
-        self._library_path.write_text(json.dumps(data, indent=2))
+        atomic_text(self._library_path, json.dumps(data, indent=2))
 
     # ─── Requests ────────────────────────────────────────────────────────
 
@@ -312,14 +325,14 @@ class Storage:
             try:
                 raw = json.loads(self._requests_path.read_text())
                 return {r["id"]: MediaRequest.from_dict(r) for r in raw}
-            except Exception:
-                pass
+            except Exception as exc:
+                raise ValueError("Cannot migrate malformed requests.json; original data was preserved.") from exc
         return {}
 
     async def _save_requests(self) -> None:
         data = [r.to_dict() for r in self._requests.values()]
         await self._save_requests_sqlite()
-        self._requests_path.write_text(json.dumps(data, indent=2))
+        atomic_text(self._requests_path, json.dumps(data, indent=2))
 
     async def add_request(self, request: MediaRequest) -> MediaRequest:
         async with self._lock:
@@ -405,8 +418,8 @@ class Storage:
             try:
                 raw = json.loads(self._cwm_logs_path.read_text())
                 return [CWMLog(**l) for l in raw]
-            except Exception:
-                pass
+            except Exception as exc:
+                raise ValueError("Cannot migrate malformed cwm_logs.json; original data was preserved.") from exc
         return []
 
     async def add_cwm_log(self, event_type: str, summary: str, detail: str = "", affected_ids: list[str] = None) -> CWMLog:
@@ -423,7 +436,7 @@ class Storage:
             # Keep last 500 logs
             self._cwm_logs = self._cwm_logs[-500:]
             await self._save_cwm_logs_sqlite()
-            self._cwm_logs_path.write_text(
+            atomic_text(self._cwm_logs_path,
                 json.dumps([l.to_dict() for l in self._cwm_logs], indent=2)
             )
         return log
@@ -433,16 +446,16 @@ class Storage:
 
     # ─── Activity Feed ───────────────────────────────────────────────────
 
-    def _load_activity(self) -> list[ActivityEvent]:
+    def _load_activity(self, sqlite_only=False) -> list[ActivityEvent]:
         try:
             with self._connect() as conn:
                 rows = conn.execute(
                     "SELECT data FROM activity_events ORDER BY timestamp ASC"
                 ).fetchall()
-            if rows:
+            if rows or sqlite_only:
                 return [ActivityEvent(**json.loads(r["data"])) for r in rows]
         except Exception:
-            pass
+            if sqlite_only: raise
         if self._activity_path.exists():
             try:
                 raw = json.loads(self._activity_path.read_text())
@@ -479,7 +492,7 @@ class Storage:
                     "INSERT INTO activity_events (id, data, timestamp) VALUES (?, ?, ?)",
                     [(e.id, json.dumps(e.to_dict()), e.timestamp) for e in self._activity],
                 )
-            self._activity_path.write_text(
+            atomic_text(self._activity_path,
                 json.dumps([e.to_dict() for e in self._activity], indent=2)
             )
         return event

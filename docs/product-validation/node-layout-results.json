@@ -1,0 +1,17 @@
+{
+  "platform": "Linux Tk layout only; not Windows acceptance",
+  "results": [
+    {
+      "width": 620,
+      "height": 740,
+      "primary_action_visible": true,
+      "last_field_reachable": true
+    },
+    {
+      "width": 500,
+      "height": 640,
+      "primary_action_visible": true,
+      "last_field_reachable": true
+    }
+  ]
+}

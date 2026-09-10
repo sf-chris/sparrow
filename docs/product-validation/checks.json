@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-10",
+  "unit_tests": {
+    "run": 107,
+    "passed": 105,
+    "skipped_live_model": 2
+  },
+  "checks": {
+    "python_compile": true,
+    "pip_check": true,
+    "production_frontend_build": true,
+    "npm_advisories": 0,
+    "release_tree": true,
+    "undefined_names_and_syntax": true,
+    "git_diff_check": true
+  },
+  "browser": {
+    "direct_and_converted_playback": true,
+    "api_failures": 0,
+    "page_errors": 0,
+    "responsive_widths": [
+      360,
+      390,
+      768,
+      1440
+    ],
+    "automated_accessibility_violations": 0,
+    "household_and_recovery": true,
+    "dialog_keyboard_and_action_visibility": true,
+    "administrator_setup_link": true,
+    "eight_character_passwords": true,
+    "discovery_prompt_and_recovery": true
+  },
+  "administrator_setup": "administrator-setup-results.json",
+  "subtitle_benchmark": "subtitle-benchmark.json",
+  "linux_package": "package-results.json",
+  "pending": [
+    "Native Windows installer/service/NTFS execution",
+    "Owner Windows-to-phone journey",
+    "Physical mobile/Safari/iOS checks",
+    "Live subtitle-provider account validation",
+    "Live model-quality evaluation"
+  ],
+  "visual_redesign": "redesign-results.json",
+  "visual_redesign_live": "redesign-live-results.json"
+}

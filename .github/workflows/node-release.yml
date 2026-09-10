@@ -1,0 +1,55 @@
+name: Build Windows storage node
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  media:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned media programs with corresponding sources
+        run: docker build -f packaging/media/Dockerfile --build-arg MEDIA_PLATFORM=windows --output type=local,dest=packaging/build/media .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-media
+          path: packaging/build/media
+  windows:
+    needs: media
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-media
+          path: packaging/build/media
+      - run: python -m pip install --require-hashes -r requirements.lock
+      - run: python -m pip install pyinstaller==6.22.2
+      - run: python packaging/fetch_sources.py packaging/build/inputs
+      - run: python packaging/fetch_model.py packaging/build/models/whisper-base
+      - name: Portable file, restart and media checks on NTFS
+        shell: pwsh
+        run: |
+          $env:SPARROW_FFMPEG = "$pwd/packaging/build/media/bin/ffmpeg.exe"
+          $env:SPARROW_FFPROBE = "$pwd/packaging/build/media/bin/ffprobe.exe"
+          python -m unittest discover -s tests -p test_nodes.py
+          python -m unittest discover -s tests -p test_playback.py
+      - run: python -m PyInstaller --clean --noconfirm packaging/windows/node.spec
+      - run: python packaging/collect_licenses.py dist/SparrowNode/licenses
+      - name: Build installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe" packaging/windows/installer.iss'
+      - name: Native installed service checks
+        shell: pwsh
+        run: ./tests/windows_service_check.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SparrowNode-Windows-x64
+          path: |
+            packaging/output/SparrowNode-Setup-x64.exe
+            packaging/build/media/sources
+            packaging/windows/installer.iss
+            packaging/THIRD_PARTY.md

@@ -1,0 +1,17 @@
+services:
+  sparrow:
+    build: .
+    image: sparrow:local
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:8888:8888"
+    volumes:
+      - sparrow-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 45s
+volumes:
+  sparrow-data:

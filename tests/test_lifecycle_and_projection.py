@@ -117,9 +117,9 @@ class PauseResumeCancelTests(LifecycleBase):
 
         cancelled = await self.service.cancel_job(job.id)
         self.assertEqual(cancelled.status, JobStatus.ABANDONED)
-        # The unfinished transfer and its partial files are gone…
-        self.assertIn((pending.torrent_hash, True), self.manager.deleted)
-        self.assertFalse(Path(pending.staging_path).exists())
+        # The unfinished transfer is removed; its staging source remains recoverable.
+        self.assertIn((pending.torrent_hash, False), self.manager.deleted)
+        self.assertTrue(Path(pending.staging_path).exists())
         self.assertEqual(self.storage.get_download(pending.id).status,
                          DownloadStatus.ERROR)
         # …the finished, organized episode is untouched.
@@ -139,7 +139,7 @@ class PauseResumeCancelTests(LifecycleBase):
         await self.service.cancel_job(job.id)
         self.assertTrue(self.staging.exists())
         self.assertTrue((self.staging / "unrelated.mkv").exists())
-        self.assertIn((legacy.torrent_hash, True), self.manager.deleted)
+        self.assertIn((legacy.torrent_hash, False), self.manager.deleted)
 
 
 class LibraryProjectionTests(LifecycleBase):
@@ -161,10 +161,12 @@ class LibraryProjectionTests(LifecycleBase):
         await self._download("dl-x", job.id, DownloadStatus.DOWNLOADING,
                              progress=0.4, size_bytes=1000, download_speed=100,
                              eta_seconds=600, stats_updated_at=__import__("time").time())
+        episode = self.library / "fixture.mkv"
+        episode.write_bytes(b"fixture")
         await self.storage.add_library_item(LibraryItem(
             id="tv-7", title="Fixture", media_type=MediaType.TV,
             path=str(self.library / "Fixture"), tmdb_id=7,
-            episodes={"1": {"1": {"path": "x", "verified": True,
+            episodes={"1": {"1": {"path": str(episode), "verified": True,
                                   "quality": "1080p"}}}))
         view = build_library_view(self.storage, self.service.store)
         entry = next(e for e in view if e["tmdb_id"] == 7)

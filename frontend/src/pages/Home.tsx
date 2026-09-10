@@ -11,14 +11,14 @@ import { useWebSocket } from '../hooks/useWebSocket'
 import { Badge, Button, SectionHeader } from '../components/ui'
 
 const QUALITY_OPTIONS = [
-  { value: '', label: 'Best available' },
+  { value: '', label: 'Use my preferred quality' },
   { value: '2160p', label: '4K' },
   { value: '1080p', label: 'Full HD' },
   { value: '720p', label: 'HD' },
 ] as const
 
 const MIN_QUALITY_OPTIONS = [
-  { value: '', label: 'Anything watchable' },
+  { value: '', label: 'Use my minimum quality' },
   { value: '1080p', label: 'Full HD or better' },
   { value: '720p', label: 'HD or better' },
 ] as const
@@ -158,7 +158,7 @@ function ResolveCardTile({
         </p>
 
         <div className="mt-2 space-y-2">
-          {gotten ? (
+          {gotten || card.active_job ? (
             <Badge tone="success" className="max-w-full">
               <Sparkles size={11} className="shrink-0" /> Sparrow is on it
             </Badge>
@@ -169,10 +169,10 @@ function ResolveCardTile({
                   variant="primary"
                   size="sm"
                   disabled={getting}
-                  onClick={() => onGet(card, knobs)}
+                  onClick={() => card.media_type === 'tv' ? openShow() : onGet(card, knobs)}
                 >
                   {getting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                  Get
+                  {card.media_type === 'tv' ? 'Choose episodes' : 'Get movie'}
                 </Button>
                 <button
                   type="button"
