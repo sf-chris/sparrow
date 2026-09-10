@@ -1,0 +1,245 @@
+{
+  "results": [
+    {
+      "name": "home",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "home",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "home",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "home",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "discover",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "discover",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "discover",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "discover",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "library",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "library",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "library",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "library",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "preferences",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "preferences",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "preferences",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "preferences",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "security",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "security",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "security",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "security",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "password-dialog",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "password-dialog",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "password-dialog",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "password-dialog",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-time-range",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-time-range",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-time-range",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-time-range",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-empty",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-empty",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-empty",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-empty",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-error",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-error",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-error",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "logs-error",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    }
+  ],
+  "errors": []
+}

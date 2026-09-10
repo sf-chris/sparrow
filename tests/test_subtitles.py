@@ -96,6 +96,8 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
     ):
         task = await self.prepared(review=True)
         self.assertEqual(task["state"], "ready")
+        logged = self.storage.operations.page(self.owner, category="subtitle")
+        self.assertEqual(logged["entries"][0]["severity"], "success")
         tracks = (
             await self.client.get(f"/api/v1/assets/{self.asset}/subtitles")
         ).json()["tracks"]
@@ -129,6 +131,9 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
     ):
         task = await self.prepared()
         self.assertEqual(task["state"], "review_pending")
+        logged = self.storage.operations.page(self.owner, category="subtitle")
+        self.assertEqual(logged["entries"][0]["severity"], "warning")
+        self.assertIn("retry", logged["entries"][0]["summary"])
         track = self.subtitles.tracks(self.owner, self.asset)[0]
         self.assertEqual((await self.client.get(track["url"])).status_code, 404)
         session = await self.start()

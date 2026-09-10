@@ -16,3 +16,7 @@ image-generation assets or runtime dependencies were added.
 `tests/browser/server.py` creates six original geometric posters and backdrops
 for clearly fictional browser fixtures. Production uses actual catalogue images
 and the shared SVG/CSS fallback when those are missing.
+
+The current [README gallery](screenshots/README.md) is captured directly from
+that fixture with `tests/browser/screenshots.cjs`. Desktop and phone images
+share the production frontend and its bundled assets; none is a mockup.

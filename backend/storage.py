@@ -28,6 +28,8 @@ class Storage:
         self.data_dir = Path(data_dir).expanduser().resolve(strict=False)
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         prepare(self.data_dir)
+        from .agents.operations import Operations
+        self.operations = Operations(self.data_dir)
         try:
             self.data_dir.chmod(0o700)
         except OSError:
@@ -269,6 +271,7 @@ class Storage:
         async with self._lock:
             self._downloads[download.id] = download
             await self._save_downloads()
+            self.operations.download(download)
         return download
 
     async def update_download(self, download_id: str, **kwargs) -> Optional[Download]:
@@ -280,6 +283,7 @@ class Storage:
                 if hasattr(dl, k):
                     setattr(dl, k, v)
             await self._save_downloads()
+            self.operations.download(dl)
             return dl
 
     async def delete_download(self, download_id: str) -> bool:

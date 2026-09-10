@@ -233,6 +233,36 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual((await self.client.get(session["url"])).status_code, 409)
 
+    async def test_logs_record_playback_failure_and_recovery_without_exposing_paths(
+        self,
+    ):
+        from unittest.mock import patch, AsyncMock
+        from backend.agents.node_executor import NodeError
+        from backend.agents.operations import install_operations
+
+        install_operations(self.app, self.storage)
+        with patch.object(
+            self.nodes,
+            "execute",
+            new=AsyncMock(side_effect=NodeError("private/path?token=secret")),
+        ):
+            response = await self.client.post(
+                "/api/v1/playback", json={"asset_id": self.asset}
+            )
+            self.assertEqual(response.status_code, 409)
+        failed = (await self.client.get("/api/v1/logs?category=playback")).json()
+        self.assertEqual(failed["total"], 1)
+        self.assertEqual(failed["entries"][0]["severity"], "error")
+        self.assertNotIn("token=secret", str(failed))
+        await self.start()
+        recovered = (await self.client.get("/api/v1/logs?category=playback")).json()
+        self.assertEqual(recovered["total"], 2)
+        self.assertEqual(recovered["entries"][0]["severity"], "success")
+        await self.start()
+        self.assertEqual(
+            (await self.client.get("/api/v1/logs?category=playback")).json()["total"], 2
+        )
+
 
 class RangeTests(unittest.TestCase):
     def test_range_boundaries(self):

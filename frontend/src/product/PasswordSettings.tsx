@@ -1,9 +1,14 @@
 import { useState } from "react";
 import PasswordField from "./PasswordField";
 import { post } from "./api";
-import { ErrorNote } from "./ui";
-export default function PasswordSettings() {
-  const [current, setCurrent] = useState(""),
+import { Dialog, ErrorNote } from "./ui";
+export default function PasswordSettings({
+  onChanged,
+}: {
+  onChanged?: () => void;
+}) {
+  const [open, setOpen] = useState(false),
+    [current, setCurrent] = useState(""),
     [next, setNext] = useState(""),
     [again, setAgain] = useState(""),
     [error, setError] = useState(""),
@@ -27,47 +32,81 @@ export default function PasswordSettings() {
       setNext("");
       setAgain("");
       setSaved(true);
+      onChanged?.();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
+  function close() {
+    setOpen(false);
+    setCurrent("");
+    setNext("");
+    setAgain("");
+    setError("");
+  }
   return (
-    <details className="mt-4">
-      <summary className="sp-button quiet">Change your password</summary>
-      <form className="sp-form mt-4" onSubmit={save}>
-        <ErrorNote error={error} />
-        <p className="sp-muted">
-          Changing your password signs out your other browser sessions.
-        </p>
-        <PasswordField
-          label="Current password"
-          value={current}
-          onChange={setCurrent}
-        />
-        <PasswordField
-          label="New password"
-          creating
-          value={next}
-          onChange={setNext}
-          hint="8 characters or more."
-        />
-        <PasswordField
-          label="Repeat new password"
-          creating
-          value={again}
-          onChange={setAgain}
-        />
-        <div className="sp-savebar">
-          <span className="sp-success" role="status">
-            {saved ? "Password changed." : ""}
-          </span>
-          <button className="sp-button secondary" disabled={busy}>
-            {busy ? "Saving…" : "Change password"}
-          </button>
+    <>
+      <section
+        className="sp-password-setting"
+        aria-labelledby="password-heading"
+      >
+        <div>
+          <h2 id="password-heading">Password</h2>
+          <p className="sp-muted">Keep your account secure.</p>
+          {!open && saved && (
+            <p className="sp-success" role="status">
+              Password changed.
+            </p>
+          )}
         </div>
-      </form>
-    </details>
+        <button
+          className="sp-button secondary"
+          onClick={() => {
+            setSaved(false);
+            setOpen(true);
+          }}
+        >
+          Change your password
+        </button>
+      </section>
+      {open && (
+        <Dialog title="Change password" onClose={close}>
+          <form className="sp-form" onSubmit={save}>
+            <ErrorNote error={error} />
+            <p className="sp-muted">
+              Changing your password signs out your other browser sessions.
+            </p>
+            <PasswordField
+              label="Current password"
+              value={current}
+              onChange={setCurrent}
+            />
+            <PasswordField
+              label="New password"
+              creating
+              value={next}
+              onChange={setNext}
+              hint="8 characters or more."
+            />
+            <PasswordField
+              label="Repeat new password"
+              creating
+              value={again}
+              onChange={setAgain}
+            />
+            <div className="sp-savebar">
+              <span className="sp-success" role="status">
+                {saved ? "Password changed." : ""}
+              </span>
+              <button className="sp-button primary" disabled={busy}>
+                {busy ? "Saving…" : "Change password"}
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+    </>
   );
 }
