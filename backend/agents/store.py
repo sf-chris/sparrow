@@ -37,6 +37,9 @@ class AgentStore:
         self.memory_dir = self.data_dir / "memory"
         (self.memory_dir / "shows").mkdir(parents=True, exist_ok=True)
         self._init_db()
+        from .evidence import EvidenceArchive
+
+        self.evidence = EvidenceArchive(self)
         from .operations import Operations
 
         self.operations = Operations(self.data_dir)
@@ -343,13 +346,16 @@ class AgentStore:
 
     def finish_invocation(
         self, session: AgentSession, tool_id: str, result: dict, control: dict
-    ) -> None:
+    ) -> dict:
         with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            result = self.evidence.capture(db, session, tool_id, result)
             self._save_session(db, session)
             db.execute(
                 "UPDATE agent_invocations SET result=?,control=? WHERE session_id=? AND tool_id=?",
                 (json.dumps(result), json.dumps(control), session.id, tool_id),
             )
+        return result
 
     def get_session(self, session_id: str) -> Optional[AgentSession]:
         with self._connect() as conn:

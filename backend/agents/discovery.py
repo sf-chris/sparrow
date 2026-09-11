@@ -171,7 +171,7 @@ class Discovery:
                         for a in self.catalogue.assets(user, i.id)
                     ],
                 }
-                for i in items[:50]
+                for i in items
             ]
 
         async def finish(ctx, args):

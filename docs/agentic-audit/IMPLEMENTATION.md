@@ -48,13 +48,13 @@ the parent issue remains the acceptance tracker. Unchecked work is not complete.
 
 ## GitHub disposition and dependency map
 
-Read-only enumeration on 11 September 2026 found one issue: #3, active. PRs #1
-and #2 are merged historical implementations. PR #4 is the active documentation
-handoff, not completion of #3. No older issues, native child dependencies or
-obsolete blockers were found to close. External Mogged issues remain references.
-No issue closure is justified by this inventory. The implementation is now
-published in [draft PR #5](https://github.com/sf-chris/sparrow/pull/5), which includes
-the not-yet-merged #4 documentation commits and explicitly does not close #3.
+Enumeration on 11 September 2026 found one issue: #3, active. PRs #1 and #2 are
+merged historical implementations. [PR #5](https://github.com/sf-chris/sparrow/pull/5)
+merged at `a7f99c6` with owner authorization and successful Product checks. It
+included the #4 documentation commits; GitHub also marked #4 merged. Neither
+completes #3. No older issues, native child dependencies or obsolete blockers
+were found to close. External Mogged issues remain references. No issue closure
+is justified by this inventory.
 
 Before and after this initial inventory: P1 inventory → P2 baseline → P3 recovery
 → P4 profiles/evidence → P5/P6/P7; P8 records a framework decision after the shared
@@ -124,12 +124,18 @@ the old enable flag set (GET 404; removed POST handlers 405).
 
 ## Remaining issue #3 work (do not close the parent)
 
+The next P4 slice adds [retrievable oversized observations](EVIDENCE.md), atomic
+with invocation receipts, private to a session and subject to explicit storage
+limits. Fetch search/file listings, Discovery collection matches and Librarian
+candidates retain all locally available rows. The linked record states the
+retrieval contract, measured regression cases and remaining evidence boundaries.
+
 | Package | Current boundary and next acceptance |
 | --- | --- |
 | P1 | Inventory and the removals above delivered. Remaining v2 curator/goals/requests, legacy description model calls, shared deterministic utilities and dated galleries still need their owning migrations/removal audit |
 | P2 | Current Librarian live fixture and 30-case controlled baseline delivered. Add full live fixtures for the other roles, separate unseen holdout, real-model/provider repetitions and full measured outcome costs |
 | P3 | Core event/result persistence and recovery delivered with controlled crash tests. Extend combined restart/revision/provider chaos scenarios in the final acceptance pilot; conservative uncertain effects still require receipt investigation |
-| P4 | Versioned provider profiles/effort, bounded escalation, complete retrievable evidence, quotas and recoverable compaction remain. Existing 40,000-character previews/history trimming are not represented as fixed |
+| P4 | Oversized tool observations now have complete saved artifacts, explicit previews, bounded retrieval/listing and serialized storage quotas. Versioned provider profiles/effort, bounded escalation, structured checkpoints/recoverable compaction, cross-session handoffs, retention policy and fuller source pagination remain |
 | P5 | Rich Discovery intent/edition constraints, complete acquisition candidate evidence, targeted missing-episode investigation and structured Fetch/Media results remain |
 | P6 | Structured rejected/missing-file results, optional import investigation and richer subtitle samples/candidate/repair tools remain |
 | P7 | Durable review and shared allowance foundation delivered; scoped evidence-backed lessons, useful policy windows/renewal and complete standing-care quality gates remain |

@@ -606,7 +606,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
         except Exception as exc:
             raise ToolError('The acquisition source is unavailable. This is not an empty search result; wait for the source to recover before trying more queries.') from exc
         out = []
-        for r in raw[:60]:
+        for r in raw:
             try:
                 size = int(r.get("size", 0))
             except (TypeError, ValueError):
@@ -650,7 +650,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
             return ("No file listing available for this torrent (the indexer doesn't "
                     "have it). If the swarm is healthy you can grab it, inspect what "
                     "arrives, and abandon it if it's wrong.")
-        return files[:200]
+        return files
 
     async def add(ctx: ToolCtx, args: dict):
         # Reserve durably before external work. The shared lock makes the cap

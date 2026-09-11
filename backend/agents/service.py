@@ -329,9 +329,9 @@ class AgentService:
             agent=AgentKind.LIBRARIAN, model=self.cheap_model()
         )
         toolsets = {
-            "fetch": self.runtime._specs["fetch"].tools(fetch_session),
-            "media": self.runtime._specs["media"].tools(media_session),
-            "librarian": self.runtime._specs["librarian"].tools(librarian_session),
+            "fetch": self.runtime.tools_for(fetch_session),
+            "media": self.runtime.tools_for(media_session),
+            "librarian": self.runtime.tools_for(librarian_session),
         }
 
         def tools_for(agent: str) -> list[dict]:
