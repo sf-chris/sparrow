@@ -22,6 +22,7 @@ from ..services.torrent_client import TorrentManager, start_configured_client
 from . import prompts
 from .models import (
     AgentKind,
+    CaseState,
     AgentSession,
     Event,
     Job,
@@ -36,10 +37,7 @@ from .store import AgentStore
 from .accounts import Accounts
 from .tools import (
     Toolbox,
-    fetch_tools,
     journal_tool,
-    librarian_tools,
-    media_tools,
     memory_tools,
     remove_download_staging,
     tmdb_tools,
@@ -131,9 +129,9 @@ class AgentService:
         self._create_lock = asyncio.Lock()
         self._tasks: list[asyncio.Task] = []
         self._wake_tasks: set[asyncio.Task] = set()
-        self._progress_seen: dict[str, tuple[float, float]] = (
-            {}
-        )  # dl_id -> (progress, ts)
+        self._progress_seen: dict[
+            str, tuple[float, float]
+        ] = {}  # dl_id -> (progress, ts)
         self._stall_flagged: set[str] = set()
         self._client_up: Optional[bool] = None
         self._client_recovery_after = 0.0
@@ -187,9 +185,6 @@ class AgentService:
                 + json.dumps(job.preferences if job else {}, sort_keys=True)
             )
 
-        async def librarian_system(session: AgentSession) -> str:
-            return prompts.librarian_system(session)
-
         self.runtime.register(
             AgentSpec(
                 kind=AgentKind.FETCH.value,
@@ -218,20 +213,6 @@ class AgentService:
                 ],
             )
         )
-        self.runtime.register(
-            AgentSpec(
-                kind=AgentKind.LIBRARIAN.value,
-                model=self.cheap_model,
-                system=librarian_system,
-                tools=lambda s: [
-                    journal_tool(tb, "librarian"),
-                    wake_tool(tb),
-                    *memory_tools(tb),
-                    *tmdb_tools(tb),
-                    *librarian_tools(tb, self.create_job),
-                ],
-            )
-        )
 
     async def _session_changed(self, session: AgentSession) -> None:
         await self.broadcast(
@@ -242,6 +223,7 @@ class AgentService:
                     "agent": session.agent.value,
                     "job_id": session.job_id,
                     "status": session.status.value,
+                    "outcome": session.outcome.value,
                     "wake_at": session.wake_at,
                     "wake_reason": session.wake_reason,
                     "spend": spend_snapshot(session),
@@ -347,27 +329,9 @@ class AgentService:
             agent=AgentKind.LIBRARIAN, model=self.cheap_model()
         )
         toolsets = {
-            "fetch": [
-                journal_tool(self.toolbox, "fetch"),
-                wake_tool(self.toolbox),
-                *memory_tools(self.toolbox),
-                *tmdb_tools(self.toolbox),
-                *fetch_tools(self.toolbox),
-            ],
-            "media": [
-                journal_tool(self.toolbox, "media"),
-                wake_tool(self.toolbox),
-                *memory_tools(self.toolbox),
-                *tmdb_tools(self.toolbox),
-                *media_tools(self.toolbox),
-            ],
-            "librarian": [
-                journal_tool(self.toolbox, "librarian"),
-                wake_tool(self.toolbox),
-                *memory_tools(self.toolbox),
-                *tmdb_tools(self.toolbox),
-                *librarian_tools(self.toolbox, self.create_job),
-            ],
+            "fetch": self.runtime._specs["fetch"].tools(fetch_session),
+            "media": self.runtime._specs["media"].tools(media_session),
+            "librarian": self.runtime._specs["librarian"].tools(librarian_session),
         }
 
         def tools_for(agent: str) -> list[dict]:
@@ -402,8 +366,8 @@ class AgentService:
                 "agent": "librarian",
                 "label": "Librarian",
                 "model": self.cheap_model(),
-                "context": "Standing library-wide prompt.",
-                "prompt": prompts.librarian_system(librarian_session),
+                "context": "Standing prompt for one person and one subscription.",
+                "prompt": self.curation.system_prompt(),
                 "tools": tools_for("librarian"),
             },
         ]
@@ -432,28 +396,28 @@ class AgentService:
         await asyncio.sleep(5)
         self._normalize_closed_sessions()
         await self._reconcile_completed_media_sessions()
-        # Sessions that died mid-turn resume with an honest note.
+        # Route persisted facts first, then recover accepted-but-interrupted turns.
+        for event in self.store.unrouted_events():
+            await self.emit(event)
+        pending = set(self.store.pending_session_ids())
         for s in self.store.get_sessions(open_only=True):
-            if s.agent in (
-                AgentKind.DISCOVERY,
-                AgentKind.LIBRARIAN,
-                AgentKind.SUBTITLE,
-            ):
-                s.status = SessionStatus.HIBERNATING
-                s.wake_at = 0
-                s.wake_reason = (
-                    "Search interrupted by a restart. Refine your search to continue."
-                )
-                self.store.save_session(s)
+            if s.agent == AgentKind.LIBRARIAN:
+                row = self.curation.row(s.download_id)
+                if row and row["data"].get("session_id") == s.id:
+                    # Curation gathers current authority/storage facts before retrying.
+                    self.curation.save(
+                        row, next_check=s.wake_at if s.wake_at > time.time() else 0
+                    )
                 continue
-            if s.status == SessionStatus.RUNNING:
+            if s.id in pending:
+                self._resume_soon(s.id)
+            elif s.status == SessionStatus.RUNNING:
                 await self.emit(
                     Event(
                         kind="restart",
                         session_id=s.id,
                         payload={
-                            "description": "Sparrow restarted while you were mid-turn. "
-                            "Check your journal and current state, then continue."
+                            "description": "Sparrow restarted during this review. Inspect saved tool outcomes and current evidence before continuing."
                         },
                     )
                 )
@@ -541,6 +505,7 @@ class AgentService:
     # ─── Event routing (zero decisions, only delivery) ───────────────────
 
     async def emit(self, event: Event) -> None:
+        self.store.enqueue_event(event)
         codes = {
             "download_stalled": "download_stalled",
             "download_recovered": "download_recovered",
@@ -556,6 +521,7 @@ class AgentService:
                 )
         try:
             await self._route(event)
+            self.store.mark_routed(event)
         except Exception:
             logger.exception("event routing failed for %s", event.kind)
 
@@ -586,9 +552,14 @@ class AgentService:
                 self.curation.save(row, next_check=0)
 
     def _wake_soon(self, session_id: str, event: Event) -> None:
+        self.store.enqueue_delivery(session_id, event)
+        self._resume_soon(session_id)
+
+    def _resume_soon(self, session_id: str) -> None:
         async def _go():
             try:
-                await self.runtime.wake(session_id, event)
+                async with self.runtime._lock(session_id):
+                    await self.runtime._run(session_id)
             except Exception:
                 logger.exception("wake failed (session %s)", session_id)
 
@@ -600,7 +571,7 @@ class AgentService:
         """A download landed: one Media Agent session per landed download."""
         existing = [
             s
-            for s in self.store.get_sessions(AgentKind.MEDIA, open_only=True)
+            for s in self.store.get_sessions(AgentKind.MEDIA)
             if s.download_id == event.download_id
         ]
         if existing:
@@ -890,14 +861,11 @@ class AgentService:
         while True:
             try:
                 await asyncio.sleep(TIMER_INTERVAL)
+                for event in self.store.unrouted_events():
+                    await self.emit(event)
                 for s in self.store.due_sessions():
-                    if s.agent in (
-                        AgentKind.LIBRARIAN,
-                        AgentKind.DISCOVERY,
-                        AgentKind.SUBTITLE,
-                    ):
-                        s.wake_at = 0
-                        self.store.save_session(s)
+                    if s.agent == AgentKind.LIBRARIAN:
+                        await self.curation.check(s.download_id)
                         continue
                     job = self.store.get_job(s.job_id) if s.job_id else None
                     if job and job.status == JobStatus.PAUSED:
@@ -1067,6 +1035,16 @@ class AgentService:
                 }
 
                 if progress >= 1.0 and not dl.metadata.get("landed_emitted"):
+                    landing = Event(
+                        kind="files_landed",
+                        job_id=dl.metadata.get("job_id", ""),
+                        download_id=dl.id,
+                        payload={
+                            "description": f'Download finished: "{dl.name}". '
+                            "Files are in staging."
+                        },
+                    )
+                    self.store.enqueue_event(landing)
                     dl.metadata["landed_emitted"] = True
                     await self.storage.update_download(
                         dl.id,
@@ -1078,17 +1056,7 @@ class AgentService:
                     await self.broadcast(
                         {"type": "download_update", "data": (refreshed or dl).to_dict()}
                     )
-                    await self.emit(
-                        Event(
-                            kind="files_landed",
-                            job_id=dl.metadata.get("job_id", ""),
-                            download_id=dl.id,
-                            payload={
-                                "description": f'Download finished: "{dl.name}". '
-                                "Files are in staging."
-                            },
-                        )
-                    )
+                    await self.emit(landing)
                     continue
 
                 # Persist and broadcast live numbers every poll — active

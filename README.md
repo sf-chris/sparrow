@@ -155,6 +155,6 @@ for private security reports and follow the [Code of Conduct](CODE_OF_CONDUCT.md
 
 Sparrow's code is [AGPL-3.0-or-later licensed](LICENSE). Its bird and illustrations are original
 SVG artwork; bundled typography and its licenses are documented in
-[the asset notes](docs/REIMAGINED_ASSETS.md). Media dependencies retain their own
+[the asset notes](docs/PRODUCT_DESIGN.md#artwork-and-font-provenance). Media dependencies retain their own
 licenses: [third-party notices](packaging/THIRD_PARTY.md) and
 [pinned source provenance](packaging/sources.json) accompany the packages.

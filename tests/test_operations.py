@@ -4,6 +4,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from backend.agents.migrations import SCHEMA_GENERATION
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
@@ -123,7 +124,7 @@ class OperationsTests(unittest.TestCase):
             3,
         )
         filtered = self.browser.get(
-            f"/api/v1/logs?category=download&severity=warning&q=harbour&since={now}&until={now+1}"
+            f"/api/v1/logs?category=download&severity=warning&q=harbour&since={now}&until={now + 1}"
         ).json()
         self.assertEqual(filtered["total"], 1)
         self.assertEqual(filtered["entries"][0]["repeats"], 3)
@@ -247,5 +248,5 @@ class OperationsTests(unittest.TestCase):
         # Reopening is idempotent; history survives and generation has a marker.
         self.assertEqual(Operations(self.temp.name).page(self.owner)["total"], 1)
         self.assertTrue(
-            (Path(self.temp.name) / ".migration-operational-history-2").exists()
+            (Path(self.temp.name) / (".migration-" + SCHEMA_GENERATION)).exists()
         )

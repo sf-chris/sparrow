@@ -129,9 +129,9 @@ class Subtitles:
                     "unchanged": data.get("unchanged", False),
                     "quality": data.get("quality"),
                     "review": data.get("review"),
-                    "url": f'/api/v1/subtitles/tracks/{row["id"]}.vtt',
+                    "url": f"/api/v1/subtitles/tracks/{row['id']}.vtt",
                     "original_url": (
-                        f'/api/v1/subtitles/tracks/{row["id"]}.vtt?original=true'
+                        f"/api/v1/subtitles/tracks/{row['id']}.vtt?original=true"
                         if data.get("original_version")
                         else None
                     ),
@@ -404,7 +404,6 @@ class Subtitles:
                 "review_pending",
                 "The quality review did not finish. Check the reasoning service and retry review.",
             )
-            session.wake_at = 0
             service.store.save_session(session)
 
     async def run(self, identity):

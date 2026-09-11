@@ -16,6 +16,13 @@ policy; tools establish facts and enforce limits. The setup agent and all
 TV/Emby/casting work are parked; do not treat retained TV option notes as active
 implementation requirements. Follow the delivery sequence at the top of ROADMAP.md.
 
+The next agentic reliability phase is tracked in
+[issue #3](https://github.com/sf-chris/sparrow/issues/3), with the source audit and
+reproductions in [docs/AGENTIC_PLAN.md](docs/AGENTIC_PLAN.md). Read that handoff
+before changing the runtime or retiring legacy paths. It includes model-evaluation
+work and the owner's required cleanup of obsolete docs, issues/dependencies and
+dead code; its proposed model profiles are not completed evaluations.
+
 ## Architecture (v3 — agentic)
 
 Everything new lives in `backend/agents/`:
@@ -25,7 +32,7 @@ Everything new lives in `backend/agents/`:
   message history), `JournalEntry`, `Event`, `Spend`.
 - `runtime.py` — the loop: wake on event → reason across tool calls →
   hibernate with a trigger or close. Handles persistence, crash repair,
-  history trimming, spend tracking, API retries.
+  durable event acknowledgements/tool results, spend tracking and API retries.
 - `tools.py` — the tool belt + guardrails. Filesystem jail (staging +
   library only), library deletion only via verified `upgrade_swap`, indexer
   rate limits, honest error text the agent can reason about (`ToolError`).
@@ -58,7 +65,8 @@ Everything new lives in `backend/agents/`:
   what makes "done means spec met" real.
 - **Librarian** (cheap tier, personal subscription sessions): reasons over eligible
   aired episodes, gaps and explicitly authorized upgrades. Unchanged idle facts
-  cause no model calls; tools enforce the current subscription revision.
+  cause no model calls; unfinished reviews retain their session and retry timer.
+  Tools enforce the current subscription revision and shared standing allowance.
 
 ## Key API surfaces
 
@@ -93,8 +101,11 @@ Everything new lives in `backend/agents/`:
   `SPARROW_LEGACY_CURATOR=1` to re-enable. `release_parser.parse_release_name`
   and the ranking helpers survive only as advisory triage tools
   (`triage_parse`) — their output is never final.
-- The CWM (`data/cwm/`) is retired; learning lives in agent memory notes.
-- v2 goals/requests routes remain for the legacy pages.
+- The executable CWM source, service and routes have been deleted. Existing
+  CWM log records remain readable by the storage migration layer; installed data
+  is preserved. Learning lives in scoped agent memory notes.
+- v2 goals/requests routes still have administrator API consumers and await
+  retirement. The unmounted legacy frontend pages/client have been deleted.
 
 ## Run
 
@@ -123,3 +134,12 @@ the owner's device can connect. For a source installation, use
 Startup logs also show the code until setup is complete. The command reads the
 existing code and does not create an account or rotate it. Return this handoff
 privately to the owner; household invitations are generated separately in People.
+
+## Issue #3 implementation evidence
+
+[The implementation ledger](docs/agentic-audit/IMPLEMENTATION.md) records current
+cleanup dispositions, recovery guarantees, evaluations and outstanding work.
+The initial 30-case controlled contract suite is reproducible with
+`tests/evals/run_contracts.py`; paid model selection and device acceptance remain
+separate gates. New tool invocations must be recorded before effects and results
+before notifications; never replay uncertain effects without inspecting receipts.

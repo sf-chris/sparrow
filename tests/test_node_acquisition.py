@@ -213,6 +213,22 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
             self.catalogue.asset(self.owner, recorded["asset_id"])["state"], "ready"
         )
 
+    async def test_durable_runtime_replay_does_not_add_a_second_download(self):
+        from backend.agents.runtime import AgentRuntime
+        from backend.agents.store import AgentStore
+        from test_discovery import Block
+
+        tools = {t.name: t for t in acquisition_tools(self.service.toolbox)}
+        block = Block("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        first = await self.service.runtime._run_tool(self.ctx, tools, block)
+        self.assertNotIn("is_error", first)
+        reopened = AgentRuntime(AgentStore(str(self.root / "server")), lambda: "unused")
+        loaded = reopened.store.get_session(self.session.id)
+        replay = await reopened._run_tool(ToolCtx(loaded, reopened), tools, block)
+        self.assertEqual(first, replay)
+        self.assertEqual(self.add_count, 1)
+        self.assertEqual(len(self.storage.get_all_downloads()), 1)
+
     async def test_offline_pause_persists_intent_and_reconciles_when_node_returns(self):
         result = await self.call(
             "client_add", {"info_hash": "a" * 40, "name": "Fixture"}

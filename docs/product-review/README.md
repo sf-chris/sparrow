@@ -43,37 +43,37 @@ The backend diagnostic is preserved in [backend_reproductions.py](backend_reprod
 
 | Finding | Evidence type | Code location |
 |---|---|---|
-| Missing playback / episode actions | Browser + source | [Show.tsx](../../frontend/src/pages/Show.tsx), `EpisodePill` at 82 and `WatchTab` at 976 |
+| Missing playback / episode actions | Browser + source | [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx), `EpisodePill` at 82 and `WatchTab` at 976 |
 | Ready ignores verification | Browser/API | [library_view.py](../../backend/services/library_view.py), inventory projection at 117 |
 | Movie detail trusts stored verification | Browser/API | [main.py](../../backend/main.py), movie detail at 1634 |
 | Completion accepts missing file / does not enforce audio | Isolated | [tools.py](../../backend/agents/tools.py), completion tool at 741 |
 | TV scan assigns verified from filenames | Isolated | [file_organizer.py](../../backend/services/file_organizer.py), `scan_show_episodes` at 245 |
-| Search Get defaults to all seasons | Browser/API | [Home.tsx](../../frontend/src/pages/Home.tsx), `handleGet` at 291; [service.py](../../backend/agents/service.py), `create_job` at 468 |
+| Search Get defaults to all seasons | Browser/API | [Home.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Home.tsx), `handleGet` at 291; [service.py](../../backend/agents/service.py), `create_job` at 468 |
 | Description call missing required argument | Installed SDK | [resolution.py](../../backend/agents/resolution.py), `_describe_to_titles` at 57 |
 | Episode request summarised as season | Isolated | [models.py](../../backend/agents/models.py), `Mandate.describe` |
-| Complete job hides next season action | Browser + source | [Show.tsx](../../frontend/src/pages/Show.tsx), action condition at 1059, `loadJob` at 1145, header at 1468 |
+| Complete job hides next season action | Browser + source | [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx), action condition at 1059, `loadJob` at 1145, header at 1468 |
 | Cannot add a second active request for title | Source | [main.py](../../backend/main.py), create-job route at 1790 |
-| Active search card still offers Get | Browser + source | [Home.tsx](../../frontend/src/pages/Home.tsx), `ResolveCardTile` |
-| Abandoned job omitted from title/library selection | Browser + source | [Show.tsx](../../frontend/src/pages/Show.tsx), `loadJob`; [library_view.py](../../backend/services/library_view.py), job-status filter at 142 |
-| Concurrent-download field dropped | Browser/API | [main.py](../../backend/main.py), `ConfigUpdate` at 854; [Settings.tsx](../../frontend/src/pages/Settings.tsx), save handler at 117 |
+| Active search card still offers Get | Browser + source | [Home.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Home.tsx), `ResolveCardTile` |
+| Abandoned job omitted from title/library selection | Browser + source | [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx), `loadJob`; [library_view.py](../../backend/services/library_view.py), job-status filter at 142 |
+| Concurrent-download field dropped | Browser/API | [main.py](../../backend/main.py), `ConfigUpdate` at 854; [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), save handler at 117 |
 | Concurrent limit race | Isolated | [tools.py](../../backend/agents/tools.py), acquisition check/action at 622 |
 | Pause/cancel do not reject an in-flight acquisition | Isolated + source | [service.py](../../backend/agents/service.py), pause at 536 and cancel at 583; [runtime.py](../../backend/agents/runtime.py), `_turn` at 247; acquisition tool above |
 | Auto-organise setting only used by legacy handling | Source | [main.py](../../backend/main.py), legacy download handling at 366–415; [prompts.py](../../backend/agents/prompts.py), media instructions at 145 |
-| Zero seeding-ratio semantics conflict | Source | [Settings.tsx](../../frontend/src/pages/Settings.tsx), ratio hint at 348; [main.py](../../backend/main.py), startup sweep at 777 |
+| Zero seeding-ratio semantics conflict | Source | [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), ratio hint at 348; [main.py](../../backend/main.py), startup sweep at 777 |
 | Error treated as first-run state | Browser failure injection | [App.tsx](../../frontend/src/App.tsx), setup-status error handling at 19 |
-| Settings errors invisible / endless loading | Browser failure injection | [Settings.tsx](../../frontend/src/pages/Settings.tsx), fetch at 109 and save at 117 |
-| Search outage treated as no matches | Browser failure injection | [Home.tsx](../../frontend/src/pages/Home.tsx), resolver catch at 259 |
+| Settings errors invisible / endless loading | Browser failure injection | [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), fetch at 109 and save at 117 |
+| Search outage treated as no matches | Browser failure injection | [Home.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Home.tsx), resolver catch at 259 |
 | WebSocket reconnect after unmount | Browser + source | [useWebSocket.ts](../../frontend/src/hooks/useWebSocket.ts), reconnect at 24 and cleanup at 34 |
-| Stale statistics called stalled | Source + rendered state | [Library.tsx](../../frontend/src/pages/Library.tsx), status line at 181 |
-| Setup completeness uses field presence | Browser + source | [Onboarding.tsx](../../frontend/src/pages/Onboarding.tsx), readiness at 124 and finish at 194 |
+| Stale statistics called stalled | Source + rendered state | [Library.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Library.tsx), status line at 181 |
+| Setup completeness uses field presence | Browser + source | [Onboarding.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Onboarding.tsx), readiness at 124 and finish at 194 |
 | Scan misses current agent TV layout | Isolated + source | [file_organizer.py](../../backend/services/file_organizer.py), layout at 225; [prompts.py](../../backend/agents/prompts.py), convention at 154 |
 | Rescan replaces richer inventory | Source | [main.py](../../backend/main.py), scan update at 2206 |
 | Unmatched catalogue entries merge | Isolated | [library_view.py](../../backend/services/library_view.py), identity key at 96 |
 | Unowned monitored show absent from normal overview | Isolated + API | [tools.py](../../backend/agents/tools.py), Librarian overview at 1096; [service.py](../../backend/agents/service.py), monitoring save at 455 |
-| Title quality resets on reload | Browser + source | [Show.tsx](../../frontend/src/pages/Show.tsx), local quality state at 1112 |
-| Cached poster path rewritten incorrectly | Browser + source | [Library.tsx](../../frontend/src/pages/Library.tsx), `posterUrl` at 83; [metadata_service.py](../../backend/services/metadata_service.py), cached path at 286 |
-| Keyboard Details differs from mouse | Browser + axe | [Library.tsx](../../frontend/src/pages/Library.tsx), card keyboard handler at 225 and nested Details at 275 |
-| Drawer lacks modal semantics/focus | Browser + source | [Library.tsx](../../frontend/src/pages/Library.tsx), drawer aside at 346 |
+| Title quality resets on reload | Browser + source | [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx), local quality state at 1112 |
+| Cached poster path rewritten incorrectly | Browser + source | [Library.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Library.tsx), `posterUrl` at 83; [metadata_service.py](../../backend/services/metadata_service.py), cached path at 286 |
+| Keyboard Details differs from mouse | Browser + axe | [Library.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Library.tsx), card keyboard handler at 225 and nested Details at 275 |
+| Drawer lacks modal semantics/focus | Browser + source | [Library.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Library.tsx), drawer aside at 346 |
 | Advisory 40-step limit can be exceeded | Isolated runtime | [runtime.py](../../backend/agents/runtime.py), limit handling at 303 |
 
 **Unvalidated areas.** This review does not establish live catalogue/provider availability, real acquisition success rates, file playback compatibility, actual remote-node behaviour, accessibility on assistive devices, or performance with a substantial collection. The proposed screen hierarchy, first-request defaults and notification preferences are product recommendations to validate through real use, not findings from user interviews.

@@ -119,11 +119,6 @@ async def build_report(storage: Storage, *, check_client: bool = True,
         "Production frontend", "Built." if (ROOT / "frontend" / "dist" / "index.html").exists() else "Not built.",
         fix="Run ./scripts/install.sh or npm run build in frontend/.",
     ))
-    checks.append(DoctorCheck(
-        "legacy_cwm", os.getenv("SPARROW_ENABLE_LEGACY_CWM") != "1",
-        "Legacy code execution", "Disabled." if os.getenv("SPARROW_ENABLE_LEGACY_CWM") != "1" else "Explicitly enabled.",
-        fix="Unset SPARROW_ENABLE_LEGACY_CWM for normal use.",
-    ))
 
     client_ok = config.torrent_client.type != TorrentClientType.NONE
     client_detail = "Not configured."

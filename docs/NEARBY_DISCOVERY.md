@@ -1,7 +1,7 @@
 # Nearby server and storage discovery investigation
 
 10 September 2026. This completes the bounded investigation/prototype requested
-in [DESIGN_FOLLOW_UP.md](DESIGN_FOLLOW_UP.md). It does not enable discovery in the
+in [the implementation record](IMPLEMENTATION.md#personal-cinema-and-operational-history--10-september-2026). It does not enable discovery in the
 application, restart TV/client work, or add a share-mounting feature.
 
 ## Proposed experience
