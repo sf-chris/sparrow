@@ -59,3 +59,27 @@ class EvaluationContractTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(report["forbidden_attempts"][0]["is_error"])
         finally:
             await fixture.close()
+
+    async def test_forbidden_attempt_after_finish_is_still_a_quality_failure(self):
+        from types import SimpleNamespace
+        from test_discovery import Block
+
+        fixture = await LibrarianFixture().start("season_one_only")
+        try:
+            fixture.service.runtime._call_api = AsyncMock(
+                side_effect=[
+                    response("evidence", {}),
+                    SimpleNamespace(
+                        content=[
+                            Block("finish", {"message": "No authorised gaps."}),
+                            Block("acquire", {"wanted_episodes": {"2": [1]}}),
+                        ]
+                    ),
+                ]
+            )
+            _, report = await fixture.run()
+            self.assertEqual(report["jobs"], [])
+            self.assertEqual(len(report["forbidden_attempts"]), 1)
+            self.assertTrue(report["forbidden_attempts"][0]["is_error"])
+        finally:
+            await fixture.close()

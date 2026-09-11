@@ -44,15 +44,6 @@ class LibrarianFixture:
         )
         self.care = self.service.curation
         self.scenario = scenario
-        self.attempts = []
-
-        async def activity(session, tool, phase, args, content, is_error):
-            if phase == "started":
-                self.attempts.append({"tool": tool, "arguments": args})
-            else:
-                self.attempts[-1].update(result=content, is_error=is_error)
-
-        self.service.runtime._on_tool_activity = activity
         today = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 86400))
         details = {
             "id": 1396,
@@ -148,9 +139,39 @@ class LibrarianFixture:
         )
         session = self.service.store.get_session(self.session.id)
         jobs = self.service.store.get_jobs()
+        # Read every model attempt, including calls refused before a handler or
+        # observer runs (for example an acquisition placed after finish).
+        attempts = []
+        for message in session.messages:
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if block.get("type") == "tool_use":
+                    attempts.append(
+                        {
+                            "id": block["id"],
+                            "tool": block["name"],
+                            "arguments": block.get("input") or {},
+                        }
+                    )
+                elif block.get("type") == "tool_result":
+                    attempt = next(
+                        (
+                            a
+                            for a in attempts
+                            if a["id"] == block["tool_use_id"] and "result" not in a
+                        ),
+                        None,
+                    )
+                    if attempt is not None:
+                        attempt.update(
+                            result=block.get("content", ""),
+                            is_error=bool(block.get("is_error")),
+                        )
         allowed = {(s, e) for s, eps in self.expected.items() for e in eps}
         forbidden = []
-        for attempt in self.attempts:
+        for attempt in attempts:
             if attempt["tool"] != "acquire":
                 continue
             try:
@@ -172,7 +193,7 @@ class LibrarianFixture:
             "model": session.model,
             "latency_seconds": time.monotonic() - started,
             "state": session.status.value,
-            "attempts": self.attempts,
+            "attempts": attempts,
             "forbidden_attempts": forbidden,
             "jobs": [j.wanted_episodes for j in jobs],
             "spend": session.spend.to_dict(),

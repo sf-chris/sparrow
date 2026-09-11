@@ -4,8 +4,8 @@
   "image_id": "sha256:e02492539c8c583c772a8b14897e37db2fdef7cef1826317762e9bdcafd7ae69",
   "schema_generation": "agent-recovery-1",
   "check_script": {
-    "tests": 139,
-    "passed": 137,
+    "tests": 140,
+    "passed": 138,
     "skipped_live_model_tests": 2,
     "compile": true,
     "pip_check": true,

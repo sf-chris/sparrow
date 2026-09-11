@@ -1093,5 +1093,6 @@
       "evidence": "Outcome assertions in the versioned test; controlled responses are not model-quality evidence."
     }
   ],
-  "passed": true
+  "passed": true,
+  "source_commit": "104cfe167c60a663708848b2d6d8f1544eb9698c"
 }
