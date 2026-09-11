@@ -52,7 +52,9 @@ Read-only enumeration on 11 September 2026 found one issue: #3, active. PRs #1
 and #2 are merged historical implementations. PR #4 is the active documentation
 handoff, not completion of #3. No older issues, native child dependencies or
 obsolete blockers were found to close. External Mogged issues remain references.
-No issue closure is justified by this inventory.
+No issue closure is justified by this inventory. The implementation is now
+published in [draft PR #5](https://github.com/sf-chris/sparrow/pull/5), which includes
+the not-yet-merged #4 documentation commits and explicitly does not close #3.
 
 Before and after this initial inventory: P1 inventory → P2 baseline → P3 recovery
 → P4 profiles/evidence → P5/P6/P7; P8 records a framework decision after the shared
@@ -87,7 +89,8 @@ contracts; P9 requires completed implementation, cleanup and real acceptance.
   late result; abandoned jobs are failed outcomes, not completed viewing requests.
 - Current personal Librarian live fixtures inspect `evidence`, record `acquire`
   attempts and actual job scope, and require completion. A blocked forbidden
-  attempt is still a quality failure. Fresh fixtures isolate each repetition.
+  attempt is still a quality failure. Fresh fixtures isolate each repetition. Attempts are read from the complete
+  model transcript, including actions blocked before dispatch or after finish.
 
 [Updated audit replay](recovery-results.json) shows the failure retains a positive
 retry timer and has no successful fingerprint; recovery closes the same session,
@@ -103,7 +106,7 @@ three repetitions, latency, source/manifest identifiers and outcomes. These are
 holdout and the remaining live role fixtures are still required before profile
 selection. Provider cost for these controlled runs is zero.
 
-[Verification summary](verification.json): **139 tests, 137 passed and two
+[Verification summary](verification.json): **140 tests, 138 passed and two
 opt-in live-model tests skipped**. `scripts/check.sh` with the available FFmpeg/ffprobe
 binaries; compilation, dependency consistency, backend suite, frontend production
 build, npm audit and release-tree checks. The independent browser runner used a
