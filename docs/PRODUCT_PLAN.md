@@ -1,6 +1,6 @@
 # Sparrow product plan
 
-Updated 9 September 2026 following the product review and the owner's additions. This is the target product and decision record; capabilities described here are planned, not claims about the current alpha. [ROADMAP.md](../ROADMAP.md) records the work and acceptance gates. The [product review](PRODUCT_REVIEW.md) remains the evidence for current behaviour, and the [node plan](DISTRIBUTED_NODES_PLAN.md) defines the execution boundary.
+Updated 9 September 2026 following the product review and the owner's additions. This is the target product and decision record; capabilities described here are planned, not claims about the current alpha. [ROADMAP.md](../ROADMAP.md) records the work and acceptance gates. The [product review](PRODUCT_REVIEW.md) preserves the dated baseline; [IMPLEMENTATION.md](IMPLEMENTATION.md) records current measured behavior, and the [node plan](DISTRIBUTED_NODES_PLAN.md) defines the execution boundary.
 
 **Latest clarification.** Built-in subtitle automation does the routine work; an agent reviews its output and investigates failures. Admin onboarding establishes inheritable defaults, with personal overrides and effective preferences passed to agents. The setup agent and all TV work are parked, including Emby integration, compatibility research, casting and native TV applications. TV notes below preserve future options only. These changes supersede the earlier implementation recommendations.
 

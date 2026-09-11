@@ -1,5 +1,6 @@
 import asyncio
 import json
+import uuid
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,7 +24,7 @@ class Block:
     def __init__(self, name, args):
         self.name = name
         self.input = args
-        self.id = name
+        self.id = uuid.uuid4().hex
 
     def to_dict(self):
         return {

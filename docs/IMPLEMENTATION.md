@@ -195,8 +195,8 @@ Physical-device, Windows and live-provider release gates remain unchanged.
 
 ## Personal cinema and operational history — 10 September 2026
 
-The follow-ups in [DESIGN_FOLLOW_UP.md](DESIGN_FOLLOW_UP.md) are implemented in
-this working tree. The bright palette, small controls and public landing page
+The owner’s follow-ups are implemented under the current
+[interface contract](PRODUCT_DESIGN.md). The bright palette, small controls and public landing page
 remain. Home uses a short greeting, compact horizontal Continue watching cards,
 then library posters. The owner review removed the oversized playable feature,
 decorative page-header lines and excess space below navigation. Activity leads
@@ -290,3 +290,30 @@ physical mobile/Safari playback, and live subtitle/provider/model evaluations.
 Nearby discovery remains an opt-in prototype. Stage 7, TV/casting, music and
 the setup agent remain deferred. The product's accepted visual direction is
 established; open platform/provider gates above remain open.
+
+## Agent recovery and retirement — 11 September 2026
+
+Issue #3 implementation began with the two reproduced failures and a consumer
+inventory. Failed collection reviews now retain their session and retry timer,
+separately record observed/successfully reviewed evidence, and share a standing
+subscription allowance across replacement sessions. Missing-provider evidence
+from earlier versions is not mistaken for successful review.
+
+Agent events/deliveries and tool invocations/results are persisted. Delivery is
+acknowledged with its saved context, tool results precede observer notifications,
+and restart repair uses recorded results while describing uncertain effects
+honestly. Discovery/subtitle failure timers survive; completed unchanged work
+still costs zero model calls. Node acquisition/publication receipts remain the
+authority for external effects. Cancellation/revision fences apply to late results.
+
+The executable CWM, unreachable legacy frontend graph and its unused assets
+were removed. `clsx`, `aiofiles`, `aiosqlite`, `beautifulsoup4`, `lxml` and the
+Beautiful Soup dependency `soupsieve` were removed from the relevant manifests
+and lockfiles. Retained versions were unchanged.
+Current artwork, fixture attribution, installed data and historical storage
+readers are preserved. Two superseded design documents were consolidated into
+the interface contract and removed; historical source links are pinned.
+
+Detailed evidence and outstanding P1–P9 scope are in
+[the implementation ledger](agentic-audit/IMPLEMENTATION.md). This is not parent
+issue completion or a live model/provider/device acceptance claim.

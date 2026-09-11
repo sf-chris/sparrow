@@ -1,0 +1,186 @@
+{
+  "version": "agent-contracts-1",
+  "mode": "controlled_contract",
+  "cases": [
+    {
+      "id": "discovery-01",
+      "role": "discovery",
+      "test": "test_discovery.DiscoveryTests.test_agent_uses_evidence_before_proposal_and_never_creates_jobs",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "discovery-02",
+      "role": "discovery",
+      "test": "test_discovery.DiscoveryTests.test_invented_identity_is_refused_then_agent_can_research_and_correct",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "discovery-03",
+      "role": "discovery",
+      "test": "test_discovery.DiscoveryTests.test_cancelled_model_response_cannot_publish_or_restart_work",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-01",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_changed_facts_wake_agent_once_and_unchanged_idle_costs_no_calls",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-02",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_scope_personal_authority_and_future_episodes_are_enforced",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-03",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_failed_unchanged_review_retries_same_session_after_restart",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-04",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_missing_provider_does_not_mark_evidence_successfully_reviewed",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-05",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_edit_during_reasoning_discards_old_response",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-06",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_exact_scope_extension_updates_one_job_and_invalidates_old_revision",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-07",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_care_cannot_replace_an_active_requests_preferences",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-08",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_legacy_authority_migrates_paused_to_owner_only_and_memory_is_private",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-09",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_estimated_reasoning_budget_refuses_a_call_before_spending",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-10",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_upgrade_contract_requires_the_preferred_quality",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "librarian-11",
+      "role": "librarian",
+      "test": "test_curation.CurationTests.test_edit_while_acquisition_loads_metadata_cannot_create_or_restore_old_care",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "fetch-01",
+      "role": "fetch",
+      "test": "test_tool_guardrails.ToolGuardrailTests.test_mocked_acquisition_marks_download_agent_managed",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "fetch-02",
+      "role": "fetch",
+      "test": "test_tool_guardrails.ToolGuardrailTests.test_job_cannot_close_before_verified_inventory_exists",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "fetch-03",
+      "role": "fetch",
+      "test": "test_tool_guardrails.ToolGuardrailTests.test_tmdb_movie_and_tv_id_namespaces_do_not_collide",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "fetch-04",
+      "role": "fetch",
+      "test": "test_tool_guardrails.ToolGuardrailTests.test_movie_inventory_can_be_verified_then_close_the_job",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "fetch-05",
+      "role": "fetch",
+      "test": "test_tool_guardrails.ToolGuardrailTests.test_tv_episode_inventory_can_satisfy_first_episode_job",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "media-01",
+      "role": "media",
+      "test": "test_tool_guardrails.ToolGuardrailTests.test_media_report_closes_the_fetch_feedback_loop",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "media-02",
+      "role": "media",
+      "test": "test_tool_guardrails.ToolGuardrailTests.test_normal_move_cannot_remove_existing_library_media",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "media-03",
+      "role": "media",
+      "test": "test_tool_guardrails.ToolGuardrailTests.test_upgrade_swap_is_verified_and_recoverable",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "subtitle-01",
+      "role": "subtitle",
+      "test": "test_subtitles.SubtitleTests.test_measured_track_waits_for_review_then_becomes_playable_with_personal_offset",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "subtitle-02",
+      "role": "subtitle",
+      "test": "test_subtitles.SubtitleTests.test_model_outage_keeps_measured_subtitles_pending_without_blocking_video",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "subtitle-03",
+      "role": "subtitle",
+      "test": "test_subtitles.SubtitleTests.test_cancel_during_preparation_discards_late_track_and_review",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "subtitle-04",
+      "role": "subtitle",
+      "test": "test_subtitles.SubtitleEvidenceTests.test_plain_caption_sanitization_and_invalid_timing",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "subtitle-05",
+      "role": "subtitle",
+      "test": "test_subtitles.SubtitleEvidenceTests.test_wrong_text_and_missing_dialogue_are_never_quality_passes",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "media-04",
+      "role": "media",
+      "test": "test_node_acquisition.NodeAcquisitionTests.test_request_reaches_chosen_node_and_verified_copy_survives_retry",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "media-05",
+      "role": "media",
+      "test": "test_node_acquisition.NodeAcquisitionTests.test_offline_pause_persists_intent_and_reconciles_when_node_returns",
+      "layer": "controlled_contract"
+    },
+    {
+      "id": "media-06",
+      "role": "media",
+      "test": "test_node_acquisition.NodeAcquisitionTests.test_inventory_cannot_claim_other_title_or_unpublished_file",
+      "layer": "controlled_contract"
+    }
+  ]
+}

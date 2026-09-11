@@ -5,7 +5,7 @@ import json
 import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from .models import AgentKind, AgentSession, Event, SessionStatus
+from .models import AgentKind, AgentSession, Event, SessionStatus, CaseState
 from .runtime import AgentSpec, ToolDef, ToolError
 from .node_executor import canonical
 
@@ -187,7 +187,7 @@ class Discovery:
                 card = (
                     row["data"]
                     .get("evidence", {})
-                    .get(f'{chosen.get("media_type")}:{chosen.get("tmdb_id")}')
+                    .get(f"{chosen.get('media_type')}:{chosen.get('tmdb_id')}")
                 )
                 if not card:
                     raise ToolError(
@@ -244,20 +244,16 @@ class Discovery:
 
     async def wake(self, session_id, message):
         service = self.register()
-        try:
-            await service.runtime.wake(
-                session_id,
-                Event(kind="discovery_request", payload={"message": message}),
-            )
-        finally:
-            # Interactive research never creates background model retries.
-            session = service.store.get_session(session_id)
-            if session and session.status != SessionStatus.CLOSED:
-                session.wake_at = 0
-                service.store.save_session(session)
+        await service.runtime.wake(
+            session_id,
+            Event(kind="discovery_request", payload={"message": message}),
+        )
 
     def launch(self, session_id, message):
-        task = asyncio.create_task(self.wake(session_id, message))
+        service = self.register()
+        event = Event(kind="discovery_request", payload={"message": message})
+        service.store.enqueue_delivery(session_id, event)
+        task = asyncio.create_task(service.runtime.wake(session_id, event))
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
 
@@ -312,6 +308,7 @@ def install_discovery(app, accounts, catalogue, get_service):
                 session = service.store.get_session(old["id"])
                 if session and session.status != SessionStatus.CLOSED:
                     session.status = SessionStatus.CLOSED
+                    session.outcome = CaseState.CANCELLED
                     session.close_reason = "Superseded by a new search."
                     session.wake_at = 0
                     service.store.save_session(session)
@@ -362,6 +359,7 @@ def install_discovery(app, accounts, catalogue, get_service):
     def cancel(identity: str, request: Request):
         _, session, service = lookup(request, identity)
         session.status = SessionStatus.CLOSED
+        session.outcome = CaseState.CANCELLED
         session.closed_at = time.time()
         session.close_reason = "Search stopped."
         session.wake_at = 0

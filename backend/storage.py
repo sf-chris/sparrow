@@ -35,7 +35,6 @@ class Storage:
         except OSError:
             pass
         (self.data_dir / "art").mkdir(exist_ok=True)
-        (self.data_dir / "cwm").mkdir(exist_ok=True)
 
         self._config_path = self.data_dir / "config.json"
         self._downloads_path = self.data_dir / "downloads.json"
@@ -426,27 +425,6 @@ class Storage:
                 raise ValueError("Cannot migrate malformed cwm_logs.json; original data was preserved.") from exc
         return []
 
-    async def add_cwm_log(self, event_type: str, summary: str, detail: str = "", affected_ids: list[str] = None) -> CWMLog:
-        log = CWMLog(
-            id=str(uuid.uuid4()),
-            timestamp=time.time(),
-            event_type=event_type,
-            summary=summary,
-            detail=detail,
-            affected_ids=affected_ids or [],
-        )
-        async with self._lock:
-            self._cwm_logs.append(log)
-            # Keep last 500 logs
-            self._cwm_logs = self._cwm_logs[-500:]
-            await self._save_cwm_logs_sqlite()
-            atomic_text(self._cwm_logs_path,
-                json.dumps([l.to_dict() for l in self._cwm_logs], indent=2)
-            )
-        return log
-
-    def get_cwm_logs(self, limit: int = 50) -> list[CWMLog]:
-        return list(reversed(self._cwm_logs[-limit:]))
 
     # ─── Activity Feed ───────────────────────────────────────────────────
 

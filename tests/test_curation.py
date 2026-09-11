@@ -1,11 +1,11 @@
 import asyncio
 import tempfile
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from backend.storage import Storage
 from backend.models import SparrowConfig
 from backend.agents.service import AgentService
-from backend.agents.models import Mandate, MonitoringMode, AgentKind
+from backend.agents.models import Mandate, MonitoringMode, AgentKind, SessionStatus
 from backend.agents.runtime import ToolError
 from test_discovery import response
 
@@ -111,6 +111,91 @@ class CurationTests(unittest.IsolatedAsyncioTestCase):
         self.care.save(row, enabled=False)
         with self.assertRaises(ToolError):
             await self.care.enforce(self.owner["id"], 42, "tv", "local", {"1": [1]})
+
+    async def test_failed_unchanged_review_retries_same_session_after_restart(self):
+        row = self.follow()
+        self.service.runtime._call_api = AsyncMock(return_value=None)
+        await self.care.check(row["id"])
+        failed = self.care.row(row["id"])
+        session = self.service.store.get_session(failed["data"]["session_id"])
+        self.assertGreater(session.wake_at, 0)
+        self.assertNotEqual(
+            failed["data"].get("fingerprint"), failed["data"]["observed_fingerprint"]
+        )
+        # Retry delay prevents repeated unchanged polling from spending tokens.
+        await self.care.check(row["id"])
+        self.assertEqual(self.service.runtime._call_api.call_count, 1)
+        original_messages = list(session.messages)
+        restarted = AgentService(self.storage, self.temp.name, AsyncMock())
+        restarted.toolbox.tmdb_get = self.service.toolbox.tmdb_get
+        restarted.runtime._api_key_getter = lambda: "fixture-key"
+        restarted.runtime._call_api = AsyncMock(
+            side_effect=[
+                response("evidence", {}),
+                response("finish", {"message": "Reviewed the current scope."}),
+            ]
+        )
+        with patch("time.time", return_value=session.wake_at + 1):
+            await restarted.curation.check(row["id"])
+        complete = restarted.curation.row(row["id"])
+        self.assertEqual(complete["data"]["session_id"], session.id)
+        recovered = restarted.store.get_session(session.id)
+        self.assertEqual(recovered.status, SessionStatus.CLOSED)
+        self.assertGreaterEqual(len(recovered.messages), len(original_messages))
+        self.assertEqual(
+            complete["data"]["fingerprint"], complete["data"]["observed_fingerprint"]
+        )
+        await restarted.curation.check(row["id"])
+        self.assertEqual(restarted.runtime._call_api.call_count, 2)
+
+    async def test_missing_provider_does_not_mark_evidence_successfully_reviewed(self):
+        row = self.follow()
+        self.service.runtime._api_key_getter = lambda: ""
+        await self.care.check(row["id"])
+        saved = self.care.row(row["id"])
+        self.assertNotEqual(
+            saved["data"].get("fingerprint"), saved["data"]["observed_fingerprint"]
+        )
+        self.service.runtime._api_key_getter = lambda: "fixture-key"
+        self.service.runtime._call_api = AsyncMock(
+            return_value=response("finish", {"message": "Reviewed."})
+        )
+        await self.care.check(row["id"])
+        self.assertEqual(self.service.runtime._call_api.call_count, 1)
+
+    async def test_failed_review_keeps_successful_acquisition_receipt(self):
+        row = self.follow()
+        self.service.runtime._call_api = AsyncMock(
+            side_effect=[
+                response("acquire", {"wanted_episodes": {"1": [1]}}),
+                None,
+            ]
+        )
+        await self.care.check(row["id"])
+        saved = self.care.row(row["id"])
+        self.assertEqual(saved["data"]["acquired_session"], saved["data"]["session_id"])
+        self.assertEqual(len(self.service.store.get_jobs()), 1)
+
+    async def test_legacy_fingerprint_without_success_cannot_suppress_provider_recovery(
+        self,
+    ):
+        import hashlib
+        from backend.agents.node_executor import canonical
+
+        row = self.follow()
+        observation = await self.care.evidence(row)
+        self.care.save(
+            row, fingerprint=hashlib.sha256(canonical(observation).encode()).hexdigest()
+        )
+        self.service.runtime._call_api = AsyncMock(
+            return_value=response(
+                "finish", {"message": "Reviewed after provider recovery."}
+            )
+        )
+        await self.care.check(row["id"])
+        self.assertEqual(self.service.runtime._call_api.call_count, 1)
+        await self.care.check(row["id"])
+        self.assertEqual(self.service.runtime._call_api.call_count, 1)
 
     async def test_edit_during_reasoning_discards_old_response(self):
         row = self.follow()
