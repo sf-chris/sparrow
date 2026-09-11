@@ -16,7 +16,11 @@ measurement, processing, scheduling and enforcement. Its normal application
 already follows that architecture. The next step is to make those agents more
 capable, durable and economical, then prove the resulting viewing experience.
 
-## What is actually running
+Implementation follow-through is recorded in [the implementation ledger](agentic-audit/IMPLEMENTATION.md).
+The sections below retain their dated audit baseline; they are not current
+claims that removed CWM/UI paths still exist.
+
+## What was running at the audit baseline
 
 Audit baseline: Sparrow `bec7f14f079bd8e909e1659267df73b25b357d85` on `main`.
 The installed container has neither `SPARROW_ENABLE_LEGACY_CWM` nor

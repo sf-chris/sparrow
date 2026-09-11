@@ -71,6 +71,6 @@ node tests/browser/reimagined.cjs
 fixture requires FFmpeg and the scripts use Chrome and Playwright. To verify a
 Vite preview, `entry.cjs` and `reimagined.cjs` accept `SPARROW_BROWSER_URL`.
 
-Artwork provenance is in [REIMAGINED_ASSETS.md](../REIMAGINED_ASSETS.md), and the
+Artwork provenance is in [the interface contract](../PRODUCT_DESIGN.md#artwork-and-font-provenance), and the
 interface contract is in [PRODUCT_DESIGN.md](../PRODUCT_DESIGN.md). JSON result
 files and screenshots in this directory record the current direction only.

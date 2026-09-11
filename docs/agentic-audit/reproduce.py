@@ -11,13 +11,14 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root))
 sys.path.insert(0, str(root / "tests"))
 
 from test_curation import CurationTests
+from test_discovery import response
 from backend.agents.models import AgentKind, AgentSession
 from backend.agents.runtime import ToolCtx, ToolError
 
@@ -43,7 +44,29 @@ async def main():
             "fingerprint_retained": current["data"]["fingerprint"]
             == first["data"]["fingerprint"],
             "message": current["data"]["message"],
+            "successful_fingerprint_matches_observation": bool(
+                current["data"].get("observed_fingerprint")
+            )
+            and current["data"].get("fingerprint")
+            == current["data"].get("observed_fingerprint"),
         }
+        if session.wake_at:
+            fixture.service.runtime._call_api = AsyncMock(
+                return_value=response("finish", {"message": "Reviewed after recovery."})
+            )
+            with patch("time.time", return_value=session.wake_at + 1):
+                await fixture.care.check(row["id"])
+            await fixture.care.check(row["id"])
+            recovered = fixture.care.row(row["id"])
+            findings["retry_after_recovery"] = {
+                "same_session": recovered["data"]["session_id"] == session.id,
+                "state": fixture.service.store.get_session(session.id).status.value,
+                "calls_including_completed_idle_recheck": fixture.service.runtime._call_api.call_count,
+                "successful_fingerprint_matches_observation": recovered["data"][
+                    "fingerprint"
+                ]
+                == recovered["data"]["observed_fingerprint"],
+            }
         spec = fixture.service.runtime._specs[AgentKind.LIBRARIAN.value]
         legacy_session = AgentSession(agent=AgentKind.LIBRARIAN)
         definitions = spec.tools(legacy_session)

@@ -1,9 +1,11 @@
 # Linux server and cross-platform media nodes
 
-Status: revised planning draft, 2026-09-09. Read with the updated
+Status: node contract, originally planned 2026-09-09; implementation status reconciled 2026-09-11. Read with the updated
 [product plan](PRODUCT_PLAN.md) and [roadmap](../ROADMAP.md). This document
 defines the node boundary; its technical slices do not replace the complete
-owner-experience acceptance gates. Implementation has not begun.
+owner-experience acceptance gates. The portable protocol, Linux package and
+node operations are implemented; physical Windows/service/NTFS and phone
+acceptance remain open. See [measured implementation](IMPLEMENTATION.md).
 
 ## Intended experience
 
@@ -25,7 +27,7 @@ remote access is a required product outcome; the concrete route remains a
 deployment input. All TV/Emby/casting work and the setup agent are parked.
 The current node acceptance gates use phone and desktop browser playback.
 
-## What exists today
+## Historical starting point (9 September 2026)
 
 The baseline at `b84450c` has a FastAPI server, React UI, persistent Fetch,
 Media, and Librarian sessions, monitoring mandates, and library projections.
@@ -48,7 +50,7 @@ entry points as well as the agent tools. Completion today checks stored
 verification and minimum quality; the new boundary must also tie those facts
 to a particular file version and confirmed location.
 
-## Proposed architecture
+## Node architecture
 
 ```mermaid
 flowchart TD
@@ -90,7 +92,7 @@ documentation describes locking and synchronization risks when database
 files are accessed over network filesystems; that informs this choice.
 [SQLite guidance](https://www.sqlite.org/useovernet.html).
 
-## Contracts to agree before implementation
+## Persistent node contracts
 
 1. **Identity and location.** Separate a catalogue title/episode, a media asset
    representing a particular file, and an asset's location. A location has a

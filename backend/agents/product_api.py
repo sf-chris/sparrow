@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .account_api import administrator
 from .catalogue import Catalogue
-from .models import JobStatus, Event, SessionStatus
+from .models import JobStatus, Event, SessionStatus, CaseState
 from .node_executor import NodeError
 from .runtime import ToolError
 from ..configuration import public_config, apply_config_update
@@ -122,7 +122,11 @@ def install_product(app, storage, accounts, nodes, get_service):
             "state": (
                 "subtitles_pending"
                 if subtitle_pending
-                else "ready" if ready else "unavailable" if assets else "verifying"
+                else "ready"
+                if ready
+                else "unavailable"
+                if assets
+                else "verifying"
             ),
             "ready_count": len(ready),
             "assets": assets,
@@ -238,9 +242,17 @@ def install_product(app, storage, accounts, nodes, get_service):
                 job.status == JobStatus.ACTIVE
                 and session
                 and session.status == SessionStatus.HIBERNATING
-                and any(
-                    word in session.wake_reason.lower()
-                    for word in ("limit", "budget", "reasoning service", "error")
+                and (
+                    session.outcome
+                    in (
+                        CaseState.NEEDS_INPUT,
+                        CaseState.BUDGET_LIMITED,
+                        CaseState.FAILED,
+                    )
+                    or any(
+                        word in session.wake_reason.lower()
+                        for word in ("limit", "budget", "reasoning service", "error")
+                    )
                 )
             ):
                 value["state_line"] = session.wake_reason

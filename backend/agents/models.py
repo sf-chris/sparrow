@@ -6,11 +6,10 @@ window, this audio preference, this urgency. It is done when the library
 inventory provably matches the spec — never when a status field flips.
 
 An AgentSession is one LLM tool-use loop bound to a job (Fetch), a landed
-download (Media), or the whole library (Librarian). Sessions hibernate
+download (Media), or a personal subscription (Librarian). Sessions hibernate
 between turns and are woken by events or their own timers.
 
-The journal is the product: agents write plain-language reasoning as they
-work, and the UI renders it verbatim.
+Watching is the product; the journal explains the work in plain language.
 """
 
 from __future__ import annotations
@@ -38,6 +37,16 @@ class SessionStatus(str, Enum):
     RUNNING = "running"  # a turn is executing right now
     HIBERNATING = "hibernating"  # waiting on an event or wake_at timer
     CLOSED = "closed"
+
+
+class CaseState(str, Enum):
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    WAITING = "waiting"
+    NEEDS_INPUT = "needs_input"
+    BUDGET_LIMITED = "budget_limited"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class AgentKind(str, Enum):
@@ -283,6 +292,8 @@ class AgentSession:
     updated_at: float = field(default_factory=time.time)
     closed_at: Optional[float] = None
     close_reason: str = ""
+    outcome: CaseState = CaseState.WAITING
+    budget_scope: str = ""  # stable across replacement subscription sessions
 
     def to_dict(self) -> dict:
         return {
@@ -302,6 +313,8 @@ class AgentSession:
             "updated_at": self.updated_at,
             "closed_at": self.closed_at,
             "close_reason": self.close_reason,
+            "outcome": self.outcome.value,
+            "budget_scope": self.budget_scope,
         }
 
     @classmethod
@@ -310,6 +323,7 @@ class AgentSession:
         d["agent"] = AgentKind(d.get("agent", "fetch"))
         d["status"] = SessionStatus(d.get("status", "hibernating"))
         d["spend"] = Spend.from_dict(d.get("spend") or {})
+        d["outcome"] = CaseState(d.get("outcome", "waiting"))
         return cls(**d)
 
 
@@ -325,6 +339,7 @@ class Event:
     session_id: str = ""  # target a specific session (else routed by job/kind)
     payload: dict = field(default_factory=dict)
     ts: float = field(default_factory=time.time)
+    id: str = field(default_factory=_uid)
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -1,0 +1,49 @@
+{
+  "verified_at": "2026-09-11T02:18:01.866766+00:00",
+  "backend_source_sha256": "d27e8f3be1a6f9eb44df50819df59a87d130ae5390d78174b2e408c8503e7f09",
+  "image_id": "sha256:e02492539c8c583c772a8b14897e37db2fdef7cef1826317762e9bdcafd7ae69",
+  "schema_generation": "agent-recovery-1",
+  "check_script": {
+    "tests": 139,
+    "passed": 137,
+    "skipped_live_model_tests": 2,
+    "compile": true,
+    "pip_check": true,
+    "frontend_build": true,
+    "npm_audit_advisories": 0,
+    "release_tree": true
+  },
+  "contract_baseline": {
+    "cases": 30,
+    "repetitions": 3,
+    "passed": 90,
+    "real_model_calls": 0
+  },
+  "browser": {
+    "isolated_port": 8893,
+    "viewing": true,
+    "household": true,
+    "entry": true,
+    "accessibility": true,
+    "redesign_layouts": 55,
+    "redesign_behaviors": 11,
+    "followup_layouts": 40
+  },
+  "package": {
+    "container": "sparrow-issue3-check",
+    "import": true,
+    "direct_range": true,
+    "converted_segment": true,
+    "restart_resume": true,
+    "pwa_assets": true,
+    "bundled_speech_model": true
+  },
+  "retired_cwm_with_old_flag_enabled": {
+    "model_get": 404,
+    "analyze_post": 405,
+    "health_check_post": 405
+  },
+  "installed_deployment_changed": false,
+  "live_model_quality_evaluated": false,
+  "physical_device_acceptance": false
+}

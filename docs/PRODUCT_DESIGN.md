@@ -6,7 +6,7 @@ controls and typography, a brighter palette, and a little whimsy throughout.
 
 The owner likes this visual style. The personal-cinema follow-up now gives
 artwork and watching shelves more space, simplifies settings and adds operational
-history. [DESIGN_FOLLOW_UP.md](DESIGN_FOLLOW_UP.md) records the implemented scope;
+history. [IMPLEMENTATION.md](IMPLEMENTATION.md) records the implemented scope;
 [NEARBY_DISCOVERY.md](NEARBY_DISCOVERY.md) records the isolated discovery prototype.
 
 ## A happy little home for the good stuff
@@ -111,3 +111,15 @@ screenshots live in [reimagined-validation](reimagined-validation/README.md) and
 Fictional geometric fixture covers are test data, not real library titles or
 recommendations. Physical-device, Windows and live-provider boundaries remain
 as recorded in [IMPLEMENTATION.md](IMPLEMENTATION.md).
+
+## Artwork and font provenance
+
+The original SVG mark, television/bird welcome illustration and discovery
+doodles live in `frontend/src/product/Brand.tsx`; `frontend/public/icon.svg`
+repeats the mark. DM Sans is bundled locally with its SIL OFL notice under
+`frontend/public/assets/font-licenses/`. Retired cinematic artwork and the
+unused Instrument Serif font have been removed.
+
+The browser fixture creates original geometric posters/backdrops for fictional
+titles. The [current gallery](screenshots/README.md) captures the production
+frontend using those fixtures; production uses actual catalogue images.

@@ -1,0 +1,25 @@
+{
+  "failed_review_unchanged_recheck": {
+    "calls_after_failure": 1,
+    "calls_after_recheck": 1,
+    "session_state": "hibernating",
+    "wake_at": 1789093274.109565,
+    "fingerprint_retained": true,
+    "message": "Can't reach my reasoning service \u2014 retrying soon.",
+    "successful_fingerprint_matches_observation": false
+  },
+  "retry_after_recovery": {
+    "same_session": true,
+    "state": "closed",
+    "calls_including_completed_idle_recheck": 1,
+    "successful_fingerprint_matches_observation": true
+  },
+  "legacy_live_eval_session": {
+    "tools": [
+      "evidence",
+      "acquire",
+      "finish"
+    ],
+    "evidence_error": "Subscription not found."
+  }
+}
