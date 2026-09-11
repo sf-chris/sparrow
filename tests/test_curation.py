@@ -70,6 +70,16 @@ class CurationTests(unittest.IsolatedAsyncioTestCase):
             **kwargs,
         )
 
+    async def test_large_followed_season_keeps_all_eligible_candidates(self):
+        self.episodes = [
+            {"episode_number": i, "air_date": "2020-01-01"}
+            for i in range(1, 126)
+        ]
+        row = self.follow()
+        facts = await self.care.evidence(row)
+        self.assertEqual(len(facts["candidates"]), 125)
+        self.assertEqual(facts["candidates"][-1]["episode"], 125)
+
     async def test_changed_facts_wake_agent_once_and_unchanged_idle_costs_no_calls(
         self,
     ):

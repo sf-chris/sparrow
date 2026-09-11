@@ -221,6 +221,43 @@ class AgentRuntime:
     def register(self, spec: AgentSpec) -> None:
         self._specs[spec.kind] = spec
 
+    def tools_for(self, session: AgentSession) -> list[ToolDef]:
+        from .evidence import PAGE_CHARS
+
+        async def read(ctx, args):
+            try:
+                return self.store.evidence.read(
+                    ctx.session, args.get("evidence_id"), args.get("offset", 0),
+                    args.get("limit", PAGE_CHARS),
+                )
+            except ValueError as exc:
+                raise ToolError(str(exc)) from exc
+
+        async def listing(ctx, args):
+            try:
+                return self.store.evidence.list(ctx.session, args.get("after", 0))
+            except ValueError as exc:
+                raise ToolError(str(exc)) from exc
+
+        tools = self._specs[session.agent.value].tools(session)
+        if any(tool.name in {"evidence_read", "evidence_list"} for tool in tools):
+            raise ValueError("Evidence retrieval tool names are reserved by the runtime.")
+        return [*tools, ToolDef(
+            "evidence_read", "Read a page of a complete saved tool observation. "
+            "Use this when a result preview is partial; never infer missing items from a preview.",
+            {"type": "object", "properties": {
+                "evidence_id": {"type": "string"},
+                "offset": {"type": "integer", "minimum": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": PAGE_CHARS},
+            }, "required": ["evidence_id"], "additionalProperties": False}, read,
+        ), ToolDef(
+            "evidence_list", "Find saved oversized observations from this session, "
+            "including references lost from older conversation context. No provider calls.",
+            {"type": "object", "properties": {
+                "after": {"type": "integer", "minimum": 0},
+            }, "additionalProperties": False}, listing,
+        )]
+
     def _client(self) -> anthropic.AsyncAnthropic:
         return anthropic.AsyncAnthropic(
             api_key=self._api_key_getter(), timeout=45, max_retries=0
@@ -362,7 +399,7 @@ class AgentRuntime:
         self, session: AgentSession, spec: AgentSpec, events: list[Event]
     ) -> None:
         ctx = ToolCtx(session=session, runtime=self)
-        tools = spec.tools(session)
+        tools = self.tools_for(session)
         tool_map = {t.name: t for t in tools}
 
         _append_user(session, self._wake_text(session, events))
@@ -526,7 +563,6 @@ class AgentRuntime:
             except Exception as e:
                 logger.exception("tool %s failed", tu.name)
                 content, is_error = f"Tool failed: {e}", True
-        content = content[:40000]  # keep single results bounded
         result: dict = {"type": "tool_result", "tool_use_id": tu.id, "content": content}
         if is_error:
             result["is_error"] = True
@@ -542,7 +578,7 @@ class AgentRuntime:
             snapshot = current
         else:
             snapshot = ctx.session
-        self.store.finish_invocation(
+        result = self.store.finish_invocation(
             snapshot,
             tu.id,
             result,
@@ -552,6 +588,8 @@ class AgentRuntime:
                 "hibernate": ctx.hibernate,
             },
         )
+        content = result["content"]
+        is_error = bool(result.get("is_error"))
         await self._notify_tool(
             ctx.session,
             tu.name,
