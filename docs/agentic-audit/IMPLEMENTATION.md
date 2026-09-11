@@ -80,7 +80,10 @@ contracts; P9 requires completed implementation, cleanup and real acceptance.
 - Replacement sessions share the subscription's existing maximum reasoning
   allowance, including historical sessions and uncertain reservations. This is a
   conservative **lifetime allowance**, using the configured request dollar limit;
-  it does not introduce a daily/monthly renewal policy. Changing the allowance
+  it does not introduce a daily/monthly renewal policy. The
+  [budget setting explains this behavior](budget-setting-desktop.png). This capture
+  uses the same isolated browser fixture and production UI; it contains no
+  personal media or provider data. Changing the allowance
   and explicitly retrying are administrator/user actions. P7's richer standing
   policy remains open.
 - Sessions expose active/completed/waiting/needs-input/budget-limited/failed/

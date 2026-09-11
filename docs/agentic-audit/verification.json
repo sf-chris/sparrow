@@ -1,7 +1,7 @@
 {
   "verified_at": "2026-09-11T02:18:01.866766+00:00",
   "backend_source_sha256": "d27e8f3be1a6f9eb44df50819df59a87d130ae5390d78174b2e408c8503e7f09",
-  "image_id": "sha256:e02492539c8c583c772a8b14897e37db2fdef7cef1826317762e9bdcafd7ae69",
+  "image_id": "sha256:8e3d002b6b334b53b20931860f261f422dbe2b918f830aaf70e88b2e27cbaf0e",
   "schema_generation": "agent-recovery-1",
   "check_script": {
     "tests": 140,
@@ -27,7 +27,8 @@
     "accessibility": true,
     "redesign_layouts": 55,
     "redesign_behaviors": 11,
-    "followup_layouts": 40
+    "followup_layouts": 40,
+    "budget_explanation_visually_checked": true
   },
   "package": {
     "container": "sparrow-issue3-check",
