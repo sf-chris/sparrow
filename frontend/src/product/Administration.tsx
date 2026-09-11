@@ -125,7 +125,10 @@ export function Defaults() {
                   }
                 />
               </Field>
-              <Field label="Reasoning budget per request (USD)">
+              <Field
+                label="Reasoning budget (USD)"
+                hint="Each request has its own allowance. Each followed title also shares this amount across all collection reviews, without an automatic reset. Raise the limit and retry if collection care stops."
+              >
                 <input
                   type="number"
                   min={0.01}
