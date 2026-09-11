@@ -6,7 +6,9 @@ Follow-up: the owner accepted these findings and added subtitle alignment,
 agentic discovery/management, mobile use, self-hosted accounts/sharing and TV
 playback. The resulting target is in [PRODUCT_PLAN.md](PRODUCT_PLAN.md) and
 the updated [roadmap](../ROADMAP.md). This review retains its original
-baseline observations; subsequent plan changes are not implemented fixes.
+baseline observations. [IMPLEMENTATION.md](IMPLEMENTATION.md) records later
+fixes and remaining device/provider gates; these historical findings do not
+describe the current interface. TV/casting are now parked.
 
 **Sparrow has useful foundations for finding and acquiring media. Its biggest product opportunity is completing the experience of owning and watching a collection.** Today, the strongest workflows concern requests and agent activity. The user still has to bridge the gap between an entry being labelled ready and actually watching the right episode, in the right language, on the device they are using.
 
@@ -48,7 +50,7 @@ Replace the episode-number cloud with compact rows containing episode number, ti
 
 **Success:** a returning user can open Sparrow and resume an available item in one deliberate action. Starting an episode does not require inspecting a file path or the agent journal.
 
-Evidence: [ready movie on mobile](product-review/movie-ready-mobile.png), [episode view](product-review/show-episodes-mobile.png); `WatchTab` and `EpisodePill` in [Show.tsx](../frontend/src/pages/Show.tsx).
+Evidence: [ready movie on mobile](product-review/movie-ready-mobile.png), [episode view](product-review/show-episodes-mobile.png); `WatchTab` and `EpisodePill` in [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx).
 
 **2. Give “ready” one dependable meaning. — Essential**
 
@@ -76,7 +78,7 @@ Use an intent summary such as “Season 2 · 8 episodes · 1080p preferred · En
 
 **Success:** before any acquisition begins, the user can correctly predict its scope, preferences and future authority.
 
-Evidence: [search before Get](product-review/search-scope-before-get.png), `search_get` and `single_episode_summary`; [Home.tsx](../frontend/src/pages/Home.tsx), `create_job` in [service.py](../backend/agents/service.py), and `Mandate.describe` in [models.py](../backend/agents/models.py).
+Evidence: [search before Get](product-review/search-scope-before-get.png), `search_get` and `single_episode_summary`; [Home.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Home.tsx), `create_job` in [service.py](../backend/agents/service.py), and `Mandate.describe` in [models.py](../backend/agents/models.py).
 
 **4. Make requests continue naturally as the collection grows. — Essential**
 
@@ -86,7 +88,7 @@ Treat the title as the durable home for ownership, preferences and request histo
 
 **Success:** request season one, finish it, request season two, pause it, return later and recover a failure without losing context or creating accidental duplicate work.
 
-Evidence: [completed-season trap](product-review/show-completed-season-desktop.png), [abandoned title](product-review/show-abandoned-mobile.png), [already-requested search result](product-review/search-active-mobile.png). Code: `loadJob`, `WatchTab` and the header in [Show.tsx](../frontend/src/pages/Show.tsx); [main.py](../backend/main.py) job creation; [library_view.py](../backend/services/library_view.py).
+Evidence: [completed-season trap](product-review/show-completed-season-desktop.png), [abandoned title](product-review/show-abandoned-mobile.png), [already-requested search result](product-review/search-active-mobile.png). Code: `loadJob`, `WatchTab` and the header in [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx); [main.py](../backend/main.py) job creation; [library_view.py](../backend/services/library_view.py).
 
 **5. Make controls authoritative and their effects visible. — Essential**
 
@@ -110,7 +112,7 @@ Replace vague recovery with concrete actions: reconnect the downloader, change a
 
 **Success:** a temporary outage does not masquerade as an empty collection, a spelling error or a new installation. Returning after a disconnect produces a consistent, current view.
 
-Evidence: [outage presented as no results](product-review/search-outage-as-no-results.png), [invisible validation failure](product-review/settings-invalid-no-feedback.png), `bootstrap_outage`, `settings_outage_text`, `initial_sockets`, `settings_sockets`; [App.tsx](../frontend/src/App.tsx), [Settings.tsx](../frontend/src/pages/Settings.tsx), [useWebSocket.ts](../frontend/src/hooks/useWebSocket.ts).
+Evidence: [outage presented as no results](product-review/search-outage-as-no-results.png), [invisible validation failure](product-review/settings-invalid-no-feedback.png), `bootstrap_outage`, `settings_outage_text`, `initial_sockets`, `settings_sockets`; [App.tsx](../frontend/src/App.tsx), [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), [useWebSocket.ts](../frontend/src/hooks/useWebSocket.ts).
 
 **7. Make setup prove the first useful outcome. — Daily use**
 
@@ -122,7 +124,7 @@ A new user should reach one recognisable success: an existing movie imported and
 
 **Success:** readiness corresponds to a working capability, and setup ends with a usable item or an understandable request rather than another configuration screen.
 
-Evidence: [initial mobile setup](product-review/onboarding-mobile.png), [false-ready setup](product-review/onboarding-false-ready-mobile.png); readiness and finish handlers in [Onboarding.tsx](../frontend/src/pages/Onboarding.tsx).
+Evidence: [initial mobile setup](product-review/onboarding-mobile.png), [false-ready setup](product-review/onboarding-false-ready-mobile.png); readiness and finish handlers in [Onboarding.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Onboarding.tsx).
 
 **8. Treat importing an existing library as a major product journey. — Daily use**
 
@@ -146,7 +148,7 @@ Avoid quietly expanding acquisition authority when the user removes an item, can
 
 **Success:** follow an unowned show today, find it again tomorrow, understand what will happen when an episode airs, and stop future acquisition predictably.
 
-Evidence: `mandate_unowned`, `unowned_monitor_visible_to_librarian`; `set_monitoring` in [service.py](../backend/agents/service.py), `library_overview` in [tools.py](../backend/agents/tools.py), Preferences in [Show.tsx](../frontend/src/pages/Show.tsx).
+Evidence: `mandate_unowned`, `unowned_monitor_visible_to_librarian`; `set_monitoring` in [service.py](../backend/agents/service.py), `library_overview` in [tools.py](../backend/agents/tools.py), Preferences in [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx).
 
 **10. Give Home, Library and Activity distinct everyday jobs. — Daily use**
 
@@ -168,7 +170,7 @@ Define global defaults, title overrides and request-specific choices. Show inher
 
 **Success:** a user sets a preference once, sees where it applies, and can predict the effect of changing it. Models and prompts do not have to be understood to manage a collection.
 
-Evidence: `quality_before`, `quality_after`; [title preferences](product-review/show-preferences-desktop.png), [mobile Settings](product-review/settings-mobile.png); [Settings.tsx](../frontend/src/pages/Settings.tsx), [Show.tsx](../frontend/src/pages/Show.tsx).
+Evidence: `quality_before`, `quality_after`; [title preferences](product-review/show-preferences-desktop.png), [mobile Settings](product-review/settings-mobile.png); [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx).
 
 **12. Make artwork, navigation and accessibility reliable. — Daily use**
 
@@ -182,7 +184,7 @@ Automated desktop checks found nested-interactive issues in Library, duplicate m
 
 **Success:** cached posters work consistently, the next action is easy to reach on a phone, and keyboard users can perform the same actions as mouse users without losing focus or context.
 
-Evidence: [mobile title](product-review/show-active-mobile.png), [drawer](product-review/library-drawer-mobile.png), `keyboard_details`, `mouse_details`, and desktop accessibility results; [Library.tsx](../frontend/src/pages/Library.tsx), [metadata_service.py](../backend/services/metadata_service.py), [Layout.tsx](../frontend/src/components/Layout.tsx).
+Evidence: [mobile title](product-review/show-active-mobile.png), [drawer](product-review/library-drawer-mobile.png), `keyboard_details`, `mouse_details`, and desktop accessibility results; [Library.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Library.tsx), [metadata_service.py](../backend/services/metadata_service.py), [Layout.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/components/Layout.tsx).
 
 **13. Bound the cost of unattended automation. — Essential for unattended use**
 
@@ -192,7 +194,7 @@ Provide enforceable per-request and overall limits, with a clear state when a bu
 
 **Success:** leaving Sparrow unattended cannot exceed the chosen policy through repeated model turns, and hitting a limit produces a recoverable status rather than a silent failure.
 
-Evidence: `wake_step_limit`; [runtime.py](../backend/agents/runtime.py), [resolution.py](../backend/agents/resolution.py), [Activity.tsx](../frontend/src/pages/Activity.tsx).
+Evidence: `wake_step_limit`; [runtime.py](../backend/agents/runtime.py), [resolution.py](../backend/agents/resolution.py), [Activity.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Activity.tsx).
 
 **14. Close the loop when media is wrong and when the user is away. — Daily use**
 

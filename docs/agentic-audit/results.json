@@ -1,0 +1,18 @@
+{
+  "failed_review_unchanged_recheck": {
+    "calls_after_failure": 1,
+    "calls_after_recheck": 1,
+    "session_state": "hibernating",
+    "wake_at": 0,
+    "fingerprint_retained": true,
+    "message": "Collection review needs attention. Check the reasoning service and retry."
+  },
+  "legacy_live_eval_session": {
+    "tools": [
+      "evidence",
+      "acquire",
+      "finish"
+    ],
+    "evidence_error": "Subscription not found."
+  }
+}

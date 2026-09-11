@@ -1,8 +1,9 @@
 # Sparrow — Design Philosophy & System
 
 > This document supersedes all previous design directions, including the Code
-> World Model (CWM) and the deterministic curator/planner pipeline. Those
-> survive only as *tools* that agents may call — never as decision-makers.
+> World Model (CWM) and the deterministic curator/planner pipeline. Executable
+> CWM paths have been removed. Retained deterministic parsing/ranking helpers
+> are advisory tools, never decision-makers.
 
 Updated product direction, 2026-09-09: the owner accepted the product review
 and added agentic discovery, subtitle/audio synchronisation, mobile use,
@@ -218,7 +219,7 @@ local processing and evidence.
 
 ## What this explicitly replaces
 
-- **The CWM** (self-evolving Python strategy file): retired. Learning now
+- **The CWM** (self-evolving Python strategy file): executable paths removed. Learning now
   lives in agent memory notes.
 - **The deterministic curator/planner/parser pipeline as decision-maker**:
   demoted. `parse_name`, `rank_candidates`, and query generators remain

@@ -23,6 +23,7 @@ from .models import (
     Mandate,
     SessionStatus,
     AgentKind,
+    Event,
 )
 
 
@@ -86,6 +87,22 @@ class AgentStore:
                     updated_at REAL NOT NULL,
                     PRIMARY KEY (tmdb_id, media_type)
                 );
+                CREATE TABLE IF NOT EXISTS agent_events (
+                    id TEXT PRIMARY KEY, data TEXT NOT NULL, routed INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS agent_deliveries (
+                    session_id TEXT NOT NULL, event_id TEXT NOT NULL,
+                    data TEXT NOT NULL, acknowledged INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(session_id, event_id)
+                );
+                CREATE TABLE IF NOT EXISTS agent_invocations (
+                    session_id TEXT NOT NULL, tool_id TEXT NOT NULL,
+                    name TEXT NOT NULL, arguments TEXT NOT NULL,
+                    revision INTEGER NOT NULL, result TEXT, control TEXT,
+                    PRIMARY KEY(session_id, tool_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_events_pending ON agent_events(routed);
+                CREATE INDEX IF NOT EXISTS idx_agent_deliveries_pending ON agent_deliveries(session_id,acknowledged);
             """)
 
     # ─── Jobs ────────────────────────────────────────────────────────────
@@ -231,21 +248,108 @@ class AgentStore:
     def save_session(self, s: AgentSession) -> AgentSession:
         s.updated_at = time.time()
         with self._connect() as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO agent_sessions "
-                "(id, data, agent, job_id, status, wake_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    s.id,
-                    json.dumps(s.to_dict()),
-                    s.agent.value,
-                    s.job_id,
-                    s.status.value,
-                    s.wake_at,
-                    s.updated_at,
-                ),
-            )
+            self._save_session(conn, s)
         return s
+
+    def _save_session(self, conn, s):
+        conn.execute(
+            "INSERT OR REPLACE INTO agent_sessions "
+            "(id, data, agent, job_id, status, wake_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                s.id,
+                json.dumps(s.to_dict()),
+                s.agent.value,
+                s.job_id,
+                s.status.value,
+                s.wake_at,
+                s.updated_at,
+            ),
+        )
+
+    def enqueue_event(self, event: Event) -> None:
+        with self._connect() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO agent_events(id,data) VALUES(?,?)",
+                (event.id, json.dumps(event.to_dict())),
+            )
+
+    def unrouted_events(self) -> list[Event]:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT data FROM agent_events WHERE routed=0 ORDER BY rowid"
+            ).fetchall()
+        return [Event(**json.loads(row["data"])) for row in rows]
+
+    def mark_routed(self, event: Event) -> None:
+        with self._connect() as db:
+            db.execute("UPDATE agent_events SET routed=1 WHERE id=?", (event.id,))
+
+    def enqueue_delivery(self, session_id: str, event: Event) -> None:
+        with self._connect() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO agent_deliveries(session_id,event_id,data) VALUES(?,?,?)",
+                (session_id, event.id, json.dumps(event.to_dict())),
+            )
+
+    def pending_events(self, session_id: str) -> list[Event]:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT data FROM agent_deliveries WHERE session_id=? AND acknowledged=0 ORDER BY rowid",
+                (session_id,),
+            ).fetchall()
+        return [Event(**json.loads(row["data"])) for row in rows]
+
+    def pending_session_ids(self) -> list[str]:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT DISTINCT session_id FROM agent_deliveries WHERE acknowledged=0"
+            ).fetchall()
+        return [row["session_id"] for row in rows]
+
+    def acknowledge_events(self, session: AgentSession, events: list[Event]) -> None:
+        """Acknowledge only in the same commit that records evidence in context."""
+        session.updated_at = time.time()
+        with self._connect() as db:
+            self._save_session(db, session)
+            db.executemany(
+                "UPDATE agent_deliveries SET acknowledged=1 WHERE session_id=? AND event_id=?",
+                [(session.id, event.id) for event in events],
+            )
+
+    def invocation(self, session_id: str, tool_id: str):
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT * FROM agent_invocations WHERE session_id=? AND tool_id=?",
+                (session_id, tool_id),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            **dict(row),
+            "arguments": json.loads(row["arguments"]),
+            "result": json.loads(row["result"]) if row["result"] else None,
+            "control": json.loads(row["control"]) if row["control"] else {},
+        }
+
+    def start_invocation(
+        self, session: AgentSession, tool_id: str, name: str, args: dict
+    ) -> None:
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO agent_invocations(session_id,tool_id,name,arguments,revision) VALUES(?,?,?,?,?)",
+                (session.id, tool_id, name, json.dumps(args), session.job_revision),
+            )
+
+    def finish_invocation(
+        self, session: AgentSession, tool_id: str, result: dict, control: dict
+    ) -> None:
+        with self._connect() as db:
+            self._save_session(db, session)
+            db.execute(
+                "UPDATE agent_invocations SET result=?,control=? WHERE session_id=? AND tool_id=?",
+                (json.dumps(result), json.dumps(control), session.id, tool_id),
+            )
 
     def get_session(self, session_id: str) -> Optional[AgentSession]:
         with self._connect() as conn:

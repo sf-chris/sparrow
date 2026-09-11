@@ -180,7 +180,6 @@ from .services import torrent_client as tc_svc
 from .services import search_engine
 from .services import metadata_service as meta_svc
 from .services import file_organizer
-from .services import cwm_service
 from .services import request_service
 from .services import release_parser
 from .services.library_view import build_library_view
@@ -868,10 +867,6 @@ class OrganizeRequest(BaseModel):
     download_id: str
     media_type: Optional[str] = None
     tmdb_id: Optional[int] = None
-
-
-class CWMQueryRequest(BaseModel):
-    prompt: str
 
 
 class CreateMediaRequest(BaseModel):
@@ -1839,7 +1834,7 @@ async def get_job(job_id: str):
         "job": job.to_dict(),
         "journal": [e.to_dict() for e in agent_service.store.get_journal(job_id)],
         "session": {
-            "status": session.status.value, "wake_at": session.wake_at,
+            "status": session.status.value, "outcome": session.outcome.value, "wake_at": session.wake_at,
             "wake_reason": session.wake_reason, "spend": spend_snapshot(session),
         } if session else None,
         "downloads": [d.to_dict() for d in storage.get_all_downloads()
@@ -1898,7 +1893,7 @@ async def list_agent_sessions(open_only: bool = True):
             "id": s.id, "agent": s.agent.value, "job_id": s.job_id,
             "job_title": job.title if job else "",
             "download_id": s.download_id, "model": s.model,
-            "status": s.status.value, "wake_at": s.wake_at,
+            "status": s.status.value, "outcome": s.outcome.value, "wake_at": s.wake_at,
             "wake_reason": s.wake_reason, "spend": spend_snapshot(s),
             "created_at": s.created_at, "updated_at": s.updated_at,
             "closed_at": s.closed_at,
@@ -1992,7 +1987,7 @@ async def add_download(req: AddDownloadRequest):
     manager = tc_svc.TorrentManager(config.torrent_client)
     torrent_hash = await manager.add_magnet(req.magnet_url, config.staging_dir)
 
-    # Resolve media_type: use explicit value if set, else ask the CWM
+    # Resolve media_type: use explicit value if set, else inspect catalogue metadata
     requested_type = MediaType(req.media_type) if req.media_type else MediaType.UNKNOWN
     resolved_type = requested_type
     if requested_type == MediaType.UNKNOWN:
@@ -2258,172 +2253,6 @@ async def get_metadata(tmdb_id: int, type: str = "movie"):
     if not data:
         raise HTTPException(404, "Not found on TMDB")
     return data
-
-
-# ─── CWM routes ───────────────────────────────────────────────────────────────
-
-def _require_legacy_cwm() -> None:
-    """The retired self-modifying executor is unreachable in normal builds."""
-    if not env_bool("SPARROW_ENABLE_LEGACY_CWM"):
-        raise HTTPException(404, "Legacy CWM is disabled")
-
-@app.get("/api/cwm/logs")
-async def get_cwm_logs(limit: int = 50):
-    _require_legacy_cwm()
-    logs = storage.get_cwm_logs(limit)
-    return [l.to_dict() for l in logs]
-
-
-@app.get("/api/cwm/model")
-async def get_cwm_model():
-    _require_legacy_cwm()
-    cwm_path = Path(DATA_DIR) / "cwm" / "sparrow_world_model.py"
-    if not cwm_path.exists():
-        # Seed from template
-        template = Path(__file__).parent.parent / "cwm" / "sparrow_world_model.py"
-        if template.exists():
-            import shutil
-            cwm_path.parent.mkdir(exist_ok=True)
-            shutil.copy(str(template), str(cwm_path))
-    content = cwm_path.read_text() if cwm_path.exists() else "# CWM not yet initialised"
-    return {"content": content, "path": str(cwm_path)}
-
-
-@app.post("/api/cwm/analyze")
-async def run_cwm_analysis(req: CWMQueryRequest):
-    _require_legacy_cwm()
-    config = storage.get_config()
-
-    # Stream results via SSE-style JSON lines (collected then returned)
-    events = []
-
-    def on_event(event: dict):
-        events.append(event)
-
-    result = await cwm_service.run_analysis(
-        data_dir=DATA_DIR,
-        anthropic_api_key=config.anthropic_api_key,
-        prompt=req.prompt,
-        on_event=on_event,
-    )
-
-    await storage.add_cwm_log(
-        event_type="analysis",
-        summary=req.prompt[:100],
-        detail=result["output"][:2000],
-    )
-
-    await broadcast({"type": "cwm_analysis", "data": result})
-    return {**result, "events": events}
-
-
-@app.post("/api/cwm/health-check")
-async def cwm_health_check():
-    _require_legacy_cwm()
-    config = storage.get_config()
-    result = await cwm_service.quick_health_check(DATA_DIR, config.anthropic_api_key)
-
-    await storage.add_cwm_log(
-        event_type="health_check",
-        summary="Pipeline health check",
-        detail=result["output"][:2000],
-    )
-
-    return result
-
-
-@app.get("/api/cwm/version")
-async def cwm_version():
-    """Current CWM version info."""
-    _require_legacy_cwm()
-    version_file = Path(DATA_DIR) / "cwm" / "version.json"
-    cwm_path = Path(DATA_DIR) / "cwm" / "sparrow_world_model.py"
-
-    version_data = {"version": 0, "updated_at": None, "strategy_added": ""}
-    if version_file.exists():
-        try:
-            version_data = json.loads(version_file.read_text())
-        except Exception:
-            pass
-
-    # Count strategies and patterns from live CWM
-    strategy_count = 0
-    pattern_count = 0
-    if cwm_path.exists():
-        import re as _re
-        content = cwm_path.read_text()
-        strategy_count = len(_re.findall(r'def strategy_\w+', content))
-        pattern_count  = len(_re.findall(r'def pattern_\w+', content))
-
-    return {**version_data, "strategy_count": strategy_count, "pattern_count": pattern_count}
-
-
-@app.get("/api/cwm/versions")
-async def cwm_versions():
-    """List CWM evolution snapshots."""
-    _require_legacy_cwm()
-    history_dir = Path(DATA_DIR) / "cwm" / "history"
-    if not history_dir.exists():
-        return []
-
-    version_file = Path(DATA_DIR) / "cwm" / "version.json"
-    version_data = {"version": 0}
-    if version_file.exists():
-        try:
-            version_data = json.loads(version_file.read_text())
-        except Exception:
-            pass
-
-    snapshots = sorted(history_dir.glob("*.py"), key=lambda p: p.name, reverse=True)
-    result = []
-    current_version = version_data.get("version", len(snapshots))
-    for i, snap in enumerate(snapshots):
-        v = current_version - i
-        ts_str = snap.stem  # e.g. 20260413T153042
-        try:
-            import datetime
-            dt = datetime.datetime.strptime(ts_str, "%Y%m%dT%H%M%S")
-            ts = dt.timestamp()
-        except Exception:
-            ts = snap.stat().st_mtime
-        result.append({"version": v, "filename": snap.name, "timestamp": ts})
-    return result
-
-
-@app.get("/api/cwm/versions/{filename}")
-async def cwm_version_content(filename: str):
-    """Content of a specific CWM snapshot."""
-    _require_legacy_cwm()
-    # Sanitise filename — only allow safe names
-    import re as _re
-    if not _re.match(r'^[\w\-.]+\.py$', filename):
-        raise HTTPException(400, "Invalid filename")
-    path = Path(DATA_DIR) / "cwm" / "history" / filename
-    if not path.exists():
-        raise HTTPException(404, "Snapshot not found")
-    return {"filename": filename, "content": path.read_text()}
-
-
-@app.get("/api/cwm/diff")
-async def cwm_diff(from_file: str = Query(..., alias="from"), to_file: str = Query(..., alias="to")):
-    """Unified diff between two CWM snapshots. Use 'current' for the live CWM."""
-    _require_legacy_cwm()
-    import difflib, re as _re
-    history_dir = Path(DATA_DIR) / "cwm" / "history"
-
-    def read(name: str) -> list[str]:
-        if name == "current":
-            p = Path(DATA_DIR) / "cwm" / "sparrow_world_model.py"
-        else:
-            if not _re.match(r'^[\w\-.]+\.py$', name):
-                raise HTTPException(400, f"Invalid filename: {name}")
-            p = history_dir / name
-        if not p.exists():
-            raise HTTPException(404, f"Not found: {name}")
-        return p.read_text().splitlines(keepends=True)
-
-    diff = list(difflib.unified_diff(read(from_file), read(to_file), fromfile=from_file, tofile=to_file))
-    return {"diff": "".join(diff)}
 
 
 # ─── Log routes ───────────────────────────────────────────────────────────────

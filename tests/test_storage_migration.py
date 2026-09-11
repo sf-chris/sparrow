@@ -68,3 +68,32 @@ class StorageMigrationTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError, "preserved"):
                 await storage.load_all()
             self.assertEqual(source.read_text(), "{broken")
+
+    async def test_retired_cwm_history_is_migrated_without_loading_old_code(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            history = [
+                {
+                    "id": "old-note",
+                    "timestamp": 1,
+                    "event_type": "analysis",
+                    "summary": "Historical fixture note",
+                }
+            ]
+            (root / "cwm_logs.json").write_text(json.dumps(history))
+            (root / "cwm").mkdir()
+            original = root / "cwm" / "sparrow_world_model.py"
+            source = "raise RuntimeError('Retired code must never execute')\n"
+            original.write_text(source)
+            storage = Storage(temp)
+            await storage.load_all()
+            await Storage(temp).load_all()
+            with storage._connect() as db:
+                saved = json.loads(
+                    db.execute(
+                        "SELECT data FROM cwm_logs WHERE id='old-note'"
+                    ).fetchone()["data"]
+                )
+            self.assertEqual(saved["summary"], history[0]["summary"])
+            self.assertEqual(original.read_text(), source)
+            self.assertEqual(json.loads((root / "cwm_logs.json").read_text()), history)

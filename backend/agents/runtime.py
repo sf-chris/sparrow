@@ -16,13 +16,12 @@ import logging
 import json
 import secrets
 import time
-from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Optional
 
 import anthropic
 
-from .models import AgentSession, Event, SessionStatus, JobStatus
+from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
 
 logger = logging.getLogger("sparrow.agents")
@@ -187,7 +186,6 @@ class AgentRuntime:
         self._api_key_getter = api_key_getter
         self._specs: dict[str, AgentSpec] = {}
         self._locks: dict[str, asyncio.Lock] = {}
-        self._pending: dict[str, deque[Event]] = {}
         self._on_session_change = on_session_change
         self._on_tool_activity = on_tool_activity
         self.policy_getter = lambda: {
@@ -200,7 +198,9 @@ class AgentRuntime:
                 "CREATE TABLE IF NOT EXISTS reasoning_reservations(id TEXT PRIMARY KEY,scope TEXT NOT NULL,dollars REAL NOT NULL,created REAL NOT NULL)"
             )
 
-    def authority_valid(self, session: AgentSession, revision: int) -> bool:
+    def authority_valid(
+        self, session: AgentSession, revision: int, completing: bool = False
+    ) -> bool:
         current = self.store.get_session(session.id)
         if current and current.status == SessionStatus.CLOSED:
             return False
@@ -213,7 +213,10 @@ class AgentRuntime:
         if not session.job_id:
             return True
         job = self.store.get_job(session.job_id)
-        return bool(job and job.status == JobStatus.ACTIVE and job.revision == revision)
+        allowed = {JobStatus.ACTIVE}
+        if completing:
+            allowed.update((JobStatus.COMPLETE, JobStatus.ABANDONED))
+        return bool(job and job.status in allowed and job.revision == revision)
 
     def register(self, spec: AgentSpec) -> None:
         self._specs[spec.kind] = spec
@@ -238,7 +241,7 @@ class AgentRuntime:
     async def wake(self, session_id: str, event: Event) -> None:
         """Deliver an event to a session. If the session is mid-turn the
         event queues and is handed to the agent before it hibernates."""
-        self._pending.setdefault(session_id, deque()).append(event)
+        self.store.enqueue_delivery(session_id, event)
         lock = self._lock(session_id)
         if lock.locked():
             return  # the running turn will drain the queue before sleeping
@@ -248,7 +251,10 @@ class AgentRuntime:
     async def _run(self, session_id: str) -> None:
         session = self.store.get_session(session_id)
         if not session or session.status == SessionStatus.CLOSED:
-            self._pending.pop(session_id, None)
+            if session:
+                self.store.acknowledge_events(
+                    session, self.store.pending_events(session_id)
+                )
             return
         spec = self._specs.get(session.agent.value)
         if not spec:
@@ -256,13 +262,18 @@ class AgentRuntime:
             return
 
         self._repair_interrupted(session)
-        pending = self._pending.setdefault(session_id, deque())
-
-        events = self._drain(pending)
+        events = self.store.pending_events(session_id)
         if not events:
             return
+        if session.status == SessionStatus.CLOSED:
+            self.store.acknowledge_events(session, events)
+            return
+        if not self.authority_valid(session, session.job_revision):
+            return
         session.status = SessionStatus.RUNNING
+        session.outcome = CaseState.ACTIVE
         session.wake_at = 0.0
+        session.wake_reason = ""
         self.store.save_session(session)
         await self._notify(session)
 
@@ -276,44 +287,74 @@ class AgentRuntime:
             if not self.authority_valid(session, session.job_revision):
                 return
             session.status = SessionStatus.HIBERNATING
+            session.outcome = CaseState.FAILED
             session.wake_at = time.time() + 300
             session.wake_reason = "Something went wrong on my side — retrying shortly."
             self.store.save_session(session)
         await self._notify(session)
 
-    def _drain(self, pending: deque[Event]) -> list[Event]:
-        events = []
-        while pending:
-            events.append(pending.popleft())
-        return events
-
     def _repair_interrupted(self, session: AgentSession) -> None:
-        """If the process died mid-turn, the last message may be an assistant
-        tool_use with no result. Patch it so the API accepts the history."""
+        """Recover recorded results; never describe an uncertain effect as unrun."""
         if not session.messages:
             return
         last = session.messages[-1]
-        if last.get("role") != "assistant":
+        if last.get("role") != "assistant" or not isinstance(last.get("content"), list):
             return
-        tool_uses = [
-            b
-            for b in last.get("content", [])
-            if isinstance(b, dict) and b.get("type") == "tool_use"
-        ]
-        if tool_uses:
-            session.messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": b["id"],
-                            "content": "(interrupted — Sparrow restarted before this tool ran)",
-                        }
-                        for b in tool_uses
-                    ],
-                }
-            )
+        results = []
+        for block in last["content"]:
+            if block.get("type") != "tool_use":
+                continue
+            receipt = self.store.invocation(session.id, block["id"])
+            if receipt and receipt["result"] is not None:
+                results.append(receipt["result"])
+                if receipt["control"].get("close"):
+                    session.status = SessionStatus.CLOSED
+                    session.outcome = self._completion_outcome(session)
+                    session.closed_at = time.time()
+                    session.close_reason = receipt["control"].get("close_reason", "")
+                    session.wake_at = 0
+                    session.wake_reason = ""
+            else:
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block["id"],
+                        "is_error": True,
+                        "content": "Tool interrupted by a restart. Its effect may already have happened. "
+                        "Inspect current inventory, requests and durable node receipts before retrying; "
+                        "do not assume the action failed or repeat it blindly.",
+                    }
+                )
+        if results:
+            session.messages.append({"role": "user", "content": results})
+            self.store.save_session(session)
+
+    def _completion_outcome(self, session):
+        job = self.store.get_job(session.job_id) if session.job_id else None
+        return (
+            CaseState.FAILED
+            if job and job.status == JobStatus.ABANDONED
+            else CaseState.COMPLETED
+        )
+
+    def _budget_sessions(self, session):
+        if session.budget_scope:
+            return [
+                s
+                for s in self.store.get_sessions()
+                if s.budget_scope == session.budget_scope
+                or (
+                    session.agent.value == "librarian"
+                    and s.agent == session.agent
+                    and s.user_id == session.user_id
+                    and s.download_id == session.download_id
+                )
+            ]
+        return (
+            self.store.get_sessions(job_id=session.job_id)
+            if session.job_id
+            else [session]
+        )
 
     # ─── The loop ────────────────────────────────────────────────────────
 
@@ -323,20 +364,16 @@ class AgentRuntime:
         ctx = ToolCtx(session=session, runtime=self)
         tools = spec.tools(session)
         tool_map = {t.name: t for t in tools}
-        pending = self._pending.setdefault(session.id, deque())
 
         _append_user(session, self._wake_text(session, events))
+        self.store.acknowledge_events(session, events)
         steps = 0
 
         while True:
             if not self.authority_valid(session, ctx.job_revision):
                 return
             policy = self.policy_getter()
-            sessions = (
-                self.store.get_sessions(job_id=session.job_id)
-                if session.job_id
-                else [session]
-            )
+            sessions = self._budget_sessions(session)
             dollars = (
                 sum(s.spend.dollars for s in sessions if s.id != session.id)
                 + session.spend.dollars
@@ -346,6 +383,11 @@ class AgentRuntime:
                 >= min(MAX_STEPS_PER_WAKE, spec.max_steps, policy["max_agent_calls"])
                 or dollars >= policy["max_agent_dollars"]
             ):
+                session.outcome = (
+                    CaseState.BUDGET_LIMITED
+                    if dollars >= policy["max_agent_dollars"]
+                    else CaseState.NEEDS_INPUT
+                )
                 session.wake_reason = (
                     "Work limit reached. Review this request before continuing."
                 )
@@ -355,6 +397,7 @@ class AgentRuntime:
             system = await spec.system(session)
             response, limited = await self._budgeted_call(session, system, tools, spec)
             if limited:
+                session.outcome = CaseState.BUDGET_LIMITED
                 session.wake_at = 0
                 session.wake_reason = "The next reasoning call could exceed this request’s estimated budget. Review the budget before continuing."
                 break
@@ -363,6 +406,7 @@ class AgentRuntime:
             if response is None:
                 # API unreachable after retries — hibernate and try later.
                 session.status = SessionStatus.HIBERNATING
+                session.outcome = CaseState.WAITING
                 session.wake_at = time.time() + 600
                 session.wake_reason = (
                     "Can't reach my reasoning service — retrying soon."
@@ -376,50 +420,94 @@ class AgentRuntime:
                     "content": [b.to_dict() for b in response.content],
                 }
             )
+            self.store.save_session(
+                session
+            )  # record every invocation before any effect
             steps += 1
 
             tool_uses = [b for b in response.content if b.type == "tool_use"]
             if not tool_uses:
-                break  # plain text turn end → hibernate
+                session.outcome = CaseState.NEEDS_INPUT
+                session.wake_reason = "The review ended without a verified outcome. Retry or clarify the request to continue."
+                break
 
             results = []
             for tu in tool_uses:
                 results.append(await self._run_tool(ctx, tool_map, tu))
             session.messages.append({"role": "user", "content": results})
-            if not ctx.close and not self.authority_valid(session, ctx.job_revision):
+            if not self.authority_valid(
+                session, ctx.job_revision, completing=ctx.close
+            ):
                 return
             self.store.save_session(session)
 
             if ctx.close:
                 session.status = SessionStatus.CLOSED
+                session.outcome = self._completion_outcome(session)
                 session.closed_at = time.time()
                 session.close_reason = ctx.close_reason
                 session.wake_at = 0.0
                 session.wake_reason = ""
                 self.store.save_session(session)
-                self._pending.pop(session.id, None)
+                self.store.acknowledge_events(
+                    session, self.store.pending_events(session.id)
+                )
                 return
             if ctx.hibernate:
                 # New events that arrived mid-turn beat hibernation.
-                fresh = self._drain(pending)
+                fresh = self.store.pending_events(session.id)
                 if fresh:
                     ctx.hibernate = False
                     _append_user(session, self._wake_text(session, fresh))
+                    self.store.acknowledge_events(session, fresh)
                     continue
                 break
 
         session.status = SessionStatus.HIBERNATING
+        if session.outcome == CaseState.ACTIVE:
+            session.outcome = CaseState.WAITING
         session.spend.turns += 1
         if session.wake_at == 0.0 and not session.wake_reason:
             session.wake_reason = "Waiting for the next event."
         self.store.save_session(session)
 
         # Events that arrived at the very end: run again.
-        if pending:
+        if self.store.pending_events(session.id):
             await self._run(session.id)
 
     async def _run_tool(self, ctx: ToolCtx, tool_map: dict[str, ToolDef], tu) -> dict:
         args = tu.input or {}
+        if ctx.close:
+            return {
+                "type": "tool_result",
+                "tool_use_id": tu.id,
+                "is_error": True,
+                "content": "The session already finished. Further actions in this batch are refused.",
+            }
+        receipt = self.store.invocation(ctx.session.id, tu.id)
+        if receipt:
+            if (
+                receipt["name"] != tu.name
+                or receipt["arguments"] != args
+                or receipt["revision"] != ctx.job_revision
+            ):
+                return {
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "is_error": True,
+                    "content": "Tool invocation identity was reused with changed inputs. Inspect current evidence.",
+                }
+            if receipt["result"] is not None:
+                for key, value in receipt["control"].items():
+                    setattr(ctx, key, value)
+                return receipt["result"]
+            return {
+                "type": "tool_result",
+                "tool_use_id": tu.id,
+                "is_error": True,
+                "content": "Previous invocation has an uncertain outcome. Reconcile current receipts before retrying.",
+            }
+        self.store.start_invocation(ctx.session, tu.id, tu.name, args)
         await self._notify_tool(ctx.session, tu.name, "started", args, "", False)
         tool = tool_map.get(tu.name)
         if not tool:
@@ -439,6 +527,31 @@ class AgentRuntime:
                 logger.exception("tool %s failed", tu.name)
                 content, is_error = f"Tool failed: {e}", True
         content = content[:40000]  # keep single results bounded
+        result: dict = {"type": "tool_result", "tool_use_id": tu.id, "content": content}
+        if is_error:
+            result["is_error"] = True
+        current = self.store.get_session(ctx.session.id)
+        if current and (
+            current.status == SessionStatus.CLOSED
+            or current.job_revision != ctx.job_revision
+            or not self.authority_valid(
+                ctx.session, ctx.job_revision, completing=ctx.close
+            )
+        ):
+            ctx.close = ctx.hibernate = False
+            snapshot = current
+        else:
+            snapshot = ctx.session
+        self.store.finish_invocation(
+            snapshot,
+            tu.id,
+            result,
+            {
+                "close": ctx.close,
+                "close_reason": ctx.close_reason,
+                "hibernate": ctx.hibernate,
+            },
+        )
         await self._notify_tool(
             ctx.session,
             tu.name,
@@ -447,9 +560,6 @@ class AgentRuntime:
             content,
             is_error,
         )
-        result: dict = {"type": "tool_result", "tool_use_id": tu.id, "content": content}
-        if is_error:
-            result["is_error"] = True
         return result
 
     async def _notify_tool(
@@ -477,15 +587,11 @@ class AgentRuntime:
             logger.exception("tool activity notification failed")
 
     async def _budgeted_call(self, session, system, tools, spec):
-        scope = session.job_id or session.id
+        scope = session.budget_scope or session.job_id or session.id
         async with self._budget_locks.setdefault(scope, asyncio.Lock()):
             if not self.authority_valid(session, session.job_revision):
                 return None, False
-            sessions = (
-                self.store.get_sessions(job_id=session.job_id)
-                if session.job_id
-                else [session]
-            )
+            sessions = self._budget_sessions(session)
             spent = (
                 sum(s.spend.dollars for s in sessions if s.id != session.id)
                 + session.spend.dollars
@@ -513,9 +619,12 @@ class AgentRuntime:
             identity = secrets.token_hex(16)
             with self.store._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
+                scopes = sorted({scope, *(s.id for s in sessions)})
                 held = db.execute(
-                    "SELECT COALESCE(SUM(dollars),0) FROM reasoning_reservations WHERE scope=?",
-                    (scope,),
+                    "SELECT COALESCE(SUM(dollars),0) FROM reasoning_reservations WHERE scope IN ("
+                    + ",".join("?" for _ in scopes)
+                    + ")",
+                    scopes,
                 ).fetchone()[0]
                 if spent + held + estimate > self.policy_getter()["max_agent_dollars"]:
                     return None, True

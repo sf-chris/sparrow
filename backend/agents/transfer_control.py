@@ -1,7 +1,7 @@
 """Persisted transfer intent; request controls report confirmed versus pending effects."""
 
 import time
-from .models import JobStatus, SessionStatus, Event
+from .models import JobStatus, SessionStatus, Event, CaseState
 from .node_executor import NodeError
 from .node_tools import components
 from ..models import DownloadStatus
@@ -101,11 +101,13 @@ async def control_job(service, job_id, action):
         session.wake_at = 0
         if action == "cancel":
             session.status = SessionStatus.CLOSED
+            session.outcome = CaseState.CANCELLED
             session.close_reason = "Cancelled by the requester."
             session.closed_at = time.time()
         elif action == "resume" and session.agent.value == "fetch":
             session.job_revision = job.revision
             session.status = SessionStatus.HIBERNATING
+            session.outcome = CaseState.WAITING
             session.closed_at = None
             session.close_reason = ""
         elif (
@@ -115,6 +117,7 @@ async def control_job(service, job_id, action):
         ):
             session.job_revision = job.revision
             session.status = SessionStatus.HIBERNATING
+            session.outcome = CaseState.WAITING
         service.store.save_session(session)
     await service.broadcast({"type": "job_update", "data": job.to_dict()})
     pending = False
