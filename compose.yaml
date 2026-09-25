@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     init: true
     ports:
-      - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:8888:8888"
+      - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:${SPARROW_PORT:-8888}:8888"
     volumes:
       - sparrow-data:/data
     security_opt:

@@ -51,6 +51,10 @@ coordinator process. `docker compose logs --tail=100 sparrow` shows startup erro
 To serve your trusted home network, create `.env` containing the server's LAN
 address, for example `SPARROW_BIND_ADDRESS=192.168.1.20`, then recreate the container
 with `docker compose up -d`. Open that address on the phone and Windows node.
+Set `SPARROW_PORT=8081` in the same file to use a different browser port, then
+recreate the container and open `http://<server-address>:8081`. The container
+continues to use port 8888 internally. Use the chosen browser port in setup links
+and node server addresses too.
 Plain HTTP is a local-network option; installing the PWA on a phone requires a
 trusted secure browser context. External access setup is deferred.
 
