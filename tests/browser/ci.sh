@@ -25,6 +25,7 @@ for _ in range(40):
 else:raise RuntimeError('The browser fixture server did not start.')
 PY
 SPARROW_VISUAL_OUT="$evidence/setup" node tests/browser/design.cjs
+SPARROW_VISUAL_OUT="$evidence/onboarding" node tests/browser/onboarding.cjs
 SPARROW_VISUAL_OUT="$evidence/viewing" node tests/browser/check.cjs
 SPARROW_VISUAL_OUT="$evidence/entry" node tests/browser/entry.cjs
 SPARROW_VISUAL_OUT="$evidence/accessibility" node tests/browser/accessibility.cjs

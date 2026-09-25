@@ -29,6 +29,9 @@ def install_product(app, storage, accounts, nodes, get_service):
     from .operations import install_operations
 
     install_operations(app, storage)
+    from .onboarding import install_onboarding
+
+    install_onboarding(app, storage, nodes)
     catalogue = Catalogue(storage, nodes)
     router = APIRouter(prefix="/api/v1")
     job_lock = asyncio.Lock()

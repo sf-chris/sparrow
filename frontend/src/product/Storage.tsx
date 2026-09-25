@@ -39,7 +39,13 @@ type Selection = {
   season: number | null;
   episode: number | null;
 };
-export default function Storage() {
+export default function Storage({
+  onboarding = false,
+  onChanged,
+}: {
+  onboarding?: boolean;
+  onChanged?: () => void | Promise<void>;
+} = {}) {
   const nodes = useResource(() => api<NodeInfo[]>("/nodes"));
   const cfg = useResource(() =>
     api<{ library_dir: string; staging_dir: string }>("/admin/config"),
@@ -79,6 +85,7 @@ export default function Storage() {
       });
       setLocal(false);
       await Promise.all([nodes.refresh(), cfg.refresh()]);
+      await onChanged?.();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -98,6 +105,7 @@ export default function Storage() {
   }
   return (
     <Page
+      embedded={onboarding}
       title="Storage & import"
       description="Keep files where you want them. Pair a storage node, or use folders on this server."
       action={
@@ -114,14 +122,26 @@ export default function Storage() {
         </button>
       }
     >
-      <ErrorNote error={error || nodes.error} retry={nodes.refresh} />
+      <ErrorNote
+        error={error || nodes.error || cfg.error}
+        retry={() => {
+          void nodes.refresh();
+          void cfg.refresh();
+        }}
+      />
       {nodes.loading && !nodes.data ? (
         <Loading label="Checking storage…" />
       ) : (
         <Section
           title="Connected storage"
           action={
-            <button className="sp-button quiet" onClick={nodes.refresh}>
+            <button
+              className="sp-button quiet"
+              onClick={() => {
+                void nodes.refresh();
+                void onChanged?.();
+              }}
+            >
               <RefreshCw size={15} />
               Refresh
             </button>
@@ -198,18 +218,20 @@ export default function Storage() {
                           Choose folders
                         </button>
                       )}
-                      <button
-                        className="sp-button secondary"
-                        disabled={
-                          busy === node.id || !node.online || !root?.available
-                        }
-                        onClick={() => preview(node)}
-                      >
-                        <FolderOpen size={16} />
-                        {busy === node.id
-                          ? "Scanning…"
-                          : "Import existing media"}
-                      </button>
+                      {!onboarding && (
+                        <button
+                          className="sp-button secondary"
+                          disabled={
+                            busy === node.id || !node.online || !root?.available
+                          }
+                          onClick={() => preview(node)}
+                        >
+                          <FolderOpen size={16} />
+                          {busy === node.id
+                            ? "Scanning…"
+                            : "Import existing media"}
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="sp-actions sp-muted mt-4">
@@ -269,6 +291,7 @@ export default function Storage() {
                   onClick={() => {
                     setPairing(false);
                     void nodes.refresh();
+                    void onChanged?.();
                   }}
                 >
                   Check connection
@@ -301,7 +324,8 @@ export default function Storage() {
             <ErrorNote error={error} />
             <p className="sp-muted">
               These paths belong to the Linux server. To use Windows folders,
-              pair a Windows storage node.
+              pair a Windows storage node. With Docker, enter the mounted paths
+              visible inside the container. Folders must already exist.
             </p>
             <Field
               label="Library folder"
