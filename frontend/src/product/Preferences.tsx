@@ -221,10 +221,12 @@ export default function Preferences({
   user,
   welcome = false,
   onChanged,
+  continueSetup = false,
 }: {
   user: User;
   welcome?: boolean;
   onChanged: () => void;
+  continueSetup?: boolean;
 }) {
   const ownerSetup = welcome && user.role === "admin";
   const resource = useResource(async () => {
@@ -353,7 +355,9 @@ export default function Preferences({
                   {busy
                     ? "Saving…"
                     : welcome
-                      ? "Continue to Sparrow"
+                      ? continueSetup
+                        ? "Continue setup"
+                        : "Continue to Sparrow"
                       : "Save preferences"}
                   {welcome && <ArrowRight size={16} />}
                 </button>

@@ -134,7 +134,20 @@ def install_accounts(app, storage, get_service):
             max_age=30 * 86400,
             path="/",
         )
-        return {"user": user, "preferences": accounts.resolve(user["id"])}
+        return {
+            "user": user,
+            "preferences": accounts.resolve(user["id"]),
+            "server_setup": server_setup(user),
+        }
+
+    def server_setup(user):
+        if not user or user["role"] != "admin":
+            return None
+        config = storage.get_config()
+        return {
+            "complete": config.onboarding_complete,
+            "deferred": config.onboarding_deferred,
+        }
 
     @router.get("/auth/status")
     def auth_status(request: Request):
@@ -143,6 +156,7 @@ def install_accounts(app, storage, get_service):
             "needs_setup": not accounts.has_users(),
             "user": user,
             "preferences": accounts.resolve(user["id"]) if user else None,
+            "server_setup": server_setup(user),
         }
 
     @router.post("/auth/bootstrap")

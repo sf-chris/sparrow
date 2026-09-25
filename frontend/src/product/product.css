@@ -3054,3 +3054,27 @@ body {
     padding-top: 6px;
   }
 }
+.sp-setup-steps,
+.sp-setup-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.sp-setup-content {
+  margin-top: 24px;
+}
+.sp-setup-content > .sp-page-heading h2 {
+  font-size: 20px;
+}
+.sp-setup-reminder {
+  grid-column: 1 / -1;
+  padding: 12px 20px;
+  margin-bottom: 18px;
+  background: var(--sp-lilac, #eee8f8);
+  border-radius: 12px;
+}
+.sp-setup-reminder a {
+  text-decoration: underline;
+  margin-left: 8px;
+}

@@ -49,6 +49,13 @@ focus remain required.
   directly. Setup-code prefill, password visibility, autocomplete, validation,
   and invitations retain their existing contracts. Back navigation returns to
   the landing page; sign-out returns there too.
+- **Server setup:** after the administrator chooses household defaults, guide
+  them through connections, storage, downloads and a measured setup summary.
+  Offer existing-library use without API keys or a download app. Save progress
+  on the server; Finish later preserves an unfinished state and a visible return
+  link. Existing administrators with unfinished setup join the same flow.
+  Household viewers only receive their personal preferences welcome. Saved keys
+  and download settings are labelled as configured, not live-verified access.
 - **Home:** one short greeting, a compact horizontal Continue watching row
   with up to twelve recent in-progress copies, then library posters. Resume
   cards show artwork, progress and a visible play action; they never expand

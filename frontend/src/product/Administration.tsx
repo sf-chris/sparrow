@@ -168,7 +168,13 @@ export function Defaults() {
   );
 }
 
-export function ServerSettings() {
+export function ServerSettings({
+  setupSection,
+  onSaved,
+}: {
+  setupSection?: "providers" | "downloads";
+  onSaved?: () => void | Promise<void>;
+} = {}) {
   const resource = useResource(() => api<Record<string, any>>("/admin/config"));
   const [draft, setDraft] = useState<Record<string, any>>({});
   const [error, setError] = useState("");
@@ -191,6 +197,7 @@ export function ServerSettings() {
       setDraft({});
       setSaved(true);
       await resource.refresh();
+      await onSaved?.();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -199,182 +206,236 @@ export function ServerSettings() {
   }
   return (
     <Page
-      title="Server settings"
-      description="Connect Sparrow to title information and its reasoning service. Storage lives in Storage & import."
+      embedded={!!setupSection}
+      title={
+        setupSection === "providers"
+          ? "Connect title search and agents"
+          : setupSection === "downloads"
+            ? "Connect your download app"
+            : "Server settings"
+      }
+      description={
+        setupSection === "providers"
+          ? "TMDB supplies title and episode information. Anthropic powers discovery and collection care. Keys are stored on your server."
+          : setupSection === "downloads"
+            ? "Use an existing Transmission or qBittorrent app. Sparrow does not install a download app for you."
+            : "Connect Sparrow to title information and its reasoning service. Storage lives in Storage & import."
+      }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.data ? (
         <div className="sp-form">
-          <Section title="Connections">
-            <div className="sp-panel sp-form-grid">
-              <Field
-                label="TMDB API key"
-                hint={
-                  values.tmdb_api_key_configured
-                    ? "Configured. Leave blank to keep the current key."
-                    : "Used to find movies, shows and episode information."
-                }
-              >
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={draft.tmdb_api_key || ""}
-                  onChange={(e) => set("tmdb_api_key", e.target.value)}
-                />
-              </Field>
-              <Field
-                label="Anthropic API key"
-                hint={
-                  values.anthropic_api_key_configured
-                    ? "Configured. Leave blank to keep the current key."
-                    : "Used by discovery and management agents. Watching existing media works without it."
-                }
-              >
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={draft.anthropic_api_key || ""}
-                  onChange={(e) => set("anthropic_api_key", e.target.value)}
-                />
-              </Field>
-              <Field
-                label="Acquisition source"
-                hint="This release includes one source. Extra source connectors are a later feature."
-              >
-                <select
-                  value={values.preferred_search_engines?.[0] || "apibay"}
-                  onChange={(e) =>
-                    set("preferred_search_engines", [e.target.value])
+          {setupSection !== "downloads" && (
+            <Section title="Connections">
+              {setupSection && (
+                <p className="sp-muted">
+                  Create a key in{" "}
+                  <a
+                    href="https://www.themoviedb.org/settings/api"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    TMDB API settings
+                  </a>{" "}
+                  and{" "}
+                  <a
+                    href="https://platform.claude.com/settings/keys"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Claude Console
+                  </a>
+                  , then paste them below. Anthropic API usage is billed by the
+                  provider.
+                </p>
+              )}
+              <div className="sp-panel sp-form-grid">
+                <Field
+                  label="TMDB API key"
+                  hint={
+                    values.tmdb_api_key_configured
+                      ? "Configured. Leave blank to keep the current key."
+                      : "Used to find movies, shows and episode information."
                   }
                 >
-                  <option value="apibay">Built-in source</option>
-                  {values.preferred_search_engines?.[0] &&
-                    values.preferred_search_engines[0] !== "apibay" && (
-                      <option
-                        value={values.preferred_search_engines[0]}
-                        disabled
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={draft.tmdb_api_key || ""}
+                    onChange={(e) => set("tmdb_api_key", e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="Anthropic API key"
+                  hint={
+                    values.anthropic_api_key_configured
+                      ? "Configured. Leave blank to keep the current key."
+                      : "Used by discovery and management agents. Watching existing media works without it."
+                  }
+                >
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={draft.anthropic_api_key || ""}
+                    onChange={(e) => set("anthropic_api_key", e.target.value)}
+                  />
+                </Field>
+                {!setupSection && (
+                  <>
+                    <Field
+                      label="Acquisition source"
+                      hint="This release includes one source. Extra source connectors are a later feature."
+                    >
+                      <select
+                        value={values.preferred_search_engines?.[0] || "apibay"}
+                        onChange={(e) =>
+                          set("preferred_search_engines", [e.target.value])
+                        }
                       >
-                        Previous source unavailable
-                      </option>
-                    )}
-                </select>
-              </Field>
-              <Field label="Routine reasoning model">
-                <input
-                  value={values.cheap_model || ""}
-                  onChange={(e) => set("cheap_model", e.target.value)}
-                />
-              </Field>
-              <Field label="Difficult-task reasoning model">
-                <input
-                  value={values.smart_model || ""}
-                  onChange={(e) => set("smart_model", e.target.value)}
-                />
-              </Field>
-            </div>
-          </Section>
-          <SubtitleProviderSettings />
-          <Section
-            title="Download app on this server"
-            description="For Windows acquisition, configure the download app on the Windows node instead."
-          >
-            <div className="sp-panel sp-form-grid">
-              <Field label="Download app">
-                <select
-                  value={tc.type || "none"}
-                  onChange={(e) =>
-                    set("torrent_client", { ...tc, type: e.target.value })
-                  }
+                        <option value="apibay">Built-in source</option>
+                        {values.preferred_search_engines?.[0] &&
+                          values.preferred_search_engines[0] !== "apibay" && (
+                            <option
+                              value={values.preferred_search_engines[0]}
+                              disabled
+                            >
+                              Previous source unavailable
+                            </option>
+                          )}
+                      </select>
+                    </Field>
+                    <Field label="Routine reasoning model">
+                      <input
+                        value={values.cheap_model || ""}
+                        onChange={(e) => set("cheap_model", e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Difficult-task reasoning model">
+                      <input
+                        value={values.smart_model || ""}
+                        onChange={(e) => set("smart_model", e.target.value)}
+                      />
+                    </Field>
+                  </>
+                )}
+              </div>
+            </Section>
+          )}
+          {!setupSection && <SubtitleProviderSettings />}
+          {setupSection !== "providers" && (
+            <Section
+              title="Download app on this server"
+              description="For Windows acquisition, configure the download app on the Windows node instead."
+            >
+              <div className="sp-panel sp-form-grid">
+                <Field label="Download app">
+                  <select
+                    value={tc.type || "none"}
+                    onChange={(e) =>
+                      set("torrent_client", {
+                        ...tc,
+                        type: e.target.value,
+                        port: e.target.value === "transmission" ? 9091 : 8080,
+                      })
+                    }
+                  >
+                    <option value="none">Not configured</option>
+                    <option value="transmission">Transmission</option>
+                    <option value="qbittorrent">qBittorrent</option>
+                  </select>
+                </Field>
+                <Field label="Host">
+                  <input
+                    value={tc.host || "localhost"}
+                    onChange={(e) =>
+                      set("torrent_client", { ...tc, host: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Port">
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={tc.port || 8080}
+                    onChange={(e) =>
+                      set("torrent_client", {
+                        ...tc,
+                        port: Number(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Username">
+                  <input
+                    autoComplete="off"
+                    value={tc.username || ""}
+                    onChange={(e) =>
+                      set("torrent_client", { ...tc, username: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Password"
+                  hint="Leave blank to keep a saved password."
                 >
-                  <option value="none">Not configured</option>
-                  <option value="transmission">Transmission</option>
-                  <option value="qbittorrent">qBittorrent</option>
-                </select>
-              </Field>
-              <Field label="Host">
-                <input
-                  value={tc.host || "localhost"}
-                  onChange={(e) =>
-                    set("torrent_client", { ...tc, host: e.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Port">
-                <input
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={tc.port || 8080}
-                  onChange={(e) =>
-                    set("torrent_client", {
-                      ...tc,
-                      port: Number(e.target.value),
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Username">
-                <input
-                  autoComplete="off"
-                  value={tc.username || ""}
-                  onChange={(e) =>
-                    set("torrent_client", { ...tc, username: e.target.value })
-                  }
-                />
-              </Field>
-              <Field
-                label="Password"
-                hint="Leave blank to keep a saved password."
-              >
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={draft.torrent_client?.password || ""}
-                  onChange={(e) =>
-                    set("torrent_client", { ...tc, password: e.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Concurrent download limit">
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={values.max_active_transfers || 1}
-                  onChange={(e) =>
-                    set("max_active_transfers", Number(e.target.value))
-                  }
-                />
-              </Field>
-              <Field
-                label="Seeding ratio limit"
-                hint="Zero means no ratio limit."
-              >
-                <input
-                  type="number"
-                  min={0}
-                  step={0.1}
-                  value={values.seeding_ratio_limit ?? 2}
-                  onChange={(e) =>
-                    set("seeding_ratio_limit", Number(e.target.value))
-                  }
-                />
-              </Field>
-              <Field
-                label="Seeding time limit (hours)"
-                hint="Zero means no time limit."
-              >
-                <input
-                  type="number"
-                  min={0}
-                  value={values.seeding_time_hours ?? 0}
-                  onChange={(e) =>
-                    set("seeding_time_hours", Number(e.target.value))
-                  }
-                />
-              </Field>
-            </div>
-          </Section>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={draft.torrent_client?.password || ""}
+                    onChange={(e) =>
+                      set("torrent_client", { ...tc, password: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Concurrent download limit">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={values.max_active_transfers || 1}
+                    onChange={(e) =>
+                      set("max_active_transfers", Number(e.target.value))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Seeding ratio limit"
+                  hint="Zero means no ratio limit."
+                >
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={values.seeding_ratio_limit ?? 2}
+                    onChange={(e) =>
+                      set("seeding_ratio_limit", Number(e.target.value))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Seeding time limit (hours)"
+                  hint="Zero means no time limit."
+                >
+                  <input
+                    type="number"
+                    min={0}
+                    value={values.seeding_time_hours ?? 0}
+                    onChange={(e) =>
+                      set("seeding_time_hours", Number(e.target.value))
+                    }
+                  />
+                </Field>
+              </div>
+            </Section>
+          )}
+          {setupSection === "downloads" && (
+            <p className="sp-muted">
+              If Sparrow runs in Docker, the host must be reachable from its
+              container. Use the download machine’s LAN address; localhost
+              refers to the Sparrow container.
+            </p>
+          )}
           <div className="sp-savebar">
             <span className="sp-success" role="status">
               {saved ? "Server settings saved." : ""}
@@ -384,7 +445,11 @@ export function ServerSettings() {
               disabled={busy}
               onClick={save}
             >
-              {busy ? "Saving…" : "Save settings"}
+              {busy
+                ? "Saving…"
+                : setupSection
+                  ? "Save and continue"
+                  : "Save settings"}
             </button>
           </div>
         </div>
