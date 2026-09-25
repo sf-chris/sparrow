@@ -122,12 +122,13 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
     .click();
   if (setup) {
     await page
-      .getByRole("button", { name: "Continue to Sparrow", exact: true })
+      .getByRole("button", { name: "Continue setup", exact: true })
       .waitFor();
     await audit("first-preferences");
     await page
-      .getByRole("button", { name: "Continue to Sparrow", exact: true })
+      .getByRole("button", { name: "Continue setup", exact: true })
       .click();
+    await page.getByRole("button", { name: "Finish later", exact: true }).click();
   }
   await page
     .getByRole("heading", { name: "What’s on tonight, Chris?", exact: true })

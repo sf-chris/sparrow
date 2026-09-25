@@ -46,6 +46,11 @@ def main():
                 },
             )
         assert response.status_code == 200, response.text
+        setup = browser.patch(
+            "/api/v1/admin/onboarding",
+            json={"mode": "library", "step": "storage", "deferred": True},
+        )
+        assert setup.status_code == 200 and not setup.json()["complete"]
         response = browser.patch(
             "/api/v1/admin/config",
             json={"library_dir": "/data/library", "staging_dir": "/data/incoming"},
@@ -131,6 +136,11 @@ def main():
         resumed = browser.post("/api/v1/playback", json={"asset_id": asset})
         assert resumed.status_code == 200, resumed.text
         assert resumed.json()["position"] == 5
+        setup = browser.get("/api/v1/admin/onboarding").json()
+        assert setup["mode"] == "library" and setup["step"] == "storage"
+        assert setup["deferred"] and not setup["complete"]
+        finished = browser.post("/api/v1/admin/onboarding/finish")
+        assert finished.status_code == 200 and finished.json()["complete"]
         assert "javascript" in browser.get("/sw.js").headers["content-type"]
         assert browser.get("/manifest.webmanifest").json()["display"] == "standalone"
         nodes = browser.get("/api/v1/nodes").json()
@@ -150,6 +160,7 @@ def main():
                     "direct_range": True,
                     "converted_segment": True,
                     "restart_resume": True,
+                    "onboarding_resume": True,
                     "pwa_assets": True,
                     "bundled_speech_model": True,
                 }

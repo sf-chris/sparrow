@@ -76,6 +76,7 @@ export type Policy = {
 };
 export type Auth = {
   needs_setup?: boolean;
+  server_setup?: { complete: boolean; deferred: boolean } | null;
   user: User | null;
   preferences: Effective | null;
 };

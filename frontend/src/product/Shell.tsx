@@ -44,14 +44,17 @@ const management = [
     icon: SlidersHorizontal,
   },
   { to: "/settings/server", label: "Server settings", icon: Server },
+  { to: "/setup", label: "Server setup", icon: SlidersHorizontal },
 ];
 
 export default function Shell({
   user,
   onLogout,
+  setupPending = false,
 }: {
   user: User;
   onLogout: () => void;
+  setupPending?: boolean;
 }) {
   const [signingOut, setSigningOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
@@ -122,6 +125,12 @@ export default function Shell({
           </div>
         </div>
       </header>
+      {setupPending && user.welcomed && pathname !== "/setup" && (
+        <div className="sp-setup-reminder" role="status">
+          Your server setup is unfinished.{" "}
+          <Link to="/setup">Continue setup</Link>
+        </div>
+      )}
       <div className={`sp-workspace ${settings ? "sp-settings-layout" : ""}`}>
         {settings && (
           <aside className="sp-settings-nav">

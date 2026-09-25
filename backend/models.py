@@ -106,6 +106,9 @@ class SparrowConfig:
     tmdb_api_key: str = ""
     anthropic_api_key: str = ""
     onboarding_complete: bool = False
+    onboarding_deferred: bool = False
+    onboarding_mode: str = "autopilot"
+    onboarding_step: str = "start"
     auto_organize: bool = True
     preferred_search_engines: list[str] = field(default_factory=lambda: ["apibay"])
     seeding_ratio_limit: float = 2.0   # stop seeding at this ratio (0 = no limit)
@@ -126,6 +129,9 @@ class SparrowConfig:
             "tmdb_api_key": self.tmdb_api_key,
             "anthropic_api_key": self.anthropic_api_key,
             "onboarding_complete": self.onboarding_complete,
+            "onboarding_deferred": self.onboarding_deferred,
+            "onboarding_mode": self.onboarding_mode,
+            "onboarding_step": self.onboarding_step,
             "auto_organize": self.auto_organize,
             "preferred_search_engines": self.preferred_search_engines,
             "seeding_ratio_limit": self.seeding_ratio_limit,

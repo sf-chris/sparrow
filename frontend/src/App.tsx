@@ -22,6 +22,7 @@ import Storage from "./product/Storage";
 import { Defaults, People, ServerSettings } from "./product/Administration";
 import Discover from "./product/Discover";
 import Watch from "./product/Watch";
+import Onboarding from "./product/Onboarding";
 import "./product/product.css";
 
 function Guest({
@@ -84,6 +85,9 @@ export default function App() {
           element={
             <Shell
               user={user}
+              setupPending={
+                !!auth.data.server_setup && !auth.data.server_setup.complete
+              }
               onLogout={() => {
                 window.history.replaceState(null, "", "/");
                 auth.setData({ user: null, preferences: null });
@@ -95,12 +99,30 @@ export default function App() {
             <Route
               path="*"
               element={
-                <Preferences user={user} welcome onChanged={auth.refresh} />
+                <Preferences
+                  user={user}
+                  welcome
+                  continueSetup={
+                    !!auth.data.server_setup && !auth.data.server_setup.complete
+                  }
+                  onChanged={auth.refresh}
+                />
               }
             />
           ) : (
             <>
-              <Route path="/" element={<Collection user={user} home />} />
+              <Route
+                path="/"
+                element={
+                  auth.data.server_setup &&
+                  !auth.data.server_setup.complete &&
+                  !auth.data.server_setup.deferred ? (
+                    <Navigate to="/setup" replace />
+                  ) : (
+                    <Collection user={user} home />
+                  )
+                }
+              />
               <Route path="/library" element={<Collection user={user} />} />
               <Route
                 path="/title/:mediaType/:tmdbId"
@@ -118,6 +140,10 @@ export default function App() {
               <Route path="/settings/logs" element={<Logs user={user} />} />
               {user.role === "admin" && (
                 <>
+                  <Route
+                    path="/setup"
+                    element={<Onboarding onChanged={auth.refresh} />}
+                  />
                   <Route path="/settings/storage" element={<Storage />} />
                   <Route path="/settings/server" element={<ServerSettings />} />
                   <Route

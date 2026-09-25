@@ -1,0 +1,171 @@
+{
+  "passed": true,
+  "layouts": [
+    {
+      "name": "setup-choice",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-choice",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-choice",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-choice",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-provider-error",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-provider-error",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-provider-error",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-provider-error",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-folder-error",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-folder-error",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-folder-error",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-folder-error",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-downloads",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-downloads",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-downloads",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-downloads",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-incomplete",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-incomplete",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-incomplete",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-incomplete",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-import-ready",
+      "width": 360,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-import-ready",
+      "width": 390,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-import-ready",
+      "width": 768,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "setup-import-ready",
+      "width": 1440,
+      "overflow": false,
+      "violations": []
+    }
+  ],
+  "errors": [],
+  "resume": true,
+  "deferred_is_incomplete": true,
+  "import_without_providers": true,
+  "backend": {
+    "total": 161,
+    "passed": 159,
+    "skipped_paid_model": 2
+  },
+  "package": {
+    "container": "sparrow-onboarding-package",
+    "import": true,
+    "direct_range": true,
+    "converted_segment": true,
+    "restart_resume": true,
+    "onboarding_resume": true,
+    "pwa_assets": true,
+    "bundled_speech_model": true
+  },
+  "broader_browser_journeys_passed": true,
+  "live_provider_acceptance": false,
+  "physical_device_acceptance": false
+}
