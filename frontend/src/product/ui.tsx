@@ -27,27 +27,34 @@ export function Page({
   description,
   action,
   className = "",
+  embedded = false,
   children,
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
   className?: string;
+  embedded?: boolean;
   children: ReactNode;
 }) {
+  const Container = embedded ? "section" : "main";
+  const Heading = embedded ? "h2" : "h1";
   return (
-    <main id="main-content" className={`sp-page ${className}`}>
+    <Container
+      id={embedded ? undefined : "main-content"}
+      className={`${embedded ? "sp-setup-content" : "sp-page"} ${className}`}
+    >
       {title && (
         <header className="sp-page-heading">
           <div>
-            <h1>{title}</h1>
+            <Heading>{title}</Heading>
             {description && <p className="sp-description">{description}</p>}
           </div>
           {action}
         </header>
       )}
       {children}
-    </main>
+    </Container>
   );
 }
 export function ErrorNote({

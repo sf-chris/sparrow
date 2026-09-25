@@ -17,8 +17,16 @@ The second command prints a link that fills the setup code automatically, and
 the code for manual entry. Open the link and choose **Create administrator account**,
 then choose household defaults. This is a one-time first-account setup, entirely
 on your server. The setup code stops working after the account is made.
-Server settings accepts TMDB and reasoning credentials; imported media plays
-without either provider. Subtitle discovery can optionally use OpenSubtitles.
+The server setup flow then guides you through TMDB and reasoning credentials,
+local or paired storage, a download app and a setup summary. Choose **Watch my
+existing collection** to import and watch without API keys or a download app.
+Settings and the current step survive refresh, sign-out and server restart.
+**Finish later** leaves setup unfinished and provides a **Continue setup** link;
+return at any time through **Settings → Server setup** or `/setup`.
+Existing administrator accounts with unfinished setup use this same flow.
+The summary checks current storage availability and labels saved credentials
+honestly; provider access is exercised by the first request, without paid model
+calls during setup. Subtitle discovery can optionally use OpenSubtitles.
 
 Sparrow also prints **Setup code:** in its startup logs until administrator setup
 is complete. View it with `docker compose logs sparrow`, or rerun the command above

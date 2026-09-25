@@ -331,3 +331,38 @@ and reports unavailable evidence without assuming an external effect failed.
 migration, crash checks and retained limitations. This is the next P4 slice after
 merged PR #5; provider profiles, conversation compaction, model-quality evaluation
 and the rest of issue #3 remain open.
+
+## Guided administrator setup — 25 September 2026
+
+Administrator onboarding now continues from household defaults into a persistent
+server setup flow: choose automatic downloads or existing-library use, connect
+providers, select local/paired storage, configure downloads and review the result.
+Previously account creation stopped at preferences and left these steps in Settings.
+Existing administrators with unfinished setup enter the same flow; progress is
+saved server-side, and Finish later retains an unfinished state and return link.
+Household viewers still receive only their personal-preferences welcome.
+
+Completion checks the selected mode against observed storage. Automatic downloads
+need provider keys and one available destination with media tools, writable
+library/incoming folders and download capability. Existing-library mode needs no
+provider or download app. Saved credentials/settings are labelled as configured;
+setup makes no paid calls or acquisitions and does not claim live provider access.
+The owner can revisit `/setup` or Settings → Server setup without creating a new
+account. External access, TV and the setup agent remain out of scope.
+
+Validation: 161 backend tests, 159 passed and two opt-in live-model tests skipped;
+production frontend build, dependency/audit and release checks pass. Five new API
+cases cover restart persistence, deferral versus completion, credential privacy,
+admin authority and unavailable/read-only/split storage. The isolated onboarding
+browser journey covers 24 layouts at 360, 390, 768 and 1440 pixels, missing settings,
+folder errors, refresh/sign-out/resume and provider-free import. The Linux package
+checks saved setup progress across container restart alongside import, ranged and
+converted playback, persistent login/progress and bundled speech-model loading.
+Browser artifacts use fictional media and disposable state. No live provider or
+physical-device acceptance is implied.
+
+[Recorded checks](product-validation/onboarding-checks.json),
+[phone setup](product-validation/onboarding-choice-mobile.png) and
+[desktop summary](product-validation/onboarding-review-desktop.png) preserve the
+isolated evidence. Existing viewing, household, accessibility and design journeys
+also pass, including 55 redesign layouts and 40 follow-up layouts.
