@@ -1,0 +1,36 @@
+{
+  "parent_issue": 3,
+  "slice": "retrievable oversized observations",
+  "base_commit": "a7f99c6816781d5b08c7490c0b130f4c59120346",
+  "backend_sha256": "57e409b2cb7885893c8540b3e970caa6bb77a614b40c1a0f512614b161a4b933",
+  "check_script": {
+    "total": 156,
+    "passed": 154,
+    "skipped_opt_in_live": 2,
+    "compilation": true,
+    "dependency_consistency": true,
+    "frontend_build": true,
+    "npm_audit_high": true,
+    "release_tree": true
+  },
+  "new_regression_tests": 16,
+  "linux_image": "sha256:698306ff93efd37e2bb40079e47e859aa2902f1427b07acf75c124fb1e44d347",
+  "linux_package": {
+    "container": "sparrow-evidence-check",
+    "import": true,
+    "direct_range": true,
+    "converted_segment": true,
+    "restart_resume": true,
+    "pwa_assets": true,
+    "bundled_speech_model": true
+  },
+  "packaged_evidence": {
+    "restart_reconstruction": true,
+    "total_chars": 105009,
+    "sha256": "e383bafe02716add5d2f7aac2e23e9d3f97d91113f7d30b5b425ed9d954d2453"
+  },
+  "packaged_backend_matches_working_tree": true,
+  "installed_deployment_changed": false,
+  "live_model_quality_evaluated": false,
+  "physical_device_acceptance": false
+}

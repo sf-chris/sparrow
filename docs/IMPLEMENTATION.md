@@ -317,3 +317,17 @@ the interface contract and removed; historical source links are pinned.
 Detailed evidence and outstanding P1–P9 scope are in
 [the implementation ledger](agentic-audit/IMPLEMENTATION.md). This is not parent
 issue completion or a live model/provider/device acceptance claim.
+
+## Retrievable agent evidence — 11 September 2026
+
+Large tool observations now persist with their invocation receipts and expose
+bounded, session-private retrieval. Agents can recover full observations after a
+restart and rediscover oversized evidence references after context loss. Four
+local row caps in Fetch search/file listings, Discovery collection matching and
+Librarian candidates were removed. The archive enforces explicit payload quotas
+and reports unavailable evidence without assuming an external effect failed.
+
+[The evidence contract](agentic-audit/EVIDENCE.md) describes storage, privacy,
+migration, crash checks and retained limitations. This is the next P4 slice after
+merged PR #5; provider profiles, conversation compaction, model-quality evaluation
+and the rest of issue #3 remain open.

@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from backend.agents.models import AgentKind, AgentSession, Job
 from backend.agents.runtime import ToolCtx, ToolError
@@ -73,6 +73,25 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_apibay_indexed_value(["movie.mkv"]), "movie.mkv")
         self.assertEqual(_apibay_indexed_value("movie.mkv"), "movie.mkv")
         self.assertEqual(_apibay_indexed_value([], "fallback"), "fallback")
+
+    async def test_search_and_torrent_listing_do_not_discard_tail_rows(self):
+        ctx = ToolCtx(session=self.session, runtime=_Runtime())
+        search = self._tool(fetch_tools(self.toolbox), "tpb_search")
+        candidates = [{"id": str(i), "name": f"Fixture candidate {i}"} for i in range(85)]
+        with patch("backend.agents.tools.apibay_query", new=AsyncMock(return_value=candidates)):
+            results = await search.handler(ctx, {"query": "Fixture"})
+        self.assertEqual(len(results), 85)
+        self.assertEqual(results[-1]["apibay_id"], "84")
+
+        peek = self._tool(fetch_tools(self.toolbox), "torrent_peek")
+        listing = [{"name": f"S01E{i:03d}.mkv", "size": 1_000_000} for i in range(1, 251)]
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.get.return_value = Mock(json=lambda: listing)
+        with patch("backend.agents.tools.httpx.AsyncClient", return_value=client):
+            files = await peek.handler(ctx, {"apibay_id": "84"})
+        self.assertEqual(len(files), 250)
+        self.assertEqual(files[-1]["file"], "S01E250.mkv")
 
     async def test_mocked_acquisition_marks_download_agent_managed(self) -> None:
         async def connect():
