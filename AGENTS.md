@@ -42,6 +42,8 @@ Everything new lives in `backend/agents/`:
   lifecycle, boot recovery. Plumbing makes zero decisions.
 - `store.py` — sqlite for jobs/journal/sessions and reasoning reservations;
   markdown memory is scoped to the requesting person.
+- `evidence.py` — immutable oversized tool observations, atomic with invocation
+  receipts; private session retrieval/listing and serialized storage quotas.
 - `discovery.py` — persistent, scoped Discovery tool loop with inspected title
   proposals. Fast TMDB suggestions remain alongside it; `resolution.py` retains
   the legacy description route.
@@ -143,3 +145,6 @@ The initial 30-case controlled contract suite is reproducible with
 `tests/evals/run_contracts.py`; paid model selection and device acceptance remain
 separate gates. New tool invocations must be recorded before effects and results
 before notifications; never replay uncertain effects without inspecting receipts.
+Large results must use the [evidence archive](docs/agentic-audit/EVIDENCE.md), with
+explicit partial previews and retrieval references. Do not silently cap observed
+inventories or treat a preview as proof that an item is missing.

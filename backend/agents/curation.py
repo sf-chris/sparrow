@@ -275,7 +275,7 @@ class Curation:
             "media_type": row["media_type"],
             "tmdb_id": row["tmdb_id"],
             "preferences": prefs,
-            "candidates": candidates[:100],
+            "candidates": candidates,
             "active_requests": [
                 {"id": j.id, "revision": j.revision, "state": j.status.value}
                 for j in active

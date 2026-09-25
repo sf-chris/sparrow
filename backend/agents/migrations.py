@@ -7,7 +7,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-SCHEMA_GENERATION = "agent-recovery-1"
+SCHEMA_GENERATION = "agent-evidence-1"
 
 
 def prepare(data_dir):

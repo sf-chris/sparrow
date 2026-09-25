@@ -102,6 +102,28 @@ class DiscoveryTests(unittest.IsolatedAsyncioTestCase):
     async def settle(self):
         await asyncio.gather(*list(self.discovery.tasks))
 
+    async def test_collection_keeps_matches_beyond_first_fifty(self):
+        for identity in range(55):
+            await self.storage.add_library_item(LibraryItem(
+                id=f"collection-{identity}", title=f"Space fixture {identity}",
+                tmdb_id=identity + 1, media_type=MediaType.MOVIE,
+                path=f"/fixture/{identity}.mp4",
+            ))
+        self.service.runtime._call_api = AsyncMock(side_effect=[
+            response("collection", {"query": "Space fixture"}),
+            response("finish", {"message": "Inspected the collection.", "titles": []}),
+        ])
+        identity = await self.search()
+        await self.settle()
+        session = self.service.store.get_session(identity)
+        collection = next(
+            json.loads(block["content"])
+            for message in session.messages if isinstance(message.get("content"), list)
+            for block in message["content"] if block.get("type") == "tool_result"
+        )
+        self.assertEqual(len(collection), 55)
+        self.assertEqual({row["tmdb_id"] for row in collection}, set(range(1, 56)))
+
     async def test_agent_uses_evidence_before_proposal_and_never_creates_jobs(self):
         calls = [
             response("search", {"media_type": "movie", "query": "space mystery"}),
