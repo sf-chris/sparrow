@@ -10,7 +10,7 @@ All notable changes to Sparrow are documented here.
   arrow keys move between titles for keyboards and TV remotes. Tailwind and
   DM Sans are removed; a before/after gallery covers all 25 screens.
 - Personal themes: the Guide stays the official theme, and each person can
-  choose Cinema, Clear, Saturday, Repertory or Console in Preferences. Every
+  choose Cinema, Clear or Saturday in Preferences. Every
   theme passes the same accessibility checks; fonts load only when used.
 - All interface copy rewritten in a listings voice, including the request,
   log, Find, Following and subtitle status lines the server sends. The voice

@@ -135,16 +135,16 @@ density. They never change structure, words or behaviour.
 | --- | --- | --- |
 | Guide | Everyone (default) | Newsprint listings, teal band, condensed capitals |
 | Cinema | Film nights, the TV across the room | Dark streaming shelves, Manrope, rounded art, no rules |
-| Clear | Older eyes, low vision | Atkinson Hyperlegible Next at a larger size, black on white, heavy focus |
-| Saturday | Kids | Fredoka, colour-coded shelves, chunky buttons with sticker shadows |
-| Repertory | Film lovers | A festival programme: Bodoni Moda italic titles, hairlines, small capitals |
-| Console | Whoever runs the server | JetBrains Mono, phosphor green, bracketed commands, dense rows |
+| Clear | Older eyes, low vision | Large print: Atkinson Hyperlegible Next, warm paper, no dark fields, one blue, amber focus halo |
+| Saturday | Kids | Fredoka, round blue shelves, sunshine buttons that press down, tilted posters |
+
+Cinema is the only dark theme. Clear and Saturday each use one colour and one
+highlight; their character comes from type size and shape, not more colours.
 
 Every theme passes the same axe and overflow checks as the Guide
 (`tests/browser/themes.cjs`). Red stays reserved for problems and the player
 stays dark in all of them. A theme restates the palette and faces in
-`frontend/src/product/themes.css`; decorative characters it adds carry empty
-alternative text so screen readers never announce them.
+`frontend/src/product/themes.css`.
 
 ## Product and verification boundaries
 
@@ -166,7 +166,7 @@ The sparrow doodle, pen circle and tick are original SVG in
 `frontend/src/product/Brand.tsx`; `frontend/public/icon.svg` repeats the
 doodle on teal. Archivo (Omnibus-Type) is bundled locally under the SIL OFL
 with its notice in `frontend/public/assets/font-licenses/`. The themes add
-Manrope, Atkinson Hyperlegible Next, Fredoka, Bodoni Moda and JetBrains Mono,
-each a Latin subset bundled locally under the SIL OFL with its notice in the
-same folder; a font downloads only when someone uses its theme. DM Sans, the
-pastel illustrations and Tailwind have been removed.
+Manrope, Atkinson Hyperlegible Next and Fredoka, each a Latin subset bundled
+locally under the SIL OFL with its notice in the same folder; a font downloads
+only when someone uses its theme. DM Sans, the pastel illustrations and
+Tailwind have been removed.

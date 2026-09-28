@@ -85,7 +85,7 @@ class AccountTests(unittest.TestCase):
                 )
             upgraded = Accounts(temp)
             self.assertEqual(upgraded.user("u1")["theme"], "")
-            self.assertEqual(upgraded.set_theme("u1", "console")["theme"], "console")
+            self.assertEqual(upgraded.set_theme("u1", "cinema")["theme"], "cinema")
 
     def test_invitations_are_single_use_and_do_not_grant_admin(self):
         token = self.accounts.invite()
