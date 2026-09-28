@@ -1,4 +1,5 @@
 import InstallApp from "./InstallApp";
+import ThemePicker from "./ThemePicker";
 import { useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { Tick } from "./Brand";
@@ -299,6 +300,7 @@ export default function Preferences({
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
+      {!ownerSetup && <ThemePicker user={user} onChanged={onChanged} />}
       {resource.loading && !values ? (
         <Loading label="Loading preferences" />
       ) : (
