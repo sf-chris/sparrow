@@ -15,3 +15,5 @@ docs/screenshots
 tests/browser/artifacts
 packaging/build
 packaging/output
+docs/redesign
+.impeccable

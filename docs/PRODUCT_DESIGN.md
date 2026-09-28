@@ -20,13 +20,19 @@ visible at distance, and every list works with arrow keys.
 | Lifted paper | `#f6f5f2` | Inputs, coupons, sheet footers |
 | Print black | `#181410` | Text, rules, reversed bars, primary buttons |
 | Secondary ink | `#433f3a` | Supporting text |
-| Signal yellow | `#fad827` | Sparrow itself (masthead, cover) and the current choice |
+| Channel teal | `#156068` | Sparrow's band: masthead, day band, cover and sign-in |
+| On teal | `#f3f2ec` | Type and rules on the band |
+| Marigold | `#f1c45e` | Small doses only: the current choice on black, play buttons, progress on artwork, focus on teal |
 | Biro blue | `#0a4ac5` | The household's hand: links, focus, request circles, ticks |
 | Red | `#b70012` | Problems only |
 | Screen | `#0b0a08` | The player |
 
-Yellow never carries text meaning on newsprint; it sits behind or beneath
-black. Selected navigation, tabs and segments are black with yellow text.
+Large fields are the mid-dark teal, never a bright colour, so the guide stays
+comfortable in a dark room (the first bright-yellow version was too glaring).
+Marigold never covers an area larger than a button and never carries text
+meaning on newsprint. Selected tabs and segments are black with marigold text;
+the selected masthead link is a newsprint pill. Focus rings are biro blue on
+paper and marigold on teal.
 All text pairs meet WCAG AA; the tokens live in `frontend/src/product/product.css`.
 
 **Type.** Archivo is the single, locally bundled variable family (weight
@@ -54,12 +60,12 @@ settings. Phones use a four-item tab bar (Guide, Find, Requests, You).
 `Ctrl/Cmd+K` opens Find; `/` focuses the page's search field; arrow keys move
 between titles, rows and covers anywhere they are listed.
 
-- **Cover (public):** a yellow magazine cover. Giant logotype, one line
+- **Cover (public):** a teal magazine cover. Giant logotype, one line
   (“Say what you want to watch.”), one action (Sign in, or Set up Sparrow on a
   new server) and a labelled example listing showing a request, an arrival and
   a resume. Sign-in, setup and invitations are coupons on the same cover.
 - **Guide (`/`):** the day's page and the whole library in one place. The day
-  name, set huge in the yellow band that continues from the masthead, is the
+  name, set huge in the teal band that continues from the masthead, is the
   heading and the only display-size title in the app besides a title's own name. **Tonight** lists up to four resumable items (twelve on
   demand) with a still, time left and a direct play button. **Coming up** lists
   open requests with their last update time, circled title and status.
@@ -77,8 +83,8 @@ between titles, rows and covers anywhere they are listed.
 - **Requests (`/activity`):** a timed listing of requests with scope, the
   agent's latest note, recovery actions and expandable notes, then Following.
   `?request=` narrows to one request, including completed work.
-- **Player:** the black TV screen with Sparrow's own controls: a large yellow
-  play button, back 10s and forward 30s, a yellow scrubber, tabular times, mute
+- **Player:** the black TV screen with Sparrow's own controls: a large marigold
+  play button, back 10s and forward 30s, a marigold scrubber, tabular times, mute
   and full screen (Space/K, ←/→, M, F). Audio and subtitle choices sit under the
   video; Playback help and Subtitle care are disclosures.
 - **Settings:** a left index grouped You (Preferences, Account, Logs),
@@ -110,6 +116,6 @@ geometric fixture covers are test data, not real titles or recommendations.
 
 The sparrow doodle, pen circle and tick are original SVG in
 `frontend/src/product/Brand.tsx`; `frontend/public/icon.svg` repeats the
-doodle on yellow. Archivo (Omnibus-Type) is bundled locally under the SIL OFL
+doodle on teal. Archivo (Omnibus-Type) is bundled locally under the SIL OFL
 with its notice in `frontend/public/assets/font-licenses/`. DM Sans, the
 pastel illustrations and Tailwind have been removed.
