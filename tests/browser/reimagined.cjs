@@ -112,12 +112,12 @@ fs.mkdirSync(out, { recursive: true });
     .getByRole("link", { name: "Back to Sparrow", exact: true })
     .click();
   await page
-    .getByRole("heading", { name: "Say the word. Dim the lights." })
+    .getByRole("heading", { name: "Films and series on request." })
     .waitFor();
   await page.reload();
   assert.equal(await page.getByLabel("Username", { exact: true }).count(), 0);
   await page
-    .getByRole("link", { name: "Take your seat", exact: true })
+    .getByRole("link", { name: "Sign in", exact: true })
     .click();
   await page.getByLabel("Username", { exact: true }).waitFor();
   await snapshot("sign-in", true);
@@ -164,7 +164,7 @@ fs.mkdirSync(out, { recursive: true });
     .getByRole("link", { name: "Open The Quiet Planet", exact: true })
     .click();
   await page
-    .getByRole("link", { name: "Your collection", exact: true })
+    .getByRole("link", { name: "Back to library", exact: true })
     .click();
   assert.equal(
     await page.getByLabel("Search your library").inputValue(),
@@ -232,7 +232,7 @@ fs.mkdirSync(out, { recursive: true });
   await snapshot("search-results");
   await page.locator(".sp-print a").first().click();
   await page
-    .getByRole("link", { name: "Back to discovery", exact: true })
+    .getByRole("link", { name: "Back to results", exact: true })
     .click();
   assert.equal(
     await page
@@ -282,10 +282,13 @@ fs.mkdirSync(out, { recursive: true });
   await page.getByRole("checkbox").first().check();
   await snapshot("import-preview", true);
   await page
-    .getByRole("button", { name: "Match a movie or show", exact: true })
+    .getByRole("button", { name: "Match title", exact: true })
     .first()
     .click();
-  await page.getByLabel("Movie or show title", { exact: true }).fill("quiet");
+  await page
+    .getByRole("dialog", { name: "Match title", exact: true })
+    .getByLabel("Title", { exact: true })
+    .fill("quiet");
   await page
     .getByRole("button", { name: "Search titles", exact: true })
     .click();

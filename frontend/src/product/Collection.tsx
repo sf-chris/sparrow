@@ -23,11 +23,8 @@ function greeting(name: string) {
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 12) return `Good morning, ${name}.`;
   if (hour >= 12 && hour < 17) return `Good afternoon, ${name}.`;
-  if (hour >= 17 && hour < 23) return `Good evening, ${name}.`;
-  return `Still up, ${name}?`;
+  return `Good evening, ${name}.`;
 }
-const today = () =>
-  new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 
 export default function Collection({ home = false, user }: { home?: boolean; user: User }) {
   const resource = useResource(() => api<Item[]>("/catalogue"));
@@ -64,7 +61,6 @@ export default function Collection({ home = false, user }: { home?: boolean; use
     if (sort === "year") result.sort((a, b) => (b.year || 0) - (a.year || 0));
     return result;
   }, [resource.data, query, type, state, sort]);
-  const numbers = new Map(all.map((item, index) => [item.id, index + 1]));
   const continuing = all
     .flatMap((item) =>
       item.assets
@@ -75,23 +71,21 @@ export default function Collection({ home = false, user }: { home?: boolean; use
     .slice(0, 12);
   const empty = resource.data?.length === 0;
   const first = user.name.split(" ")[0];
-  const count = (n: number) => `${n} ${n === 1 ? "title" : "titles"}`;
 
   return (
     <Page
       className={home ? "sp-tonight" : "sp-library"}
-      kicker={
-        home
-          ? `${today()}${resource.data ? ` · ${count(all.length)} in the house` : ""}`
-          : "The collection"
-      }
       title={home ? greeting(first) : "Library"}
       action={
         !home && resource.data && !empty ? (
           <p className="sp-tally" aria-live="polite">
             <strong>{String(items.length).padStart(2, "0")}</strong>
             <span className="sp-label">
-              {items.length === all.length ? count(all.length) : `of ${count(all.length)}`}
+              {items.length === all.length
+                ? items.length === 1
+                  ? "title"
+                  : "titles"
+                : `of ${all.length}`}
             </span>
           </p>
         ) : undefined
@@ -102,36 +96,33 @@ export default function Collection({ home = false, user }: { home?: boolean; use
         resource.loading && <Loading />
       ) : (
         <>
-          {home && empty && (
-            <section className="sp-opening" aria-label="Welcome to your collection">
-              <p className="sp-label">Opening night</p>
-              <h2>The house is empty. For now.</h2>
-              <p>
-                {user.role === "viewer"
-                  ? "Titles shared with you will appear here. Ask whoever runs your server to add a collection."
-                  : user.role === "admin"
-                    ? "Bring in the films and series you already own, or ask Sparrow to find your first one."
-                    : "Ask Sparrow to find a film or series and it will appear here when it’s ready."}
-              </p>
-              <div className="sp-actions">
-                {user.role === "admin" && (
-                  <Link className="sp-btn sp-btn-solid" to="/settings/storage">
-                    Bring in your collection
-                  </Link>
-                )}
-                {user.role !== "viewer" && (
-                  <Link
-                    className={`sp-btn ${user.role === "admin" ? "sp-btn-line" : "sp-btn-solid"}`}
-                    to="/discover"
-                  >
-                    Find your first title <ArrowRight size={16} aria-hidden="true" />
-                  </Link>
-                )}
-              </div>
-            </section>
+          {empty && (
+            <Empty
+              title="Nothing to watch yet."
+              action={
+                <>
+                  {user.role === "admin" && (
+                    <ActionLink solid to="/settings/storage">
+                      Import media
+                    </ActionLink>
+                  )}
+                  {user.role !== "viewer" && (
+                    <ActionLink solid={user.role !== "admin"} to="/discover">
+                      Find a title
+                    </ActionLink>
+                  )}
+                </>
+              }
+            >
+              {user.role === "viewer"
+                ? "Ask whoever runs this server to add something."
+                : user.role === "admin"
+                  ? "Import what you already have, or find something new."
+                  : "Find a film or series and it will appear here when it’s ready."}
+            </Empty>
           )}
           {home && continuing.length > 0 && (
-            <Section kicker="Your tickets" title="Pick up where you left off">
+            <Section title="Continue watching">
               <div className="sp-tickets" role="region" aria-label="Continue watching titles" tabIndex={0}>
                 {continuing.map(({ item, asset }) => {
                   const value = percent(asset.watch!.position, asset.watch!.duration);
@@ -154,7 +145,7 @@ export default function Collection({ home = false, user }: { home?: boolean; use
                       </div>
                       <div className="sp-ticket-stub">
                         <span className="sp-label">
-                          {asset.episode ? `Season ${asset.season} · Episode ${asset.episode}` : "Feature"}
+                          {asset.episode ? `Season ${asset.season} · Episode ${asset.episode}` : "Film"}
                         </span>
                         <h3>
                           <Link to={itemLink(item)}>{item.title}</Link>
@@ -165,7 +156,7 @@ export default function Collection({ home = false, user }: { home?: boolean; use
                           {asset.state !== "ready" && (
                             <>
                               <br />
-                              Storage offline · progress saved
+                              Storage offline
                             </>
                           )}
                         </p>
@@ -176,41 +167,18 @@ export default function Collection({ home = false, user }: { home?: boolean; use
               </div>
             </Section>
           )}
-          {empty ? (
-            !home && (
-              <Empty
-                title="Your collection starts here."
-                action={
-                  <>
-                    {user.role === "admin" && (
-                      <ActionLink solid to="/settings/storage">
-                        Connect storage & import
-                      </ActionLink>
-                    )}
-                    {user.role !== "viewer" && (
-                      <ActionLink to="/discover">Find a film or series</ActionLink>
-                    )}
-                  </>
-                }
-              >
-                {user.role === "viewer"
-                  ? "Titles shared with you will appear here. Ask whoever runs your server to add a collection."
-                  : "Bring in what you already own, then let Sparrow help with the rest."}
-              </Empty>
-            )
-          ) : home ? (
+          {empty ? null : home ? (
             <Section
-              kicker="In the house"
-              title="Now showing"
+              title="Your library"
               action={
                 <Link className="sp-btn sp-btn-ghost" to="/library">
-                  The whole library <ArrowRight size={16} aria-hidden="true" />
+                  See all <ArrowRight size={16} aria-hidden="true" />
                 </Link>
               }
             >
               <div className="sp-prints">
                 {all.slice(0, 12).map((item) => (
-                  <PrintCard key={item.id} item={item} number={numbers.get(item.id)} />
+                  <PrintCard key={item.id} item={item} />
                 ))}
               </div>
             </Section>
@@ -254,8 +222,8 @@ export default function Collection({ home = false, user }: { home?: boolean; use
                   <option value="">Any availability</option>
                   <option value="ready">Ready to watch</option>
                   <option value="unavailable">Storage offline</option>
-                  <option value="subtitles_pending">Subtitles need attention</option>
-                  <option value="verifying">Being checked</option>
+                  <option value="subtitles_pending">No subtitles yet</option>
+                  <option value="verifying">Checking</option>
                 </select>
                 <select
                   className="sp-select"
@@ -264,14 +232,14 @@ export default function Collection({ home = false, user }: { home?: boolean; use
                   onChange={(event) => filter("sort", event.target.value)}
                 >
                   <option value="recent">Library order</option>
-                  <option value="title">Title, A–Z</option>
-                  <option value="year">Newest release</option>
+                  <option value="title">A–Z</option>
+                  <option value="year">Newest</option>
                 </select>
               </div>
               {items.length ? (
                 <div className="sp-prints">
                   {items.map((item) => (
-                    <PrintCard key={item.id} item={item} number={numbers.get(item.id)} />
+                    <PrintCard key={item.id} item={item} />
                   ))}
                 </div>
               ) : (
@@ -283,21 +251,9 @@ export default function Collection({ home = false, user }: { home?: boolean; use
                     </button>
                   }
                 >
-                  Try another title, or show everything in your collection.
                 </Empty>
               )}
             </>
-          )}
-          {home && user.role !== "viewer" && (
-            <section className="sp-callout">
-              <div>
-                <p className="sp-label">Box office</p>
-                <h2>Something in mind? Or just a mood?</h2>
-              </div>
-              <Link className="sp-btn sp-btn-solid" to="/discover">
-                Find something to watch <ArrowRight size={17} aria-hidden="true" />
-              </Link>
-            </section>
           )}
         </>
       )}

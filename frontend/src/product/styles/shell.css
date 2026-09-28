@@ -50,7 +50,7 @@
   border-bottom: 1px solid var(--ink);
 }
 .sp-bar::after {
-  /* A second, finer rule: the programme's double line. */
+  /* Second, finer rule under the bar. */
   content: "";
   position: absolute;
   left: 0;
@@ -168,40 +168,6 @@
   text-decoration-thickness: 2px;
 }
 
-/* ───────── Footer ───────── */
-.sp-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px 24px;
-  max-width: var(--measure);
-  width: 100%;
-  margin: 0 auto;
-  padding: 22px var(--gutter) 30px;
-}
-.sp-foot > div {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.sp-foot::before {
-  content: "";
-  flex-basis: 100%;
-  height: 1px;
-  background: var(--ink);
-  margin-bottom: 8px;
-}
-.sp-foot-brand {
-  font-family: var(--display);
-  font-weight: 900;
-  font-size: 22px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  line-height: 1;
-}
-
 /* ───────── Mobile dock ───────── */
 .sp-dock {
   display: none;
@@ -301,9 +267,7 @@
   border-bottom: 1px solid var(--rule);
 }
 .sp-settings-index a {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
+  display: block;
   padding: 11px 0;
   font-size: 15px;
   font-weight: 600;
@@ -313,20 +277,8 @@
 .sp-settings-index a:hover {
   color: var(--ink);
 }
-.sp-settings-number {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-}
 .sp-settings-index a.active {
   color: var(--ink);
-}
-.sp-settings-index a.active .sp-settings-number {
-  color: var(--signal-ink);
-}
-.sp-settings-index a.active span:last-child {
   text-decoration: underline;
   text-decoration-color: var(--signal);
   text-decoration-thickness: 2px;
@@ -378,7 +330,6 @@
     padding: 12px 0;
     min-height: 44px;
     font-size: 14px;
-    gap: 7px;
   }
   .sp-settings-index > .sp-label {
     border: 0;

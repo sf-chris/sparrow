@@ -96,22 +96,25 @@ export default function CollectionCare({
   }
   const describe = (row: Subscription) =>
     row.data.mandate.mode === "keep_current"
-      ? "New episodes from when you started following"
+      ? "New episodes"
       : row.data.mandate.mode === "backfill"
-        ? "Every aired episode"
+        ? "All aired episodes"
         : row.data.mandate.mode === "seasons"
           ? `Seasons ${row.data.mandate.seasons.join(", ")}`
-          : "Only what was requested";
+          : "Requested episodes only";
   return (
     <Section
       className="sp-care"
-      kicker="Standing orders"
-      title={tmdbId ? "Keep it up to date" : "Titles you follow"}
-      description="Following a title lets Sparrow fetch new episodes, fill gaps and, if you allow it, find a better picture. Existing copies are kept until a better one is verified."
+      title={tmdbId ? "Keep up to date" : "Followed titles"}
+      description={
+        tmdbId
+          ? undefined
+          : "Sparrow keeps these up to date, and can upgrade their picture if you allow it."
+      }
       action={
         tmdbId && resource.data && !rows.length ? (
           <button className="sp-btn sp-btn-line" onClick={() => edit(null)}>
-            {mediaType === "tv" ? "Follow this show" : "Manage this movie"}
+            {mediaType === "tv" ? "Follow this series" : "Follow this film"}
           </button>
         ) : undefined
       }
@@ -119,7 +122,7 @@ export default function CollectionCare({
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {!resource.data ? (
         resource.loading ? (
-          <Loading label="Checking what you follow…" />
+          <Loading />
         ) : null
       ) : rows.length > 0 ? (
         <ul className="sp-rows sp-care-rows">
@@ -145,26 +148,22 @@ export default function CollectionCare({
                   </button>
                 )}
                 <button className="sp-btn sp-btn-line sp-btn-small" onClick={() => edit(row)}>
-                  Edit care
+                  Edit
                 </button>
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="sp-hint">
-          {tmdbId
-            ? "You don’t follow this title yet."
-            : "Nothing followed yet. Follow a title from its page, or choose “new episodes as they air” when you request a series."}
-        </p>
+        !tmdbId && <p className="sp-hint">Follow a series from its page to get new episodes automatically.</p>
       )}
       {open && (
         <Dialog
-          title={`Care for ${editing?.data.title || title || "this title"}`}
+          title={`Follow ${editing?.data.title || title || "this title"}`}
           onClose={() => setOpen(false)}
           footer={
             <button className="sp-btn sp-btn-solid" disabled={busy} onClick={save}>
-              {busy ? "Saving…" : "Save collection care"}
+              {busy ? "Saving…" : "Save"}
             </button>
           }
         >
@@ -172,17 +171,17 @@ export default function CollectionCare({
             <ErrorNote error={error} />
             <label className="sp-check">
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-              Look after this title automatically
+              Follow this title
             </label>
             {(editing?.media_type || mediaType) === "tv" && (
               <>
                 <Field
-                  label="Episode scope"
+                  label="Which episodes"
                   hint={
                     mode === "backfill"
                       ? "Includes missing episodes from older seasons."
                       : mode === "keep_current"
-                        ? "Only episodes that air after you start following."
+                        ? "Episodes that air from now on."
                         : undefined
                   }
                 >
@@ -194,13 +193,13 @@ export default function CollectionCare({
                   </select>
                 </Field>
                 {mode === "seasons" && (
-                  <Field label="Season numbers" hint="Separate with commas, for example 1, 2.">
+                  <Field label="Seasons" hint="For example: 1, 2">
                     <input value={seasons} onChange={(e) => setSeasons(e.target.value)} />
                   </Field>
                 )}
               </>
             )}
-            <Field label="Storage destination">
+            <Field label="Store on">
               <select disabled={!!editing} value={node} onChange={(e) => setNode(e.target.value)}>
                 {nodes.data
                   ?.filter((n) => !n.disabled)
@@ -213,11 +212,10 @@ export default function CollectionCare({
             </Field>
             <label className="sp-check">
               <input type="checkbox" checked={upgrades} onChange={(e) => setUpgrades(e.target.checked)} />
-              Look for a better picture, up to my preferred quality
+              Upgrade to my preferred quality when possible
             </label>
             <p className="sp-hint">
-              Saving applies your current preferences to future care; existing requests keep theirs. Pausing
-              care stops new automatic requests — manage work already under way in{" "}
+              Changes only affect new downloads. Manage running ones in{" "}
               <Link className="sp-link" to="/activity">
                 Requests
               </Link>

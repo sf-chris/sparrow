@@ -55,11 +55,6 @@ export default function Auth({
       setBusy(false);
     }
   }
-  const ticket = needsSetup
-    ? { admit: "Opening night", seat: "The owner’s box" }
-    : joining
-      ? { admit: "Admit one guest", seat: "Your own" }
-      : { admit: "Admit one", seat: "Yours, as always" };
   return (
     <div className="sp-entry">
       <aside className="sp-entry-ticket" aria-hidden="true">
@@ -67,21 +62,9 @@ export default function Auth({
           <Wordmark />
         </Link>
         <div className="sp-entry-stub">
-          <span className="sp-label">Sparrow picture house</span>
-          <strong>{ticket.admit}</strong>
-          <dl>
-            <div>
-              <dt>Seat</dt>
-              <dd>{ticket.seat}</dd>
-            </div>
-            <div>
-              <dt>Showing</dt>
-              <dd>Whatever you like</dd>
-            </div>
-          </dl>
+          <strong>Admit one</strong>
           <Mark />
         </div>
-        <p className="sp-label">Accounts live on this server · no Sparrow subscription</p>
       </aside>
       <main id="main-content" className="sp-entry-main">
         <div className="sp-entry-top">
@@ -96,29 +79,14 @@ export default function Auth({
           className="sp-entry-form"
           aria-label={registering ? "Create your account" : "Sign in"}
         >
-          <p className="sp-label">
-            {needsSetup ? "Opening night" : joining ? "You’re on the list" : "Welcome back"}
-          </p>
-          <h1>
-            {needsSetup
-              ? "Set up your Sparrow server"
-              : joining
-                ? "Pull up a seat."
-                : "Take your seat."}
-          </h1>
-          <p className="sp-lede">
-            {needsSetup
-              ? "Create the administrator account first. Next you’ll set household defaults, connect your storage and invite your people."
-              : joining
-                ? "Create your account. Your watch history and preferences are yours alone."
-                : "Sign in and pick up where you left off."}
-          </p>
+          <h1>{needsSetup ? "Set up Sparrow" : joining ? "Create your account" : "Sign in"}</h1>
+          {needsSetup && <p className="sp-lede">Start with the administrator account.</p>}
           <form onSubmit={submit} className="sp-form">
             <ErrorNote error={error} />
             {needsSetup && (
               <Field
                 label="Setup code"
-                hint="A one-time code from your installer or the server’s startup log."
+                hint="From your installer or the server’s startup log."
               >
                 <input
                   required
@@ -161,7 +129,9 @@ export default function Auth({
             />
             <button className="sp-btn sp-btn-solid sp-entry-submit" disabled={busy}>
               {busy
-                ? "One moment…"
+                ? registering
+                  ? "Creating account…"
+                  : "Signing in…"
                 : needsSetup
                   ? "Create administrator account"
                   : joining

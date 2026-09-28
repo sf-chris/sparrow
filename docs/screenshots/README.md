@@ -1,30 +1,30 @@
 # A look around Sparrow
 
-The picture-house interface, captured from the production frontend on
-28 September 2026. These are real application screens using the isolated
-browser fixture: six fictional titles, original geometric covers and generated
-video. They contain no personal library, credentials or paid-provider results.
+The current interface, captured from the production frontend on
+28 September 2026 with the isolated browser fixture: six fictional titles,
+original geometric covers and generated video. No personal library,
+credentials or paid-provider results appear.
 
-## Front of house
+## Landing page
 
-![Public front-of-house page](landing-desktop.png)
+![Public landing page](landing-desktop.png)
 
-## Pick up where you left off
+## Home
 
-![Tonight: ticket-style Continue watching and numbered prints](home-desktop.png)
+![Home with Continue watching and library posters](home-desktop.png)
 
-## Find something good
+## Find
 
-![Find: large title search and starting-point slips](discover-desktop.png)
+![Find with title search and example requests](discover-desktop.png)
 
-## Make it yours
+## Title
 
-![Title page with backdrop band and episode listing](title-desktop.png)
+![Title page with backdrop and episode list](title-desktop.png)
 
 | Screen | Desktop · 1440 × 1000 | Phone · 390 × 844 |
 | --- | --- | --- |
-| Front of house | [View](landing-desktop.png) | [View](landing-mobile.png) |
-| Tonight | [View](home-desktop.png) | [View](home-mobile.png) |
+| Landing page | [View](landing-desktop.png) | [View](landing-mobile.png) |
+| Home | [View](home-desktop.png) | [View](home-mobile.png) |
 | Library | [View](library-desktop.png) | [View](library-mobile.png) |
 | Find | [View](discover-desktop.png) | [View](discover-mobile.png) |
 | Show detail | [View](title-desktop.png) | [View](title-mobile.png) |

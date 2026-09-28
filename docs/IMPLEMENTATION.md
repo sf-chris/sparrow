@@ -90,22 +90,26 @@ navigation, an already-open setup tab, the normal first-account flow, private
 local retrieval and suppression after an administrator exists. The running Linux
 instance was rebuilt and updated with its existing data volume preserved.
 
-## Repertory programme redesign — 28 September 2026
+## Picture-house redesign (28 September 2026)
 
-A ground-up redesign of every screen, replacing the pastel system. The identity
-is a private picture house set in print: bone paper, warm ink and one vermilion
-signal reserved for playback and live state; Big Shoulders Display, Schibsted
-Grotesk and IBM Plex Mono bundled locally; square corners and hairline rules;
-ticket-style Continue watching, numbered poster prints, an episode programme
-listing, a mono journal for requests and an admit-one entry layout. Navigation
-is Tonight, Library, Find and Requests; Logs is now the Activity log. Dark mode
-follows the system; the player is always dark. Tailwind was removed and styles
-are split by layer under `frontend/src/product/styles/`.
+Every screen was redesigned, replacing the pastel system: bone paper, warm ink
+and one red for playback and live state; Big Shoulders Display, Schibsted
+Grotesk and IBM Plex Mono bundled locally; square corners and hairline rules.
+Continue watching uses ticket cards, and sign-in, setup and invitations share
+an admit-one layout. Navigation is Home, Library, Find and Requests, and Logs
+is now the Activity log. Dark mode follows the system and the player is always
+dark. Tailwind was removed; styles are split by layer under
+`frontend/src/product/styles/`.
 
-Behaviour, API use and permissions are unchanged. All ten browser suites pass,
-including axe audits at 360/390/768/1440px; the signal red was deepened to
-`#cc3a16` to meet 4.5:1 with light text. Before/after captures of all 22 pages
-are in [redesign/README.md](redesign/README.md); the contract is
+Copy was cut on every page. Headings have no labels above them or taglines
+under them, and preference sources appear only where they differ from the
+household default.
+
+Behaviour, API use and permissions are unchanged, except that a newly followed
+title no longer shows a placeholder status message. All ten browser suites pass,
+including axe audits at 360, 390, 768 and 1440px. The red was darkened to
+`#cc3a16` to reach 4.5:1 with light text. Before and after captures of all 22
+pages are in [redesign/README.md](redesign/README.md); the contract is
 [PRODUCT_DESIGN.md](PRODUCT_DESIGN.md).
 
 ## Picture house redesign — 10 September 2026

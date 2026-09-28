@@ -108,8 +108,7 @@ usage are separate from Sparrow. Use media you are entitled to acquire and store
 
 ## What still needs work
 
-The interface is the "private picture house" design described in
-[the design contract](docs/PRODUCT_DESIGN.md).
+The interface follows [the design contract](docs/PRODUCT_DESIGN.md).
 The next phase is making the remaining features consistently excellent:
 
 - Native Windows installer/service and storage validation, including the full

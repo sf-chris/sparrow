@@ -7,7 +7,7 @@ import { Empty, ErrorNote, Loading, Page, Status, useResource } from "./ui";
 import { useWebSocket } from "../hooks/useWebSocket";
 
 function scope(job: Job) {
-  if (job.media_type === "movie") return "Feature film";
+  if (job.media_type === "movie") return "Film";
   return Object.entries(job.wanted_episodes)
     .map(([season, eps]) => `Season ${season} · ${eps.length} episode${eps.length === 1 ? "" : "s"}`)
     .join(" / ");
@@ -44,9 +44,7 @@ export default function Activity() {
   return (
     <Page
       className="sp-requests"
-      kicker="On order"
       title="Requests"
-      description="What Sparrow is fetching for you, and everything it noticed along the way."
       action={
         <Link className="sp-btn sp-btn-ghost" to="/settings/logs">
           Activity log
@@ -58,7 +56,7 @@ export default function Activity() {
         <div className="sp-tabs" role="tablist" aria-label="Request history">
           {[
             ["current", `Open${resource.data ? ` · ${open}` : ""}`],
-            ["all", "All requests"],
+            ["all", "All"],
           ].map(([value, label]) => (
             <button
               key={value}
@@ -95,7 +93,7 @@ export default function Activity() {
                   <Link to={`/title/${job.media_type}/${job.tmdb_id}`}>{job.title}</Link>
                 </h2>
                 <p className="sp-order-line">
-                  {job.state_line || "Sparrow is working out what this request needs."}
+                  {job.state_line || "Starting…"}
                 </p>
               </div>
               <div className="sp-actions sp-order-actions">
@@ -136,7 +134,7 @@ export default function Activity() {
                     disabled={busy === job.id}
                     onClick={() => control(job, "cancel")}
                   >
-                    Cancel request
+                    Cancel
                   </button>
                 )}
               </div>
@@ -146,16 +144,16 @@ export default function Activity() {
         </ol>
       ) : (
         <Empty
-          title={selectedRequest ? "This request is no longer here." : "Nothing on order."}
+          title={selectedRequest ? "Request not found." : "No requests."}
           action={
-            <Link to="/discover" className="sp-btn sp-btn-line">
-              Find something to watch
-            </Link>
+            selectedRequest ? undefined : (
+              <Link to="/discover" className="sp-btn sp-btn-line">
+                Find something to watch
+              </Link>
+            )
           }
         >
-          {selectedRequest
-            ? "It may have been removed, or your access may have changed. Use Show all requests to go back."
-            : "When you ask for a film or series, you can follow its progress here."}
+          {selectedRequest ? "It may have been removed, or you no longer have access." : undefined}
         </Empty>
       )}
       <CollectionCare />
@@ -169,7 +167,7 @@ function Journal({ job }: { job: Job }) {
     <div className="sp-order-journal">
       <button className="sp-journal-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span aria-hidden="true">{open ? "–" : "+"}</span>
-        What Sparrow checked
+        Journal
       </button>
       {open && <JournalEntries id={job.id} />}
     </div>
@@ -185,7 +183,7 @@ function JournalEntries({ id }: { id: string }) {
       }>(`/jobs/${id}`),
     [id],
   );
-  if (resource.loading) return <Loading label="Opening the journal…" />;
+  if (resource.loading) return <Loading />;
   return (
     <div className="sp-journal">
       <ErrorNote error={resource.error} retry={resource.refresh} />
@@ -201,7 +199,7 @@ function JournalEntries({ id }: { id: string }) {
           ))}
         </ol>
       ) : (
-        <p className="sp-journal-empty">The first entry appears here as soon as Sparrow starts checking.</p>
+        <p className="sp-journal-empty">No entries yet.</p>
       )}
     </div>
   );

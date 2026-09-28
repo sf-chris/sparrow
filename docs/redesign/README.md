@@ -1,21 +1,20 @@
 # Redesign: before and after
 
-Every page of the product, captured from the real application against the
-same fresh fictional fixture (six test titles, generated video, one owner
-account named Chris, seeded watch progress and one request). "Before" is
-`main` at `b85aac4`; "after" is the picture-house redesign. Desktop is
-1440px wide, phone 390px; both are full-page captures, so the phone dock
-appears where the viewport ended.
+Every page, captured from the running app against the same fictional fixture:
+six test titles, generated video, an owner account named Chris, some watch
+progress and one request. Before is `main` at `b85aac4`. Desktop is 1440px
+wide and phone is 390px. Both are full-page captures, so the phone dock
+appears where the first screen ended.
 
 Regenerate with `tests/browser/tour.cjs` against a fixture server started by
-`tests/browser/server.py` (see the header of the script).
+`tests/browser/server.py`. Usage is at the top of the script.
 
-## Front of house (public)
+## Landing page
 
 | Before | After |
 | --- | --- |
-| ![Front of house (public), before, desktop](before/landing-desktop.png) | ![Front of house (public), after, desktop](after/landing-desktop.png) |
-| ![Front of house (public), before, phone](before/landing-mobile.png) | ![Front of house (public), after, phone](after/landing-mobile.png) |
+| ![Landing page, before, desktop](before/landing-desktop.png) | ![Landing page, after, desktop](after/landing-desktop.png) |
+| ![Landing page, before, phone](before/landing-mobile.png) | ![Landing page, after, phone](after/landing-mobile.png) |
 
 ## Sign in
 
@@ -24,12 +23,12 @@ Regenerate with `tests/browser/tour.cjs` against a fixture server started by
 | ![Sign in, before, desktop](before/login-desktop.png) | ![Sign in, after, desktop](after/login-desktop.png) |
 | ![Sign in, before, phone](before/login-mobile.png) | ![Sign in, after, phone](after/login-mobile.png) |
 
-## First-run setup: owner account
+## First-run setup
 
 | Before | After |
 | --- | --- |
-| ![First-run setup: owner account, before, desktop](before/setup-account-desktop.png) | ![First-run setup: owner account, after, desktop](after/setup-account-desktop.png) |
-| ![First-run setup: owner account, before, phone](before/setup-account-mobile.png) | ![First-run setup: owner account, after, phone](after/setup-account-mobile.png) |
+| ![First-run setup, before, desktop](before/setup-account-desktop.png) | ![First-run setup, after, desktop](after/setup-account-desktop.png) |
+| ![First-run setup, before, phone](before/setup-account-mobile.png) | ![First-run setup, after, phone](after/setup-account-mobile.png) |
 
 ## Invitation
 
@@ -38,26 +37,26 @@ Regenerate with `tests/browser/tour.cjs` against a fixture server started by
 | ![Invitation, before, desktop](before/join-desktop.png) | ![Invitation, after, desktop](after/join-desktop.png) |
 | ![Invitation, before, phone](before/join-mobile.png) | ![Invitation, after, phone](after/join-mobile.png) |
 
-## Setup: household defaults
+## Household defaults (first run)
 
 | Before | After |
 | --- | --- |
-| ![Setup: household defaults, before, desktop](before/welcome-defaults-desktop.png) | ![Setup: household defaults, after, desktop](after/welcome-defaults-desktop.png) |
-| ![Setup: household defaults, before, phone](before/welcome-defaults-mobile.png) | ![Setup: household defaults, after, phone](after/welcome-defaults-mobile.png) |
+| ![Household defaults (first run), before, desktop](before/welcome-defaults-desktop.png) | ![Household defaults (first run), after, desktop](after/welcome-defaults-desktop.png) |
+| ![Household defaults (first run), before, phone](before/welcome-defaults-mobile.png) | ![Household defaults (first run), after, phone](after/welcome-defaults-mobile.png) |
 
-## Server setup stepper
-
-| Before | After |
-| --- | --- |
-| ![Server setup stepper, before, desktop](before/onboarding-desktop.png) | ![Server setup stepper, after, desktop](after/onboarding-desktop.png) |
-| ![Server setup stepper, before, phone](before/onboarding-mobile.png) | ![Server setup stepper, after, phone](after/onboarding-mobile.png) |
-
-## Tonight (home)
+## Server setup
 
 | Before | After |
 | --- | --- |
-| ![Tonight (home), before, desktop](before/home-desktop.png) | ![Tonight (home), after, desktop](after/home-desktop.png) |
-| ![Tonight (home), before, phone](before/home-mobile.png) | ![Tonight (home), after, phone](after/home-mobile.png) |
+| ![Server setup, before, desktop](before/onboarding-desktop.png) | ![Server setup, after, desktop](after/onboarding-desktop.png) |
+| ![Server setup, before, phone](before/onboarding-mobile.png) | ![Server setup, after, phone](after/onboarding-mobile.png) |
+
+## Home
+
+| Before | After |
+| --- | --- |
+| ![Home, before, desktop](before/home-desktop.png) | ![Home, after, desktop](after/home-desktop.png) |
+| ![Home, before, phone](before/home-mobile.png) | ![Home, after, phone](after/home-mobile.png) |
 
 ## Library
 
@@ -80,19 +79,19 @@ Regenerate with `tests/browser/tour.cjs` against a fixture server started by
 | ![Title: film, before, desktop](before/title-film-desktop.png) | ![Title: film, after, desktop](after/title-film-desktop.png) |
 | ![Title: film, before, phone](before/title-film-mobile.png) | ![Title: film, after, phone](after/title-film-mobile.png) |
 
-## Request episodes dialog
+## Request dialog
 
 | Before | After |
 | --- | --- |
-| ![Request episodes dialog, before, desktop](before/request-dialog-desktop.png) | ![Request episodes dialog, after, desktop](after/request-dialog-desktop.png) |
-| ![Request episodes dialog, before, phone](before/request-dialog-mobile.png) | ![Request episodes dialog, after, phone](after/request-dialog-mobile.png) |
+| ![Request dialog, before, desktop](before/request-dialog-desktop.png) | ![Request dialog, after, desktop](after/request-dialog-desktop.png) |
+| ![Request dialog, before, phone](before/request-dialog-mobile.png) | ![Request dialog, after, phone](after/request-dialog-mobile.png) |
 
-## Screening room (player)
+## Player
 
 | Before | After |
 | --- | --- |
-| ![Screening room (player), before, desktop](before/player-desktop.png) | ![Screening room (player), after, desktop](after/player-desktop.png) |
-| ![Screening room (player), before, phone](before/player-mobile.png) | ![Screening room (player), after, phone](after/player-mobile.png) |
+| ![Player, before, desktop](before/player-desktop.png) | ![Player, after, desktop](after/player-desktop.png) |
+| ![Player, before, phone](before/player-mobile.png) | ![Player, after, phone](after/player-mobile.png) |
 
 ## Find
 

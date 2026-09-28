@@ -61,7 +61,7 @@
   padding: 0 11px;
   font-size: 13px;
 }
-/* Play is the only round, red thing in the house. */
+/* Play is the only round, red control. */
 .sp-btn-play {
   min-height: 48px;
   padding: 0 24px 0 18px;
@@ -217,7 +217,7 @@
   font-size: 14px;
 }
 
-/* A sheet is a raised piece of paper on the table. */
+/* Sheet: a raised surface for forms. */
 .sp-sheet {
   background: var(--sheet);
   border: 1px solid var(--rule);
@@ -268,6 +268,10 @@
 }
 .sp-savebar > :first-child {
   flex: 1 1 220px;
+}
+.sp-savebar > :only-child {
+  flex: none;
+  margin-left: auto;
 }
 
 /* ───────── Fields ───────── */
@@ -629,7 +633,7 @@ input[type="radio"] {
   outline-offset: 2px;
 }
 
-/* ───────── Prints: poster cards ───────── */
+/* ───────── Poster cards ───────── */
 .sp-prints {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
@@ -744,13 +748,6 @@ input[type="radio"] {
 .sp-poster > * {
   position: relative;
 }
-.sp-poster-kicker {
-  font-family: var(--mono);
-  font-size: max(8px, 5.4cqi);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  opacity: 0.8;
-}
 .sp-poster-title {
   font-family: var(--display);
   font-weight: 900;
@@ -766,7 +763,7 @@ input[type="radio"] {
     var(--inverse);
 }
 
-/* ───────── Tickets: continue watching ───────── */
+/* ───────── Continue watching ───────── */
 .sp-tickets {
   display: grid;
   grid-auto-flow: column;
@@ -789,7 +786,7 @@ input[type="radio"] {
   scroll-snap-align: start;
   background: var(--sheet);
   border: 1px solid var(--ink);
-  /* Punch the two notches where the ticket tears. */
+  /* Notches at the perforation. */
   -webkit-mask:
     radial-gradient(circle at 55.5% 0, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) top / 100% 51% no-repeat,
     radial-gradient(circle at 55.5% 100%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) bottom / 100% 51% no-repeat;

@@ -2,9 +2,6 @@
 .sp-settings .sp-masthead h1 {
   font-size: clamp(42px, 5.6vw, 72px);
 }
-.sp-settings .sp-masthead .sp-label {
-  color: var(--signal-ink);
-}
 
 /* Preferences */
 .sp-preference-groups > * + * {
@@ -13,21 +10,13 @@
   border-top: 1px solid var(--rule);
 }
 .sp-preference-group legend {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
   font-family: var(--display);
   font-weight: 800;
   font-size: clamp(26px, 3vw, 32px);
   line-height: 1;
 }
-.sp-preference-group legend .sp-label {
-  color: var(--signal-ink);
-}
-.sp-preference-description {
-  margin: 6px 0 20px;
-  color: var(--ink-2);
-  font-size: 14px;
+.sp-preference-group > .sp-form-grid {
+  margin-top: 20px;
 }
 .sp-preference {
   display: grid;
@@ -352,9 +341,6 @@
   background: var(--inverse);
   color: var(--inverse-ink);
 }
-.sp-choice:first-child .sp-label {
-  color: var(--inverse-accent);
-}
 .sp-choice-title {
   font-family: var(--display);
   font-weight: 800;
@@ -376,9 +362,6 @@
 .sp-choice:focus-visible {
   background: var(--signal);
   color: var(--on-signal);
-}
-.sp-choice:hover .sp-label {
-  color: inherit;
 }
 @media (max-width: 640px) {
   .sp-choices {

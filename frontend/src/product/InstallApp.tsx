@@ -26,16 +26,16 @@ export default function InstallApp() {
     };
   }, []);
   return (
-    <Section kicker="Pocket edition" title="Sparrow on your phone">
+    <Section title="Install the app">
       <div className="sp-sheet">
         <p className="sp-hint">
           {installed
             ? "Sparrow is installed on this device."
             : !isSecureContext
-              ? "Use Sparrow in this browser. Installing it on your home screen requires a trusted HTTPS address."
+              ? "Installing needs an HTTPS address."
               : prompt
-                ? "Keep your collection a tap away with the Sparrow web app."
-                : "Use your browser’s Add to Home Screen or Install option when available. On iPhone, open Safari’s Share menu."}
+                ? "Add Sparrow to your home screen."
+                : "Use your browser’s Install or Add to Home Screen option. On iPhone, it’s in Safari’s Share menu."}
         </p>
         {prompt && (
           <button

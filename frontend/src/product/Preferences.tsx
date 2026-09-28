@@ -30,23 +30,18 @@ export function PreferenceFields({
 }) {
   function field(key: keyof Values, label: string, control: ReactNode, hint?: string) {
     const personal = sources?.[key] === "personal";
+    const limited = sources?.[key] === "policy";
     return (
       <div className={`sp-preference ${personal ? "is-personal" : ""}`} key={key}>
         <Field label={label} hint={hint}>
           {control}
         </Field>
-        {sources && (
+        {(personal || limited) && (
           <p className="sp-source">
-            <span>
-              {personal
-                ? "Your choice"
-                : sources[key] === "policy"
-                  ? "Limited by the server"
-                  : "Household default"}
-            </span>
+            <span>{personal ? "Your choice" : "Limited by the server"}</span>
             {personal && (
               <button type="button" onClick={() => onReset?.(key)}>
-                Use the default
+                Reset
               </button>
             )}
           </p>
@@ -71,11 +66,7 @@ export function PreferenceFields({
   return (
     <div className="sp-preference-groups">
       <fieldset className="sp-preference-group">
-        <legend>
-          <span className="sp-label">01</span>
-          Sound & subtitles
-        </legend>
-        <p className="sp-preference-description">Hear every word. Follow every story.</p>
+        <legend>Sound & subtitles</legend>
         <div className="sp-form-grid">
           {field(
             "audio_pref",
@@ -110,13 +101,13 @@ export function PreferenceFields({
                 )
               }
             />,
-            "Language codes, in preference order. For example: en, es.",
+            "Codes in order of preference, like en, es",
           )}
           {field(
             "subtitle_mode",
             "Show subtitles",
             select("subtitle_mode", [
-              ["auto", "When they help"],
+              ["auto", "Automatic"],
               ["always", "Always"],
               ["off", "Off"],
             ]),
@@ -132,7 +123,7 @@ export function PreferenceFields({
           )}
           {field(
             "require_subtitles",
-            "Ready-to-watch requirements",
+            "Ready to watch",
             <label className="sp-check">
               <input
                 type="checkbox"
@@ -141,31 +132,27 @@ export function PreferenceFields({
                   onChange("require_subtitles", e.target.checked)
                 }
               />
-              Wait for subtitles before calling it ready
+              Only once subtitles are ready
             </label>,
           )}
         </div>
       </fieldset>
       <fieldset className="sp-preference-group">
-        <legend>
-          <span className="sp-label">02</span>
-          Picture & storage
-        </legend>
-        <p className="sp-preference-description">A great picture, with room left for more.</p>
+        <legend>Picture & storage</legend>
         <div className="sp-form-grid">
           {field(
             "preferred_quality",
-            "Preferred picture quality",
+            "Picture quality",
             select("preferred_quality", quality),
           )}
           {field(
             "min_quality",
-            "Lowest acceptable quality",
+            "Minimum quality",
             select("min_quality", [["any", "Any verified video"], ...quality]),
           )}
           {field(
             "max_file_size_gb",
-            "File size limit",
+            "File size limit (GB)",
             <input
               type="number"
               min={0}
@@ -176,11 +163,11 @@ export function PreferenceFields({
                 onChange("max_file_size_gb", Number(e.target.value))
               }
             />,
-            "GB per file. Zero means no personal limit; server limits still apply.",
+            "Per file. 0 for no limit.",
           )}
           {field(
             "prefer_smaller_files",
-            "Storage preference",
+            "Storage",
             <label className="sp-check">
               <input
                 type="checkbox"
@@ -189,26 +176,22 @@ export function PreferenceFields({
                   onChange("prefer_smaller_files", e.target.checked)
                 }
               />
-              Prefer smaller files when they’re good enough
+              Prefer smaller files
             </label>,
           )}
         </div>
       </fieldset>
       <fieldset className="sp-preference-group">
-        <legend>
-          <span className="sp-label">03</span>
-          Your collection, on autopilot
-        </legend>
-        <p className="sp-preference-description">What happens after the credits roll.</p>
+        <legend>Requests</legend>
         <div className="sp-form-grid">
           {field(
             "monitoring",
             "Future episodes",
             select("monitoring", [
               ["exact", "Only what I request"],
-              ["keep_current", "Keep new episodes coming"],
+              ["keep_current", "Get new episodes as they air"],
             ]),
-            "You’ll see this choice again before starting a request.",
+            "You can change this on each request.",
           )}
         </div>
       </fieldset>
@@ -294,20 +277,11 @@ export default function Preferences({
   return (
     <Page
       className={welcome ? "sp-welcome" : "sp-preferences"}
-      kicker={welcome ? (ownerSetup ? "Opening night · step one" : "Before the lights go down") : "Settings"}
-      title={
-        welcome
-          ? ownerSetup
-            ? "Set the house rules."
-            : "Make it your own."
-          : "Your preferences"
-      }
+      title={ownerSetup ? "Household defaults" : welcome ? "Your preferences" : "Preferences"}
       description={
         ownerSetup
-          ? "These are the starting preferences for everyone on this server. Each person can change their own later."
-          : welcome
-            ? "These are your household’s defaults. Keep them, or change anything that doesn’t suit you."
-            : "Your preferences follow you everywhere. Anything you haven’t changed follows the household default."
+          ? "Everyone starts with these. People can change their own later."
+          : "Anything you haven’t changed uses the household default."
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />

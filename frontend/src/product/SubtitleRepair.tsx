@@ -116,9 +116,8 @@ export function SubtitleRepair({
   return (
     <Section
       className="sp-subtitle-care"
-      kicker="Subtitles"
-      title="Subtitle care"
-      description="Sparrow finds a suitable track, lines it up with this audio, then checks samples of the dialogue. Your original files stay as they are."
+      title="Fix subtitles"
+      description="Sparrow finds a track, syncs it to this audio and spot-checks the dialogue."
     >
       <div className="sp-form">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
@@ -128,11 +127,11 @@ export function SubtitleRepair({
               {latest.state === "ready"
                 ? "Subtitles checked"
                 : running
-                  ? "Preparing your subtitles…"
+                  ? "Working…"
                   : latest.state === "review_pending"
-                    ? "Ready for a quality check"
+                    ? "Waiting for review"
                     : latest.state === "cancelled"
-                      ? "Repair stopped"
+                      ? "Stopped"
                       : "Subtitles need attention"}
             </strong>
             {latest.message && <p className="sp-hint">{latest.message}</p>}
@@ -140,8 +139,8 @@ export function SubtitleRepair({
         )}
         <div className="sp-form-grid">
           <Field
-            label="Repair language"
-            hint="Automatic checking currently needs captions in the spoken language."
+            label="Language"
+            hint="Must match the spoken language."
           >
             <select value={language} onChange={(e) => setLanguage(e.target.value)}>
               {[
@@ -176,7 +175,7 @@ export function SubtitleRepair({
             onClick={() => void repair()}
           >
             <RefreshCw size={15} aria-hidden="true" />
-            Find & repair subtitles
+            Find subtitles
           </button>
           <span className="sp-label">or</span>
           <Field label="Use your own subtitle file">
@@ -195,7 +194,7 @@ export function SubtitleRepair({
         <div className="sp-actions">
           {running && (
             <button className="sp-btn sp-btn-ghost" disabled={busy} onClick={() => void action("DELETE")}>
-              Stop repair
+              Stop
             </button>
           )}
           {latest?.state === "review_pending" && (
@@ -204,16 +203,14 @@ export function SubtitleRepair({
               disabled={busy}
               onClick={() => void action("POST", "/review")}
             >
-              Retry quality review
+              Retry review
             </button>
           )}
         </div>
         {resource.data?.tracks.some((t) => t.original_url) && (
           <details className="sp-disclosure">
             <summary>Original subtitle files</summary>
-            <p className="sp-hint">
-              Kept exactly as they arrived, before alignment. Their timing hasn’t been checked.
-            </p>
+            <p className="sp-hint">As downloaded, before syncing.</p>
             <div className="sp-actions">
               {resource.data.tracks
                 .filter((t) => t.original_url)
@@ -233,8 +230,8 @@ export function SubtitleRepair({
         )}
         {selected?.id && (
           <Field
-            label="Personal subtitle delay (seconds)"
-            hint="Positive numbers show captions later. Only changes your own playback."
+            label="Subtitle delay (seconds)"
+            hint="Positive values show subtitles later. Only affects you."
           >
             <input
               type="number"
