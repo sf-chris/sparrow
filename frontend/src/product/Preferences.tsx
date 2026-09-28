@@ -9,7 +9,7 @@ import {
   type User,
   type Policy,
 } from "./api";
-import { ErrorNote, Field, Loading, Page, Section, useResource } from "./ui";
+import { ErrorNote, Field, Loading, Page, useResource } from "./ui";
 
 const quality = [
   ["480p", "Standard definition"],
@@ -28,32 +28,28 @@ export function PreferenceFields({
   sources?: Record<string, string>;
   onReset?: (key: keyof Values) => void;
 }) {
-  function field(
-    key: keyof Values,
-    label: string,
-    control: ReactNode,
-    hint?: string,
-  ) {
+  function field(key: keyof Values, label: string, control: ReactNode, hint?: string) {
+    const personal = sources?.[key] === "personal";
     return (
-      <div className="sp-preference" key={key}>
+      <div className={`sp-preference ${personal ? "is-personal" : ""}`} key={key}>
         <Field label={label} hint={hint}>
           {control}
         </Field>
         {sources && (
-          <div className="sp-source">
+          <p className="sp-source">
             <span>
-              {sources[key] === "personal"
-                ? "Your preference"
+              {personal
+                ? "Your choice"
                 : sources[key] === "policy"
-                  ? "Limited by server policy"
+                  ? "Limited by the server"
                   : "Household default"}
             </span>
-            {sources[key] === "personal" && (
+            {personal && (
               <button type="button" onClick={() => onReset?.(key)}>
-                Use default
+                Use the default
               </button>
             )}
-          </div>
+          </p>
         )}
       </div>
     );
@@ -75,10 +71,11 @@ export function PreferenceFields({
   return (
     <div className="sp-preference-groups">
       <fieldset className="sp-preference-group">
-        <legend>Sound & subtitles</legend>
-        <p className="sp-preference-description">
-          Hear every word. Follow every story.
-        </p>
+        <legend>
+          <span className="sp-label">01</span>
+          Sound & subtitles
+        </legend>
+        <p className="sp-preference-description">Hear every word. Follow every story.</p>
         <div className="sp-form-grid">
           {field(
             "audio_pref",
@@ -119,7 +116,7 @@ export function PreferenceFields({
             "subtitle_mode",
             "Show subtitles",
             select("subtitle_mode", [
-              ["auto", "When useful"],
+              ["auto", "When they help"],
               ["always", "Always"],
               ["off", "Off"],
             ]),
@@ -136,7 +133,7 @@ export function PreferenceFields({
           {field(
             "require_subtitles",
             "Ready-to-watch requirements",
-            <span className="sp-checkbox">
+            <label className="sp-check">
               <input
                 type="checkbox"
                 checked={values.require_subtitles}
@@ -144,16 +141,17 @@ export function PreferenceFields({
                   onChange("require_subtitles", e.target.checked)
                 }
               />
-              Subtitles must be ready too
-            </span>,
+              Wait for subtitles before calling it ready
+            </label>,
           )}
         </div>
       </fieldset>
       <fieldset className="sp-preference-group">
-        <legend>Picture & storage</legend>
-        <p className="sp-preference-description">
-          The right balance of a great picture and room for more.
-        </p>
+        <legend>
+          <span className="sp-label">02</span>
+          Picture & storage
+        </legend>
+        <p className="sp-preference-description">A great picture, with room left for more.</p>
         <div className="sp-form-grid">
           {field(
             "preferred_quality",
@@ -183,7 +181,7 @@ export function PreferenceFields({
           {field(
             "prefer_smaller_files",
             "Storage preference",
-            <span className="sp-checkbox">
+            <label className="sp-check">
               <input
                 type="checkbox"
                 checked={values.prefer_smaller_files}
@@ -191,16 +189,17 @@ export function PreferenceFields({
                   onChange("prefer_smaller_files", e.target.checked)
                 }
               />
-              Prefer smaller suitable files
-            </span>,
+              Prefer smaller files when they’re good enough
+            </label>,
           )}
         </div>
       </fieldset>
       <fieldset className="sp-preference-group">
-        <legend>Your collection, on autopilot</legend>
-        <p className="sp-preference-description">
-          Decide what happens after the credits.
-        </p>
+        <legend>
+          <span className="sp-label">03</span>
+          Your collection, on autopilot
+        </legend>
+        <p className="sp-preference-description">What happens after the credits roll.</p>
         <div className="sp-form-grid">
           {field(
             "monitoring",
@@ -294,19 +293,21 @@ export default function Preferences({
   }
   return (
     <Page
+      className={welcome ? "sp-welcome" : "sp-preferences"}
+      kicker={welcome ? (ownerSetup ? "Opening night · step one" : "Before the lights go down") : "Settings"}
       title={
         welcome
           ? ownerSetup
-            ? "Set your household defaults."
+            ? "Set the house rules."
             : "Make it your own."
-          : "Your settings"
+          : "Your preferences"
       }
       description={
         ownerSetup
-          ? "These are the starting preferences for everyone on this server. Each person can make their own changes later."
+          ? "These are the starting preferences for everyone on this server. Each person can change their own later."
           : welcome
-            ? "Here are the household defaults. Keep them as they are, or choose what works for you."
-            : "Your preferences follow you. Anything you haven’t changed follows the household defaults."
+            ? "These are your household’s defaults. Keep them, or change anything that doesn’t suit you."
+            : "Your preferences follow you everywhere. Anything you haven’t changed follows the household default."
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
@@ -314,56 +315,43 @@ export default function Preferences({
         <Loading label="Loading preferences…" />
       ) : (
         values && (
-          <Section
-            title={
-              ownerSetup ? "Household preferences" : "Watching preferences"
-            }
-          >
-            <div className="sp-panel">
-              <PreferenceFields
-                values={values}
-                onChange={(key, value) => {
-                  setDraft({ ...draft, [key]: value });
-                  setSaved(false);
-                }}
-                sources={
-                  ownerSetup
-                    ? undefined
-                    : {
-                        ...resource.data!.effective.sources,
-                        ...Object.fromEntries(
-                          Object.keys(draft).map((k) => [k, "personal"]),
-                        ),
-                      }
-                }
-                onReset={reset}
-              />
-              <div className="sp-savebar">
-                <span role="status" className="sp-success">
-                  {saved && (
-                    <>
-                      <Check size={14} className="inline mr-1" />
-                      Preferences saved
-                    </>
-                  )}
-                </span>
-                <button
-                  className="sp-button primary"
-                  disabled={busy}
-                  onClick={save}
-                >
-                  {busy
-                    ? "Saving…"
-                    : welcome
-                      ? continueSetup
-                        ? "Continue setup"
-                        : "Continue to Sparrow"
-                      : "Save preferences"}
-                  {welcome && <ArrowRight size={16} />}
-                </button>
-              </div>
+          <div className="sp-sheet sp-preferences-sheet">
+            <PreferenceFields
+              values={values}
+              onChange={(key, value) => {
+                setDraft({ ...draft, [key]: value });
+                setSaved(false);
+              }}
+              sources={
+                ownerSetup
+                  ? undefined
+                  : {
+                      ...resource.data!.effective.sources,
+                      ...Object.fromEntries(Object.keys(draft).map((k) => [k, "personal"])),
+                    }
+              }
+              onReset={reset}
+            />
+            <div className="sp-savebar">
+              <span role="status" className="sp-success">
+                {saved && (
+                  <>
+                    <Check size={14} aria-hidden="true" /> Preferences saved
+                  </>
+                )}
+              </span>
+              <button className="sp-btn sp-btn-solid" disabled={busy} onClick={save}>
+                {busy
+                  ? "Saving…"
+                  : welcome
+                    ? continueSetup
+                      ? "Continue setup"
+                      : "Continue to Sparrow"
+                    : "Save preferences"}
+                {welcome && <ArrowRight size={16} aria-hidden="true" />}
+              </button>
             </div>
-          </Section>
+          </div>
         )
       )}
       {!welcome && <InstallApp />}

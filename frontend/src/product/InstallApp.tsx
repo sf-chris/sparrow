@@ -26,9 +26,9 @@ export default function InstallApp() {
     };
   }, []);
   return (
-    <Section title="Sparrow on your phone">
-      <div className="sp-panel">
-        <p className="sp-muted">
+    <Section kicker="Pocket edition" title="Sparrow on your phone">
+      <div className="sp-sheet">
+        <p className="sp-hint">
           {installed
             ? "Sparrow is installed on this device."
             : !isSecureContext
@@ -39,7 +39,7 @@ export default function InstallApp() {
         </p>
         {prompt && (
           <button
-            className="sp-button secondary mt-4"
+            className="sp-btn sp-btn-line sp-install"
             onClick={async () => {
               await prompt.prompt();
               await prompt.userChoice;

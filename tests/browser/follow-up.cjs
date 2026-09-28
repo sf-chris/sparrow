@@ -63,11 +63,13 @@ fs.mkdirSync(out, { recursive: true });
       assert.equal(overflow, false, JSON.stringify(results.at(-1)));
       assert.equal(violations.length, 0, JSON.stringify(results.at(-1)));
       if (name === "security" && width > 900) {
-        const heading = await page.locator(".sp-page-heading").boundingBox();
-        const navigation = await page.locator(".sp-settings-nav").boundingBox();
+        // The settings index is sticky; compare the tops before any scrolling.
+        await page.evaluate(() => scrollTo(0, 0));
+        const heading = await page.locator(".sp-masthead").boundingBox();
+        const navigation = await page.locator(".sp-settings-index > .sp-label").boundingBox();
         assert(
           Math.abs(heading.y - navigation.y) < 4,
-          "Settings content must start beside its navigation",
+          "Settings content must start beside its navigation: " + JSON.stringify({ heading, navigation }),
         );
       }
       if ([390, 1440].includes(width))
@@ -78,15 +80,15 @@ fs.mkdirSync(out, { recursive: true });
     }
   }
   await go("/");
-  await page.locator(".sp-continue").first().waitFor();
+  await page.locator(".sp-ticket").first().waitFor();
   assert.equal(await page.locator(".sp-cinema-feature").count(), 0);
   assert.equal(await page.locator(".sp-curiosity-card").count(), 0);
   await audit("home");
   await page.setViewportSize({ width: 360, height: 844 });
   assert.equal(await page.locator(".sp-header-search").count(), 0);
   await page
-    .locator(".sp-bottom-nav")
-    .getByRole("link", { name: "Discover", exact: true })
+    .locator(".sp-dock")
+    .getByRole("link", { name: "Find", exact: true })
     .click();
   assert.equal(new URL(page.url()).pathname, "/discover");
   await audit("discover");
@@ -113,7 +115,7 @@ fs.mkdirSync(out, { recursive: true });
     "People",
     "Server settings",
     "Household defaults",
-    "Logs",
+    "Activity log",
     "Account & security",
   ]) {
     assert.equal(
@@ -243,7 +245,7 @@ fs.mkdirSync(out, { recursive: true });
   await go("/settings/logs");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await page
-    .getByRole("heading", { name: "Less scrolling. More good stuff." })
+    .getByRole("heading", { name: "Say the word. Dim the lights." })
     .waitFor();
   assert.equal(new URL(page.url()).pathname, "/");
   assert.equal(await page.getByLabel("Username", { exact: true }).count(), 0);

@@ -15,12 +15,12 @@ const path = require('node:path');
   async function audit(name, widths = [360, 390, 768, 1440]) {
     for (const width of widths) {
       await page.setViewportSize({ width, height: width > 700 ? 1000 : 844 });
-      await page.evaluate(() => Promise.all([document.fonts.load('400 14px "DM Sans"'), document.fonts.load('600 24px "DM Sans"')]));
+      await page.evaluate(() => Promise.all([document.fonts.load('400 14px "Schibsted Grotesk"'), document.fonts.load('600 24px "Schibsted Grotesk"')]));
       await page.evaluate(() => document.fonts.ready);
       await page.evaluate(() => Promise.all([...document.images].map(image => image.decode().catch(() => {}))));
       const layout = await page.evaluate(() => ({
         overflow: document.documentElement.scrollWidth > innerWidth,
-        fonts: [...document.fonts].filter(f => ['DM Sans'].includes(f.family)).every(f => f.status === 'loaded'),
+        fonts: [...document.fonts].filter(f => ['Schibsted Grotesk'].includes(f.family) && f.style === 'normal').every(f => f.status === 'loaded'),
         brokenImages: [...document.images].filter(i => !i.complete || !i.naturalWidth).length,
         clippedControls: [...document.querySelectorAll('button, input, select, textarea')].filter(el => {
           const r = el.getBoundingClientRect();

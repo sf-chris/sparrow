@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, ArrowLeft, Check } from "lucide-react";
-import { Mark, PlayroomArt } from "./Brand";
+import { ArrowRight, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Mark, Wordmark } from "./Brand";
 import PasswordField from "./PasswordField";
 import { post, type Auth as AuthState } from "./api";
 import { ErrorNote, Field } from "./ui";
@@ -19,23 +19,15 @@ export default function Auth({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState(() =>
-    needsSetup
-      ? new URLSearchParams(location.hash.slice(1)).get("setup_code") || ""
-      : "",
+    needsSetup ? new URLSearchParams(location.hash.slice(1)).get("setup_code") || "" : "",
   );
   useEffect(() => {
     function readSetupLink() {
       if (joining) return;
-      const linkedCode = new URLSearchParams(location.hash.slice(1)).get(
-        "setup_code",
-      );
+      const linkedCode = new URLSearchParams(location.hash.slice(1)).get("setup_code");
       if (linkedCode === null) return;
       if (needsSetup) setCode(linkedCode);
-      history.replaceState(
-        history.state,
-        "",
-        location.pathname + location.search,
-      );
+      history.replaceState(history.state, "", location.pathname + location.search);
     }
     readSetupLink();
     window.addEventListener("hashchange", readSetupLink);
@@ -63,63 +55,70 @@ export default function Auth({
       setBusy(false);
     }
   }
+  const ticket = needsSetup
+    ? { admit: "Opening night", seat: "The owner’s box" }
+    : joining
+      ? { admit: "Admit one guest", seat: "Your own" }
+      : { admit: "Admit one", seat: "Yours, as always" };
   return (
-    <main className="sp-auth sp-auth-layout">
-      <header className="sp-auth-header">
-        <Link className="sp-brand" to="/" aria-label="Sparrow home">
+    <div className="sp-entry">
+      <aside className="sp-entry-ticket" aria-hidden="true">
+        <Link to="/" tabIndex={-1} className="sp-bar-brand">
+          <Wordmark />
+        </Link>
+        <div className="sp-entry-stub">
+          <span className="sp-label">Sparrow picture house</span>
+          <strong>{ticket.admit}</strong>
+          <dl>
+            <div>
+              <dt>Seat</dt>
+              <dd>{ticket.seat}</dd>
+            </div>
+            <div>
+              <dt>Showing</dt>
+              <dd>Whatever you like</dd>
+            </div>
+          </dl>
           <Mark />
-          <span>sparrow</span>
-        </Link>
-        <Link className="sp-back" to="/">
-          <ArrowLeft size={15} /> Back to the good stuff
-        </Link>
-      </header>
-      <section className="sp-auth-story" aria-label="Make yourself at home">
-        <PlayroomArt />
-        <h2>
-          Your own little corner
-          <br />
-          of the watch-world.
-        </h2>
-        <p>Good stories. Familiar faces. Something just for you.</p>
-      </section>
-      <section
-        className="sp-auth-entry"
-        aria-label={registering ? "Create your account" : "Sign in"}
-      >
-        <div className="sp-auth-card">
-          <div className="sp-auth-step">
-            <span>
-              {needsSetup
-                ? "A FRESH START"
-                : joining
-                  ? "YOUR INVITATION"
-                  : "HELLO AGAIN"}
-            </span>
-            <span className="sp-small-mark">
-              <Mark />
-            </span>
-          </div>
+        </div>
+        <p className="sp-label">Accounts live on this server · no Sparrow subscription</p>
+      </aside>
+      <main id="main-content" className="sp-entry-main">
+        <div className="sp-entry-top">
+          <Link className="sp-entry-brand" to="/" aria-label="Sparrow home">
+            <Wordmark />
+          </Link>
+          <Link className="sp-back" to="/">
+            <ArrowLeft size={15} aria-hidden="true" /> Back to Sparrow
+          </Link>
+        </div>
+        <section
+          className="sp-entry-form"
+          aria-label={registering ? "Create your account" : "Sign in"}
+        >
+          <p className="sp-label">
+            {needsSetup ? "Opening night" : joining ? "You’re on the list" : "Welcome back"}
+          </p>
           <h1>
             {needsSetup
               ? "Set up your Sparrow server"
               : joining
-                ? "Welcome to the collection."
-                : "Come on in."}
+                ? "Pull up a seat."
+                : "Take your seat."}
           </h1>
-          <p className="sp-description">
+          <p className="sp-lede">
             {needsSetup
-              ? "A few details, then it’s yours. Next, connect your collection and invite your people."
+              ? "Create the administrator account first. Next you’ll set household defaults, connect your storage and invite your people."
               : joining
-                ? "Make yourself at home. Your watch history and preferences will be just for you."
-                : "Your collection is right where you left it."}
+                ? "Create your account. Your watch history and preferences are yours alone."
+                : "Sign in and pick up where you left off."}
           </p>
           <form onSubmit={submit} className="sp-form">
             <ErrorNote error={error} />
             {needsSetup && (
               <Field
                 label="Setup code"
-                hint="Your installation agent or server startup logs have this one-time code."
+                hint="A one-time code from your installer or the server’s startup log."
               >
                 <input
                   required
@@ -158,13 +157,9 @@ export default function Auth({
               value={password}
               onChange={setPassword}
               creating={registering}
-              hint={
-                registering
-                  ? "8 characters or more. Keep it simple."
-                  : undefined
-              }
+              hint={registering ? "At least 8 characters." : undefined}
             />
-            <button className="sp-button primary" disabled={busy}>
+            <button className="sp-btn sp-btn-solid sp-entry-submit" disabled={busy}>
               {busy
                 ? "One moment…"
                 : needsSetup
@@ -172,18 +167,11 @@ export default function Auth({
                   : joining
                     ? "Create account"
                     : "Sign in"}
-              <ArrowRight size={17} />
+              <ArrowRight size={17} aria-hidden="true" />
             </button>
           </form>
-          <p className="sp-auth-note">
-            <Check size={14} /> An account on this server. No Sparrow
-            subscription.
-          </p>
-        </div>
-        <p className="sp-auth-footer">
-          A little less managing. A lot more watching.
-        </p>
-      </section>
-    </main>
+        </section>
+      </main>
+    </div>
   );
 }

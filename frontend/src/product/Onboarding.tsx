@@ -87,67 +87,75 @@ export default function Onboarding({
   }
   return (
     <Page
-      title="Let’s get Sparrow ready"
-      description="Connect the services and storage you want to use. Your progress is saved as you go."
+      kicker="Opening night"
+      title="Let’s get the house ready."
+      description="Connect the services and storage you want to use. Progress saves as you go, so you can stop and come back."
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {!state ? (
         <Loading label="Loading your setup…" />
       ) : (
         <>
-          <nav className="sp-setup-steps" aria-label="Server setup steps">
-            {steps.map(({ id, label }, index) => (
-              <button
-                key={id}
-                className={`sp-button ${state.step === id ? "primary" : "secondary"}`}
-                aria-current={state.step === id ? "step" : undefined}
-                disabled={busy}
-                onClick={() => void update({ step: id })}
-              >
-                {index + 1}. {label}
-              </button>
-            ))}
+          <nav className="sp-steps" aria-label="Server setup steps">
+            <ol>
+              {steps.map(({ id, label }, index) => {
+                const position = steps.findIndex((step) => step.id === state.step);
+                return (
+                  <li key={id} className={index < position ? "is-done" : index === position ? "is-current" : ""}>
+                    <button
+                      aria-current={state.step === id ? "step" : undefined}
+                      disabled={busy}
+                      onClick={() => void update({ step: id })}
+                    >
+                      <span className="sp-steps-number" aria-hidden="true">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <span>
+                        <span className="sp-sr">{index + 1}. </span>
+                        {label}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
           </nav>
           {state.step === "start" && (
-            <section className="sp-panel sp-form">
-              <h2>How would you like to start?</h2>
-              <p>
-                Automatic downloads need title information, a reasoning service,
-                storage and a download app. You can also begin with media you
-                already own.
+            <section className="sp-setup-start" aria-labelledby="setup-start">
+              <h2 id="setup-start">How would you like to start?</h2>
+              <p className="sp-hint">
+                Automatic fetching needs title information, a reasoning service, storage and a download
+                app. You can also start with media you already own and add the rest later.
               </p>
-              <div className="sp-setup-choices">
+              <div className="sp-choices">
                 <button
-                  className="sp-button primary"
+                  className="sp-choice"
+                  aria-label="Find and download for me"
+                  aria-describedby="choice-autopilot"
                   disabled={busy}
-                  onClick={() =>
-                    void update({
-                      mode: "autopilot",
-                      step: "providers",
-                      deferred: false,
-                    })
-                  }
+                  onClick={() => void update({ mode: "autopilot", step: "providers", deferred: false })}
                 >
-                  Find and download for me
+                  <span className="sp-label">Full service</span>
+                  <span className="sp-choice-title">Find and download for me</span>
+                  <span className="sp-choice-body" id="choice-autopilot">
+                    Connect title search, the reasoning service and a download app. Sparrow does the
+                    fetching.
+                  </span>
                 </button>
                 <button
-                  className="sp-button secondary"
+                  className="sp-choice"
+                  aria-label="Watch my existing collection"
+                  aria-describedby="choice-library"
                   disabled={busy}
-                  onClick={() =>
-                    void update({
-                      mode: "library",
-                      step: "storage",
-                      deferred: false,
-                    })
-                  }
+                  onClick={() => void update({ mode: "library", step: "storage", deferred: false })}
                 >
-                  Watch my existing collection
+                  <span className="sp-label">Just the projector</span>
+                  <span className="sp-choice-title">Watch my existing collection</span>
+                  <span className="sp-choice-body" id="choice-library">
+                    No API keys or download app needed. Point Sparrow at your media and press play.
+                  </span>
                 </button>
               </div>
-              <p className="sp-muted">
-                Existing-library playback needs no API keys or download app. You
-                can enable automatic downloads later in Server setup.
-              </p>
             </section>
           )}
           {state.step === "providers" && (
@@ -161,12 +169,12 @@ export default function Onboarding({
             <>
               <Storage onboarding onChanged={resource.refresh} />
               <div className="sp-savebar">
-                <p className="sp-muted">
+                <p className="sp-hint">
                   Choose folders on this server, or pair another machine.
                   Downloads need a separate, writable incoming folder.
                 </p>
                 <button
-                  className="sp-button primary"
+                  className="sp-btn sp-btn-solid"
                   disabled={busy}
                   onClick={() =>
                     void update({
@@ -192,12 +200,12 @@ export default function Onboarding({
                 setupSection="downloads"
                 onSaved={() => advance("review")}
               />
-              <p className="sp-muted">
+              <p className="sp-hint">
                 For a paired Windows machine, configure its download app in
                 Sparrow Node, then check the setup summary.
               </p>
               <button
-                className="sp-button secondary"
+                className="sp-btn sp-btn-line"
                 disabled={busy}
                 onClick={() => void update({ step: "review" })}
               >
@@ -206,7 +214,7 @@ export default function Onboarding({
             </>
           )}
           {state.step === "review" && (
-            <section className="sp-panel sp-form">
+            <section className="sp-sheet sp-form">
               <h2>Check your setup</h2>
               <p>
                 {state.mode === "library"
@@ -256,16 +264,16 @@ export default function Onboarding({
                   </div>
                   {(state.mode !== "library" || check.step === "storage") && (
                     <button
-                      className="sp-button quiet"
+                      className="sp-btn sp-btn-ghost"
                       disabled={busy}
                       onClick={() => void update({ step: check.step })}
                     >
-                      Edit<span className="sr-only"> {check.label}</span>
+                      Edit<span className="sp-sr"> {check.label}</span>
                     </button>
                   )}
                 </div>
               ))}
-              <p className="sp-muted">
+              <p className="sp-hint">
                 Live provider access is checked when you make a request. No paid
                 model calls or downloads run during setup.
               </p>
@@ -280,14 +288,14 @@ export default function Onboarding({
               )}
               <div className="sp-actions">
                 <button
-                  className="sp-button secondary"
+                  className="sp-btn sp-btn-line"
                   onClick={resource.refresh}
                   disabled={busy || resource.loading}
                 >
                   Check again
                 </button>
                 <button
-                  className="sp-button primary"
+                  className="sp-btn sp-btn-solid"
                   disabled={busy || !state.can_finish}
                   onClick={() => void leave(true)}
                 >
@@ -299,11 +307,11 @@ export default function Onboarding({
             </section>
           )}
           <div className="sp-savebar">
-            <p className="sp-muted">
+            <p className="sp-hint">
               You can return here from Settings → Server setup.
             </p>
             <button
-              className="sp-button quiet"
+              className="sp-btn sp-btn-ghost"
               disabled={busy}
               onClick={() => void leave(false)}
             >

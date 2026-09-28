@@ -1,132 +1,127 @@
 # Product design contract
 
-The current direction replaces the rejected dark cinematic redesign on
-`design/sparrow-reimagined`. The owner's brief is a public landing page, smaller
-controls and typography, a brighter palette, and a little whimsy throughout.
+Sparrow is **a private picture house**: a cinema for one household that runs
+itself. The interface borrows from repertory-cinema print — programmes,
+tickets, marquees and the projectionist's log — rather than from software
+dashboards. The before/after record of this redesign is in
+[redesign/README.md](redesign/README.md).
 
-The owner likes this visual style. The personal-cinema follow-up now gives
-artwork and watching shelves more space, simplifies settings and adds operational
-history. [IMPLEMENTATION.md](IMPLEMENTATION.md) records the implemented scope;
-[NEARBY_DISCOVERY.md](NEARBY_DISCOVERY.md) records the isolated discovery prototype.
+## Principles
 
-## A happy little home for the good stuff
+1. **Watching first.** Play and Resume are always the most obvious control on
+   the page. Everything else is quieter.
+2. **Only Play is round and red.** Square corners, hairline rules and no
+   shadows everywhere else. The vermilion signal marks what is live: play,
+   progress, the current page and the active step. Primary actions that are not
+   playback use solid ink.
+3. **Print, not panels.** Paper surfaces, ruled sections and set type do the
+   structuring. Sheets (raised paper) are used sparingly for forms.
+4. **Say it plainly, with a little theatre.** Headings may have character
+   ("Take your seat.", "Nothing on order."); labels, buttons and errors say
+   exactly what happens.
+5. **Verify reality.** Use actual collection, account and progress facts. Never
+   invent availability, recommendations or permissions for presentation.
 
-Sparrow uses light paper, plum ink, lilac actions, and mint and pink supporting
-surfaces. Original line illustrations bring a small bird, a television, books,
-a cup, and playful stars into the welcome experience. Discovery uses small
-heart, star and orbit drawings. There are no landscape or sunset brand assets.
-Real titles still use their catalogue artwork; missing art gets a geometric,
-locally rendered fallback.
+## Palette
 
-| Role           | Value     |
-| -------------- | --------- |
-| Page           | `#faf9f6` |
-| Surface        | `#ffffff` |
-| Text           | `#302d3c` |
-| Secondary text | `#696372` |
-| Primary action | `#7050b5` |
-| Lilac          | `#eee8f8` |
-| Mint           | `#e6f1e4` |
-| Pink           | `#f9e8ed` |
-| Border         | `#dedbe5` |
+Tokens live in `frontend/src/product/styles/base.css`. Every state is paired
+with words, never colour alone.
 
-DM Sans is the single locally bundled typeface. Page titles are 24–26px,
-section headings 17–18px, body copy 12–13px, and desktop controls 36–39px high.
-The landing headline is 49px at its largest, 38px on phones. Main touch controls
-increase to 40–44px and text inputs to 16px on phones. Small decorative captions
-never carry the only explanation of an action. Contrast and visible keyboard
-focus remain required.
+| Role | Light ("house lights") | Dark ("after hours") |
+| --- | --- | --- |
+| Paper | `#eee8db` | `#14120e` |
+| Sheet (raised) | `#f7f3ea` | `#1f1c17` |
+| Ink | `#17140f` | `#eee7d9` |
+| Secondary ink | `#4b453b` | `#c0b7a6` |
+| Signal (fills, large marks) | `#cc3a16` | `#f0532d` |
+| Signal ink (small text) | `#b0300f` | `#ff7b58` |
+| Inverse accent (red text on ink) | `#ff7b58` | `#b0300f` |
+| Ready / attention / problem | `#1d6a44` / `#8a5300` / `#a8261a` | `#6fcf9a` / `#f0b75a` / `#ff8a7a` |
+
+Dark mode follows the system setting. The player page (`.sp-dark`) is always
+dark. Light text on the signal colour is 4.7:1; small red text on paper uses
+signal ink. Axe colour-contrast audits run at 360, 390, 768 and 1440px.
+
+## Type
+
+Three OFL families are bundled locally — no font requests leave the server.
+
+- **Big Shoulders Display** (800–900): mastheads, titles, section heads,
+  numerals. Tall and condensed, like marquee lettering.
+- **Schibsted Grotesk** (400–700, italic for Sparrow's discovery answers):
+  body, controls and buttons. Body is 15px; inputs are 15–16px.
+- **IBM Plex Mono** (400–500, uppercase, 0.08em tracking): kickers, field
+  labels, metadata, timestamps and the agents' journal.
+
+## Signature elements
+
+- **Masthead**: a mono kicker (date, count or context) over a display title.
+- **Tickets**: Continue watching cards have a perforated stub, punched notches,
+  a round play disc and a progress line. They scroll horizontally.
+- **Prints**: library posters carry a catalogue number (`Nº 04`), kind and
+  year. Titles without artwork get a typographic print generated from the
+  title, never invented imagery.
+- **Programme listing**: episodes are numbered rows with large display numerals.
+- **Journal**: each request's log is set in mono on ruled paper with times in
+  the margin.
+- **Admit-one ticket**: sign-in, first-run setup and invitations share a split
+  layout whose ink panel holds a tilted red ticket.
 
 ## Screen compositions
 
-- **Public home:** a welcome page before any sign-in form. It introduces the
-  collection, discovery, and household with a restrained headline, original
-  illustration, and three pastel panels. Sign in and Open your Sparrow lead to
-  `/login`. On an unconfigured server those actions lead to `/setup`. The hero
-  starts 22–28px below the navigation, with copy aligned to its top.
-- **Account entry:** a compact light card, with a quiet illustration on desktop
-  and a simple header on phones. Setup and invitation links open their forms
-  directly. Setup-code prefill, password visibility, autocomplete, validation,
-  and invitations retain their existing contracts. Back navigation returns to
-  the landing page; sign-out returns there too.
-- **Server setup:** after the administrator chooses household defaults, guide
-  them through connections, storage, downloads and a measured setup summary.
-  Offer existing-library use without API keys or a download app. Save progress
-  on the server; Finish later preserves an unfinished state and a visible return
-  link. Existing administrators with unfinished setup join the same flow.
-  Household viewers only receive their personal preferences welcome. Saved keys
-  and download settings are labelled as configured, not live-verified access.
-- **Home:** one short greeting, a compact horizontal Continue watching row
-  with up to twelve recent in-progress copies, then library posters. Resume
-  cards show artwork, progress and a visible play action; they never expand
-  into a hero. Phone shelves scroll horizontally. Empty collections use a welcome
-  illustration and real next steps appropriate to the account's permissions.
-- **Library:** a compact header, result count, tidy filter bar, and poster grid.
-  Search, type, availability and sort persist in the URL. Phone filters use
-  two columns, with a full-width availability control.
-- **Discover:** a modest centred heading and white search panel, followed by
-  three pastel illustrated prompts. Prompts fill an editable draft without
-  starting paid work or acquiring anything. Mode tabs support arrow/Home/End
-  keys; drafts and title return links preserve context.
-- **Title:** poster, plum title and synopsis on a light lilac panel. A subdued
-  catalogue backdrop supplies texture without making text depend on the image.
-  Real Play/Resume controls, episodes, season filtering, copies, exact request
-  scope and collection care remain explicit.
-- **Activity:** title-led request rows, small scope tags, recovery controls and
-  expandable journals. A request link from Logs narrows to that request, including
-  completed work. Errors cannot masquerade as empty work.
-- **Settings:** a compact desktop sidebar, wrapping phone navigation, white
-  grouped forms and visible inheritance/reset controls. People have initial
-  tiles and access actions; storage has mint device icons and connected-folder
-  cards. Server/defaults, import, matching, pairing, password and care flows
-  share the same compact control and dialog system. Sign out sits separately
-  below the navigation and returns to the public landing page. Account & security
-  contains a compact password row whose button opens the shared password-change
-  dialog, followed by browser-revocation controls; preferences has no duplicate
-  administration links or session feed.
-- **Logs:** operational history with readable summaries, title/request context,
-  timestamp, severity and a next action. Technical identifiers expand separately.
-  Time/category/severity/title filters persist through snapshot pagination and
-  reload. Empty and failed loads are distinct.
-- **Player:** video remains on a dark viewing surface. Its surrounding page,
-  track settings, subtitle repair and recovery use the light shared system.
-  Optional conversion sits under Playback help, explaining that it changes the
-  browser's playback format while preserving the original file.
-- **Dialogs and states:** warm white dialogs, lilac focus and sticky action
-  footers; restrained mint success and pink error states; lilac empty states
-  with the bird. Focus containment, Escape and focus restoration remain intact.
+- **Front of house (public)**: poster-scale headline, the projection
+  illustration, a marquee band, the three-act programme and a closing call.
+  Sign in / Set up Sparrow go to `/login` or `/setup`.
+- **Entry**: setup code, invitation and sign-in forms keep their contracts
+  (prefill, show/hide password, autocomplete, validation). Phones drop the
+  ticket panel for a ruled header.
+- **Tonight (home)**: time-aware greeting, tickets for up to twelve in-progress
+  copies, up to twelve prints, and a box-office callout for people who can
+  request. An empty house shows real next steps for the account's role.
+- **Library**: count, search, All/Films/Series segments, availability and sort;
+  every filter persists in the URL.
+- **Title**: framed backdrop band, overlapping poster, display title, round
+  Play/Resume, request and follow controls, episode listing with season filter.
+- **Find**: one large typed field with two tabs ("I know the title", "Help me
+  choose"), three starting-point slips that only fill a draft, and Sparrow's
+  answer set as an italic note. Keyboard tab navigation is preserved.
+- **Requests**: open/all tabs, request rows with status, scope, controls and an
+  expandable journal; followed titles below.
+- **Screening room**: dark page, the video, an audio/subtitle deck, playback
+  help and subtitle care.
+- **Settings**: a numbered, sticky index on desktop; a horizontal index with
+  visible Sign out on phones. Preferences are numbered fieldsets with visible
+  inheritance and reset. People is a cast list; storage uses device cards with
+  capacity gauges; server setup has a numbered stepper and two choice cards.
+- **Dialogs**: a red top rule, display title and a sticky footer; bottom sheet
+  on phones. Focus trapping, Escape and focus restoration are unchanged.
 
-Desktop navigation remains horizontal. Phones use four compact bottom links.
-Discover is the single search destination in navigation; there is no duplicate
-search link beside the account. `Ctrl/Cmd+K` still opens Discover. Page headers
-omit decorative eyebrow lines and retain descriptions only where they explain
-an action. `Page`, `Section`, `Field`, `Dialog`, `Poster` and the
-state components in `frontend/src/product/ui.tsx` define common behavior;
-`product.css` owns visual tokens and responsive layouts.
+Navigation: desktop bar with Tonight · Library · Find · Requests; phones use a
+four-item dock. `Ctrl/Cmd+K` opens Find.
 
-## Product and verification boundaries
+## Implementation map
 
-Use actual collection and account facts. Never invent availability, progress,
-recommendations, household permissions or request authority for presentation.
-Existing copies, preference inheritance, scope, acquisition limits, media
-verification and backend permissions remain authoritative.
+`frontend/src/product/ui.tsx` holds the shared behaviour (`Page`, `Section`,
+`Field`, `Dialog`, `Poster`, `PrintCard`, `Status`, states). Styles are split by
+layer under `frontend/src/product/styles/`: `base.css` (tokens, fonts, type),
+`components.css`, `shell.css`, `front.css`, `screens.css` and `settings.css`.
+Tailwind is no longer used.
 
-Inspect real browser renders at 360, 390, 768 and 1440px, including errors, empty
-collections, unavailable artwork and supporting dialogs. Browser scripts and
-screenshots live in [reimagined-validation](reimagined-validation/README.md) and
-[follow-up-validation](follow-up-validation/README.md).
-Fictional geometric fixture covers are test data, not real library titles or
-recommendations. Physical-device, Windows and live-provider boundaries remain
-as recorded in [IMPLEMENTATION.md](IMPLEMENTATION.md).
+## Verification
+
+`tests/browser/ci.sh` runs the functional journeys, axe audits and overflow
+checks at 360, 390, 768 and 1440px, then captures the
+[screenshot gallery](screenshots/README.md) from fictional fixtures.
 
 ## Artwork and font provenance
 
-The original SVG mark, television/bird welcome illustration and discovery
-doodles live in `frontend/src/product/Brand.tsx`; `frontend/public/icon.svg`
-repeats the mark. DM Sans is bundled locally with its SIL OFL notice under
-`frontend/public/assets/font-licenses/`. Retired cinematic artwork and the
-unused Instrument Serif font have been removed.
+The sparrow mark, wordmark, projection illustration and generated poster prints
+are original SVG/CSS in `frontend/src/product/Brand.tsx` and `ui.tsx`;
+`frontend/public/icon.svg` repeats the mark. Big Shoulders Display, Schibsted
+Grotesk and IBM Plex Mono are bundled under `frontend/src/product/assets/fonts/`
+with their SIL Open Font License notices in
+`frontend/public/assets/font-licenses/`. DM Sans and the previous bird,
+television and doodle illustrations have been removed.
 
-The browser fixture creates original geometric posters/backdrops for fictional
-titles. The [current gallery](screenshots/README.md) captures the production
-frontend using those fixtures; production uses actual catalogue images.
+The browser fixture's geometric posters and backdrops belong to fictional test
+titles; production uses actual catalogue images.

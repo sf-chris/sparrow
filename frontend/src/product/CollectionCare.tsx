@@ -94,91 +94,85 @@ export default function CollectionCare({
       setError((e as Error).message);
     }
   }
+  const describe = (row: Subscription) =>
+    row.data.mandate.mode === "keep_current"
+      ? "New episodes from when you started following"
+      : row.data.mandate.mode === "backfill"
+        ? "Every aired episode"
+        : row.data.mandate.mode === "seasons"
+          ? `Seasons ${row.data.mandate.seasons.join(", ")}`
+          : "Only what was requested";
   return (
     <Section
-      title="Collection care"
-      description="Your subscriptions decide what Sparrow may keep up to date. Existing copies are preserved when you opt into upgrades."
+      className="sp-care"
+      kicker="Standing orders"
+      title={tmdbId ? "Keep it up to date" : "Titles you follow"}
+      description="Following a title lets Sparrow fetch new episodes, fill gaps and, if you allow it, find a better picture. Existing copies are kept until a better one is verified."
+      action={
+        tmdbId && resource.data && !rows.length ? (
+          <button className="sp-btn sp-btn-line" onClick={() => edit(null)}>
+            {mediaType === "tv" ? "Follow this show" : "Manage this movie"}
+          </button>
+        ) : undefined
+      }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {!resource.data ? (
         resource.loading ? (
-          <Loading label="Opening collection care…" />
+          <Loading label="Checking what you follow…" />
         ) : null
       ) : rows.length > 0 ? (
-        <div className="sp-panel">
+        <ul className="sp-rows sp-care-rows">
           {rows.map((row) => (
-            <div className="sp-row" key={row.id}>
+            <li className="sp-row" key={row.id}>
               <div>
-                <h3>
-                  {row.data.title || title || "Saved title"} ·{" "}
-                  {row.data.enabled ? "Following" : "Paused"}
-                </h3>
-                <p>{row.data.message}</p>
-                <p>
-                  {row.data.mandate.mode === "keep_current"
-                    ? "New episodes from when you followed"
-                    : row.data.mandate.mode === "backfill"
-                      ? "All aired episodes"
-                      : row.data.mandate.mode === "seasons"
-                        ? `Seasons ${row.data.mandate.seasons.join(", ")}`
-                        : "Only explicitly requested items"}
-                  {row.data.upgrades ? " · Quality upgrades enabled" : ""}
+                <p className="sp-care-state">
+                  <span className={`sp-status ${row.data.enabled ? "is-ok" : "is-quiet"}`}>
+                    {row.data.enabled ? "Following" : "Paused"}
+                  </span>
+                  <span className="sp-label">
+                    {describe(row)}
+                    {row.data.upgrades ? " · Upgrades on" : ""}
+                  </span>
                 </p>
+                <h3>{row.data.title || title || "Saved title"}</h3>
+                {row.data.message && <p>{row.data.message}</p>}
               </div>
               <div className="sp-actions">
-                <button
-                  className="sp-button secondary"
-                  onClick={() => edit(row)}
-                >
-                  Edit care
-                </button>
                 {row.data.enabled && (
-                  <button
-                    className="sp-button quiet"
-                    onClick={() => void check(row)}
-                  >
+                  <button className="sp-btn sp-btn-ghost sp-btn-small" onClick={() => void check(row)}>
                     Check now
                   </button>
                 )}
+                <button className="sp-btn sp-btn-line sp-btn-small" onClick={() => edit(row)}>
+                  Edit care
+                </button>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : (
-        <p className="sp-muted">
+        <p className="sp-hint">
           {tmdbId
-            ? "Follow this title to choose its future care."
-            : "Follow a title from its page, or enable monitoring when you request episodes."}
+            ? "You don’t follow this title yet."
+            : "Nothing followed yet. Follow a title from its page, or choose “new episodes as they air” when you request a series."}
         </p>
-      )}
-      {tmdbId && resource.data && !rows.length && (
-        <button className="sp-button secondary" onClick={() => edit(null)}>
-          {mediaType === "tv" ? "Follow this show" : "Manage this movie"}
-        </button>
       )}
       {open && (
         <Dialog
           title={`Care for ${editing?.data.title || title || "this title"}`}
           onClose={() => setOpen(false)}
           footer={
-            <button
-              className="sp-button primary"
-              disabled={busy}
-              onClick={save}
-            >
+            <button className="sp-btn sp-btn-solid" disabled={busy} onClick={save}>
               {busy ? "Saving…" : "Save collection care"}
             </button>
           }
         >
           <div className="sp-form">
             <ErrorNote error={error} />
-            <label className="sp-checkbox">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-              />
-              Enable automatic care
+            <label className="sp-check">
+              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+              Look after this title automatically
             </label>
             {(editing?.media_type || mediaType) === "tv" && (
               <>
@@ -192,10 +186,7 @@ export default function CollectionCare({
                         : undefined
                   }
                 >
-                  <select
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value)}
-                  >
+                  <select value={mode} onChange={(e) => setMode(e.target.value)}>
                     <option value="exact">Requested episodes only</option>
                     <option value="keep_current">New episodes</option>
                     <option value="seasons">Selected seasons</option>
@@ -203,24 +194,14 @@ export default function CollectionCare({
                   </select>
                 </Field>
                 {mode === "seasons" && (
-                  <Field
-                    label="Season numbers"
-                    hint="Separate season numbers with commas, for example 1, 2."
-                  >
-                    <input
-                      value={seasons}
-                      onChange={(e) => setSeasons(e.target.value)}
-                    />
+                  <Field label="Season numbers" hint="Separate with commas, for example 1, 2.">
+                    <input value={seasons} onChange={(e) => setSeasons(e.target.value)} />
                   </Field>
                 )}
               </>
             )}
             <Field label="Storage destination">
-              <select
-                disabled={!!editing}
-                value={node}
-                onChange={(e) => setNode(e.target.value)}
-              >
+              <select disabled={!!editing} value={node} onChange={(e) => setNode(e.target.value)}>
                 {nodes.data
                   ?.filter((n) => !n.disabled)
                   .map((n) => (
@@ -230,19 +211,17 @@ export default function CollectionCare({
                   ))}
               </select>
             </Field>
-            <label className="sp-checkbox">
-              <input
-                type="checkbox"
-                checked={upgrades}
-                onChange={(e) => setUpgrades(e.target.checked)}
-              />
-              Look for better picture quality up to my preferred quality
+            <label className="sp-check">
+              <input type="checkbox" checked={upgrades} onChange={(e) => setUpgrades(e.target.checked)} />
+              Look for a better picture, up to my preferred quality
             </label>
-            <p className="sp-muted">
-              Saving applies your current preferences to future care. Existing
-              requests keep their saved preferences. Pausing care stops new
-              automatic requests; control existing work in{" "}
-              <Link to="/activity">Activity</Link>.
+            <p className="sp-hint">
+              Saving applies your current preferences to future care; existing requests keep theirs. Pausing
+              care stops new automatic requests — manage work already under way in{" "}
+              <Link className="sp-link" to="/activity">
+                Requests
+              </Link>
+              .
             </p>
           </div>
         </Dialog>

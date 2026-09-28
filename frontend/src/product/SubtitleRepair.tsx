@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, Upload } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { api, patch, post } from "./api";
 import { ErrorNote, Field, Section, useResource } from "./ui";
 
@@ -115,36 +115,35 @@ export function SubtitleRepair({
   }
   return (
     <Section
+      className="sp-subtitle-care"
+      kicker="Subtitles"
       title="Subtitle care"
-      description="Find a suitable track, align it to this audio, then review dialogue samples. Your original files stay intact."
+      description="Sparrow finds a suitable track, lines it up with this audio, then checks samples of the dialogue. Your original files stay as they are."
     >
-      <div className="sp-panel sp-form">
+      <div className="sp-form">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {latest && (
-          <div role="status">
+          <div className="sp-note" role="status">
             <strong>
               {latest.state === "ready"
                 ? "Subtitles checked"
                 : running
-                  ? "Preparing your subtitles"
+                  ? "Preparing your subtitles…"
                   : latest.state === "review_pending"
-                    ? "Ready for quality review"
+                    ? "Ready for a quality check"
                     : latest.state === "cancelled"
                       ? "Repair stopped"
                       : "Subtitles need attention"}
             </strong>
-            <p className="sp-muted">{latest.message}</p>
+            {latest.message && <p className="sp-hint">{latest.message}</p>}
           </div>
         )}
         <div className="sp-form-grid">
           <Field
             label="Repair language"
-            hint="Automatic verification currently needs captions in the spoken language."
+            hint="Automatic checking currently needs captions in the spoken language."
           >
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            >
+            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
               {[
                 ["en", "English"],
                 ["es", "Spanish"],
@@ -170,15 +169,16 @@ export function SubtitleRepair({
             </select>
           </Field>
         </div>
-        <div className="sp-actions">
+        <div className="sp-subtitle-actions">
           <button
-            className="sp-button secondary"
+            className="sp-btn sp-btn-solid"
             disabled={busy || running}
             onClick={() => void repair()}
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={15} aria-hidden="true" />
             Find & repair subtitles
           </button>
+          <span className="sp-label">or</span>
           <Field label="Use your own subtitle file">
             <input
               type="file"
@@ -191,18 +191,16 @@ export function SubtitleRepair({
               }}
             />
           </Field>
+        </div>
+        <div className="sp-actions">
           {running && (
-            <button
-              className="sp-button quiet"
-              disabled={busy}
-              onClick={() => void action("DELETE")}
-            >
+            <button className="sp-btn sp-btn-ghost" disabled={busy} onClick={() => void action("DELETE")}>
               Stop repair
             </button>
           )}
           {latest?.state === "review_pending" && (
             <button
-              className="sp-button secondary"
+              className="sp-btn sp-btn-line"
               disabled={busy}
               onClick={() => void action("POST", "/review")}
             >
@@ -211,33 +209,32 @@ export function SubtitleRepair({
           )}
         </div>
         {resource.data?.tracks.some((t) => t.original_url) && (
-          <details>
-            <summary className="sp-button quiet">
-              Original subtitle files
-            </summary>
-            <p className="sp-muted">
-              These are preserved before alignment. Their original timing has
-              not been approved.
+          <details className="sp-disclosure">
+            <summary>Original subtitle files</summary>
+            <p className="sp-hint">
+              Kept exactly as they arrived, before alignment. Their timing hasn’t been checked.
             </p>
-            {resource.data.tracks
-              .filter((t) => t.original_url)
-              .slice(0, 10)
-              .map((t) => (
-                <a
-                  className="sp-button quiet"
-                  key={t.id}
-                  href={t.original_url}
-                  download={`${t.language}-original.vtt`}
-                >
-                  Download original · {t.language}
-                </a>
-              ))}
+            <div className="sp-actions">
+              {resource.data.tracks
+                .filter((t) => t.original_url)
+                .slice(0, 10)
+                .map((t) => (
+                  <a
+                    className="sp-btn sp-btn-line sp-btn-small"
+                    key={t.id}
+                    href={t.original_url}
+                    download={`${t.language}-original.vtt`}
+                  >
+                    Download original · {t.language}
+                  </a>
+                ))}
+            </div>
           </details>
         )}
         {selected?.id && (
           <Field
             label="Personal subtitle delay (seconds)"
-            hint="Positive values show captions later. This only changes your playback."
+            hint="Positive numbers show captions later. Only changes your own playback."
           >
             <input
               type="number"
