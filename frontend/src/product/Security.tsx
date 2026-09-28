@@ -24,61 +24,67 @@ export default function Security() {
   }
   return (
     <Page
-      title="Account & security"
-      description="Manage your password and the browsers signed in to your account."
+      title="Account"
+      lede="Your password and the browsers signed in as you."
     >
       <PasswordSettings onChanged={resource.refresh} />
-      <Section
-        title="Signed-in browsers"
-        description="End a session to remove its access. Use Sign out in the settings navigation to leave this browser."
-      >
+      <Section title="Signed in">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {!resource.data && resource.loading ? (
-          <Loading label="Loading browsers…" />
+          <Loading label="Loading browsers" />
         ) : (
           resource.data &&
           (resource.data.length ? (
-            <div className="sp-panel">
-              {resource.data.map((session) => (
-                <div className="sp-row" key={session.id}>
-                  <div>
-                    <h3 className="sp-actions">
-                      {/Mobile|Android|iPhone|iPad/i.test(session.label) ? (
-                        <Smartphone size={17} />
+            <ul className="rows">
+              {resource.data.map((session) => {
+                const phone = /Mobile|Android|iPhone|iPad/i.test(session.label);
+                return (
+                  <li className="row" key={session.id}>
+                    <div className="device">
+                      {phone ? (
+                        <Smartphone
+                          size={22}
+                          strokeWidth={2}
+                          aria-hidden="true"
+                        />
                       ) : (
-                        <Monitor size={17} />
+                        <Monitor size={22} strokeWidth={2} aria-hidden="true" />
                       )}
-                      {session.current
-                        ? "This browser"
-                        : /Mobile|Android|iPhone|iPad/i.test(session.label)
-                          ? "Mobile browser"
-                          : "Browser"}
-                    </h3>
-                    <p>
-                      Signed in{" "}
-                      {new Date(session.created * 1000).toLocaleString()}
-                    </p>
-                    <details className="sp-session-detail">
-                      <summary>Browser details</summary>
-                      <p>
-                        {session.label || "No browser information available."}
-                      </p>
-                    </details>
-                  </div>
-                  {!session.current && (
-                    <button
-                      className="sp-button secondary"
-                      disabled={!!busy}
-                      onClick={() => revoke(session.id)}
-                    >
-                      {busy === session.id ? "Ending…" : "End session"}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+                      <div>
+                        <h3>
+                          {session.current
+                            ? "This browser"
+                            : phone
+                              ? "Phone or tablet"
+                              : "Browser"}
+                        </h3>
+                        <p className="num">
+                          Since{" "}
+                          {new Date(session.created * 1000).toLocaleString()}
+                        </p>
+                        <details className="disclosure">
+                          <summary>Browser details</summary>
+                          <p className="muted">
+                            {session.label || "No browser information."}
+                          </p>
+                        </details>
+                      </div>
+                    </div>
+                    {!session.current && (
+                      <button
+                        className="btn"
+                        disabled={!!busy}
+                        onClick={() => revoke(session.id)}
+                      >
+                        {busy === session.id ? "Ending…" : "End session"}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
-            <Empty title="No active browsers.">
+            <Empty title="No browsers.">
               Sign in again to manage this account.
             </Empty>
           ))

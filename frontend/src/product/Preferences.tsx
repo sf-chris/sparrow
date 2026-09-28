@@ -1,6 +1,7 @@
 import InstallApp from "./InstallApp";
 import { useState, type ReactNode } from "react";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { Tick } from "./Brand";
 import {
   api,
   patch,
@@ -9,10 +10,10 @@ import {
   type User,
   type Policy,
 } from "./api";
-import { ErrorNote, Field, Loading, Page, Section, useResource } from "./ui";
+import { ErrorNote, Field, Loading, Page, useResource } from "./ui";
 
 const quality = [
-  ["480p", "Standard definition"],
+  ["480p", "Standard · 480p"],
   ["720p", "HD · 720p"],
   ["1080p", "Full HD · 1080p"],
   ["2160p", "4K · 2160p"],
@@ -35,26 +36,22 @@ export function PreferenceFields({
     hint?: string,
   ) {
     return (
-      <div className="sp-preference" key={key}>
+      <div className="preference" key={key}>
         <Field label={label} hint={hint}>
           {control}
         </Field>
-        {sources && (
-          <div className="sp-source">
-            <span>
-              {sources[key] === "personal"
-                ? "Your preference"
-                : sources[key] === "policy"
-                  ? "Limited by server policy"
-                  : "Household default"}
-            </span>
-            {sources[key] === "personal" && (
-              <button type="button" onClick={() => onReset?.(key)}>
-                Use default
-              </button>
-            )}
+        {sources?.[key] === "personal" ? (
+          <div className="source">
+            <span>Yours</span>
+            <button type="button" onClick={() => onReset?.(key)}>
+              Use household default
+            </button>
           </div>
-        )}
+        ) : sources?.[key] === "policy" ? (
+          <div className="source">
+            <span>Limited by the server</span>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -73,13 +70,10 @@ export function PreferenceFields({
     );
   }
   return (
-    <div className="sp-preference-groups">
-      <fieldset className="sp-preference-group">
-        <legend>Sound & subtitles</legend>
-        <p className="sp-preference-description">
-          Hear every word. Follow every story.
-        </p>
-        <div className="sp-form-grid">
+    <div className="preference-groups">
+      <fieldset className="preference-group">
+        <legend>Sound and subtitles</legend>
+        <div className="form-grid">
           {field(
             "audio_pref",
             "Preferred audio",
@@ -113,7 +107,7 @@ export function PreferenceFields({
                 )
               }
             />,
-            "Language codes, in preference order. For example: en, es.",
+            "Language codes in order, like en, es.",
           )}
           {field(
             "subtitle_mode",
@@ -130,13 +124,13 @@ export function PreferenceFields({
             select("subtitle_kind", [
               ["full", "Full dialogue"],
               ["forced", "Foreign dialogue only"],
-              ["sdh", "Dialogue and sound descriptions"],
+              ["sdh", "Dialogue and sounds"],
             ]),
           )}
           {field(
             "require_subtitles",
-            "Ready-to-watch requirements",
-            <span className="sp-checkbox">
+            "Before it’s ready",
+            <span className="check">
               <input
                 type="checkbox"
                 checked={values.require_subtitles}
@@ -149,25 +143,22 @@ export function PreferenceFields({
           )}
         </div>
       </fieldset>
-      <fieldset className="sp-preference-group">
-        <legend>Picture & storage</legend>
-        <p className="sp-preference-description">
-          The right balance of a great picture and room for more.
-        </p>
-        <div className="sp-form-grid">
+      <fieldset className="preference-group">
+        <legend>Picture and space</legend>
+        <div className="form-grid">
           {field(
             "preferred_quality",
-            "Preferred picture quality",
+            "Preferred quality",
             select("preferred_quality", quality),
           )}
           {field(
             "min_quality",
-            "Lowest acceptable quality",
+            "Lowest quality",
             select("min_quality", [["any", "Any verified video"], ...quality]),
           )}
           {field(
             "max_file_size_gb",
-            "File size limit",
+            "File size limit (GB)",
             <input
               type="number"
               min={0}
@@ -178,12 +169,12 @@ export function PreferenceFields({
                 onChange("max_file_size_gb", Number(e.target.value))
               }
             />,
-            "GB per file. Zero means no personal limit; server limits still apply.",
+            "Per file. 0 means no personal limit.",
           )}
           {field(
             "prefer_smaller_files",
-            "Storage preference",
-            <span className="sp-checkbox">
+            "Space",
+            <span className="check">
               <input
                 type="checkbox"
                 checked={values.prefer_smaller_files}
@@ -191,25 +182,22 @@ export function PreferenceFields({
                   onChange("prefer_smaller_files", e.target.checked)
                 }
               />
-              Prefer smaller suitable files
+              Prefer smaller files that still fit
             </span>,
           )}
         </div>
       </fieldset>
-      <fieldset className="sp-preference-group">
-        <legend>Your collection, on autopilot</legend>
-        <p className="sp-preference-description">
-          Decide what happens after the credits.
-        </p>
-        <div className="sp-form-grid">
+      <fieldset className="preference-group">
+        <legend>Series</legend>
+        <div className="form-grid">
           {field(
             "monitoring",
             "Future episodes",
             select("monitoring", [
               ["exact", "Only what I request"],
-              ["keep_current", "Keep new episodes coming"],
+              ["keep_current", "New ones as they air"],
             ]),
-            "You’ll see this choice again before starting a request.",
+            "You can still choose on each request.",
           )}
         </div>
       </fieldset>
@@ -294,76 +282,66 @@ export default function Preferences({
   }
   return (
     <Page
+      className={welcome ? "welcome" : ""}
       title={
         welcome
           ? ownerSetup
-            ? "Set your household defaults."
-            : "Make it your own."
-          : "Your settings"
+            ? "Household defaults"
+            : `Welcome, ${user.name.split(" ")[0]}`
+          : "Preferences"
       }
-      description={
+      lede={
         ownerSetup
-          ? "These are the starting preferences for everyone on this server. Each person can make their own changes later."
+          ? "Defaults for everyone on this server. Each person can change their own."
           : welcome
-            ? "Here are the household defaults. Keep them as they are, or choose what works for you."
-            : "Your preferences follow you. Anything you haven’t changed follows the household defaults."
+            ? "These are the household defaults. Keep them, or make them yours."
+            : "Anything you haven’t changed follows the household."
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.loading && !values ? (
-        <Loading label="Loading preferences…" />
+        <Loading label="Loading preferences" />
       ) : (
         values && (
-          <Section
-            title={
-              ownerSetup ? "Household preferences" : "Watching preferences"
-            }
-          >
-            <div className="sp-panel">
-              <PreferenceFields
-                values={values}
-                onChange={(key, value) => {
-                  setDraft({ ...draft, [key]: value });
-                  setSaved(false);
-                }}
-                sources={
-                  ownerSetup
-                    ? undefined
-                    : {
-                        ...resource.data!.effective.sources,
-                        ...Object.fromEntries(
-                          Object.keys(draft).map((k) => [k, "personal"]),
-                        ),
-                      }
-                }
-                onReset={reset}
-              />
-              <div className="sp-savebar">
-                <span role="status" className="sp-success">
-                  {saved && (
-                    <>
-                      <Check size={14} className="inline mr-1" />
-                      Preferences saved
-                    </>
-                  )}
-                </span>
-                <button
-                  className="sp-button primary"
-                  disabled={busy}
-                  onClick={save}
-                >
-                  {busy
-                    ? "Saving…"
-                    : welcome
-                      ? continueSetup
-                        ? "Continue setup"
-                        : "Continue to Sparrow"
-                      : "Save preferences"}
-                  {welcome && <ArrowRight size={16} />}
-                </button>
-              </div>
+          <>
+            <PreferenceFields
+              values={values}
+              onChange={(key, value) => {
+                setDraft({ ...draft, [key]: value });
+                setSaved(false);
+              }}
+              sources={
+                ownerSetup
+                  ? undefined
+                  : {
+                      ...resource.data!.effective.sources,
+                      ...Object.fromEntries(
+                        Object.keys(draft).map((k) => [k, "personal"]),
+                      ),
+                    }
+              }
+              onReset={reset}
+            />
+            <div className="savebar">
+              <span role="status" className="done-note">
+                {saved && (
+                  <>
+                    <Tick /> Saved
+                  </>
+                )}
+              </span>
+              <button className="btn primary" disabled={busy} onClick={save}>
+                {busy
+                  ? "Saving…"
+                  : welcome
+                    ? continueSetup
+                      ? "Continue setup"
+                      : "Continue"
+                    : "Save"}
+                {welcome && <ArrowRight size={18} strokeWidth={2.5} />}
+              </button>
             </div>
-          </Section>
+          </>
         )
       )}
       {!welcome && <InstallApp />}

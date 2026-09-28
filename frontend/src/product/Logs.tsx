@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
 import { api, type User } from "./api";
 import { Empty, ErrorNote, Field, Loading, Page, useResource } from "./ui";
+import { clock } from "./Collection";
 
 type LogEntry = {
   id: number;
@@ -38,6 +39,11 @@ const severities: Record<string, string> = {
   warning: "Needs attention",
   error: "Error",
 };
+const tones: Record<string, string> = {
+  success: "done",
+  warning: "problem",
+  error: "problem",
+};
 function localDate(value: string | null) {
   if (!value || !Number.isFinite(Number(value))) return "";
   const date = new Date(Number(value) * 1000);
@@ -53,10 +59,10 @@ export default function Logs({ user }: { user: User }) {
   return (
     <Page
       title="Logs"
-      description={
+      lede={
         user.role === "admin"
-          ? "Requests, downloads and the work that keeps your cinema running. Includes household and system events."
-          : "Your requests and playback, plus changes to the storage and library you can access."
+          ? "Requests, downloads, imports and storage across the household."
+          : "Your requests and playback, and the storage you can use."
       }
     >
       <HistoryPage
@@ -116,24 +122,24 @@ function HistoryPage({
   return (
     <>
       <form
-        className="sp-log-filters"
+        className="log-filters"
         onSubmit={(event) => {
           event.preventDefault();
           change("q", q.trim());
         }}
       >
-        <div className="sp-field">
+        <div className="field log-search">
           <label htmlFor="log-search">Title or request</label>
-          <div className="sp-log-search">
+          <div className="inline-search">
             <input
               id="log-search"
               type="search"
               value={q}
               maxLength={300}
               onChange={(event) => setQ(event.target.value)}
-              placeholder="Find a title or request ID"
+              placeholder="Title or request ID"
             />
-            <button className="sp-button secondary">Search</button>
+            <button className="btn">Search</button>
           </div>
         </div>
         <Field label="Category">
@@ -141,7 +147,7 @@ function HistoryPage({
             value={params.get("category") || ""}
             onChange={(event) => change("category", event.target.value)}
           >
-            <option value="">All categories</option>
+            <option value="">All</option>
             {categories.map((category) => (
               <option value={category} key={category}>
                 {category === "import"
@@ -156,7 +162,7 @@ function HistoryPage({
             value={params.get("severity") || ""}
             onChange={(event) => change("severity", event.target.value)}
           >
-            <option value="">All severities</option>
+            <option value="">All</option>
             {Object.entries(severities).map(([value, label]) => (
               <option value={value} key={value}>
                 {label}
@@ -164,151 +170,166 @@ function HistoryPage({
             ))}
           </select>
         </Field>
-        <details
-          className="sp-log-time"
-          open={params.has("since") || params.has("until")}
-        >
-          <summary>
-            Time range
-            {params.has("since") || params.has("until") ? " · filtered" : ""}
-          </summary>
-          <div>
-            <Field label="From">
-              <input
-                type="datetime-local"
-                value={localDate(params.get("since"))}
-                onChange={(event) =>
-                  change(
-                    "since",
-                    event.target.value
-                      ? String(new Date(event.target.value).getTime() / 1000)
-                      : "",
-                  )
-                }
-              />
-            </Field>
-            <Field label="Until">
-              <input
-                type="datetime-local"
-                value={localDate(params.get("until"))}
-                onChange={(event) =>
-                  change(
-                    "until",
-                    event.target.value
-                      ? String(new Date(event.target.value).getTime() / 1000)
-                      : "",
-                  )
-                }
-              />
-            </Field>
-          </div>
-        </details>
-      </form>
-      <div className="sp-log-tools">
-        <p className="sp-muted">
-          Recent history · up to 90 days. Repeated events are grouped within
-          five-minute windows.
-        </p>
-        <div className="sp-actions">
-          {filtering && (
-            <button
-              className="sp-button quiet"
-              onClick={() => setParams(new URLSearchParams())}
-            >
-              Clear filters
-            </button>
-          )}
-          <button
-            className="sp-button secondary"
-            disabled={resource.loading}
-            onClick={refresh}
+        <div className="log-tools">
+          <details
+            className="disclosure log-time"
+            open={params.has("since") || params.has("until")}
           >
-            <RefreshCw size={15} />
-            Refresh
-          </button>
+            <summary>
+              Time range
+              {params.has("since") || params.has("until") ? " · filtered" : ""}
+            </summary>
+            <div className="form-grid">
+              <Field label="From">
+                <input
+                  type="datetime-local"
+                  value={localDate(params.get("since"))}
+                  onChange={(event) =>
+                    change(
+                      "since",
+                      event.target.value
+                        ? String(new Date(event.target.value).getTime() / 1000)
+                        : "",
+                    )
+                  }
+                />
+              </Field>
+              <Field label="Until">
+                <input
+                  type="datetime-local"
+                  value={localDate(params.get("until"))}
+                  onChange={(event) =>
+                    change(
+                      "until",
+                      event.target.value
+                        ? String(new Date(event.target.value).getTime() / 1000)
+                        : "",
+                    )
+                  }
+                />
+              </Field>
+            </div>
+          </details>
+          <div className="actions">
+            {filtering && (
+              <button
+                type="button"
+                className="btn quiet"
+                onClick={() => setParams(new URLSearchParams())}
+              >
+                Clear filters
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn"
+              disabled={resource.loading}
+              onClick={refresh}
+            >
+              <RefreshCw size={16} strokeWidth={2.5} />
+              Refresh
+            </button>
+          </div>
         </div>
-      </div>
+      </form>
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {resource.loading && !data ? (
-        <Loading label="Loading logs…" />
+        <Loading label="Loading logs" />
       ) : (
         data &&
         !resource.error && (
           <>
             {data.entries.length ? (
-              <ol className="sp-log-list">
+              <ol className="log">
                 {data.entries.map((entry) => (
-                  <li className="sp-log-entry" key={entry.id}>
-                    <div className="sp-log-meta">
-                      <span className={`sp-log-severity ${entry.severity}`}>
-                        {severities[entry.severity]}
-                      </span>
-                      <span className="sp-log-category">{entry.category}</span>
-                      <time
-                        dateTime={new Date(entry.last_ts * 1000).toISOString()}
-                      >
-                        {new Date(entry.last_ts * 1000).toLocaleString()}
-                      </time>
-                    </div>
-                    {entry.title && <h2>{entry.title}</h2>}
-                    <p>{entry.summary}</p>
-                    <div className="sp-log-actions">
-                      {entry.action && (
-                        <Link
-                          className="sp-button quiet"
-                          to={entry.action.href}
-                        >
-                          {entry.action.label}
-                          <ArrowRight size={14} />
-                        </Link>
+                  <li className="log-entry" key={entry.id}>
+                    <time
+                      className="slot-time"
+                      dateTime={new Date(entry.last_ts * 1000).toISOString()}
+                      title={new Date(entry.last_ts * 1000).toLocaleString()}
+                    >
+                      {clock(entry.last_ts)}
+                    </time>
+                    <div className="log-body">
+                      <div className="log-head">
+                        {entry.title && <h2>{entry.title}</h2>}
+                        {tones[entry.severity] && (
+                          <span className={`flag ${tones[entry.severity]}`}>
+                            {severities[entry.severity]}
+                          </span>
+                        )}
+                      </div>
+                      <p>
+                        {entry.summary}
+                        {(!entry.summary
+                          .toLowerCase()
+                          .startsWith(entry.category) ||
+                          entry.repeats > 1) && (
+                          <span className="meta">
+                            {" "}
+                            {[
+                              !entry.summary
+                                .toLowerCase()
+                                .startsWith(entry.category) &&
+                                (entry.category === "import"
+                                  ? "Imports"
+                                  : entry.category.charAt(0).toUpperCase() +
+                                    entry.category.slice(1)),
+                              entry.repeats > 1 && `${entry.repeats} times`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        )}
+                      </p>
+                      {(entry.repeats > 1 ||
+                        entry.job_id ||
+                        (user.role === "admin" && entry.detail)) && (
+                        <details className="disclosure log-detail">
+                          <summary>Details</summary>
+                          <dl>
+                            <dt>First recorded</dt>
+                            <dd>
+                              {new Date(entry.first_ts * 1000).toLocaleString()}
+                            </dd>
+                            <dt>Last recorded</dt>
+                            <dd>
+                              {new Date(entry.last_ts * 1000).toLocaleString()}
+                            </dd>
+                            {entry.job_id && (
+                              <>
+                                <dt>Request</dt>
+                                <dd>{entry.job_id}</dd>
+                              </>
+                            )}
+                            {Object.entries(entry.detail || {})
+                              .filter(([, value]) => value)
+                              .map(([key, value]) => (
+                                <div key={key}>
+                                  <dt>{key}</dt>
+                                  <dd>{value}</dd>
+                                </div>
+                              ))}
+                          </dl>
+                        </details>
                       )}
-                      {entry.repeats > 1 && (
-                        <span className="sp-muted">
-                          Repeated {entry.repeats} times
-                        </span>
-                      )}
                     </div>
-                    {(entry.repeats > 1 ||
-                      entry.job_id ||
-                      (user.role === "admin" && entry.detail)) && (
-                      <details className="sp-log-detail">
-                        <summary>Event details</summary>
-                        <dl>
-                          <dt>First recorded</dt>
-                          <dd>
-                            {new Date(entry.first_ts * 1000).toLocaleString()}
-                          </dd>
-                          {entry.job_id && (
-                            <>
-                              <dt>Request</dt>
-                              <dd>{entry.job_id}</dd>
-                            </>
-                          )}
-                          {Object.entries(entry.detail || {})
-                            .filter(([, value]) => value)
-                            .map(([key, value]) => (
-                              <div key={key}>
-                                <dt>{key}</dt>
-                                <dd>{value}</dd>
-                              </div>
-                            ))}
-                        </dl>
-                      </details>
+                    {entry.action && (
+                      <Link className="link log-action" to={entry.action.href}>
+                        {entry.action.label}
+                        <ArrowRight size={15} strokeWidth={2.5} />
+                      </Link>
                     )}
                   </li>
                 ))}
               </ol>
             ) : (
               <Empty
-                title={
-                  filtering
-                    ? "No events match these filters."
-                    : "No operational events yet."
-                }
+                title={filtering ? "No events match." : "No events yet."}
                 action={
                   filtering ? (
                     <button
-                      className="sp-button secondary"
+                      className="btn"
                       onClick={() => setParams(new URLSearchParams())}
                     >
                       Clear filters
@@ -317,34 +338,34 @@ function HistoryPage({
                 }
               >
                 {filtering
-                  ? "Try a different title, time range or category."
-                  : "New requests, imports and operational changes will appear here as Sparrow works."}
+                  ? "Try another title, time range or category."
+                  : "Requests, imports and storage changes will appear here."}
               </Empty>
             )}
             {(data.total > 0 || data.page > 1) && (
-              <nav className="sp-log-pagination" aria-label="Log pages">
+              <nav className="pages" aria-label="Log pages">
                 <button
-                  className="sp-button secondary"
+                  className="btn"
                   disabled={data.page <= 1 || resource.loading}
                   onClick={() => page(data.page - 1)}
                 >
-                  <ArrowLeft size={15} />
+                  <ArrowLeft size={16} strokeWidth={2.5} />
                   Previous
                 </button>
-                <span role="status">
+                <span role="status" className="num">
                   Page {data.page} of{" "}
                   {Math.max(1, Math.ceil(data.total / data.limit))} ·{" "}
                   {data.total} events
                 </span>
                 <button
-                  className="sp-button secondary"
+                  className="btn"
                   disabled={
                     data.page * data.limit >= data.total || resource.loading
                   }
                   onClick={() => page(data.page + 1)}
                 >
                   Next
-                  <ArrowRight size={15} />
+                  <ArrowRight size={16} strokeWidth={2.5} />
                 </button>
               </nav>
             )}

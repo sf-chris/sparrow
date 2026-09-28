@@ -1,7 +1,8 @@
 import { useState } from "react";
 import PasswordField from "./PasswordField";
 import { post } from "./api";
-import { Dialog, ErrorNote } from "./ui";
+import { Dialog, ErrorNote, Section } from "./ui";
+import { Tick } from "./Brand";
 export default function PasswordSettings({
   onChanged,
 }: {
@@ -48,36 +49,32 @@ export default function PasswordSettings({
   }
   return (
     <>
-      <section
-        className="sp-password-setting"
-        aria-labelledby="password-heading"
-      >
-        <div>
-          <h2 id="password-heading">Password</h2>
-          <p className="sp-muted">Keep your account secure.</p>
-          {!open && saved && (
-            <p className="sp-success" role="status">
-              Password changed.
-            </p>
-          )}
+      <Section title="Password">
+        <div className="row">
+          <p className="muted">
+            {!open && saved ? (
+              <span className="done-note" role="status">
+                <Tick /> Password changed.
+              </span>
+            ) : (
+              "Changing it signs out your other browsers."
+            )}
+          </p>
+          <button
+            className="btn"
+            onClick={() => {
+              setSaved(false);
+              setOpen(true);
+            }}
+          >
+            Change your password
+          </button>
         </div>
-        <button
-          className="sp-button secondary"
-          onClick={() => {
-            setSaved(false);
-            setOpen(true);
-          }}
-        >
-          Change your password
-        </button>
-      </section>
+      </Section>
       {open && (
         <Dialog title="Change password" onClose={close}>
-          <form className="sp-form" onSubmit={save}>
+          <form className="form" onSubmit={save}>
             <ErrorNote error={error} />
-            <p className="sp-muted">
-              Changing your password signs out your other browser sessions.
-            </p>
             <PasswordField
               label="Current password"
               value={current}
@@ -88,7 +85,7 @@ export default function PasswordSettings({
               creating
               value={next}
               onChange={setNext}
-              hint="8 characters or more."
+              hint="At least 8 characters."
             />
             <PasswordField
               label="Repeat new password"
@@ -96,11 +93,15 @@ export default function PasswordSettings({
               value={again}
               onChange={setAgain}
             />
-            <div className="sp-savebar">
-              <span className="sp-success" role="status">
-                {saved ? "Password changed." : ""}
+            <div className="savebar">
+              <span className="done-note" role="status">
+                {saved && (
+                  <>
+                    <Tick /> Password changed.
+                  </>
+                )}
               </span>
-              <button className="sp-button primary" disabled={busy}>
+              <button className="btn primary" disabled={busy}>
                 {busy ? "Saving…" : "Change password"}
               </button>
             </div>

@@ -366,3 +366,40 @@ physical-device acceptance is implied.
 [desktop summary](product-validation/onboarding-review-desktop.png) preserve the
 isolated evidence. Existing viewing, household, accessibility and design journeys
 also pass, including 55 redesign layouts and 40 follow-up layouts.
+
+## TV guide redesign — 28 September 2026
+
+Every screen was redesigned from the ground up under a new
+[interface contract](PRODUCT_DESIGN.md): the household's own weekly TV guide,
+in newsprint, print black, signal yellow and biro blue, set in one bundled
+variable family (Archivo). The owner chose the direction from an impeccable
+direction round and approved structural UX changes.
+
+- **Guide replaces Home and Library.** One page holds Tonight (resumes with a
+  direct play button), Coming up (open requests) and the whole collection as an
+  A–Z listing or covers. `/library` redirects to it with its filters. Search,
+  type, sort, availability and view persist in the URL.
+- **Find has one box.** Title matches appear as you type and are marked when
+  already in the guide; Ask Sparrow is the only way to start paid discovery.
+  The separate title/assisted tabs are gone; drafts and sessions persist.
+- **Couch and TV use.** Arrow keys move between listed titles, rows and covers
+  across the app; `/` focuses the page's search; the type scale grows with very
+  wide screens. Focus rings are drawn for distance.
+- **Fewer words and labels.** Only exceptions carry flags; preferences show a
+  source only when it is personal or limited by the server; Following is one
+  line on a title page and names the title on Requests even when the saved
+  subscription has none.
+- **Removed:** Tailwind, DM Sans and the pastel illustrations. No backend,
+  API or runtime dependency changed.
+
+The browser suite was updated for the new copy and structure and passes in full
+(`tests/browser/ci.sh`, including axe checks at 360, 390, 768 and 1440px). Two
+harness races were fixed: audits now wait for a frame after an emulated resize,
+and the session check counts End session buttons directly. Repository checks
+pass with 161 tests (two opt-in live-model tests skipped); the production build,
+npm audit and release-tree checks pass. A new capture script,
+`tests/browser/gallery.cjs`, photographs every screen from a fresh fixture; the
+[before and after gallery](redesign/README.md) compares all 25 screens. The
+earlier validation galleries remain as dated evidence of the previous design.
+Physical-device, Windows and live-provider release gates are unchanged.
+

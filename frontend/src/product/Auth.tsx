@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, ArrowLeft, Check } from "lucide-react";
-import { Mark, PlayroomArt } from "./Brand";
+import { ArrowLeft, Scissors } from "lucide-react";
+import { Logotype } from "./Brand";
 import { Link } from "react-router-dom";
 import PasswordField from "./PasswordField";
 import { post, type Auth as AuthState } from "./api";
@@ -63,127 +63,94 @@ export default function Auth({
       setBusy(false);
     }
   }
+  const heading = needsSetup
+    ? "Set up Sparrow"
+    : joining
+      ? "Join Sparrow"
+      : "Sign in";
   return (
-    <main className="sp-auth sp-auth-layout">
-      <header className="sp-auth-header">
-        <Link className="sp-brand" to="/" aria-label="Sparrow home">
-          <Mark />
-          <span>sparrow</span>
+    <main className="entry-page" id="main-content">
+      <header className="entry-top">
+        <Link className="brand" to="/" aria-label="Sparrow home">
+          <Logotype />
         </Link>
-        <Link className="sp-back" to="/">
-          <ArrowLeft size={15} /> Back to the good stuff
+        <Link className="back" to="/">
+          <ArrowLeft size={18} strokeWidth={2.5} /> Back
         </Link>
       </header>
-      <section className="sp-auth-story" aria-label="Make yourself at home">
-        <PlayroomArt />
-        <h2>
-          Your own little corner
-          <br />
-          of the watch-world.
-        </h2>
-        <p>Good stories. Familiar faces. Something just for you.</p>
-      </section>
-      <section
-        className="sp-auth-entry"
-        aria-label={registering ? "Create your account" : "Sign in"}
-      >
-        <div className="sp-auth-card">
-          <div className="sp-auth-step">
-            <span>
-              {needsSetup
-                ? "A FRESH START"
-                : joining
-                  ? "YOUR INVITATION"
-                  : "HELLO AGAIN"}
-            </span>
-            <span className="sp-small-mark">
-              <Mark />
-            </span>
-          </div>
-          <h1>
+      <section className="coupon" aria-label={heading}>
+        <Scissors
+          className="coupon-cut"
+          size={20}
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+        <h1 className="display">{heading}</h1>
+        {registering && (
+          <p className="lede">
             {needsSetup
-              ? "Set up your Sparrow server"
-              : joining
-                ? "Welcome to the collection."
-                : "Come on in."}
-          </h1>
-          <p className="sp-description">
-            {needsSetup
-              ? "A few details, then it’s yours. Next, connect your collection and invite your people."
-              : joining
-                ? "Make yourself at home. Your watch history and preferences will be just for you."
-                : "Your collection is right where you left it."}
+              ? "Create the owner account for this server."
+              : "Your own account, progress and preferences."}
           </p>
-          <form onSubmit={submit} className="sp-form">
-            <ErrorNote error={error} />
-            {needsSetup && (
-              <Field
-                label="Setup code"
-                hint="Your installation agent or server startup logs have this one-time code."
-              >
-                <input
-                  required
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                />
-              </Field>
-            )}
-            {registering && (
-              <Field label="Your name">
-                <input
-                  required
-                  maxLength={100}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoComplete="name"
-                />
-              </Field>
-            )}
-            <Field label="Username">
+        )}
+        <form onSubmit={submit} className="form">
+          <ErrorNote error={error} />
+          {needsSetup && (
+            <Field
+              label="Setup code"
+              hint="From your installer or the server’s startup log."
+            >
               <input
                 required
-                minLength={3}
-                maxLength={64}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
               />
             </Field>
-            <PasswordField
-              value={password}
-              onChange={setPassword}
-              creating={registering}
-              hint={
-                registering
-                  ? "8 characters or more. Keep it simple."
-                  : undefined
-              }
+          )}
+          {registering && (
+            <Field label="Your name">
+              <input
+                required
+                maxLength={100}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
+              />
+            </Field>
+          )}
+          <Field label="Username">
+            <input
+              required
+              minLength={3}
+              maxLength={64}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
             />
-            <button className="sp-button primary" disabled={busy}>
-              {busy
-                ? "One moment…"
-                : needsSetup
-                  ? "Create administrator account"
-                  : joining
-                    ? "Create account"
-                    : "Sign in"}
-              <ArrowRight size={17} />
-            </button>
-          </form>
-          <p className="sp-auth-note">
-            <Check size={14} /> An account on this server. No Sparrow
-            subscription.
-          </p>
-        </div>
-        <p className="sp-auth-footer">
-          A little less managing. A lot more watching.
-        </p>
+          </Field>
+          <PasswordField
+            value={password}
+            onChange={setPassword}
+            creating={registering}
+            hint={registering ? "At least 8 characters." : undefined}
+          />
+          <button className="btn primary" disabled={busy}>
+            {busy
+              ? "One moment…"
+              : needsSetup
+                ? "Create owner account"
+                : joining
+                  ? "Create account"
+                  : "Sign in"}
+          </button>
+        </form>
       </section>
+      <p className="entry-foot">An account on this server only.</p>
     </main>
   );
 }

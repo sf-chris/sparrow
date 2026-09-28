@@ -26,20 +26,20 @@ export default function InstallApp() {
     };
   }, []);
   return (
-    <Section title="Sparrow on your phone">
-      <div className="sp-panel">
-        <p className="sp-muted">
+    <Section title="On your phone">
+      <div className="row">
+        <p className="muted">
           {installed
             ? "Sparrow is installed on this device."
             : !isSecureContext
-              ? "Use Sparrow in this browser. Installing it on your home screen requires a trusted HTTPS address."
+              ? "Installing to a home screen needs a secure (HTTPS) address. Sparrow works in this browser either way."
               : prompt
-                ? "Keep your collection a tap away with the Sparrow web app."
-                : "Use your browser’s Add to Home Screen or Install option when available. On iPhone, open Safari’s Share menu."}
+                ? "Keep Sparrow one tap away."
+                : "Use your browser’s Install or Add to Home Screen option. On iPhone, it’s in Safari’s Share menu."}
         </p>
         {prompt && (
           <button
-            className="sp-button secondary mt-4"
+            className="btn"
             onClick={async () => {
               await prompt.prompt();
               await prompt.userChoice;

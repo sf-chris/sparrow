@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, post, type NodeInfo } from "./api";
-import { Dialog, ErrorNote, Field, Loading, Section, useResource } from "./ui";
+import { Bar, Dialog, ErrorNote, Field, Loading, useResource } from "./ui";
 type Subscription = {
   id: string;
   media_type: "tv" | "movie";
@@ -19,14 +19,26 @@ type Subscription = {
     };
   };
 };
+const reach = (row: Subscription) =>
+  row.data.mandate.mode === "keep_current"
+    ? "New episodes as they air"
+    : row.data.mandate.mode === "backfill"
+      ? "Every aired episode"
+      : row.data.mandate.mode === "seasons"
+        ? `Seasons ${row.data.mandate.seasons.join(", ")}`
+        : "Only what you requested";
+
+/** Following: what Sparrow may keep up to date for a title. */
 export default function CollectionCare({
   mediaType,
   tmdbId,
   title,
+  titles = {},
 }: {
   mediaType?: "tv" | "movie";
   tmdbId?: number;
   title?: string;
+  titles?: Record<string, string>;
 }) {
   const resource = useResource(() => api<Subscription[]>("/subscriptions"));
   const nodes = useResource(() => api<NodeInfo[]>("/nodes"));
@@ -38,7 +50,8 @@ export default function CollectionCare({
     [node, setNode] = useState("local"),
     [seasons, setSeasons] = useState(""),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [checked, setChecked] = useState("");
   useEffect(() => {
     const timer = setInterval(() => void resource.refresh(), 30000);
     return () => clearInterval(timer);
@@ -47,6 +60,11 @@ export default function CollectionCare({
     resource.data?.filter(
       (r) => !tmdbId || (r.tmdb_id === tmdbId && r.media_type === mediaType),
     ) || [];
+  const name = (row: Subscription | null) =>
+    row?.data.title ||
+    (row && titles[`${row.media_type}:${row.tmdb_id}`]) ||
+    title ||
+    "this title";
   function edit(row: Subscription | null) {
     setEditing(row);
     setMode(
@@ -89,164 +107,169 @@ export default function CollectionCare({
   async function check(row: Subscription) {
     try {
       await post(`/subscriptions/${row.id}/check`);
+      setChecked(row.id);
       await resource.refresh();
     } catch (e) {
       setError((e as Error).message);
     }
   }
-  return (
-    <Section
-      title="Collection care"
-      description="Your subscriptions decide what Sparrow may keep up to date. Existing copies are preserved when you opt into upgrades."
-    >
-      <ErrorNote error={error || resource.error} retry={resource.refresh} />
-      {!resource.data ? (
-        resource.loading ? (
-          <Loading label="Opening collection care…" />
-        ) : null
-      ) : rows.length > 0 ? (
-        <div className="sp-panel">
-          {rows.map((row) => (
-            <div className="sp-row" key={row.id}>
-              <div>
-                <h3>
-                  {row.data.title || title || "Saved title"} ·{" "}
-                  {row.data.enabled ? "Following" : "Paused"}
-                </h3>
-                <p>{row.data.message}</p>
-                <p>
-                  {row.data.mandate.mode === "keep_current"
-                    ? "New episodes from when you followed"
-                    : row.data.mandate.mode === "backfill"
-                      ? "All aired episodes"
-                      : row.data.mandate.mode === "seasons"
-                        ? `Seasons ${row.data.mandate.seasons.join(", ")}`
-                        : "Only explicitly requested items"}
-                  {row.data.upgrades ? " · Quality upgrades enabled" : ""}
-                </p>
-              </div>
-              <div className="sp-actions">
-                <button
-                  className="sp-button secondary"
-                  onClick={() => edit(row)}
-                >
-                  Edit care
-                </button>
-                {row.data.enabled && (
-                  <button
-                    className="sp-button quiet"
-                    onClick={() => void check(row)}
-                  >
-                    Check now
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="sp-muted">
-          {tmdbId
-            ? "Follow this title to choose its future care."
-            : "Follow a title from its page, or enable monitoring when you request episodes."}
-        </p>
-      )}
-      {tmdbId && resource.data && !rows.length && (
-        <button className="sp-button secondary" onClick={() => edit(null)}>
-          {mediaType === "tv" ? "Follow this show" : "Manage this movie"}
+  const controls = (row: Subscription) => (
+    <div className="actions">
+      <button className="btn" onClick={() => edit(row)}>
+        Edit
+      </button>
+      {row.data.enabled && (
+        <button className="btn quiet" onClick={() => void check(row)}>
+          {checked === row.id ? "Check started" : "Check now"}
         </button>
       )}
-      {open && (
-        <Dialog
-          title={`Care for ${editing?.data.title || title || "this title"}`}
-          onClose={() => setOpen(false)}
-          footer={
-            <button
-              className="sp-button primary"
-              disabled={busy}
-              onClick={save}
+    </div>
+  );
+  const dialog = open && (
+    <Dialog
+      title={`Follow ${name(editing)}`}
+      onClose={() => setOpen(false)}
+      footer={
+        <button className="btn primary" disabled={busy} onClick={save}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+      }
+    >
+      <div className="form">
+        <ErrorNote error={error} />
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
+          Keep this title up to date
+        </label>
+        {(editing?.media_type || mediaType) === "tv" && (
+          <>
+            <Field
+              label="Which episodes"
+              hint={
+                mode === "backfill"
+                  ? "Includes missing episodes from older seasons."
+                  : mode === "keep_current"
+                    ? "Only episodes that air after you follow."
+                    : undefined
+              }
             >
-              {busy ? "Saving…" : "Save collection care"}
-            </button>
-          }
-        >
-          <div className="sp-form">
-            <ErrorNote error={error} />
-            <label className="sp-checkbox">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-              />
-              Enable automatic care
-            </label>
-            {(editing?.media_type || mediaType) === "tv" && (
-              <>
-                <Field
-                  label="Episode scope"
-                  hint={
-                    mode === "backfill"
-                      ? "Includes missing episodes from older seasons."
-                      : mode === "keep_current"
-                        ? "Only episodes that air after you start following."
-                        : undefined
-                  }
-                >
-                  <select
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value)}
-                  >
-                    <option value="exact">Requested episodes only</option>
-                    <option value="keep_current">New episodes</option>
-                    <option value="seasons">Selected seasons</option>
-                    <option value="backfill">All aired episodes</option>
-                  </select>
-                </Field>
-                {mode === "seasons" && (
-                  <Field
-                    label="Season numbers"
-                    hint="Separate season numbers with commas, for example 1, 2."
-                  >
-                    <input
-                      value={seasons}
-                      onChange={(e) => setSeasons(e.target.value)}
-                    />
-                  </Field>
-                )}
-              </>
-            )}
-            <Field label="Storage destination">
-              <select
-                disabled={!!editing}
-                value={node}
-                onChange={(e) => setNode(e.target.value)}
-              >
-                {nodes.data
-                  ?.filter((n) => !n.disabled)
-                  .map((n) => (
-                    <option value={n.id} key={n.id}>
-                      {n.name}
-                    </option>
-                  ))}
+              <select value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="exact">Only what I request</option>
+                <option value="keep_current">New episodes</option>
+                <option value="seasons">Chosen seasons</option>
+                <option value="backfill">Every aired episode</option>
               </select>
             </Field>
-            <label className="sp-checkbox">
-              <input
-                type="checkbox"
-                checked={upgrades}
-                onChange={(e) => setUpgrades(e.target.checked)}
-              />
-              Look for better picture quality up to my preferred quality
-            </label>
-            <p className="sp-muted">
-              Saving applies your current preferences to future care. Existing
-              requests keep their saved preferences. Pausing care stops new
-              automatic requests; control existing work in{" "}
-              <Link to="/activity">Activity</Link>.
-            </p>
-          </div>
-        </Dialog>
+            {mode === "seasons" && (
+              <Field
+                label="Seasons"
+                hint="Numbers separated by commas, like 1, 2."
+              >
+                <input
+                  value={seasons}
+                  onChange={(e) => setSeasons(e.target.value)}
+                />
+              </Field>
+            )}
+          </>
+        )}
+        <Field label="Store on">
+          <select
+            disabled={!!editing}
+            value={node}
+            onChange={(e) => setNode(e.target.value)}
+          >
+            {nodes.data
+              ?.filter((n) => !n.disabled)
+              .map((n) => (
+                <option value={n.id} key={n.id}>
+                  {n.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={upgrades}
+            onChange={(e) => setUpgrades(e.target.checked)}
+          />
+          Upgrade picture quality, up to my preference
+        </label>
+        <p className="muted">
+          Uses your current preferences. Existing copies are kept until a better
+          one is verified. Pausing stops new automatic requests; manage current
+          ones in <Link to="/activity">Requests</Link>.
+        </p>
+      </div>
+    </Dialog>
+  );
+  if (tmdbId)
+    return (
+      <div className="care">
+        <ErrorNote error={error || resource.error} retry={resource.refresh} />
+        {!resource.data ? null : rows.length ? (
+          rows.map((row) => (
+            <div className="care-line" key={row.id}>
+              <p>
+                <strong>
+                  {row.data.enabled ? "Following" : "Following paused"}
+                </strong>
+                <span>
+                  {reach(row)}
+                  {row.data.upgrades ? " · upgrades on" : ""}
+                </span>
+              </p>
+              {controls(row)}
+            </div>
+          ))
+        ) : (
+          <button className="btn quiet care-follow" onClick={() => edit(null)}>
+            {mediaType === "tv" ? "Follow this series" : "Follow this film"}
+          </button>
+        )}
+        {dialog}
+      </div>
+    );
+  return (
+    <section className="following" aria-labelledby="following">
+      <Bar id="following" title="Following" />
+      <ErrorNote error={error || resource.error} retry={resource.refresh} />
+      {!resource.data ? (
+        resource.loading && <Loading label="Checking what you follow" />
+      ) : rows.length ? (
+        <ul className="rows">
+          {rows.map((row) => (
+            <li className="row" key={row.id}>
+              <div>
+                <h3>
+                  <Link to={`/title/${row.media_type}/${row.tmdb_id}`}>
+                    {name(row)}
+                  </Link>
+                  {!row.data.enabled && <span className="flag">Paused</span>}
+                </h3>
+                <p>
+                  {reach(row)}
+                  {row.data.upgrades ? " · upgrades on" : ""}
+                </p>
+                {row.data.message && !row.data.message.startsWith("Saved.") && (
+                  <p className="meta">{row.data.message}</p>
+                )}
+              </div>
+              {controls(row)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted following-empty">
+          Follow a series from its page to get new episodes automatically.
+        </p>
       )}
-    </Section>
+      {dialog}
+    </section>
   );
 }
