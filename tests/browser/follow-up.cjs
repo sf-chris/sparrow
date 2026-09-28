@@ -98,7 +98,7 @@ fs.mkdirSync(out, { recursive: true });
     0,
   );
   assert.equal(
-    await page.getByText("Signed in", { exact: true }).count(),
+    await page.getByText("Devices", { exact: true }).count(),
     0,
   );
   const signout = await page
@@ -152,14 +152,14 @@ fs.mkdirSync(out, { recursive: true });
   await page.reload();
   await page.getByRole("heading", { name: "This browser" }).waitFor();
   const sessionsBefore = await page
-    .getByRole("button", { name: "End session", exact: true })
+    .getByRole("button", { name: /^Sign out of / })
     .count();
   await page
-    .getByRole("button", { name: "End session", exact: true })
+    .getByRole("button", { name: /^Sign out of / })
     .first()
     .click();
   await expect(
-    page.getByRole("button", { name: "End session", exact: true }),
+    page.getByRole("button", { name: /^Sign out of / }),
   ).toHaveCount(sessionsBefore - 1);
   await other.close();
   await go("/settings/logs?limit=1");
@@ -216,7 +216,7 @@ fs.mkdirSync(out, { recursive: true });
     .fill("No such film in this fixture");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await page
-    .getByRole("heading", { name: "No events match." })
+    .getByRole("heading", { name: "Nothing matches." })
     .waitFor();
   await audit("logs-empty");
   await page.route("**/api/v1/logs*", (route) =>
@@ -231,7 +231,7 @@ fs.mkdirSync(out, { recursive: true });
   await go("/settings/logs");
   await page.getByRole("alert").waitFor();
   assert.equal(
-    await page.getByRole("heading", { name: /^No events/ }).count(),
+    await page.getByRole("heading", { name: /^Nothing (matches|logged)/ }).count(),
     0,
   );
   await audit("logs-error");

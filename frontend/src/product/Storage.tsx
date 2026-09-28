@@ -106,7 +106,6 @@ export default function Storage({
     <Page
       embedded={onboarding}
       title="Storage"
-      lede="Where your films and series live. Use folders on this server, or pair another machine."
       action={
         <button
           className="btn primary"
@@ -117,7 +116,7 @@ export default function Storage({
           }}
         >
           <Plus size={18} strokeWidth={2.5} />
-          Pair storage
+          Pair a computer
         </button>
       }
     >
@@ -129,10 +128,10 @@ export default function Storage({
         }}
       />
       {nodes.loading && !nodes.data ? (
-        <Loading label="Checking storage" />
+        <Loading label="Loading storage" />
       ) : (
         <section aria-labelledby="devices">
-          <Bar id="devices" title="Connected">
+          <Bar id="devices" title="Devices">
             <button
               className="bar-button"
               onClick={() => {
@@ -170,16 +169,8 @@ export default function Storage({
                       {root?.free_bytes !== undefined
                         ? `${bytes(root.free_bytes)} free`
                         : root?.error || "No library folder yet"}
-                      {" · "}
-                      {node.capabilities.probe
-                        ? "Media checks ready"
-                        : "Media tools need attention"}
+                      {!node.capabilities.probe && " · Media tools missing"}
                     </p>
-                    {!node.online && !node.disabled && (
-                      <p className="muted">
-                        Files and progress are kept while it’s away.
-                      </p>
-                    )}
                     <div className="actions">
                       {node.id === "local" ? (
                         <button
@@ -233,9 +224,7 @@ export default function Storage({
                           onClick={() => preview(node)}
                         >
                           <FolderOpen size={17} strokeWidth={2.25} />
-                          {busy === node.id
-                            ? "Looking…"
-                            : "Import existing media"}
+                          {busy === node.id ? "Scanning…" : "Import files"}
                         </button>
                       )}
                     </div>
@@ -247,11 +236,10 @@ export default function Storage({
         </section>
       )}
       <p className="muted storage-note">
-        Import shows what it found before anything is added. Files stay where
-        they are.
+        Import shows what it found before adding anything. Files aren’t moved.
       </p>
       {pairing && (
-        <Dialog title="Pair storage" onClose={() => setPairing(false)}>
+        <Dialog title="Pair a computer" onClose={() => setPairing(false)}>
           <div className="form">
             <ErrorNote error={error} />
             {code ? (
@@ -270,7 +258,7 @@ export default function Storage({
                       onFocus={(e) => e.target.select()}
                     />
                   </Field>
-                  <Field label="Pairing code" hint="Expires in ten minutes.">
+                  <Field label="Pairing code" hint="Expires in 10 minutes.">
                     <input
                       className="big-code"
                       readOnly
@@ -280,8 +268,9 @@ export default function Storage({
                   </Field>
                 </div>
                 <p className="muted">
-                  Open Sparrow Node on the other machine, enter both, choose a
-                  library folder and a separate incoming folder, then start it.
+                  On the other computer, open Sparrow Node and enter the address
+                  and code. Then choose a library folder and a separate incoming
+                  folder.
                 </p>
                 <button
                   className="btn primary"
@@ -332,9 +321,9 @@ export default function Storage({
           <div className="form">
             <ErrorNote error={error} />
             <p className="muted">
-              Paths on this Linux server; in Docker, the mounted paths inside
-              the container. Folders must already exist. For Windows folders,
-              pair a Windows machine instead.
+              Paths on this server, or inside the container in Docker. The
+              folders must already exist. For a Windows computer, pair it
+              instead.
             </p>
             <Field
               label="Library folder"
@@ -347,8 +336,8 @@ export default function Storage({
               />
             </Field>
             <Field
-              label="Staging folder"
-              hint="A separate folder for incoming downloads."
+              label="Incoming folder"
+              hint="A separate folder for downloads in progress."
             >
               <input
                 value={staging}
@@ -405,17 +394,13 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
     }
   }
   return (
-    <Dialog
-      title={done === null ? "Review your import" : "Added to your guide"}
-      onClose={onClose}
-    >
+    <Dialog title={done === null ? "Import" : "Imported"} onClose={onClose}>
       <div className="form">
         <ErrorNote error={error} />
         {done !== null ? (
           <>
             <p>
-              {done} {done === 1 ? "file is" : "files are"} in your guide. The
-              originals stayed where they were.
+              {done} {done === 1 ? "file" : "files"} added to your collection.
             </p>
             <Link className="btn primary" to="/">
               Open the guide
@@ -424,13 +409,10 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
         ) : (
           <>
             <p className="muted">
-              {scan.candidates.length} video files found. Check the title and
-              episode for each one you choose. Names are only suggestions;
-              Sparrow checks the media itself before importing.
+              {scan.candidates.length === 0
+                ? "No video files found."
+                : `${scan.candidates.length} video ${scan.candidates.length === 1 ? "file" : "files"} found. Titles are guessed from file names, so check each one you select.`}
             </p>
-            {scan.candidates.length === 0 && (
-              <p className="muted">No supported video files in this folder.</p>
-            )}
             <div className="actions">
               <button
                 className="btn"
@@ -494,12 +476,12 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
                             className="btn"
                             onClick={() => setMatching(candidate)}
                           >
-                            Match a title
+                            Find title
                           </button>
                           <span className="muted">
                             {selected[candidate.id].tmdb_id
                               ? "Matched"
-                              : "Using your title"}
+                              : "Not matched"}
                           </span>
                         </div>
                         {selected[candidate.id].media_type === "tv" && (
@@ -550,8 +532,8 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
               onClick={confirm}
             >
               {busy
-                ? "Inspecting and importing…"
-                : `Import ${Object.keys(selected).length} selected files`}
+                ? "Checking and importing…"
+                : `Import ${Object.keys(selected).length} ${Object.keys(selected).length === 1 ? "file" : "files"}`}
             </button>
           </>
         )}
@@ -602,7 +584,7 @@ function MatchTitle({
     }
   }
   return (
-    <Dialog title="Find the correct title" onClose={onClose}>
+    <Dialog title="Find title" onClose={onClose}>
       <div className="form">
         <Field label="Film or series">
           <input value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -612,7 +594,7 @@ function MatchTitle({
           disabled={busy || query.trim().length < 2}
           onClick={search}
         >
-          {busy ? "Searching…" : "Search titles"}
+          {busy ? "Searching…" : "Search"}
         </button>
         <ErrorNote error={error} />
         {results.map((card) => (

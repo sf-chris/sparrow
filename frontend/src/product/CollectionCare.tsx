@@ -143,7 +143,7 @@ export default function CollectionCare({
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
           />
-          Keep this title up to date
+          Keep it up to date
         </label>
         {(editing?.media_type || mediaType) === "tv" && (
           <>
@@ -165,10 +165,7 @@ export default function CollectionCare({
               </select>
             </Field>
             {mode === "seasons" && (
-              <Field
-                label="Seasons"
-                hint="Numbers separated by commas, like 1, 2."
-              >
+              <Field label="Seasons" hint="Separate with commas, like 1, 2.">
                 <input
                   value={seasons}
                   onChange={(e) => setSeasons(e.target.value)}
@@ -198,12 +195,17 @@ export default function CollectionCare({
             checked={upgrades}
             onChange={(e) => setUpgrades(e.target.checked)}
           />
-          Upgrade picture quality, up to my preference
+          Upgrade to my preferred quality
         </label>
         <p className="muted">
-          Uses your current preferences. Existing copies are kept until a better
-          one is verified. Pausing stops new automatic requests; manage current
-          ones in <Link to="/activity">Requests</Link>.
+          {enabled ? (
+            "A copy is only replaced once a better one has been checked."
+          ) : (
+            <>
+              Open requests keep going. Cancel them in{" "}
+              <Link to="/activity">Requests</Link>.
+            </>
+          )}
         </p>
       </div>
     </Dialog>
@@ -240,7 +242,7 @@ export default function CollectionCare({
       <Bar id="following" title="Following" />
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {!resource.data ? (
-        resource.loading && <Loading label="Checking what you follow" />
+        resource.loading && <Loading label="Loading" />
       ) : rows.length ? (
         <ul className="rows">
           {rows.map((row) => (
@@ -266,7 +268,7 @@ export default function CollectionCare({
         </ul>
       ) : (
         <p className="muted following-empty">
-          Follow a series from its page to get new episodes automatically.
+          Follow a series to get new episodes as they air.
         </p>
       )}
       {dialog}

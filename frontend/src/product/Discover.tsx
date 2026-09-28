@@ -23,9 +23,9 @@ type Research = {
   status_line: string;
 };
 const ideas = [
-  "A mystery for tonight",
-  "Something to watch together",
-  "An adventure somewhere far away",
+  "A mystery we can finish tonight",
+  "Funny and under 90 minutes",
+  "A film for a Sunday afternoon",
 ];
 
 export default function Discover() {
@@ -179,9 +179,9 @@ export default function Discover() {
               <span className="entry-line">
                 <span className="entry-title">{card.title}</span>
                 {inGuide.has(`${card.media_type}:${card.tmdb_id}`) && (
-                  <span className="owned" title="In your guide">
+                  <span className="owned" title="In your collection">
                     <Tick />
-                    <span className="sr-only">In your guide</span>
+                    <span className="sr-only">In your collection</span>
                   </span>
                 )}
                 <span className="leader" aria-hidden="true" />
@@ -250,12 +250,11 @@ export default function Discover() {
               Start over
             </button>
           </Bar>
-          {asking && <Loading label="Reading titles and your guide" />}
+          {asking && <Loading label="Finding picks" />}
           {research?.message && <p className="pick-note">{research.message}</p>}
           {research && !asking && !research.message && (
             <p className="muted pick-status" role="status">
-              {research.status_line} Change the words and ask again, or start
-              over.
+              {research.status_line}
             </p>
           )}
           {!!research?.cards.length && rows(research.cards)}
@@ -271,9 +270,8 @@ export default function Discover() {
             : searched &&
               !searching &&
               !error && (
-                <Empty title="No title by that name.">
-                  Check the spelling, or ask Sparrow to look for it by
-                  description.
+                <Empty title={`No title called “${searched}”.`}>
+                  Check the spelling, or ask Sparrow.
                 </Empty>
               )}
         </section>

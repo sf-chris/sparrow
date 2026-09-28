@@ -22,104 +22,104 @@ EVENTS = {
     "request_submitted": (
         "request",
         "info",
-        "Request submitted; Sparrow will check what is needed.",
+        "Request sent.",
     ),
-    "request_active": ("request", "info", "Request resumed; Sparrow will check again."),
+    "request_active": ("request", "info", "Request resumed."),
     "request_paused": ("request", "info", "Request paused."),
     "request_complete": (
         "request",
         "success",
-        "Request complete; the requested media has been verified.",
+        "Request complete. Everything was checked.",
     ),
     "request_abandoned": (
         "request",
         "warning",
-        "Request stopped; review it or try again.",
+        "Request stopped.",
     ),
     "request_failed": (
         "request",
         "error",
-        "Request needs attention; review it and try again.",
+        "Request stuck.",
     ),
     "download_started": ("download", "info", "Download started."),
     "download_stalled": (
         "download",
         "warning",
-        "Download stalled; Sparrow has been asked to check the source.",
+        "Download stalled.",
     ),
-    "download_recovered": ("download", "success", "Download is making progress again."),
+    "download_recovered": ("download", "success", "Download moving again."),
     "download_completed": (
         "download",
         "success",
-        "Download completed; the files still need checking.",
+        "Download finished. Checking the files.",
     ),
     "download_failed": (
         "download",
         "error",
-        "Download failed; review the request for recovery.",
+        "Download failed.",
     ),
-    "media_checking": ("import", "info", "Checking and matching the downloaded files."),
-    "media_organized": ("import", "success", "Verified media added to the library."),
+    "media_checking": ("import", "info", "Checking the downloaded files."),
+    "media_organized": ("import", "success", "Checked and added to the collection."),
     "import_preview": (
         "import",
         "info",
-        "Folder checked; matching choices are ready to review.",
+        "Folder scanned. Ready to review.",
     ),
     "import_failed": (
         "import",
         "error",
-        "Import could not finish; scan again and review matching choices.",
+        "Import didn’t finish. Scan the folder again.",
     ),
-    "import_matched": ("import", "success", "Imported and matched to the library."),
+    "import_matched": ("import", "success", "Imported."),
     "import_corrected": (
         "import",
         "success",
-        "Library matching updated; watch progress preserved.",
+        "Import match corrected. Watch progress kept.",
     ),
-    "storage_online": ("storage", "success", "Storage is available again."),
+    "storage_online": ("storage", "success", "Storage back online."),
     "storage_offline": (
         "storage",
         "warning",
-        "Storage is unavailable; reconnect the device or check its folders.",
+        "Storage offline. Reconnect it or check its folders.",
     ),
     "client_down": (
         "download",
         "error",
-        "The download app is unavailable; requests will wait for it.",
+        "Download app unreachable. Requests will wait for it.",
     ),
-    "client_recovered": ("download", "success", "The download app is available again."),
+    "client_recovered": ("download", "success", "Download app back online."),
     "playback_failed": (
         "playback",
         "error",
-        "Playback could not be prepared or delivered; reopen the title and try again.",
+        "Playback failed. Open the title and try again.",
     ),
-    "playback_recovered": ("playback", "success", "Playback is available again."),
+    "playback_recovered": ("playback", "success", "Playback working again."),
     "captions_failed": (
         "subtitle",
         "error",
-        "The subtitle track could not be prepared; try subtitle repair in the player.",
+        "Subtitles couldn’t load. Try Subtitle help in the player.",
     ),
     "captions_recovered": (
         "subtitle",
         "success",
-        "The subtitle track is available again.",
+        "Subtitles loading again.",
     ),
     "subtitle_needs_attention": (
         "subtitle",
         "warning",
-        "Subtitle preparation needs attention; review or retry repair in the player.",
+        "Subtitles need attention. Open Subtitle help in the player.",
     ),
     "subtitle_failed": (
         "subtitle",
         "error",
-        "Subtitle preparation failed; retry repair in the player.",
+        "Subtitle fix failed. Try again from Subtitle help in the player.",
     ),
     "subtitle_review_pending": (
         "subtitle",
         "warning",
-        "Subtitle quality review did not finish; check the review service and retry from the player.",
+        "Subtitle review didn’t finish. Try again from Subtitle help in the player.",
     ),
-    "subtitle_ready": ("subtitle", "success", "Subtitles prepared and checked."),
+    "subtitle_ready": ("subtitle", "success", "Subtitles fixed and checked."),
 }
 
 
@@ -358,7 +358,7 @@ class Operations:
                 }
             elif row["job_id"]:
                 entry["action"] = {
-                    "label": "View request",
+                    "label": "See request",
                     "href": "/activity?request=" + quote(row["job_id"], safe=""),
                 }
             elif user["role"] == "admin":

@@ -187,10 +187,10 @@ const flags: Record<string, [string, string]> = {
   unavailable: ["Offline", "problem"],
   verifying: ["Checking", ""],
   paused: ["Paused", ""],
-  complete: ["Done", "done"],
-  abandoned: ["Needs you", "problem"],
-  failed: ["Needs you", "problem"],
-  attention: ["Needs you", "problem"],
+  complete: ["Arrived", "done"],
+  abandoned: ["Stopped", "problem"],
+  failed: ["Failed", "problem"],
+  attention: ["Stuck", "problem"],
 };
 export function Flag({ value }: { value: string }) {
   if (!flags[value]) return null;
@@ -286,7 +286,7 @@ export function useResource<T>(
       }
     } catch (e) {
       if (current === generation.current)
-        setError(e instanceof Error ? e.message : "Could not load this page.");
+        setError(e instanceof Error ? e.message : "Couldn’t load this.");
     } finally {
       if (current === generation.current) setLoading(false);
     }
@@ -381,11 +381,7 @@ export function Dialog({
           />
         )}
         <h2>{title}</h2>
-        <button
-          className="icon-btn"
-          aria-label="Close dialog"
-          onClick={onClose}
-        >
+        <button className="icon-btn" aria-label="Close" onClick={onClose}>
           <X size={20} strokeWidth={2.25} />
         </button>
       </div>

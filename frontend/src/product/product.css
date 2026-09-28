@@ -1762,13 +1762,6 @@ a.tonight-art:hover .still img {
   background: var(--paper);
   color: var(--ink);
 }
-.entry-foot {
-  text-align: center;
-  font-size: var(--t-small);
-  font-weight: 700;
-  padding-bottom: 1.5rem;
-}
-
 /* ─── Find ──────────────────────────────────────────────────────── */
 
 .finder {
