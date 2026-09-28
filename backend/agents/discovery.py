@@ -197,7 +197,7 @@ class Discovery:
             row["data"].update({"message": message, "cards": cards, "complete": True})
             self.update(ctx.session.id, row["data"])
             ctx.close = True
-            ctx.close_reason = "Discovery response ready."
+            ctx.close_reason = "Done."
             return {"proposals": len(cards), "acquisitions_started": 0}
 
         return [
@@ -309,7 +309,7 @@ def install_discovery(app, accounts, catalogue, get_service):
                 if session and session.status != SessionStatus.CLOSED:
                     session.status = SessionStatus.CLOSED
                     session.outcome = CaseState.CANCELLED
-                    session.close_reason = "Superseded by a new search."
+                    session.close_reason = "Replaced by a newer question."
                     session.wake_at = 0
                     service.store.save_session(session)
             session = AgentSession(
@@ -350,9 +350,7 @@ def install_discovery(app, accounts, catalogue, get_service):
             "message": data.get("message", ""),
             "cards": data.get("cards", []),
             "state": "complete" if data.get("complete") else session.status.value,
-            "status_line": session.wake_reason
-            or session.close_reason
-            or "Checking titles and your collection…",
+            "status_line": session.wake_reason or session.close_reason or "Looking…",
         }
 
     @router.delete("/{identity}")
@@ -361,7 +359,7 @@ def install_discovery(app, accounts, catalogue, get_service):
         session.status = SessionStatus.CLOSED
         session.outcome = CaseState.CANCELLED
         session.closed_at = time.time()
-        session.close_reason = "Search stopped."
+        session.close_reason = "Stopped."
         session.wake_at = 0
         service.store.save_session(session)
         return {"ok": True}

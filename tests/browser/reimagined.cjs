@@ -98,7 +98,7 @@ fs.mkdirSync(out, { recursive: true });
   }
   async function closeDialog() {
     await page
-      .getByRole("button", { name: "Close dialog", exact: true })
+      .getByRole("button", { name: "Close", exact: true })
       .last()
       .click();
   }
@@ -158,26 +158,26 @@ fs.mkdirSync(out, { recursive: true });
   const types = page.getByRole("group", { name: "Media type", exact: true });
   await types.getByLabel("Films", { exact: true }).check();
   await page.getByLabel("Sort titles", { exact: true }).selectOption("year");
-  await page.getByLabel("Search your library", { exact: true }).fill("quiet");
+  await page.getByLabel("Search the collection", { exact: true }).fill("quiet");
   await expect(page.locator(".entry")).toHaveCount(1);
   await page
     .getByRole("link", { name: "Open The Quiet Planet", exact: true })
     .click();
   await page.getByRole("link", { name: "Back to Guide", exact: true }).click();
   assert.equal(
-    await page.getByLabel("Search your library").inputValue(),
+    await page.getByLabel("Search the collection").inputValue(),
     "quiet",
   );
   await expect(types.getByLabel("Films", { exact: true })).toBeChecked();
   assert.equal(await page.getByLabel("Sort titles").inputValue(), "year");
   await page.reload();
   assert.equal(
-    await page.getByLabel("Search your library").inputValue(),
+    await page.getByLabel("Search the collection").inputValue(),
     "quiet",
   );
   await snapshot("library-filtered", true, [360, 390, 768, 1440]);
-  await page.getByLabel("Search your library").fill("not in this collection");
-  await page.getByRole("heading", { name: "No match." }).waitFor();
+  await page.getByLabel("Search the collection").fill("not in this collection");
+  await page.getByRole("heading", { name: "Nothing matches." }).waitFor();
   await page
     .getByRole("button", { name: "Clear filters", exact: true })
     .click();
@@ -240,7 +240,7 @@ fs.mkdirSync(out, { recursive: true });
   );
 
   await go("/settings/storage");
-  await page.getByRole("button", { name: "Pair storage", exact: true }).click();
+  await page.getByRole("button", { name: "Pair a computer", exact: true }).click();
   await snapshot("storage-pair", true);
   await closeDialog();
   await page
@@ -249,21 +249,21 @@ fs.mkdirSync(out, { recursive: true });
   await snapshot("storage-folders", true);
   await closeDialog();
   await page
-    .getByRole("button", { name: "Import existing media", exact: true })
+    .getByRole("button", { name: "Import files", exact: true })
     .first()
     .click();
   await page
-    .getByRole("dialog", { name: "Review your import", exact: true })
+    .getByRole("dialog", { name: "Import", exact: true })
     .waitFor();
   await page.getByRole("checkbox").first().check();
   await snapshot("import-preview", true);
   await page
-    .getByRole("button", { name: "Match a title", exact: true })
+    .getByRole("button", { name: "Find title", exact: true })
     .first()
     .click();
   await page.getByLabel("Film or series", { exact: true }).fill("quiet");
   await page
-    .getByRole("button", { name: "Search titles", exact: true })
+    .getByRole("button", { name: "Search", exact: true })
     .click();
   await page.getByRole("button", { name: /The Quiet Planet/ }).waitFor();
   await snapshot("import-match", true);

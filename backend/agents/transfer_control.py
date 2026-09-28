@@ -70,9 +70,9 @@ async def apply_control(service, job, download):
         if d.metadata.get("job_id") == job.id
     ):
         job.state_line = {
-            JobStatus.PAUSED: "Paused. Downloads stopped; files retained.",
+            JobStatus.PAUSED: "Paused. Downloads stopped.",
             JobStatus.ACTIVE: "Resumed.",
-            JobStatus.ABANDONED: "Cancelled. Transfers removed; files retained.",
+            JobStatus.ABANDONED: "Cancelled. Downloaded files were kept.",
         }.get(job.status, job.state_line)
         service.store.save_job(job)
         await service.broadcast({"type": "job_update", "data": job.to_dict()})
@@ -90,9 +90,9 @@ async def control_job(service, job_id, action):
         "cancel": JobStatus.ABANDONED,
     }[action]
     job.state_line = {
-        "pause": "Paused. Confirming stopped transfers…",
-        "resume": "Resuming. Checking storage…",
-        "cancel": "Cancelled. Confirming transfer removal; files retained.",
+        "pause": "Pausing…",
+        "resume": "Resuming…",
+        "cancel": "Cancelling…",
     }[action]
     job.closed_at = time.time() if action == "cancel" else None
     job.next_wake_at = 0
@@ -165,15 +165,15 @@ async def control_job(service, job_id, action):
         return current
     if pending:
         job.state_line = {
-            "pause": "Paused. Waiting for storage to confirm stopped downloads.",
-            "resume": "Resumed. Waiting for storage to restart downloads.",
-            "cancel": "Cancelled. Transfer removal will finish when storage reconnects; files are retained.",
+            "pause": "Paused. Waiting for storage to stop the downloads.",
+            "resume": "Resumed. Waiting for storage to restart the downloads.",
+            "cancel": "Cancelled. Waiting for storage to remove the downloads. Downloaded files will be kept.",
         }[action]
     else:
         job.state_line = {
-            "pause": "Paused. Downloads stopped; files retained.",
+            "pause": "Paused. Downloads stopped.",
             "resume": "Resumed.",
-            "cancel": "Cancelled. Transfers removed; library and staging files retained.",
+            "cancel": "Cancelled. Downloaded files were kept.",
         }[action]
     service.store.save_job(job)
     await service.broadcast({"type": "job_update", "data": job.to_dict()})

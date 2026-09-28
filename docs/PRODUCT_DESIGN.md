@@ -46,12 +46,37 @@ and 22px at 2560px, so a TV across the room gets a proportionally larger guide.
 title to its facts. A left column carries time: real event times in Logs, and
 honest age since the last update (“now”, “12m”, “2h”) for requests, never an
 invented broadcast time. A–Z index letters hang in the gutter. Flags are small boxed capitals, used only for exceptions (offline,
-needs subtitles, paused, needs you); a playable title carries no label.
+needs subtitles, checking, paused, stuck); a playable title carries no label.
 Every input, select and segmented choice is a square coupon field; only
 buttons and tabs are pills. The request form is a dashed coupon with a
 scissors mark. The biro circle draws once around wanted titles (Coming up and
 open requests) and nowhere else; a biro tick marks watched, saved and already
-in your guide. The loading state is the sparrow doodle drawing itself.
+in your collection. The loading state is the sparrow doodle drawing itself.
+
+## Voice
+
+Sparrow reads like a listings page, not an assistant: short, factual, British
+English. Apple TV, BBC iPlayer and printed TV guides are the reference.
+
+- Sections are nouns (Tonight, Coming up, Collection, Following). Buttons say
+  what happens (Play, Resume S1 E3, Request, Follow this series, Import files).
+- No lede under a page title. Keep one only when it changes what someone will
+  do, as on Defaults and Preferences.
+- Hints state consequences people can't see: cost, sign-outs, expiry, what is
+  left unchanged. Never reassurance, and never an explanation of the product.
+- State, not narration: “Starting…”, “Paused”, “Stuck”. Sparrow never speaks
+  in the first person; only Ask Sparrow and Sparrow's picks name it.
+- Errors say what happened and what to do, in two short sentences at most:
+  “This copy won't play. Try another format under Playback help.” No “please”
+  and no apologies.
+- No rhetorical rhythm: no lists of three for effect, no paired fragments, no
+  semicolons, no em dashes.
+- The household's words: film, series, season, episode, collection, storage,
+  download app. Not media, content, assets, transfers, staging or reasoning.
+- Digits for numbers: “7 days”, “24 min left”, “S1 E3”, “Airs 5 Oct”.
+
+Request flags are Stuck (needs a retry), Stopped (cancelled or given up),
+Failed and Arrived. Title flags are Offline, Needs subtitles and Checking.
 
 ## Structure
 
@@ -73,7 +98,7 @@ between titles, rows and covers anywhere they are listed.
   Search, type, sort, availability and view persist in the URL. `/library`
   redirects here with its filters.
 - **Find (`/discover`):** one box for a title or a mood. Title matches appear
-  as you type and are marked when already in your guide. **Ask Sparrow** is the
+  as you type and are marked when already in your collection. **Ask Sparrow** is the
   only way to start paid discovery; its answer appears as Sparrow's picks. Ideas
   fill the box without starting anything. Drafts and sessions persist in the URL.
 - **Title:** a feature spread. Big condensed title, facts line, synopsis, one
@@ -86,7 +111,7 @@ between titles, rows and covers anywhere they are listed.
 - **Player:** the black TV screen with Sparrow's own controls: a large marigold
   play button, back 10s and forward 30s, a marigold scrubber, tabular times, mute
   and full screen (Space/K, ←/→, M, F). Audio and subtitle choices sit under the
-  video; Playback help and Subtitle care are disclosures.
+  video; Playback help and Subtitle help are disclosures.
 - **Settings:** a left index grouped You (Preferences, Account, Logs),
   Household (People, Defaults) and Server (Storage, Connections, Setup), with
   Sign out beneath. On phones the index becomes a scrolling strip with Sign

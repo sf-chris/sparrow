@@ -113,7 +113,7 @@ const out =
       .click();
     await page
       .getByRole("alert")
-      .filter({ hasText: "Add both API keys" })
+      .filter({ hasText: "Add both keys" })
       .waitFor();
     await audit("setup-provider-error");
     await page
@@ -137,7 +137,7 @@ const out =
       .getByLabel("Library folder", { exact: true })
       .fill(path.join(process.env.SPARROW_BROWSER_STATE, "library"));
     await page
-      .getByLabel("Staging folder", { exact: true })
+      .getByLabel("Incoming folder", { exact: true })
       .fill(path.join(process.env.SPARROW_BROWSER_STATE, "library", "nested"));
     await page
       .getByRole("button", { name: "Save folders", exact: true })
@@ -145,7 +145,7 @@ const out =
     await page.getByRole("dialog").getByRole("alert").waitFor();
     await audit("setup-folder-error");
     await page
-      .getByLabel("Staging folder", { exact: true })
+      .getByLabel("Incoming folder", { exact: true })
       .fill(path.join(process.env.SPARROW_BROWSER_STATE, "incoming"));
     await page
       .getByRole("button", { name: "Save folders", exact: true })
@@ -163,7 +163,7 @@ const out =
     assert(
       await page
         .getByRole("button", {
-          name: "Finish and find a title",
+          name: "Finish and find something",
           exact: true,
         })
         .isDisabled(),
@@ -186,7 +186,7 @@ const out =
     assert.equal((await state()).complete, false);
     await page.reload();
     await page
-      .getByRole("link", { name: "Continue setup", exact: true })
+      .getByRole("link", { name: "Finish setup", exact: true })
       .waitFor();
     await page.goto(base + "/settings");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -197,13 +197,13 @@ const out =
       .fill("fixture-password-123");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page
-      .getByRole("link", { name: "Continue setup", exact: true })
+      .getByRole("link", { name: "Finish setup", exact: true })
       .click();
     await page
       .getByRole("heading", { name: "Check your setup", exact: true })
       .waitFor();
     await page
-      .getByRole("button", { name: "1 How to start", exact: true })
+      .getByRole("button", { name: "1 Start", exact: true })
       .click();
     await page
       .getByRole("button", {
@@ -223,11 +223,11 @@ const out =
     );
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
-      .getByRole("button", { name: "Finish and import media", exact: true })
+      .getByRole("button", { name: "Finish and import", exact: true })
       .waitFor();
     await audit("setup-import-ready");
     await page
-      .getByRole("button", { name: "Finish and import media", exact: true })
+      .getByRole("button", { name: "Finish and import", exact: true })
       .click();
     await page
       .getByRole("heading", { name: "Storage", exact: true })

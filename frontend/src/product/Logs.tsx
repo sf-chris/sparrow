@@ -25,18 +25,18 @@ type History = {
   limit: number;
   snapshot: number;
 };
-const categories = [
-  "request",
-  "download",
-  "import",
-  "storage",
-  "playback",
-  "subtitle",
-];
+const categories: Record<string, string> = {
+  request: "Requests",
+  download: "Downloads",
+  import: "Imports",
+  storage: "Storage",
+  playback: "Playback",
+  subtitle: "Subtitles",
+};
 const severities: Record<string, string> = {
-  info: "Update",
+  info: "Info",
   success: "Success",
-  warning: "Needs attention",
+  warning: "Warning",
   error: "Error",
 };
 const tones: Record<string, string> = {
@@ -57,14 +57,7 @@ export default function Logs({ user }: { user: User }) {
   const [params, setParams] = useSearchParams();
   const query = params.toString();
   return (
-    <Page
-      title="Logs"
-      lede={
-        user.role === "admin"
-          ? "Requests, downloads, imports and storage across the household."
-          : "Your requests and playback, and the storage you can use."
-      }
-    >
+    <Page title="Logs">
       <HistoryPage
         key={query}
         user={user}
@@ -148,16 +141,14 @@ function HistoryPage({
             onChange={(event) => change("category", event.target.value)}
           >
             <option value="">All</option>
-            {categories.map((category) => (
-              <option value={category} key={category}>
-                {category === "import"
-                  ? "Imports"
-                  : category.charAt(0).toUpperCase() + category.slice(1)}
+            {Object.entries(categories).map(([value, label]) => (
+              <option value={value} key={value}>
+                {label}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Severity">
+        <Field label="Level">
           <select
             value={params.get("severity") || ""}
             onChange={(event) => change("severity", event.target.value)}
@@ -271,10 +262,7 @@ function HistoryPage({
                               !entry.summary
                                 .toLowerCase()
                                 .startsWith(entry.category) &&
-                                (entry.category === "import"
-                                  ? "Imports"
-                                  : entry.category.charAt(0).toUpperCase() +
-                                    entry.category.slice(1)),
+                                categories[entry.category],
                               entry.repeats > 1 && `${entry.repeats} times`,
                             ]
                               .filter(Boolean)
@@ -325,7 +313,7 @@ function HistoryPage({
               </ol>
             ) : (
               <Empty
-                title={filtering ? "No events match." : "No events yet."}
+                title={filtering ? "Nothing matches." : "Nothing logged yet."}
                 action={
                   filtering ? (
                     <button
@@ -336,11 +324,7 @@ function HistoryPage({
                     </button>
                   ) : undefined
                 }
-              >
-                {filtering
-                  ? "Try another title, time range or category."
-                  : "Requests, imports and storage changes will appear here."}
-              </Empty>
+              />
             )}
             {(data.total > 0 || data.page > 1) && (
               <nav className="pages" aria-label="Log pages">

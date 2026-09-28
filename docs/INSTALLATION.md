@@ -70,7 +70,7 @@ Download its `SparrowNode-Windows-x64` artifact after that workflow passes. This
 checkout does not imply that an installer has already been published or that
 physical Windows hardware has passed validation.
 
-1. In the web app, open **Storage & import → Pair storage**, name the node and
+1. In the web app, open **Settings → Storage → Pair a computer**, name the node and
    generate a pairing code.
 2. Run `SparrowNode-Setup-x64.exe` on Windows. Open **Connect Sparrow storage**.
    Windows requests administrator access once for service installation.
@@ -84,7 +84,7 @@ physical Windows hardware has passed validation.
 5. Choose **Pair storage & start service**. Close setup after it confirms success.
    The node runs as Windows LocalService with access granted to its own service
    SID for your selected folders, and starts automatically with Windows.
-6. Refresh Storage in the web app, choose **Import existing media**, review the
+6. Refresh Storage in the web app, choose **Import files**, review the
    title/episode matches and import. Open the title to play or resume it.
 
 No Python installation or separate subtitle service is needed on the storage

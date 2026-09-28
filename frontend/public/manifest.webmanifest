@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Sparrow",
   "short_name": "Sparrow",
-  "description": "The household guide to your own films and series.",
+  "description": "Say what you want to watch.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

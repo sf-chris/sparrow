@@ -20,7 +20,7 @@ export default function PasswordSettings({
     setError("");
     setSaved(false);
     if (next !== again) {
-      setError("The new passwords do not match.");
+      setError("The new passwords don’t match.");
       return;
     }
     setBusy(true);
@@ -57,7 +57,7 @@ export default function PasswordSettings({
                 <Tick /> Password changed.
               </span>
             ) : (
-              "Changing it signs out your other browsers."
+              "Changing it signs you out on other devices."
             )}
           </p>
           <button
@@ -88,7 +88,7 @@ export default function PasswordSettings({
               hint="At least 8 characters."
             />
             <PasswordField
-              label="Repeat new password"
+              label="Confirm new password"
               creating
               value={again}
               onChange={setAgain}

@@ -86,19 +86,15 @@ export default function Auth({
           aria-hidden="true"
         />
         <h1 className="display">{heading}</h1>
-        {registering && (
-          <p className="lede">
-            {needsSetup
-              ? "Create the owner account for this server."
-              : "Your own account, progress and preferences."}
-          </p>
+        {needsSetup && (
+          <p className="lede">Create the owner account for this server.</p>
         )}
         <form onSubmit={submit} className="form">
           <ErrorNote error={error} />
           {needsSetup && (
             <Field
               label="Setup code"
-              hint="From your installer or the server’s startup log."
+              hint="Shown by the installer and in the server log."
             >
               <input
                 required
@@ -141,7 +137,9 @@ export default function Auth({
           />
           <button className="btn primary" disabled={busy}>
             {busy
-              ? "One moment…"
+              ? registering
+                ? "Creating account…"
+                : "Signing in…"
               : needsSetup
                 ? "Create owner account"
                 : joining
@@ -150,7 +148,6 @@ export default function Auth({
           </button>
         </form>
       </section>
-      <p className="entry-foot">An account on this server only.</p>
     </main>
   );
 }
