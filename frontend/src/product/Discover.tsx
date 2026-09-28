@@ -22,11 +22,7 @@ type Research = {
   state: string;
   status_line: string;
 };
-const slips = [
-  { label: "Plot twists, please", idea: "A mystery for tonight" },
-  { label: "Better together", idea: "Something to watch together" },
-  { label: "A little escapism", idea: "An adventure somewhere far away" },
-];
+const ideas = ["A mystery for tonight", "Something to watch together", "An adventure somewhere far away"];
 
 export default function Discover() {
   const location = useLocation();
@@ -147,7 +143,7 @@ export default function Discover() {
     }
   }
   return (
-    <Page className="sp-find" kicker="Box office" title="Find something.">
+    <Page className="sp-find" title="Find">
       <div className="sp-finder">
         <div
           className="sp-tabs"
@@ -217,13 +213,9 @@ export default function Discover() {
               />
             )}
           </label>
-          <div className="sp-finder-foot">
-            <p className="sp-hint">
-              {mode === "title"
-                ? "The one you know by heart, or the one you almost remember."
-                : "Describe a mood, an occasion, or that one scene you remember. Nothing is fetched until you choose a title."}
-            </p>
-            {mode === "assisted" && (
+          {mode === "assisted" && (
+            <div className="sp-finder-foot">
+              <p className="sp-hint">Nothing is downloaded until you pick a title.</p>
               <div className="sp-actions">
                 {busy && identity && (
                   <button type="button" className="sp-btn sp-btn-ghost" onClick={stop}>
@@ -247,35 +239,31 @@ export default function Discover() {
                   </button>
                 )}
                 <button className="sp-btn sp-btn-solid" disabled={busy || query.trim().length < 2}>
-                  {identity ? "Refine these suggestions" : "Ask Sparrow"}
+                  {identity ? "Refine" : "Ask Sparrow"}
                   <ArrowRight size={16} aria-hidden="true" />
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </form>
       </div>
       <ErrorNote error={error} />
       {busy && (
-        <Loading label={mode === "title" ? "Looking up titles…" : "Thinking it over and checking your collection…"} />
+        <Loading label="Searching…" />
       )}
       {mode === "assisted" && research?.message && (
         <figure className="sp-usher">
           <Mark />
           <blockquote>{research.message}</blockquote>
-          <figcaption className="sp-label">Sparrow’s suggestions</figcaption>
         </figure>
       )}
       {mode === "assisted" && research && !busy && !research.message && (
         <p className="sp-note" role="status">
-          {research.status_line} You can refine the description or start a new search.
+          {research.status_line}
         </p>
       )}
       {!!cards.length && (
-        <Section
-          kicker={`${cards.length} ${cards.length === 1 ? "result" : "results"}`}
-          title={mode === "title" ? "Matching titles" : "Open a title to choose what to get"}
-        >
+        <Section title={mode === "title" ? "Matching titles" : "Suggestions"}>
           <div className="sp-prints">
             {cards.map((card) => (
               <article className="sp-print" key={`${card.media_type}:${card.tmdb_id}`}>
@@ -308,10 +296,10 @@ export default function Discover() {
       {!query && !busy && !research && (
         <section className="sp-slips" aria-labelledby="slips-title">
           <h2 className="sp-label" id="slips-title">
-            Or start with a feeling
+            Or ask for
           </h2>
           <div>
-            {slips.map(({ idea, label }, index) => (
+            {ideas.map((idea) => (
               <button
                 key={idea}
                 className="sp-slip"
@@ -321,10 +309,6 @@ export default function Discover() {
                   setParams({ mode: "assisted", q: idea });
                 }}
               >
-                <span className="sp-label">
-                  <span>Nº {index + 1}</span>
-                  <span>{label}</span>
-                </span>
                 <span className="sp-slip-idea">{idea}</span>
                 <span className="sp-slip-go" aria-hidden="true">
                   <ArrowRight size={18} />
@@ -335,12 +319,8 @@ export default function Discover() {
         </section>
       )}
       {!cards.length && !busy && !error && mode === "title" && query.length > 0 && (
-        <Empty
-          title={searched && query.length > 1 ? "Nothing by that name yet." : "Keep typing…"}
-        >
-          {searched && query.length > 1
-            ? "Try another spelling, or describe it under Help me choose."
-            : "A couple of letters and Sparrow will start looking."}
+        <Empty title={searched && query.length > 1 ? "No matches." : "Keep typing…"}>
+          {searched && query.length > 1 ? "Check the spelling, or try Help me choose." : undefined}
         </Empty>
       )}
     </Page>

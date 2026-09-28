@@ -11,7 +11,7 @@ const url=process.env.SPARROW_BROWSER_URL || 'http://127.0.0.1:8891';
 await page.goto(url);await page.getByRole('link',{name:/^(Sign in|Set up Sparrow)$/}).click();await page.getByLabel('Username',{exact:true}).waitFor();
 const needsSetup=await page.getByLabel('Setup code',{exact:true}).count();
 if(needsSetup){
- await page.getByRole('heading',{name:'Set up your Sparrow server',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Set up Sparrow',exact:true}).waitFor();
  await page.screenshot({path:path.join(out,'owner-setup-desktop.png')});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'administrator-setup-mobile.png'),fullPage:true});await page.setViewportSize({width:1440,height:1000});
  const password=page.getByLabel('Password',{exact:true});
@@ -33,7 +33,7 @@ if(needsSetup){
 }
 await page.getByLabel('Username',{exact:true}).fill('owner');await page.getByLabel('Password',{exact:true}).fill('fixture-password-123');await page.getByRole('button',{name:needsSetup?'Create administrator account':'Sign in',exact:true}).click();
 if(needsSetup){await page.getByRole('button',{name:'Continue setup',exact:true}).waitFor();await page.screenshot({path:path.join(out,'owner-defaults-desktop.png')});await page.getByRole('button',{name:'Continue setup',exact:true}).click();await page.getByRole('button',{name:'Finish later',exact:true}).click();}
-await page.getByRole('heading',{name:/^(Good (morning|afternoon|evening), Chris\.|Still up, Chris\?)$/}).waitFor({timeout:10000}).catch(async()=>{const welcome=page.getByRole('button',{name:'Continue to Sparrow'});if(await welcome.isVisible())await welcome.click();});
+await page.getByRole('heading',{name:/^Good (morning|afternoon|evening), Chris\.$/}).waitFor({timeout:10000}).catch(async()=>{const welcome=page.getByRole('button',{name:'Continue to Sparrow'});if(await welcome.isVisible())await welcome.click();});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).waitFor();
 await page.screenshot({path:path.join(out,'home-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).click();await page.getByRole('heading',{name:'The Quiet Planet',exact:true}).waitFor();

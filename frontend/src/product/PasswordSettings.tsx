@@ -72,9 +72,6 @@ export default function PasswordSettings({
         <Dialog title="Change password" onClose={close}>
           <form className="sp-form" onSubmit={save}>
             <ErrorNote error={error} />
-            <p className="sp-hint">
-              Changing your password signs out your other browser sessions.
-            </p>
             <PasswordField
               label="Current password"
               value={current}
@@ -85,7 +82,7 @@ export default function PasswordSettings({
               creating
               value={next}
               onChange={setNext}
-              hint="8 characters or more."
+              hint="At least 8 characters."
             />
             <PasswordField
               label="Repeat new password"

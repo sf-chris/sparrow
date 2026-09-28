@@ -51,10 +51,7 @@ export function Backdrop({
   );
 }
 
-/**
- * The house projector: a sparrow in the booth throwing a beam onto the screen.
- * Pure geometry, so it scales and follows the theme tokens.
- */
+/** A sparrow projecting onto a screen. Pure geometry that follows the theme tokens. */
 export function Projection({ className = "" }: { className?: string }) {
   return (
     <svg
@@ -77,17 +74,6 @@ export function Projection({ className = "" }: { className?: string }) {
         <text x="190" y="104" fontSize="54" letterSpacing="1">NOW</text>
         <text x="190" y="156" fontSize="54" letterSpacing="1">SHOWING</text>
       </g>
-      <text
-        x="190"
-        y="190"
-        fill="var(--inverse-ink)"
-        fontFamily="IBM Plex Mono, monospace"
-        fontSize="11"
-        letterSpacing="2.4"
-        opacity=".75"
-      >
-        WHATEVER YOU LIKE · ALL NIGHT
-      </text>
       <g transform="translate(20 356) scale(3.3)" fill="var(--ink)">
         <path d="M3 15h24a12 12 0 0 1-24 0Z" />
         <circle cx="20" cy="9.6" r="5.6" />

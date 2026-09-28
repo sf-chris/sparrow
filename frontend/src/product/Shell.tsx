@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { NavLink, Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Clapperboard, Library, Search, Ticket, LogOut } from "lucide-react";
+import { Home, Library, Search, Ticket, LogOut } from "lucide-react";
 import { post, type User } from "./api";
 import { ErrorNote } from "./ui";
 import { Wordmark } from "./Brand";
 
 const navigation = [
-  { to: "/", label: "Tonight", icon: Clapperboard },
+  { to: "/", label: "Home", icon: Home },
   { to: "/library", label: "Library", icon: Library },
   { to: "/discover", label: "Find", icon: Search },
   { to: "/activity", label: "Requests", icon: Ticket },
@@ -22,7 +22,7 @@ const management = [
   { to: "/setup", label: "Server setup", admin: true },
 ];
 const titles: Record<string, string> = {
-  "/": "Tonight",
+  "/": "Home",
   "/discover": "Find",
   "/activity": "Requests",
   "/library": "Library",
@@ -119,7 +119,7 @@ export default function Shell({
       {!user.welcomed && <ErrorNote error={logoutError} />}
       {setupPending && user.welcomed && pathname !== "/setup" && (
         <div className="sp-notice-strip" role="status">
-          <span>Server setup isn’t finished yet.</span>
+          <span>Server setup isn’t finished.</span>
           <Link to="/setup">Continue setup</Link>
         </div>
       )}
@@ -129,13 +129,10 @@ export default function Shell({
             <p className="sp-label">Settings</p>
             <nav aria-label="Settings navigation">
               <ol>
-                {settingsLinks.map(({ to, label }, index) => (
+                {settingsLinks.map(({ to, label }) => (
                   <li key={to}>
                     <NavLink to={to} end>
-                      <span className="sp-settings-number" aria-hidden="true">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <span>{label}</span>
+                      {label}
                     </NavLink>
                   </li>
                 ))}
@@ -150,21 +147,6 @@ export default function Shell({
         </div>
       ) : (
         <Outlet />
-      )}
-      {!watching && (
-        <footer className="sp-foot">
-          <div>
-            <span className="sp-foot-brand">Sparrow</span>
-            <span className="sp-label">A private picture house</span>
-          </div>
-          <span className="sp-label">
-            {new Date().toLocaleDateString(undefined, {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
-          </span>
-        </footer>
       )}
       {user.welcomed && (
         <nav className="sp-dock" aria-label="Mobile navigation">

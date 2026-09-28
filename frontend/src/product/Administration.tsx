@@ -54,9 +54,8 @@ export function Defaults() {
   }
   return (
     <Page
-      kicker="Administration"
       title="Household defaults"
-      description="The starting point for everyone. Personal overrides stay personal; server limits always apply."
+      description="Everyone starts with these. People can change their own, within the server limits."
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.data ? (
@@ -74,7 +73,7 @@ export function Defaults() {
           </Section>
           <Section
             title="Server limits"
-            description="These apply to every request, including work managed by agents."
+            description="These apply to every request."
           >
             <div className="sp-sheet sp-form-grid">
               <Field label="Maximum picture quality">
@@ -91,7 +90,7 @@ export function Defaults() {
               </Field>
               <Field
                 label="Maximum file size (GB)"
-                hint="Zero means no server size limit."
+                hint="0 for no limit."
               >
                 <input
                   type="number"
@@ -128,7 +127,7 @@ export function Defaults() {
               </Field>
               <Field
                 label="Reasoning budget (USD)"
-                hint="Each request has its own allowance. Each followed title also shares this amount across all collection reviews, without an automatic reset. Raise the limit and retry if collection care stops."
+                hint="Per request. Each followed title gets this amount once for all its checks, with no reset. If following stops, raise it and retry."
               >
                 <input
                   type="number"
@@ -163,7 +162,7 @@ export function Defaults() {
           </div>
         </>
       ) : (
-        resource.loading && <Loading label="Loading household defaults…" />
+        resource.loading && <Loading />
       )}
     </Page>
   );
@@ -210,18 +209,15 @@ export function ServerSettings({
       embedded={!!setupSection}
       title={
         setupSection === "providers"
-          ? "Connect title search and agents"
+          ? "API keys"
           : setupSection === "downloads"
-            ? "Connect your download app"
+            ? "Download app"
             : "Server settings"
       }
-      kicker={setupSection ? undefined : "Administration"}
       description={
-        setupSection === "providers"
-          ? "TMDB supplies title and episode information. Anthropic powers discovery and collection care. Keys are stored on your server."
-          : setupSection === "downloads"
-            ? "Use an existing Transmission or qBittorrent app. Sparrow does not install a download app for you."
-            : "Connect Sparrow to title information and its reasoning service. Storage lives in Storage & import."
+        setupSection === "downloads"
+          ? "Sparrow works with Transmission or qBittorrent. Install one first."
+          : undefined
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
@@ -231,15 +227,15 @@ export function ServerSettings({
             <Section title="Connections">
               {setupSection && (
                 <p className="sp-hint">
-                  Create a key in{" "}
+                  Get keys from{" "}
                   <a
                     href="https://www.themoviedb.org/settings/api"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    TMDB API settings
+                    TMDB
                   </a>{" "}
-                  and{" "}
+                  and the{" "}
                   <a
                     href="https://platform.claude.com/settings/keys"
                     target="_blank"
@@ -247,8 +243,8 @@ export function ServerSettings({
                   >
                     Claude Console
                   </a>
-                  , then paste them below. Anthropic API usage is billed by the
-                  provider.
+                  . Keys are stored on this server. Anthropic bills API usage
+                  separately.
                 </p>
               )}
               <div className="sp-sheet sp-form-grid">
@@ -256,8 +252,8 @@ export function ServerSettings({
                   label="TMDB API key"
                   hint={
                     values.tmdb_api_key_configured
-                      ? "Configured. Leave blank to keep the current key."
-                      : "Used to find movies, shows and episode information."
+                      ? "Saved. Leave blank to keep it."
+                      : "For title and episode information."
                   }
                 >
                   <input
@@ -271,8 +267,8 @@ export function ServerSettings({
                   label="Anthropic API key"
                   hint={
                     values.anthropic_api_key_configured
-                      ? "Configured. Leave blank to keep the current key."
-                      : "Used by discovery and management agents. Watching existing media works without it."
+                      ? "Saved. Leave blank to keep it."
+                      : "For finding and downloading titles. Not needed to watch what you have."
                   }
                 >
                   <input
@@ -286,7 +282,7 @@ export function ServerSettings({
                   <>
                     <Field
                       label="Acquisition source"
-                      hint="This release includes one source. Extra source connectors are a later feature."
+                      hint="Only one source is available for now."
                     >
                       <select
                         value={values.preferred_search_engines?.[0] || "apibay"}
@@ -327,7 +323,7 @@ export function ServerSettings({
           {setupSection !== "providers" && (
             <Section
               title="Download app on this server"
-              description="For Windows acquisition, configure the download app on the Windows node instead."
+              description="For a Windows node, set this up in Sparrow Node instead."
             >
               <div className="sp-sheet sp-form-grid">
                 <Field label="Download app">
@@ -379,7 +375,7 @@ export function ServerSettings({
                 </Field>
                 <Field
                   label="Password"
-                  hint="Leave blank to keep a saved password."
+                  hint="Leave blank to keep it."
                 >
                   <input
                     type="password"
@@ -403,7 +399,7 @@ export function ServerSettings({
                 </Field>
                 <Field
                   label="Seeding ratio limit"
-                  hint="Zero means no ratio limit."
+                  hint="0 for no limit."
                 >
                   <input
                     type="number"
@@ -417,7 +413,7 @@ export function ServerSettings({
                 </Field>
                 <Field
                   label="Seeding time limit (hours)"
-                  hint="Zero means no time limit."
+                  hint="0 for no limit."
                 >
                   <input
                     type="number"
@@ -433,9 +429,8 @@ export function ServerSettings({
           )}
           {setupSection === "downloads" && (
             <p className="sp-hint">
-              If Sparrow runs in Docker, the host must be reachable from its
-              container. Use the download machine’s LAN address; localhost
-              refers to the Sparrow container.
+              In Docker, localhost means the Sparrow container. Use the
+              download machine’s LAN address.
             </p>
           )}
           <div className="sp-savebar">
@@ -456,7 +451,7 @@ export function ServerSettings({
           </div>
         </div>
       ) : (
-        resource.loading && <Loading label="Loading server settings…" />
+        resource.loading && <Loading />
       )}
     </Page>
   );
@@ -534,9 +529,7 @@ export function People({ currentUser }: { currentUser: User }) {
   }
   return (
     <Page
-      kicker="The household"
       title="People"
-      description="Good stories are better shared. Everyone gets their own seat, history and preferences."
       action={
         <button
           className="sp-btn sp-btn-solid"
@@ -568,7 +561,7 @@ export function People({ currentUser }: { currentUser: User }) {
                   {user.role === "requester"
                     ? "Watches and requests"
                     : user.role === "admin"
-                      ? "Runs the house"
+                      ? "Administrator"
                       : "Watches"}
                   {user.library_scope !== null &&
                     ` · ${user.library_scope.length ? `${user.library_scope.length} ${user.library_scope.length === 1 ? "library" : "libraries"}` : "No libraries"}`}
@@ -608,7 +601,7 @@ export function People({ currentUser }: { currentUser: User }) {
           ))}
         </ol>
       ) : (
-        resource.loading && <Loading label="Loading household accounts…" />
+        resource.loading && <Loading />
       )}
       {editing && (
         <Dialog
@@ -649,10 +642,7 @@ export function People({ currentUser }: { currentUser: User }) {
                 ))}
               </select>
             </Field>
-            <p className="sp-hint">
-              Changing access signs this person out so the new permissions apply
-              immediately.
-            </p>
+            <p className="sp-hint">Saving signs them out so the change applies right away.</p>
           </div>
         </Dialog>
       )}
@@ -662,9 +652,6 @@ export function People({ currentUser }: { currentUser: User }) {
             <ErrorNote error={error} />
             {invite ? (
               <>
-                <p className="sp-hint">
-                  Share this invitation link with the person you want to invite.
-                </p>
                 <Field label="Invitation link">
                   <input
                     readOnly
@@ -680,7 +667,7 @@ export function People({ currentUser }: { currentUser: User }) {
                       setCopied(true);
                     } catch {
                       setError(
-                        "Select the invitation link and copy it manually.",
+                        "Couldn’t copy. Select the link and copy it yourself.",
                       );
                     }
                   }}
@@ -691,9 +678,7 @@ export function People({ currentUser }: { currentUser: User }) {
               </>
             ) : (
               <>
-                <p className="sp-hint">
-                  A personal invitation, valid for seven days and usable once.
-                </p>
+                <p className="sp-hint">The link works once and expires in 7 days.</p>
                 <Field label="What can they do?">
                   <select
                     value={role}
@@ -704,7 +689,7 @@ export function People({ currentUser }: { currentUser: User }) {
                     <option value="admin">Manage the server</option>
                   </select>
                 </Field>
-                <Field label="Which storage libraries?">
+                <Field label="Libraries">
                   <select
                     value={scope}
                     onChange={(e) => setScope(e.target.value)}

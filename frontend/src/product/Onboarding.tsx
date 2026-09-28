@@ -60,7 +60,7 @@ export default function Onboarding({
       (!current.tmdb_configured || !current.reasoning_configured)
     )
       throw new Error(
-        "Add both API keys to enable automatic discovery and downloads, or choose Watch my existing collection.",
+        "Add both API keys, or go back and choose Watch my existing collection.",
       );
     await update({ step });
   }
@@ -86,11 +86,7 @@ export default function Onboarding({
     }
   }
   return (
-    <Page
-      kicker="Opening night"
-      title="Let’s get the house ready."
-      description="Connect the services and storage you want to use. Progress saves as you go, so you can stop and come back."
-    >
+    <Page title="Server setup" description="Progress is saved as you go.">
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {!state ? (
         <Loading label="Loading your setup…" />
@@ -123,10 +119,6 @@ export default function Onboarding({
           {state.step === "start" && (
             <section className="sp-setup-start" aria-labelledby="setup-start">
               <h2 id="setup-start">How would you like to start?</h2>
-              <p className="sp-hint">
-                Automatic fetching needs title information, a reasoning service, storage and a download
-                app. You can also start with media you already own and add the rest later.
-              </p>
               <div className="sp-choices">
                 <button
                   className="sp-choice"
@@ -135,11 +127,9 @@ export default function Onboarding({
                   disabled={busy}
                   onClick={() => void update({ mode: "autopilot", step: "providers", deferred: false })}
                 >
-                  <span className="sp-label">Full service</span>
                   <span className="sp-choice-title">Find and download for me</span>
                   <span className="sp-choice-body" id="choice-autopilot">
-                    Connect title search, the reasoning service and a download app. Sparrow does the
-                    fetching.
+                    Needs two API keys and a download app.
                   </span>
                 </button>
                 <button
@@ -149,10 +139,9 @@ export default function Onboarding({
                   disabled={busy}
                   onClick={() => void update({ mode: "library", step: "storage", deferred: false })}
                 >
-                  <span className="sp-label">Just the projector</span>
                   <span className="sp-choice-title">Watch my existing collection</span>
                   <span className="sp-choice-body" id="choice-library">
-                    No API keys or download app needed. Point Sparrow at your media and press play.
+                    Point Sparrow at your media. You can add downloads later.
                   </span>
                 </button>
               </div>
@@ -170,8 +159,7 @@ export default function Onboarding({
               <Storage onboarding onChanged={resource.refresh} />
               <div className="sp-savebar">
                 <p className="sp-hint">
-                  Choose folders on this server, or pair another machine.
-                  Downloads need a separate, writable incoming folder.
+                  Downloads need a separate, writable staging folder.
                 </p>
                 <button
                   className="sp-btn sp-btn-solid"
@@ -191,8 +179,7 @@ export default function Onboarding({
             <>
               {state.download_destinations.length > 0 && (
                 <p className="sp-success" role="status">
-                  Download settings are available on{" "}
-                  {state.download_destinations.join(", ")}.
+                  Downloads are set up on {state.download_destinations.join(", ")}.
                 </p>
               )}
               <ServerSettings
@@ -201,59 +188,54 @@ export default function Onboarding({
                 onSaved={() => advance("review")}
               />
               <p className="sp-hint">
-                For a paired Windows machine, configure its download app in
-                Sparrow Node, then check the setup summary.
+                For a paired Windows machine, set up its download app in
+                Sparrow Node instead.
               </p>
               <button
                 className="sp-btn sp-btn-line"
                 disabled={busy}
                 onClick={() => void update({ step: "review" })}
               >
-                Use my paired node and continue
+                Continue with my paired machine
               </button>
             </>
           )}
           {state.step === "review" && (
             <section className="sp-sheet sp-form">
               <h2>Check your setup</h2>
-              <p>
-                {state.mode === "library"
-                  ? "Start by importing your existing media. Automatic downloads can be set up later."
-                  : "These are the settings Sparrow will use for your first request."}
-              </p>
               {[
                 {
-                  label: "Title information",
+                  label: "TMDB key",
                   value: state.tmdb_configured
-                    ? "Key saved"
+                    ? "Saved"
                     : state.mode === "library"
-                      ? "Optional for importing existing media"
-                      : "Add a TMDB API key",
+                      ? "Optional"
+                      : "Missing",
                   step: "providers" as Step,
                 },
                 {
-                  label: "Discovery and management agents",
+                  label: "Anthropic key",
                   value: state.reasoning_configured
-                    ? "Key saved"
+                    ? "Saved"
                     : state.mode === "library"
-                      ? "Optional for watching existing media"
-                      : "Add an Anthropic API key",
+                      ? "Optional"
+                      : "Missing",
                   step: "providers" as Step,
                 },
                 {
-                  label: "Library and media inspection",
+                  label: "Library",
                   value: state.libraries.length
-                    ? `Available on ${state.libraries.join(", ")}`
-                    : "Connect an available library with media tools",
+                    ? state.libraries.join(", ")
+                    : "No library with working media tools yet",
                   step: "storage" as Step,
                 },
                 {
                   label: "Downloads",
                   value: state.download_destinations.length
-                    ? `Configured on ${state.download_destinations.join(", ")}`
+                    ? state.download_destinations.join(", ")
                     : state.mode === "library"
                       ? "Set up later"
-                      : "Connect a download app and writable library/incoming folders on the same machine",
+                      : "Needs a download app and writable folders on the same machine",
                   step: "downloads" as Step,
                 },
               ].map((check) => (
@@ -274,18 +256,11 @@ export default function Onboarding({
                 </div>
               ))}
               <p className="sp-hint">
-                Live provider access is checked when you make a request. No paid
-                model calls or downloads run during setup.
+                Keys are tested on your first request. Setup makes no paid
+                calls.
               </p>
-              <Link to="/settings/defaults">
-                Review household defaults and spending limits
-              </Link>
-              {!state.can_finish && (
-                <p role="status">
-                  Some steps still need attention. Update them above, or finish
-                  later and resume from Settings.
-                </p>
-              )}
+              <Link to="/settings/defaults">Household defaults and spending limits</Link>
+              {!state.can_finish && <p role="status">Some steps still need attention.</p>}
               <div className="sp-actions">
                 <button
                   className="sp-btn sp-btn-line"
@@ -300,16 +275,13 @@ export default function Onboarding({
                   onClick={() => void leave(true)}
                 >
                   {state.mode === "library"
-                    ? "Save setup and import media"
-                    : "Save setup and find a title"}
+                    ? "Finish and import media"
+                    : "Finish and find a title"}
                 </button>
               </div>
             </section>
           )}
           <div className="sp-savebar">
-            <p className="sp-hint">
-              You can return here from Settings → Server setup.
-            </p>
             <button
               className="sp-btn sp-btn-ghost"
               disabled={busy}

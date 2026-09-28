@@ -15,7 +15,7 @@ fs.mkdirSync(out,{recursive:true});
  if(modal){
   await page.keyboard.press('Tab');
   if(!await page.getByRole('dialog').evaluate(d=>d.contains(document.activeElement)))throw new Error('Keyboard focus escaped the dialog');
-  const action=page.getByRole('button',{name:'Save collection care',exact:true});
+  const action=page.getByRole('button',{name:'Save',exact:true});
   if(await action.count()){const b=await action.boundingBox();if(!b||b.y+b.height>844)throw new Error('Care action is outside the phone viewport');}
  }
  await page.screenshot({path:`${out}/${name}-mobile.png`,fullPage:!modal});
@@ -26,17 +26,17 @@ fs.mkdirSync(out,{recursive:true});
  await page.getByLabel('What can they do?',{exact:true}).selectOption('requester');await page.getByRole('button',{name:'Create invitation',exact:true}).click();
  const invitation=await page.getByLabel('Invitation link',{exact:true}).inputValue();await audit('invite-link');
  const guest=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});const person=await guest.newPage();person.on('pageerror',e=>errors.push(e.message));
- const username='person'+Date.now();await person.goto(invitation);await person.getByRole('heading',{name:'Pull up a seat.',exact:true}).waitFor();await person.screenshot({path:out+'/invitation-mobile.png',fullPage:true});
+ const username='person'+Date.now();await person.goto(invitation);await person.getByRole('heading',{name:'Create your account',exact:true}).waitFor();await person.screenshot({path:out+'/invitation-mobile.png',fullPage:true});
  await person.getByLabel('Your name',{exact:true}).fill('Alex');await person.getByLabel('Username',{exact:true}).fill(username);await person.getByLabel('Password',{exact:true}).fill('movienow');await person.getByRole('button',{name:'Create account',exact:true}).click();
  await person.getByRole('button',{name:'Continue to Sparrow',exact:true}).waitFor();await person.getByLabel('Preferred audio',{exact:true}).selectOption('es');await person.getByRole('button',{name:'Continue to Sparrow',exact:true}).click();
- await person.getByRole('heading',{name:/^(Good (morning|afternoon|evening), Alex\.|Still up, Alex\?)$/}).waitFor();
+ await person.getByRole('heading',{name:/^Good (morning|afternoon|evening), Alex\.$/}).waitFor();
  const privatePrefs=await (await guest.request.get(base+'/api/v1/preferences')).json(),ownerPrefs=await (await owner.request.get(base+'/api/v1/preferences')).json();
  if(privatePrefs.effective.values.audio_pref!=='es'||ownerPrefs.effective.values.audio_pref==='es')throw new Error('Personal preference leaked or failed to save');
  if((await guest.request.get(base+'/api/v1/admin/users')).status()!==403)throw new Error('Requester reached admin accounts');
  await person.goto(base+'/settings/security');await person.getByText('Change your password',{exact:true}).click();await person.getByLabel('Current password',{exact:true}).fill('movienow');await person.getByLabel('New password',{exact:true}).fill('newmovie');await person.getByLabel('Repeat new password',{exact:true}).fill('newmovie');await person.getByRole('button',{name:'Change password',exact:true}).click();await person.getByText('Password changed.',{exact:true}).waitFor();
- await page.goto(base+'/title/tv/104');await page.getByRole('button',{name:/^(Edit care|Follow this show)$/}).first().click();await page.getByLabel('Episode scope',{exact:true}).selectOption('backfill');await audit('collection-care-dialog');await page.getByRole('button',{name:'Save collection care',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});await page.getByRole('button',{name:'Edit care',exact:true}).waitFor();await audit('following-show');
+ await page.goto(base+'/title/tv/104');await page.getByRole('button',{name:/^(Edit|Follow this series)$/}).first().click();await page.getByLabel('Which episodes',{exact:true}).selectOption('backfill');await audit('collection-care-dialog');await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});await page.getByRole('button',{name:'Edit',exact:true}).waitFor();await audit('following-show');
  const items=await (await owner.request.get(base+'/api/v1/catalogue')).json();const asset=items.find(i=>i.tmdb_id===103).assets[0];
- await page.goto(base+'/watch/'+asset.id);await page.getByRole('heading',{name:'Subtitle care',exact:true}).waitFor();await audit('subtitle-repair');
+ await page.goto(base+'/watch/'+asset.id);await page.getByRole('heading',{name:'Fix subtitles',exact:true}).waitFor();await audit('subtitle-repair');
  await page.getByLabel('Use your own subtitle file',{exact:true}).setInputFiles({name:'invalid.srt',mimeType:'text/plain',buffer:Buffer.from('This is not a subtitle file.')});await page.getByText('Subtitles need attention',{exact:true}).waitFor({timeout:20000});await audit('subtitle-repair-failure');
  // Mark subtitles mandatory: the library must remain honest while playback is usable.
  await owner.request.patch(base+'/api/v1/preferences',{headers,data:{values:{require_subtitles:true}}});

@@ -107,7 +107,7 @@ export function ErrorNote({
   );
 }
 
-export function Loading({ label = "Loading your collection…" }: { label?: string }) {
+export function Loading({ label = "Loading…" }: { label?: string }) {
   return (
     <div className="sp-loading" role="status">
       <span>{label}</span>
@@ -121,14 +121,14 @@ export function Empty({
   action,
 }: {
   title: string;
-  children: ReactNode;
+  children?: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <div className="sp-empty">
       <Mark />
       <h2>{title}</h2>
-      <p>{children}</p>
+      {children && <p>{children}</p>}
       {action && <div className="sp-actions">{action}</div>}
     </div>
   );
@@ -173,15 +173,15 @@ export function Field({
 
 const statuses: Record<string, [string, string]> = {
   ready: ["Ready", "is-ok"],
-  subtitles_pending: ["Playable · subtitles needed", "is-warn"],
+  subtitles_pending: ["No subtitles yet", "is-warn"],
   unavailable: ["Storage offline", "is-bad"],
-  verifying: ["Being checked", "is-warn"],
-  active: ["Working on it", "is-live"],
+  verifying: ["Checking", "is-warn"],
+  active: ["In progress", "is-live"],
   paused: ["Paused", "is-quiet"],
   complete: ["Done", "is-ok"],
-  abandoned: ["Needs you", "is-warn"],
+  abandoned: ["Needs attention", "is-warn"],
   pending: ["Preparing", "is-quiet"],
-  failed: ["Needs you", "is-warn"],
+  failed: ["Needs attention", "is-warn"],
 };
 export function Status({ value }: { value: string }) {
   const [label, tone] = statuses[value] || [value, "is-quiet"];
@@ -234,7 +234,6 @@ export function Poster({ title, src }: { title: string; src?: string }) {
         } as CSSProperties
       }
     >
-      <span className="sp-poster-kicker">Sparrow presents</span>
       <span className="sp-poster-title">{title}</span>
     </div>
   );
@@ -263,8 +262,8 @@ export function Progress({
   );
 }
 
-/** A title in the collection, presented as a numbered print. */
-export function PrintCard({ item, number }: { item: Item; number?: number }) {
+/** A poster card for a title in the library. */
+export function PrintCard({ item }: { item: Item }) {
   const location = useLocation();
   const watching = item.assets.find(
     (a) => a.watch && !a.watch.watched && a.watch.position > 5,
@@ -293,11 +292,8 @@ export function PrintCard({ item, number }: { item: Item; number?: number }) {
         </div>
         <div className="sp-print-caption">
           <span className="sp-label">
-            <span>{number !== undefined ? `Nº ${String(number).padStart(2, "0")}` : kind(item.media_type)}</span>
-            <span>
-              {number !== undefined && `${kind(item.media_type)} · `}
-              {item.year || ""}
-            </span>
+            <span>{kind(item.media_type)}</span>
+            <span>{item.year || ""}</span>
           </span>
           <h3>{item.title}</h3>
           {item.state !== "ready" && <Status value={item.state} />}

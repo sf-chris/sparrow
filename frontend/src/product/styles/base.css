@@ -1,6 +1,4 @@
 /*
- * Sparrow — a private picture house.
- *
  * Bone paper, warm ink and one vermilion signal. Square corners, hairline
  * rules and no shadows. Only Play is round and red.
  */
@@ -51,7 +49,6 @@
   --inverse: #17140f;
   --inverse-ink: #eee8db;
   --inverse-ink-2: #b9b1a1;
-  --inverse-accent: #ff7b58;
   /* The one signal colour. Use --signal for fills and large marks,
      --signal-ink for small text on paper. */
   --signal: #cc3a16;
@@ -78,7 +75,7 @@
   --ease: cubic-bezier(0.2, 0.7, 0.1, 1);
 }
 
-/* After hours: the same house with the lights down. */
+/* Dark mode */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
@@ -93,7 +90,6 @@
     --inverse: #eee7d9;
     --inverse-ink: #14120e;
     --inverse-ink-2: #4b453b;
-    --inverse-accent: #b0300f;
     --signal: #f0532d;
     --signal-ink: #ff7b58;
     --on-signal: #1a0a04;
@@ -107,7 +103,7 @@
     --scrim: rgb(0 0 0 / 0.72);
   }
 }
-/* The projection room is always dark, whatever the house lights say. */
+/* The player is always dark. */
 .sp-dark {
   color-scheme: dark;
   --paper: #0f0e0b;
@@ -121,7 +117,6 @@
   --inverse: #eee7d9;
   --inverse-ink: #14120e;
   --inverse-ink-2: #4b453b;
-  --inverse-accent: #b0300f;
   --signal: #f0532d;
   --signal-ink: #ff7b58;
   --on-signal: #1a0a04;

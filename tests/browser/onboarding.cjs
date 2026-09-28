@@ -160,7 +160,7 @@ const out =
     assert(
       await page
         .getByRole("button", {
-          name: "Save setup and find a title",
+          name: "Finish and find a title",
           exact: true,
         })
         .isDisabled(),
@@ -178,7 +178,7 @@ const out =
       .getByRole("button", { name: "Finish later", exact: true })
       .click();
     await page
-      .getByRole("heading", { name: /^(Good (morning|afternoon|evening), Chris\.|Still up, Chris\?)$/ })
+      .getByRole("heading", { name: /^Good (morning|afternoon|evening), Chris\.$/ })
       .waitFor();
     assert.equal((await state()).complete, false);
     await page.reload();
@@ -220,11 +220,11 @@ const out =
     );
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
-      .getByRole("button", { name: "Save setup and import media", exact: true })
+      .getByRole("button", { name: "Finish and import media", exact: true })
       .waitFor();
     await audit("setup-import-ready");
     await page
-      .getByRole("button", { name: "Save setup and import media", exact: true })
+      .getByRole("button", { name: "Finish and import media", exact: true })
       .click();
     await page
       .getByRole("heading", { name: "Storage & import", exact: true })

@@ -52,13 +52,8 @@ export default function Logs({ user }: { user: User }) {
   const query = params.toString();
   return (
     <Page
-      kicker="The house log"
       title="Activity log"
-      description={
-        user.role === "admin"
-          ? "Requests, downloads, imports and the housekeeping that keeps the picture house running — for everyone on this server."
-          : "Your requests and playback, plus changes to the storage and libraries you can use."
-      }
+      description={user.role === "admin" ? "Includes everyone on this server." : undefined}
     >
       <HistoryPage
         key={query}
@@ -124,7 +119,7 @@ function HistoryPage({
         }}
       >
         <div className="sp-field">
-          <label htmlFor="log-search">Title or request</label>
+          <label htmlFor="log-search">Title or request ID</label>
           <div className="sp-log-search">
             <input
               id="log-search"
@@ -132,7 +127,6 @@ function HistoryPage({
               value={q}
               maxLength={300}
               onChange={(event) => setQ(event.target.value)}
-              placeholder="Find a title or request ID"
             />
             <button className="sp-btn sp-btn-line">Search</button>
           </div>
@@ -207,8 +201,7 @@ function HistoryPage({
       </form>
       <div className="sp-log-tools">
         <p className="sp-hint">
-          Recent history · up to 90 days. Repeated events are grouped within
-          five-minute windows.
+          Last 90 days. Repeats within five minutes are grouped.
         </p>
         <div className="sp-actions">
           {filtering && (
@@ -302,9 +295,7 @@ function HistoryPage({
             ) : (
               <Empty
                 title={
-                  filtering
-                    ? "No events match these filters."
-                    : "No operational events yet."
+                  filtering ? "No events match these filters." : "No events yet."
                 }
                 action={
                   filtering ? (
@@ -316,11 +307,7 @@ function HistoryPage({
                     </button>
                   ) : undefined
                 }
-              >
-                {filtering
-                  ? "Try a different title, time range or category."
-                  : "New requests, imports and operational changes will appear here as Sparrow works."}
-              </Empty>
+              />
             )}
             {(data.total > 0 || data.page > 1) && (
               <nav className="sp-log-pagination" aria-label="Log pages">

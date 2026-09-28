@@ -103,7 +103,7 @@ class Curation:
             "fingerprint": "",
             "observed_fingerprint": "",
             "next_check": 0,
-            "message": "Saved. Future work uses these preferences and only this authorised scope.",
+            "message": "",
         }
         with self.accounts.connect() as db:
             db.execute(

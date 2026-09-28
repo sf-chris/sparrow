@@ -182,7 +182,7 @@ fs.mkdirSync(out, { recursive: true });
   await expect(pageStatus).toContainText("Page 1 of");
   await expect.poll(() => firstEntry.textContent()).toBe(first);
   await page.getByLabel("Category", { exact: true }).selectOption("request");
-  await page.getByLabel("Title or request", { exact: true }).fill("Harbour");
+  await page.getByLabel("Title or request ID", { exact: true }).fill("Harbour");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(firstEntry.locator("h2")).toHaveText("Harbour Lights");
   assert(!new URL(page.url()).searchParams.has("page"));
@@ -193,7 +193,7 @@ fs.mkdirSync(out, { recursive: true });
   await page.reload();
   await page.locator(".sp-log-entry").first().waitFor();
   assert.equal(
-    await page.getByLabel("Title or request", { exact: true }).inputValue(),
+    await page.getByLabel("Title or request ID", { exact: true }).inputValue(),
     "Harbour",
   );
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -215,7 +215,7 @@ fs.mkdirSync(out, { recursive: true });
   await page.locator(".sp-log-entry").first().waitFor();
   await audit("logs-time-range");
   await page
-    .getByLabel("Title or request", { exact: true })
+    .getByLabel("Title or request ID", { exact: true })
     .fill("No such film in this fixture");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await page
@@ -245,7 +245,7 @@ fs.mkdirSync(out, { recursive: true });
   await go("/settings/logs");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await page
-    .getByRole("heading", { name: "Say the word. Dim the lights." })
+    .getByRole("heading", { name: "Films and series on request." })
     .waitFor();
   assert.equal(new URL(page.url()).pathname, "/");
   assert.equal(await page.getByLabel("Username", { exact: true }).count(), 0);

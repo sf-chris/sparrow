@@ -49,11 +49,11 @@ export default function Watch() {
           Back to title
         </Link>
       }
-      title={resource.data?.title || "Your screening"}
+      title={resource.data?.title || "Watch"}
     >
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {resource.loading && !resource.data ? (
-        <Loading label="Opening your screening…" />
+        <Loading />
       ) : (
         resource.data && <Player key={assetId} {...resource.data} />
       )}
@@ -190,7 +190,7 @@ function Player({
           if (disposed) return;
           if (!Hls.isSupported()) {
             setError(
-              "This browser cannot play the prepared stream. Try a current Chrome, Firefox, Edge or Safari browser.",
+              "This browser can’t play this stream. Try a current version of Chrome, Firefox, Edge or Safari.",
             );
             return;
           }
@@ -260,7 +260,7 @@ function Player({
               setError(
                 transcode
                   ? "This copy still won’t play. Check that its storage is connected, then try again."
-                  : "This copy won’t play in this browser. Open Playback help to try another format, or reconnect its storage.",
+                  : "This copy won’t play in this browser. Open Playback help to convert it, or reconnect its storage.",
               );
           }}
         >
@@ -282,19 +282,14 @@ function Player({
         </video>
         {(busy || waiting) && (
           <div className="sp-screen-status">
-            <Loading label={busy ? "Threading the projector…" : "Waiting for your media…"} />
+            <Loading label={busy ? "Starting…" : "Buffering…"} />
           </div>
         )}
       </div>
       <div className="sp-deck">
         <div className="sp-deck-info">
           {episode && <span className="sp-label">{episode}</span>}
-          <p className="sp-hint">
-            {session?.mode === "hls"
-              ? "Converted for this browser as it plays."
-              : "Playing directly from your collection."}{" "}
-            Progress saves as you watch.
-          </p>
+          {session?.mode === "hls" && <p className="sp-hint">Converted for this browser as it plays.</p>}
         </div>
         {session && (
           <div className="sp-deck-tracks">
@@ -332,8 +327,8 @@ function Player({
         <details className="sp-disclosure sp-playback-help">
           <summary>Playback help</summary>
           <p className="sp-hint">
-            Picture won’t play, or there’s no sound? Sparrow can convert it into a format this browser
-            understands. It may take a moment to start; your original file isn’t changed.
+            No picture or sound? Sparrow can convert the video for this browser. Your file isn’t
+            changed.
           </p>
           <button
             className="sp-btn sp-btn-line sp-btn-small"
@@ -343,7 +338,7 @@ function Player({
             }}
           >
             <RefreshCw size={14} aria-hidden="true" />
-            Try another playback format
+            Convert for this browser
           </button>
         </details>
       )}

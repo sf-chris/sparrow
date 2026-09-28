@@ -18,6 +18,7 @@ import {
   Page,
   Section,
   bytes,
+  kind,
   useResource,
 } from "./ui";
 
@@ -106,9 +107,7 @@ export default function Storage({
   return (
     <Page
       embedded={onboarding}
-      kicker={onboarding ? undefined : "Administration"}
       title="Storage & import"
-      description="Keep files wherever suits you: folders on this server, or another machine paired as a storage node."
       action={
         <button
           className="sp-btn sp-btn-solid"
@@ -173,9 +172,9 @@ export default function Storage({
                           ? "Access revoked"
                           : node.online
                             ? root?.available
-                              ? "Connected · library available"
-                              : "Connected · choose or reconnect a library folder"
-                            : "Offline · files and progress are safe"}
+                              ? "Connected"
+                              : "Connected · no library folder"
+                            : "Offline"}
                       </span>
                     </div>
                   </div>
@@ -196,8 +195,7 @@ export default function Storage({
                       {root?.free_bytes !== undefined
                         ? `${bytes(root.free_bytes)} free${root.total_bytes ? ` of ${bytes(root.total_bytes)}` : ""}`
                         : root?.error || "No library folder yet"}
-                      {" · "}
-                      {node.capabilities.probe ? "Media checks ready" : "Media tools need attention"}
+                      {!node.capabilities.probe && " · Media tools need attention"}
                     </p>
                   </div>
                   <div className="sp-actions">
@@ -260,10 +258,7 @@ export default function Storage({
           </div>
         </Section>
       )}
-      <p className="sp-hint">
-        Import previews your files and lets you correct title matches. Existing
-        files stay in place.
-      </p>
+      <p className="sp-hint">Importing leaves your files where they are.</p>
       {pairing && (
         <Dialog title="Pair a storage node" onClose={() => setPairing(false)}>
           <div className="sp-form">
@@ -271,8 +266,8 @@ export default function Storage({
             {code ? (
               <>
                 <p className="sp-hint">
-                  Open Sparrow Node on your storage machine. Enter this server
-                  address and pairing code. The code expires in ten minutes.
+                  Enter this address and code in Sparrow Node on the other
+                  machine. The code expires in 10 minutes.
                 </p>
                 <Field label="Server address">
                   <input
@@ -289,9 +284,8 @@ export default function Storage({
                   />
                 </Field>
                 <p className="sp-hint">
-                  Choose the library folder and a separate staging folder in the
-                  node installer, then start the node. Its library will appear
-                  here when it connects.
+                  Then choose its library and staging folders and start the
+                  node.
                 </p>
                 <button
                   className="sp-btn sp-btn-solid"
@@ -330,24 +324,17 @@ export default function Storage({
           <div className="sp-form">
             <ErrorNote error={error} />
             <p className="sp-hint">
-              These paths belong to the Linux server. To use Windows folders,
-              pair a Windows storage node. With Docker, enter the mounted paths
-              visible inside the container. Folders must already exist.
+              Paths on this server, as seen inside the container if you use
+              Docker. The folders must already exist.
             </p>
-            <Field
-              label="Library folder"
-              hint="Where existing movies and shows live."
-            >
+            <Field label="Library folder" hint="Where your films and series are.">
               <input
                 value={library}
                 onChange={(e) => setLibrary(e.target.value)}
                 placeholder="/media/library"
               />
             </Field>
-            <Field
-              label="Staging folder"
-              hint="A separate folder for incoming downloads."
-            >
+            <Field label="Staging folder" hint="A separate folder for downloads.">
               <input
                 value={staging}
                 onChange={(e) => setStaging(e.target.value)}
@@ -411,7 +398,7 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
   }
   return (
     <Dialog
-      title={done === null ? "Review your import" : "Added to your collection"}
+      title={done === null ? "Review your import" : "Import complete"}
       onClose={onClose}
     >
       <div className="sp-form">
@@ -419,8 +406,8 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
         {done !== null ? (
           <>
             <p>
-              {done} {done === 1 ? "file is" : "files are"} ready in your
-              collection. The originals stayed in place.
+              {done} {done === 1 ? "file" : "files"} added. The originals
+              weren’t moved.
             </p>
             <Link className="sp-btn sp-btn-solid" to="/library">
               Open your library
@@ -429,9 +416,8 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
         ) : (
           <>
             <p className="sp-hint">
-              {scan.candidates.length} video files found. Confirm the title and
-              episode for each selected file. Names are suggestions; Sparrow
-              checks the actual media before importing.
+              {scan.candidates.length} video files found. Check the title of
+              each file you select.
             </p>
             {scan.candidates.length === 0 && (
               <p className="sp-hint">
@@ -504,12 +490,12 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
                             className="sp-btn sp-btn-line"
                             onClick={() => setMatching(candidate)}
                           >
-                            Match a movie or show
+                            Match title
                           </button>
                           <span className="sp-hint">
                             {selected[candidate.id].tmdb_id
-                              ? "Matched to catalogue"
-                              : "Using your title"}
+                              ? "Matched"
+                              : "Not matched"}
                           </span>
                         </div>
                         {selected[candidate.id].media_type === "tv" && (
@@ -560,8 +546,8 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
               onClick={confirm}
             >
               {busy
-                ? "Inspecting and importing…"
-                : `Import ${Object.keys(selected).length} selected files`}
+                ? "Importing…"
+                : `Import ${Object.keys(selected).length} files`}
             </button>
           </>
         )}
@@ -612,9 +598,9 @@ function MatchTitle({
     }
   }
   return (
-    <Dialog title="Find the correct title" onClose={onClose}>
+    <Dialog title="Match title" onClose={onClose}>
       <div className="sp-form">
-        <Field label="Movie or show title">
+        <Field label="Title">
           <input value={query} onChange={(e) => setQuery(e.target.value)} />
         </Field>
         <button
@@ -634,7 +620,7 @@ function MatchTitle({
             <div>
               <h3>{card.title}</h3>
               <p>
-                {card.year} · {card.media_type === "tv" ? "TV show" : "Movie"}
+                {card.year} · {kind(card.media_type)}
               </p>
             </div>
             <Check size={16} />

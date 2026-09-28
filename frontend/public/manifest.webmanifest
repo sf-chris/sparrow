@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Sparrow",
   "short_name": "Sparrow",
-  "description": "A private picture house for your household.",
+  "description": "Films and series for your household, on your own server.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

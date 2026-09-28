@@ -75,7 +75,7 @@ export default function Title({ user }: { user: User }) {
   const back = (
     <Link className="sp-back" to={returnTo}>
       <ArrowLeft size={15} aria-hidden="true" />
-      {returnTo.startsWith("/discover") ? "Back to discovery" : "Your collection"}
+      {returnTo.startsWith("/discover") ? "Back to results" : "Back to library"}
     </Link>
   );
   if (!title)
@@ -107,9 +107,7 @@ export default function Title({ user }: { user: User }) {
             {title.media_type === "tv" && seasons > 0 && ` · ${seasons} ${seasons === 1 ? "season" : "seasons"}`}
           </p>
           <h1>{title.title}</h1>
-          <p className="sp-feature-overview">
-            {title.overview || "A place for this title in your collection."}
-          </p>
+          {title.overview && <p className="sp-feature-overview">{title.overview}</p>}
           <div className="sp-actions sp-feature-actions">
             {next && (
               <Link className="sp-btn sp-btn-play" to={`/watch/${next.id}`}>
@@ -124,7 +122,7 @@ export default function Title({ user }: { user: User }) {
                 onClick={() => setRequestOpen(true)}
               >
                 <Plus size={17} aria-hidden="true" />
-                {title.media_type === "movie" ? "Request movie" : "Choose episodes"}
+                {title.media_type === "movie" ? "Request film" : "Choose episodes"}
               </button>
             )}
             {active && (
@@ -146,17 +144,13 @@ export default function Title({ user }: { user: User }) {
             </div>
           )}
           {assets.some((a) => a.state === "unavailable") && (
-            <p className="sp-note">
-              Some copies are on storage that’s offline right now. Your collection and progress are
-              safe.
-            </p>
+            <p className="sp-note">Some copies are on storage that’s offline.</p>
           )}
         </div>
       </div>
       {assets.length > 0 ? (
         <Section
-          kicker="In your collection"
-          title={title.media_type === "tv" ? "Episodes" : "Your copies"}
+          title={title.media_type === "tv" ? "Episodes" : "Copies"}
           action={
             title.media_type === "tv" ? (
               <select
@@ -187,21 +181,12 @@ export default function Title({ user }: { user: User }) {
           </ol>
         </Section>
       ) : (
-        <Empty
-          title={active ? "Sparrow has your request." : "Not in the house yet."}
-          action={
-            active ? (
-              <Link className="sp-btn sp-btn-line" to="/activity">
-                Follow its progress
-              </Link>
-            ) : undefined
-          }
-        >
+        <Empty title={active ? "Requested." : "Not in your library."}>
           {active
-            ? "You’ll find updates, and anything that needs you, in Requests."
+            ? "Progress shows under Requests."
             : user.role === "viewer"
-              ? "This title isn’t in your collection."
-              : "Choose exactly what you’d like, or import a copy you already own from Storage settings."}
+              ? "Ask whoever runs this server to add it."
+              : undefined}
         </Empty>
       )}
       {user.role !== "viewer" && title.tmdb_id && (
@@ -229,7 +214,7 @@ function Episode({ asset, index }: { asset: Asset; index: number }) {
         {String(asset.episode ?? index + 1).padStart(2, "0")}
       </span>
       <div className="sp-listing-info">
-        <h3>{asset.episode ? `Episode ${asset.episode}` : "Feature"}</h3>
+        <h3>{asset.episode ? `Episode ${asset.episode}` : "Film"}</h3>
         <p className="sp-label">
           {asset.episode ? `Season ${asset.season} · ` : ""}
           {duration(asset.facts.duration)}
@@ -328,9 +313,9 @@ function RequestSheet({
           onClick={submit}
         >
           {busy
-            ? "Starting request…"
+            ? "Requesting…"
             : title.media_type === "movie"
-              ? "Request movie"
+              ? "Request film"
               : `Request ${selected.length} episode${selected.length === 1 ? "" : "s"}`}
         </button>
       }
@@ -344,17 +329,18 @@ function RequestSheet({
             <span className="sp-label">
               {kind(title.media_type)} · {title.year}
             </span>
-            <br />
-            {title.media_type === "tv"
-              ? "Pick exactly the episodes you want. Nothing else will be fetched unless you ask."
-              : "Sparrow will find a good copy, check it and add it to your collection."}
+            {title.media_type === "tv" && (
+              <>
+                <br />
+                Only the episodes you pick are downloaded.
+              </>
+            )}
           </p>
         </div>
         <ErrorNote error={error || nodes.error} />
         {title.jobs.some((j) => ["active", "paused"].includes(j.status)) && (
           <p className="sp-note">
-            These episodes join the existing request and use the preferences below. A paused request stays
-            paused.
+            These episodes join the existing request. If it’s paused, it stays paused.
           </p>
         )}
         {title.media_type === "tv" && (
@@ -371,7 +357,7 @@ function RequestSheet({
               </select>
             </Field>
             {loading ? (
-              <Loading label="Checking the episode list…" />
+              <Loading label="Loading episodes…" />
             ) : (
               <div className="sp-picker">
                 <div className="sp-picker-head">
@@ -382,7 +368,7 @@ function RequestSheet({
                     className="sp-btn sp-btn-ghost sp-btn-small"
                     onClick={() => setSelected(selected.length === aired.length && aired.length ? [] : aired)}
                   >
-                    {selected.length === aired.length && aired.length ? "Clear selection" : "Select aired episodes"}
+                    {selected.length === aired.length && aired.length ? "Clear" : "Select all aired"}
                   </button>
                 </div>
                 <ul className="sp-picker-list">
@@ -433,13 +419,13 @@ function RequestSheet({
         </Field>
         {values && (
           <div className="sp-request-prefs">
-            <p className="sp-label">Using your preferences</p>
+            <p className="sp-label">Preferences</p>
             <p>
               {values.preferred_quality} picture · {audioNames[values.audio_pref] || `${values.audio_pref} audio`} ·{" "}
               {values.subtitle_languages.join(", ") || "no"} subtitles
             </p>
             <details className="sp-disclosure">
-              <summary>Change them for this request</summary>
+              <summary>Change for this request</summary>
               <PreferenceFields
                 values={values}
                 onChange={(key, value) => setOverrides({ ...overrides, [key]: value })}

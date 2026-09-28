@@ -24,16 +24,9 @@ export default function Security() {
   }
   const mobile = (label: string) => /Mobile|Android|iPhone|iPad/i.test(label);
   return (
-    <Page
-      kicker="Settings"
-      title="Account & security"
-      description="Your password, and every browser that’s signed in as you."
-    >
+    <Page title="Account & security">
       <PasswordSettings onChanged={resource.refresh} />
-      <Section
-        title="Signed-in browsers"
-        description="End a session to sign that browser out. To leave this one, use Sign out."
-      >
+      <Section title="Signed-in browsers">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {!resource.data && resource.loading ? (
           <Loading label="Loading browsers…" />
@@ -64,9 +57,7 @@ export default function Security() {
                       </details>
                     </div>
                   </div>
-                  {session.current ? (
-                    <span className="sp-status is-ok">You’re here</span>
-                  ) : (
+                  {!session.current && (
                     <button
                       className="sp-btn sp-btn-line sp-btn-small"
                       disabled={!!busy}

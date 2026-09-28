@@ -54,7 +54,7 @@ const path = require('node:path');
     if (await prompt.inputValue() !== 'A mystery for tonight') throw new Error('Discovery prompt lost after reload');
     // Controlled UI states only; the server's collection stays intact.
     await page.route('**/api/v1/catalogue', route => route.fulfill({ json: [] }));
-    await page.goto(base + '/library'); await page.getByRole('heading', { name: 'Your collection starts here.' }).waitFor();
+    await page.goto(base + '/library'); await page.getByRole('heading', { name: 'Nothing to watch yet.' }).waitFor();
     await audit('empty-library', [390, 1440]);
     await page.unroute('**/api/v1/catalogue');
     await page.route('**/api/v1/catalogue', route => route.fulfill({ status: 503, json: { detail: 'The collection is temporarily unavailable. Try again.' } }));
