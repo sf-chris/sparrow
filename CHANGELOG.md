@@ -5,7 +5,7 @@ All notable changes to Sparrow are documented here.
 ## Unreleased — the household guide and product foundation
 
 - Every screen redesigned as the household's own TV guide: newsprint, print
-  black, signal yellow and biro blue in one bundled typeface (Archivo). The
+  black, channel teal and biro blue in one bundled typeface (Archivo). The
   Guide replaces Home and Library, Find has one box for a title or a mood, and
   arrow keys move between titles for keyboards and TV remotes. Tailwind and
   DM Sans are removed; a before/after gallery covers all 25 screens.

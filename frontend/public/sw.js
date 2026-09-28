@@ -1,5 +1,5 @@
 /* Cache the public shell only. Accounts, media and private artwork always use the network. */
-const CACHE='sparrow-shell-v5';
+const CACHE='sparrow-shell-v6';
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(['/','/icon.svg']))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('sparrow-shell-')&&k!==CACHE).map(k=>caches.delete(k))))));
 self.addEventListener('fetch',event=>{

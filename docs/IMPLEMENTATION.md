@@ -371,9 +371,11 @@ also pass, including 55 redesign layouts and 40 follow-up layouts.
 
 Every screen was redesigned from the ground up under a new
 [interface contract](PRODUCT_DESIGN.md): the household's own weekly TV guide,
-in newsprint, print black, signal yellow and biro blue, set in one bundled
+in newsprint, print black, channel teal and biro blue, set in one bundled
 variable family (Archivo). The owner chose the direction from an impeccable
-direction round and approved structural UX changes.
+direction round and approved structural UX changes. After a first look the
+owner found the bright yellow fields hard on the eyes; the band became a
+mid-dark channel teal and yellow shrank to a marigold accent for small marks.
 
 - **Guide replaces Home and Library.** One page holds Tonight (resumes with a
   direct play button), Coming up (open requests) and the whole collection as an

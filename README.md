@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://github.com/sf-chris/sparrow/actions/workflows/ci.yml"><img src="https://github.com/sf-chris/sparrow/actions/workflows/ci.yml/badge.svg?branch=main" alt="Product checks" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-181410" alt="AGPL-3.0-or-later license" /></a>
-  <a href="ROADMAP.md"><img src="https://img.shields.io/badge/status-alpha-fad827?labelColor=181410" alt="Alpha" /></a>
+  <a href="ROADMAP.md"><img src="https://img.shields.io/badge/status-alpha-156068?labelColor=181410" alt="Alpha" /></a>
 </p>
 <p align="center">
   <a href="#get-started">Get started</a> ·
