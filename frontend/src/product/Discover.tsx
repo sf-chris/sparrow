@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams, useLocation } from "react-router-dom";
-import { Search, Sparkles, ArrowUpRight } from "lucide-react";
-import { Doodle } from "./Brand";
+import { Search } from "lucide-react";
 import { api, post } from "./api";
-import { Empty, ErrorNote, Loading, Page, Poster, Section } from "./ui";
+import { Empty, ErrorNote, Loading, Poster, Section } from "./ui";
 
 type Card = {
   tmdb_id: number;
@@ -131,11 +130,13 @@ export default function Discover() {
       setError((e as Error).message);
     }
   }
+  const titleMode = mode === "title";
   return (
-    <Page className="sp-discover-page" title="Find your next watch.">
-      <div className="sp-discover-console">
+    <main id="main-content" className="sp-page sp-find">
+      <header className="sp-find-head">
+        <h1>Discover</h1>
         <div
-          className="sp-tabs"
+          className="sp-switch"
           role="tablist"
           aria-label="Discovery method"
           onKeyDown={(event) => {
@@ -165,8 +166,8 @@ export default function Discover() {
         >
           <button
             role="tab"
-            aria-selected={mode === "title"}
-            tabIndex={mode === "title" ? 0 : -1}
+            aria-selected={titleMode}
+            tabIndex={titleMode ? 0 : -1}
             onClick={() => {
               setMode("title");
               setBusy(false);
@@ -175,13 +176,12 @@ export default function Discover() {
               setParams({ q: query });
             }}
           >
-            <Search size={15} className="inline mr-2" />
-            Title search
+            I know the name
           </button>
           <button
             role="tab"
-            aria-selected={mode === "assisted"}
-            tabIndex={mode === "assisted" ? 0 : -1}
+            aria-selected={!titleMode}
+            tabIndex={titleMode ? -1 : 0}
             onClick={() => {
               setMode("assisted");
               setBusy(research?.state === "running");
@@ -194,30 +194,30 @@ export default function Discover() {
               });
             }}
           >
-            <Sparkles size={15} className="inline mr-2" />
-            Help me find something
+            Describe it
           </button>
         </div>
-        <form onSubmit={submit} className="sp-form">
-          <label className="sp-field">
-            <span>
-              {mode === "title"
-                ? "Movie or TV title"
-                : "What would you like to watch?"}
-            </span>
-            {mode === "title" ? (
+        <form onSubmit={submit} className="sp-ask">
+          {titleMode ? (
+            <label className="sp-ask-field">
+              <Search size={26} aria-hidden="true" />
               <input
                 type="search"
+                aria-label="Film or show title"
                 value={query}
+                autoFocus
                 onChange={(e) => {
                   setQuery(e.target.value);
                   setParams({ q: e.target.value }, { replace: true });
                 }}
-                placeholder="Search movies and TV shows"
+                placeholder="Type a film or show"
               />
-            ) : (
+            </label>
+          ) : (
+            <>
               <textarea
-                className="sp-search-input"
+                className="sp-ask-describe"
+                aria-label="What would you like to watch?"
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);
@@ -231,71 +231,84 @@ export default function Discover() {
                   );
                 }}
                 maxLength={2000}
-                placeholder="A clever mystery, something we can finish tonight…"
+                placeholder="A clever mystery we can finish tonight…"
               />
-            )}
-          </label>
-          {mode === "assisted" && (
-            <div className="sp-actions">
-              <button
-                className="sp-button primary"
-                disabled={busy || query.trim().length < 2}
-              >
-                <Sparkles size={16} />
-                {identity
-                  ? "Refine these suggestions"
-                  : "Find something for me"}
-              </button>
-              {identity && (
+              <div className="sp-actions">
                 <button
-                  type="button"
-                  className="sp-button secondary"
-                  onClick={() => {
-                    if (busy) void stop();
-                    setIdentity("");
-                    setResearch(null);
-                    setCards([]);
-                    setParams({ mode: "assisted" });
-                    setBusy(false);
-                  }}
+                  className="sp-button primary"
+                  disabled={busy || query.trim().length < 2}
                 >
-                  New search
+                  {identity
+                    ? "Refine these suggestions"
+                    : "Find something for me"}
                 </button>
-              )}
-              {busy && identity && (
-                <button
-                  type="button"
-                  className="sp-button quiet"
-                  onClick={stop}
-                >
-                  Stop search
-                </button>
-              )}
-            </div>
+                {identity && (
+                  <button
+                    type="button"
+                    className="sp-button secondary"
+                    onClick={() => {
+                      if (busy) void stop();
+                      setIdentity("");
+                      setResearch(null);
+                      setCards([]);
+                      setParams({ mode: "assisted" });
+                      setBusy(false);
+                    }}
+                  >
+                    New search
+                  </button>
+                )}
+                {busy && identity && (
+                  <button
+                    type="button"
+                    className="sp-button quiet"
+                    onClick={stop}
+                  >
+                    Stop search
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </form>
-        <p className="sp-discover-hint">
-          {mode === "title"
-            ? "The one you know by heart. The one you almost remember."
-            : "Tell Sparrow the mood, the occasion, or that one scene you remember."}
-        </p>
-      </div>
+        {!query && !busy && !research && (
+          <div className="sp-ideas" aria-label="Ideas to explore" role="group">
+            <span aria-hidden="true">Or describe a mood:</span>
+            {[
+              "A mystery for tonight",
+              "Something to watch together",
+              "An adventure somewhere far away",
+            ].map((idea) => (
+              <button
+                key={idea}
+                onClick={() => {
+                  setMode("assisted");
+                  setQuery(idea);
+                  setParams({ mode: "assisted", q: idea });
+                }}
+              >
+                {idea}
+              </button>
+            ))}
+          </div>
+        )}
+      </header>
       <ErrorNote error={error} />
       {busy && (
         <Loading
           label={
-            mode === "title"
+            titleMode
               ? "Finding titles…"
               : "Checking titles and your collection…"
           }
         />
       )}
-      {mode === "assisted" && research?.message && (
+      {!titleMode && research?.message && (
         <Section title="A few possibilities">
-          <p className="sp-discovery-answer">{research.message}</p>
+          <p className="sp-answer">{research.message}</p>
         </Section>
       )}
-      {mode === "assisted" && research && !busy && !research.message && (
+      {!titleMode && research && !busy && !research.message && (
         <p className="sp-muted" role="status">
           {research.status_line} You can refine the description or start a new
           search.
@@ -304,15 +317,13 @@ export default function Discover() {
       {!!cards.length && (
         <Section
           title={
-            mode === "title"
-              ? "Matching titles"
-              : "Open a title to choose what to get"
+            titleMode ? "Matching titles" : "Open a title to choose what to get"
           }
         >
           <div className="sp-grid">
             {cards.map((card) => (
               <article
-                className="sp-media-card"
+                className="sp-tile"
                 key={`${card.media_type}:${card.tmdb_id}`}
               >
                 <Link
@@ -330,8 +341,9 @@ export default function Discover() {
                   />
                   <h3>{card.title}</h3>
                   <p>
-                    {card.year} ·{" "}
-                    {card.media_type === "tv" ? "TV show" : "Movie"}
+                    {[card.year, card.media_type === "tv" ? "Series" : "Film"]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 </Link>
               </article>
@@ -339,61 +351,19 @@ export default function Discover() {
           </div>
         </Section>
       )}
-      {!query && !busy && !research && (
-        <div className="sp-discovery-prompts" aria-label="Ideas to explore">
-          <p className="sp-eyebrow">A FEW LITTLE STARTING POINTS</p>
-          <div>
-            {[
-              {
-                idea: "A mystery for tonight",
-                kind: "spark" as const,
-                label: "PLOT TWISTS, PLEASE",
-              },
-              {
-                idea: "Something to watch together",
-                kind: "heart" as const,
-                label: "BETTER TOGETHER",
-              },
-              {
-                idea: "An adventure somewhere far away",
-                kind: "orbit" as const,
-                label: "A LITTLE ESCAPISM",
-              },
-            ].map(({ idea, kind, label }) => (
-              <button
-                key={idea}
-                onClick={() => {
-                  setMode("assisted");
-                  setQuery(idea);
-                  setParams({ mode: "assisted", q: idea });
-                }}
-              >
-                <Doodle kind={kind} />
-                <span className="sp-prompt-label">{label}</span>
-                <span className="sp-prompt-title">{idea}</span>
-                <ArrowUpRight size={20} />
-              </button>
-            ))}
-          </div>
-        </div>
+      {!cards.length && !busy && !error && titleMode && query.length > 0 && (
+        <Empty
+          title={
+            searched && query.length > 1
+              ? "No matching titles yet."
+              : "Keep typing."
+          }
+        >
+          {searched && query.length > 1
+            ? "Try another spelling, or switch to Describe it."
+            : "Two letters or more and Sparrow starts looking."}
+        </Empty>
       )}
-      {!cards.length &&
-        !busy &&
-        !error &&
-        mode === "title" &&
-        query.length > 0 && (
-          <Empty
-            title={
-              searched && query.length > 1
-                ? "No matching titles yet."
-                : "There’s something good out there."
-            }
-          >
-            {searched && query.length > 1
-              ? "Try another spelling, or describe it in Help me find something."
-              : "Find a favourite, explore a new show, or let Sparrow help you decide."}
-          </Empty>
-        )}
-    </Page>
+    </main>
   );
 }

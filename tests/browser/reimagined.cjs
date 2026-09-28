@@ -109,15 +109,15 @@ fs.mkdirSync(out, { recursive: true });
   await page.getByRole("link", { name: "Sign in", exact: true }).click();
   await page.getByLabel("Username", { exact: true }).waitFor();
   await page
-    .getByRole("link", { name: "Back to the good stuff", exact: true })
+    .getByRole("link", { name: "Back", exact: true })
     .click();
   await page
-    .getByRole("heading", { name: "Less scrolling. More good stuff." })
+    .getByRole("heading", { name: "Ask for a film. Sparrow does the rest." })
     .waitFor();
   await page.reload();
   assert.equal(await page.getByLabel("Username", { exact: true }).count(), 0);
   await page
-    .getByRole("link", { name: "Open your Sparrow", exact: true })
+    .getByRole("link", { name: "Open Sparrow", exact: true })
     .click();
   await page.getByLabel("Username", { exact: true }).waitFor();
   await snapshot("sign-in", true);
@@ -156,23 +156,23 @@ fs.mkdirSync(out, { recursive: true });
   }
 
   await go("/library");
-  await page.getByLabel("Media type", { exact: true }).selectOption("movie");
+  await page.getByRole("radio", { name: "Films", exact: true }).check();
   await page.getByLabel("Sort titles", { exact: true }).selectOption("title");
   await page.getByLabel("Search your library", { exact: true }).fill("quiet");
-  await expect(page.locator(".sp-media-card")).toHaveCount(1);
+  await expect(page.locator(".sp-tile")).toHaveCount(1);
   await page
     .getByRole("link", { name: "Open The Quiet Planet", exact: true })
     .click();
   await page
-    .getByRole("link", { name: "Your collection", exact: true })
+    .getByRole("link", { name: "Back to library", exact: true })
     .click();
   assert.equal(
     await page.getByLabel("Search your library").inputValue(),
     "quiet",
   );
   assert.equal(
-    await page.getByLabel("Media type", { exact: true }).inputValue(),
-    "movie",
+    await page.getByRole("radio", { name: "Films", exact: true }).isChecked(),
+    true,
   );
   assert.equal(await page.getByLabel("Sort titles").inputValue(), "title");
   await page.reload();
@@ -188,20 +188,20 @@ fs.mkdirSync(out, { recursive: true });
   await page
     .getByRole("button", { name: "Clear filters", exact: true })
     .click();
-  await expect(page.locator(".sp-media-card")).toHaveCount(6);
+  await expect(page.locator(".sp-tile")).toHaveCount(6);
   await page.getByLabel("Sort titles").selectOption("title");
-  const names = await page.locator(".sp-media-card h3").allTextContents();
-  await expect(page.locator(".sp-media-card h3")).toHaveText(
+  const names = await page.locator(".sp-tile h3").allTextContents();
+  await expect(page.locator(".sp-tile h3")).toHaveText(
     [...names].sort((a, b) => a.localeCompare(b)),
   );
 
   await page.keyboard.press("Control+k");
-  await page.getByRole("tab", { name: "Title search", exact: true }).waitFor();
-  await page.getByRole("tab", { name: "Title search", exact: true }).focus();
+  await page.getByRole("tab", { name: "I know the name", exact: true }).waitFor();
+  await page.getByRole("tab", { name: "I know the name", exact: true }).focus();
   await page.keyboard.press("ArrowRight");
   assert.equal(
     await page
-      .getByRole("tab", { name: "Help me find something", exact: true })
+      .getByRole("tab", { name: "Describe it", exact: true })
       .getAttribute("aria-selected"),
     "true",
   );
@@ -222,26 +222,26 @@ fs.mkdirSync(out, { recursive: true });
     "A funny film under two hours",
   );
   await snapshot("assisted-search", true);
-  await page.getByRole("tab", { name: "Title search", exact: true }).click();
+  await page.getByRole("tab", { name: "I know the name", exact: true }).click();
   await page
-    .getByRole("searchbox", { name: "Movie or TV title", exact: true })
+    .getByRole("searchbox", { name: "Film or show title", exact: true })
     .fill("quiet");
   await page
     .getByRole("heading", { name: "Matching titles", exact: true })
     .waitFor();
   await snapshot("search-results");
-  await page.locator(".sp-media-card a").first().click();
+  await page.locator(".sp-tile a").first().click();
   await page
     .getByRole("link", { name: "Back to discovery", exact: true })
     .click();
   assert.equal(
     await page
-      .getByRole("searchbox", { name: "Movie or TV title", exact: true })
+      .getByRole("searchbox", { name: "Film or show title", exact: true })
       .inputValue(),
     "quiet",
   );
   await page
-    .getByRole("searchbox", { name: "Movie or TV title", exact: true })
+    .getByRole("searchbox", { name: "Film or show title", exact: true })
     .fill("");
   await expect(page.getByRole("status")).toHaveCount(0);
 

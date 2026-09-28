@@ -6,22 +6,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import {
-  Home,
-  Library,
-  Compass,
-  Activity,
-  Settings,
-  HardDrive,
-  Users,
-  SlidersHorizontal,
-  Server,
-  ChevronDown,
-  ArrowUpRight,
-  LogOut,
-  ShieldCheck,
-  ScrollText,
-} from "lucide-react";
+import { Home, Library, Search, Activity } from "lucide-react";
 import { post, type User } from "./api";
 import { ErrorNote } from "./ui";
 import { Mark } from "./Brand";
@@ -29,22 +14,18 @@ import { Mark } from "./Brand";
 const navigation = [
   { to: "/", label: "Home", icon: Home },
   { to: "/library", label: "Library", icon: Library },
-  { to: "/discover", label: "Discover", icon: Compass },
+  { to: "/discover", label: "Discover", icon: Search },
   { to: "/activity", label: "Activity", icon: Activity },
 ];
 const management = [
-  { to: "/settings", label: "My preferences", icon: Settings },
-  { to: "/settings/security", label: "Account & security", icon: ShieldCheck },
-  { to: "/settings/logs", label: "Logs", icon: ScrollText },
-  { to: "/settings/people", label: "People", icon: Users },
-  { to: "/settings/storage", label: "Storage & import", icon: HardDrive },
-  {
-    to: "/settings/defaults",
-    label: "Household defaults",
-    icon: SlidersHorizontal,
-  },
-  { to: "/settings/server", label: "Server settings", icon: Server },
-  { to: "/setup", label: "Server setup", icon: SlidersHorizontal },
+  { to: "/settings", label: "My preferences" },
+  { to: "/settings/security", label: "Account & security" },
+  { to: "/settings/logs", label: "Logs" },
+  { to: "/settings/people", label: "People" },
+  { to: "/settings/storage", label: "Storage & import" },
+  { to: "/settings/defaults", label: "Household defaults" },
+  { to: "/settings/server", label: "Server settings" },
+  { to: "/setup", label: "Server setup" },
 ];
 
 export default function Shell({
@@ -92,70 +73,74 @@ export default function Shell({
   }, [navigate]);
   return (
     <div
-      className={`sp-app ${settings ? "sp-settings-app" : ""} ${watching ? "sp-watching-app" : ""}`}
+      className={`sp-app${settings ? " is-settings" : ""}${watching ? " is-watching" : ""}`}
     >
       <a className="sp-skip" href="#main-content">
         Skip to content
       </a>
-      <header className="sp-topbar">
-        <div className="sp-topbar-inner">
-          <Link to="/" className="sp-brand" aria-label="Sparrow home">
-            <Mark />
-            <span>sparrow</span>
-          </Link>
-          <nav className="sp-desktop-nav" aria-label="Main navigation">
-            {navigation.map(({ to, label }) => (
-              <NavLink key={to} to={to} end={to === "/"}>
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="sp-topbar-actions">
-            <NavLink
-              to="/settings"
-              className="sp-account"
-              aria-label={`${user.name}’s settings`}
-            >
-              <span className="sp-avatar">
-                {user.name.slice(0, 1).toUpperCase()}
-              </span>
-              <span className="sp-account-name">{user.name}</span>
-              <ChevronDown size={14} />
-            </NavLink>
-          </div>
-        </div>
-      </header>
       {setupPending && user.welcomed && pathname !== "/setup" && (
-        <div className="sp-setup-reminder" role="status">
-          Your server setup is unfinished.{" "}
+        <div className="sp-notice" role="status">
+          <span>Server setup isn’t finished.</span>
           <Link to="/setup">Continue setup</Link>
         </div>
       )}
-      <div className={`sp-workspace ${settings ? "sp-settings-layout" : ""}`}>
+      <header className="sp-bar">
+        <Link to="/" className="sp-wordmark" aria-label="Sparrow home">
+          <Mark />
+          <span>sparrow</span>
+        </Link>
+        <nav className="sp-bar-nav" aria-label="Main navigation">
+          {navigation.map(({ to, label }) => (
+            <NavLink key={to} to={to} end={to === "/"}>
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+        <NavLink
+          to="/settings"
+          className="sp-me"
+          aria-label={`${user.name}’s settings`}
+        >
+          <span className="sp-avatar">
+            {user.name.slice(0, 1).toUpperCase()}
+          </span>
+        </NavLink>
+      </header>
+      <div className={settings ? "sp-settings" : "sp-stage"}>
         {settings && (
           <aside className="sp-settings-nav">
-            <h2>Settings</h2>
+            <p className="sp-settings-who">
+              <span className="sp-avatar">
+                {user.name.slice(0, 1).toUpperCase()}
+              </span>
+              <span>
+                <strong>{user.name}</strong>
+                <small>
+                  {user.role === "admin"
+                    ? "Administrator"
+                    : user.role === "viewer"
+                      ? "Viewer"
+                      : "Member"}
+                </small>
+              </span>
+            </p>
             <nav aria-label="Settings navigation">
               {management
                 .filter((_, index) => index < 3 || user.role === "admin")
-                .map(({ to, label, icon: Icon }) => (
+                .map(({ to, label }) => (
                   <NavLink key={to} to={to} end>
-                    <Icon size={18} />
-                    <span>{label}</span>
+                    {label}
                   </NavLink>
                 ))}
             </nav>
-            <div className="sp-settings-signout">
-              <button
-                className="sp-button quiet"
-                onClick={logout}
-                disabled={signingOut}
-              >
-                <LogOut size={18} />
-                {signingOut ? "Signing out…" : "Sign out"}
-              </button>
-              <ErrorNote error={logoutError} />
-            </div>
+            <button
+              className="sp-button quiet sp-signout"
+              onClick={logout}
+              disabled={signingOut}
+            >
+              {signingOut ? "Signing out…" : "Sign out"}
+            </button>
+            <ErrorNote error={logoutError} />
           </aside>
         )}
         {!user.welcomed && (
@@ -172,20 +157,10 @@ export default function Shell({
         )}
         <Outlet />
       </div>
-      {!watching && (
-        <footer className="sp-footer">
-          <span>
-            <Mark /> A little less managing. A lot more watching.
-          </span>
-          <Link to="/discover">
-            The next good thing <ArrowUpRight size={14} />
-          </Link>
-        </footer>
-      )}
-      <nav className="sp-bottom-nav" aria-label="Mobile navigation">
+      <nav className="sp-tabbar" aria-label="Mobile navigation">
         {navigation.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} end={to === "/"}>
-            <Icon size={20} />
+            <Icon size={20} strokeWidth={1.75} />
             <span>{label}</span>
           </NavLink>
         ))}

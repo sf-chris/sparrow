@@ -4,6 +4,9 @@ All notable changes to Sparrow are documented here.
 
 ## Unreleased — bright Sparrow and household product foundation
 
+- Distilled daylight redesign of every page: white, ink and one leaf-green
+  accent; Hanken Grotesk; artwork in frames. Home leads with what to resume
+  and what is on the way; Discover is one large field; Tailwind removed.
 - Approved bright design across the actual application: public welcome page,
   compact Continue watching shelf, poster-led library, discovery, titles,
   browser player, settings and dialogs on desktop and phones.

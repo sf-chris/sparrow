@@ -33,7 +33,7 @@ if(needsSetup){
 }
 await page.getByLabel('Username',{exact:true}).fill('owner');await page.getByLabel('Password',{exact:true}).fill('fixture-password-123');await page.getByRole('button',{name:needsSetup?'Create administrator account':'Sign in',exact:true}).click();
 if(needsSetup){await page.getByRole('button',{name:'Continue setup',exact:true}).waitFor();await page.screenshot({path:path.join(out,'owner-defaults-desktop.png')});await page.getByRole('button',{name:'Continue setup',exact:true}).click();await page.getByRole('button',{name:'Finish later',exact:true}).click();}
-await page.getByRole('heading',{name:'What’s on tonight, Chris?'}).waitFor({timeout:10000}).catch(async()=>{const welcome=page.getByRole('button',{name:'Continue to Sparrow'});if(await welcome.isVisible())await welcome.click();});
+await page.getByRole('heading',{name:'Welcome back, Chris.'}).waitFor({timeout:10000}).catch(async()=>{const welcome=page.getByRole('button',{name:'Continue to Sparrow'});if(await welcome.isVisible())await welcome.click();});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).waitFor();
 await page.screenshot({path:path.join(out,'home-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).click();await page.getByRole('heading',{name:'The Quiet Planet',exact:true}).waitFor();

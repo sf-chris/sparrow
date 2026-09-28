@@ -39,16 +39,14 @@ export function PreferenceFields({
         <Field label={label} hint={hint}>
           {control}
         </Field>
-        {sources && (
+        {(sources?.[key] === "personal" || sources?.[key] === "policy") && (
           <div className="sp-source">
             <span>
-              {sources[key] === "personal"
+              {sources?.[key] === "personal"
                 ? "Your preference"
-                : sources[key] === "policy"
-                  ? "Limited by server policy"
-                  : "Household default"}
+                : "Limited by server policy"}
             </span>
-            {sources[key] === "personal" && (
+            {sources?.[key] === "personal" && (
               <button type="button" onClick={() => onReset?.(key)}>
                 Use default
               </button>
@@ -342,7 +340,7 @@ export default function Preferences({
                 <span role="status" className="sp-success">
                   {saved && (
                     <>
-                      <Check size={14} className="inline mr-1" />
+                      <Check size={14} aria-hidden="true" />
                       Preferences saved
                     </>
                   )}

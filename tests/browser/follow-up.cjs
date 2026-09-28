@@ -63,7 +63,8 @@ fs.mkdirSync(out, { recursive: true });
       assert.equal(overflow, false, JSON.stringify(results.at(-1)));
       assert.equal(violations.length, 0, JSON.stringify(results.at(-1)));
       if (name === "security" && width > 900) {
-        const heading = await page.locator(".sp-page-heading").boundingBox();
+        await page.evaluate(() => scrollTo(0, 0));
+        const heading = await page.locator(".sp-head").boundingBox();
         const navigation = await page.locator(".sp-settings-nav").boundingBox();
         assert(
           Math.abs(heading.y - navigation.y) < 4,
@@ -78,14 +79,14 @@ fs.mkdirSync(out, { recursive: true });
     }
   }
   await go("/");
-  await page.locator(".sp-continue").first().waitFor();
+  await page.locator(".sp-hero").first().waitFor();
   assert.equal(await page.locator(".sp-cinema-feature").count(), 0);
   assert.equal(await page.locator(".sp-curiosity-card").count(), 0);
   await audit("home");
   await page.setViewportSize({ width: 360, height: 844 });
   assert.equal(await page.locator(".sp-header-search").count(), 0);
   await page
-    .locator(".sp-bottom-nav")
+    .locator(".sp-tabbar")
     .getByRole("link", { name: "Discover", exact: true })
     .click();
   assert.equal(new URL(page.url()).pathname, "/discover");
@@ -243,7 +244,7 @@ fs.mkdirSync(out, { recursive: true });
   await go("/settings/logs");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await page
-    .getByRole("heading", { name: "Less scrolling. More good stuff." })
+    .getByRole("heading", { name: "Ask for a film. Sparrow does the rest." })
     .waitFor();
   assert.equal(new URL(page.url()).pathname, "/");
   assert.equal(await page.getByLabel("Username", { exact: true }).count(), 0);

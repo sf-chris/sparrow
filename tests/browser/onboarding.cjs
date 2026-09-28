@@ -178,7 +178,7 @@ const out =
       .getByRole("button", { name: "Finish later", exact: true })
       .click();
     await page
-      .getByRole("heading", { name: "What’s on tonight, Chris?", exact: true })
+      .getByRole("heading", { name: "Welcome back, Chris.", exact: true })
       .waitFor();
     assert.equal((await state()).complete, false);
     await page.reload();
