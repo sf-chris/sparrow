@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, patch, post } from "./api";
 import { ErrorNote, Loading, Page, useResource } from "./ui";
+import { Tick } from "./Brand";
 import { ServerSettings } from "./Administration";
 import Storage from "./Storage";
 
@@ -60,7 +61,7 @@ export default function Onboarding({
       (!current.tmdb_configured || !current.reasoning_configured)
     )
       throw new Error(
-        "Add both API keys to enable automatic discovery and downloads, or choose Watch my existing collection.",
+        "Add both API keys to find and download automatically, or choose Watch my existing collection.",
       );
     await update({ step });
   }
@@ -85,41 +86,86 @@ export default function Onboarding({
       setBusy(false);
     }
   }
+  const checks = state
+    ? [
+        {
+          label: "Title information",
+          ok: state.tmdb_configured,
+          value: state.tmdb_configured
+            ? "Key saved"
+            : state.mode === "library"
+              ? "Optional for your own files"
+              : "Add a TMDB key",
+          step: "providers" as Step,
+        },
+        {
+          label: "Agents",
+          ok: state.reasoning_configured,
+          value: state.reasoning_configured
+            ? "Key saved"
+            : state.mode === "library"
+              ? "Optional for watching"
+              : "Add an Anthropic key",
+          step: "providers" as Step,
+        },
+        {
+          label: "Library",
+          ok: state.libraries.length > 0,
+          value: state.libraries.length
+            ? `Ready on ${state.libraries.join(", ")}`
+            : "Connect a library folder with media tools",
+          step: "storage" as Step,
+        },
+        {
+          label: "Downloads",
+          ok: state.download_destinations.length > 0,
+          value: state.download_destinations.length
+            ? `Set up on ${state.download_destinations.join(", ")}`
+            : state.mode === "library"
+              ? "Later"
+              : "Connect a download app beside writable library and incoming folders",
+          step: "downloads" as Step,
+        },
+      ]
+    : [];
   return (
     <Page
-      title="Let’s get Sparrow ready"
-      description="Connect the services and storage you want to use. Your progress is saved as you go."
+      className="setup-page"
+      title="Setup"
+      lede="Connect what you want to use. Progress saves as you go."
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {!state ? (
-        <Loading label="Loading your setup…" />
+        <Loading label="Loading your setup" />
       ) : (
         <>
-          <nav className="sp-setup-steps" aria-label="Server setup steps">
-            {steps.map(({ id, label }, index) => (
-              <button
-                key={id}
-                className={`sp-button ${state.step === id ? "primary" : "secondary"}`}
-                aria-current={state.step === id ? "step" : undefined}
-                disabled={busy}
-                onClick={() => void update({ step: id })}
-              >
-                {index + 1}. {label}
-              </button>
-            ))}
+          <nav className="steps" aria-label="Setup steps">
+            <ol>
+              {steps.map(({ id, label }, index) => (
+                <li key={id}>
+                  <button
+                    className="step"
+                    aria-current={state.step === id ? "step" : undefined}
+                    disabled={busy}
+                    onClick={() => void update({ step: id })}
+                  >
+                    <span className="num step-no">{index + 1}</span>{" "}
+                    <span>{label}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
           </nav>
           {state.step === "start" && (
-            <section className="sp-panel sp-form">
-              <h2>How would you like to start?</h2>
-              <p>
-                Automatic downloads need title information, a reasoning service,
-                storage and a download app. You can also begin with media you
-                already own.
-              </p>
-              <div className="sp-setup-choices">
+            <section className="setup-start" aria-labelledby="start">
+              <h2 id="start" className="setup-heading">
+                How do you want to start?
+              </h2>
+              <div className="choices">
                 <button
-                  className="sp-button primary"
+                  className="choice"
                   disabled={busy}
+                  aria-describedby="choice-autopilot"
                   onClick={() =>
                     void update({
                       mode: "autopilot",
@@ -128,11 +174,16 @@ export default function Onboarding({
                     })
                   }
                 >
-                  Find and download for me
+                  <strong>Find and download for me</strong>
+                  <span id="choice-autopilot" aria-hidden="true">
+                    Needs title information, an Anthropic key, storage and a
+                    download app.
+                  </span>
                 </button>
                 <button
-                  className="sp-button secondary"
+                  className="choice"
                   disabled={busy}
+                  aria-describedby="choice-library"
                   onClick={() =>
                     void update({
                       mode: "library",
@@ -141,13 +192,12 @@ export default function Onboarding({
                     })
                   }
                 >
-                  Watch my existing collection
+                  <strong>Watch my existing collection</strong>
+                  <span id="choice-library" aria-hidden="true">
+                    No keys or download app. Add downloads later.
+                  </span>
                 </button>
               </div>
-              <p className="sp-muted">
-                Existing-library playback needs no API keys or download app. You
-                can enable automatic downloads later in Server setup.
-              </p>
             </section>
           )}
           {state.step === "providers" && (
@@ -160,13 +210,12 @@ export default function Onboarding({
           {state.step === "storage" && (
             <>
               <Storage onboarding onChanged={resource.refresh} />
-              <div className="sp-savebar">
-                <p className="sp-muted">
-                  Choose folders on this server, or pair another machine.
+              <div className="savebar">
+                <p className="muted">
                   Downloads need a separate, writable incoming folder.
                 </p>
                 <button
-                  className="sp-button primary"
+                  className="btn primary"
                   disabled={busy}
                   onClick={() =>
                     void update({
@@ -182,8 +231,8 @@ export default function Onboarding({
           {state.step === "downloads" && (
             <>
               {state.download_destinations.length > 0 && (
-                <p className="sp-success" role="status">
-                  Download settings are available on{" "}
+                <p className="done-note" role="status">
+                  <Tick /> Downloads set up on{" "}
                   {state.download_destinations.join(", ")}.
                 </p>
               )}
@@ -192,118 +241,84 @@ export default function Onboarding({
                 setupSection="downloads"
                 onSaved={() => advance("review")}
               />
-              <p className="sp-muted">
-                For a paired Windows machine, configure its download app in
-                Sparrow Node, then check the setup summary.
-              </p>
-              <button
-                className="sp-button secondary"
-                disabled={busy}
-                onClick={() => void update({ step: "review" })}
-              >
-                Use my paired node and continue
-              </button>
+              <div className="row">
+                <p className="muted">
+                  On a paired Windows machine, set up its download app in
+                  Sparrow Node instead.
+                </p>
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => void update({ step: "review" })}
+                >
+                  Use my paired machine
+                </button>
+              </div>
             </>
           )}
           {state.step === "review" && (
-            <section className="sp-panel sp-form">
-              <h2>Check your setup</h2>
-              <p>
-                {state.mode === "library"
-                  ? "Start by importing your existing media. Automatic downloads can be set up later."
-                  : "These are the settings Sparrow will use for your first request."}
+            <section aria-labelledby="review">
+              <h2 id="review" className="setup-heading">
+                Check your setup
+              </h2>
+              <ul className="checks">
+                {checks.map((check) => (
+                  <li className="check-row" key={check.label}>
+                    <span className="check-mark" aria-hidden="true">
+                      {check.ok ? <Tick /> : <span className="check-open" />}
+                    </span>
+                    <div>
+                      <h3>{check.label}</h3>
+                      <p>{check.value}</p>
+                    </div>
+                    {(state.mode !== "library" || check.step === "storage") && (
+                      <button
+                        className="btn quiet"
+                        disabled={busy}
+                        onClick={() => void update({ step: check.step })}
+                      >
+                        Edit<span className="sr-only"> {check.label}</span>
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="muted">
+                Keys are checked on your first request. Nothing is downloaded or
+                billed during setup.{" "}
+                <Link to="/settings/defaults">
+                  Household defaults and spending limits
+                </Link>
               </p>
-              {[
-                {
-                  label: "Title information",
-                  value: state.tmdb_configured
-                    ? "Key saved"
-                    : state.mode === "library"
-                      ? "Optional for importing existing media"
-                      : "Add a TMDB API key",
-                  step: "providers" as Step,
-                },
-                {
-                  label: "Discovery and management agents",
-                  value: state.reasoning_configured
-                    ? "Key saved"
-                    : state.mode === "library"
-                      ? "Optional for watching existing media"
-                      : "Add an Anthropic API key",
-                  step: "providers" as Step,
-                },
-                {
-                  label: "Library and media inspection",
-                  value: state.libraries.length
-                    ? `Available on ${state.libraries.join(", ")}`
-                    : "Connect an available library with media tools",
-                  step: "storage" as Step,
-                },
-                {
-                  label: "Downloads",
-                  value: state.download_destinations.length
-                    ? `Configured on ${state.download_destinations.join(", ")}`
-                    : state.mode === "library"
-                      ? "Set up later"
-                      : "Connect a download app and writable library/incoming folders on the same machine",
-                  step: "downloads" as Step,
-                },
-              ].map((check) => (
-                <div className="sp-row" key={check.label}>
-                  <div>
-                    <h3>{check.label}</h3>
-                    <p>{check.value}</p>
-                  </div>
-                  {(state.mode !== "library" || check.step === "storage") && (
-                    <button
-                      className="sp-button quiet"
-                      disabled={busy}
-                      onClick={() => void update({ step: check.step })}
-                    >
-                      Edit<span className="sr-only"> {check.label}</span>
-                    </button>
-                  )}
-                </div>
-              ))}
-              <p className="sp-muted">
-                Live provider access is checked when you make a request. No paid
-                model calls or downloads run during setup.
-              </p>
-              <Link to="/settings/defaults">
-                Review household defaults and spending limits
-              </Link>
               {!state.can_finish && (
-                <p role="status">
-                  Some steps still need attention. Update them above, or finish
-                  later and resume from Settings.
+                <p role="status" className="muted">
+                  Some steps still need attention. Fix them above, or finish
+                  later from Settings.
                 </p>
               )}
-              <div className="sp-actions">
+              <div className="savebar">
                 <button
-                  className="sp-button secondary"
+                  className="btn"
                   onClick={resource.refresh}
                   disabled={busy || resource.loading}
                 >
                   Check again
                 </button>
                 <button
-                  className="sp-button primary"
+                  className="btn primary"
                   disabled={busy || !state.can_finish}
                   onClick={() => void leave(true)}
                 >
                   {state.mode === "library"
-                    ? "Save setup and import media"
-                    : "Save setup and find a title"}
+                    ? "Finish and import media"
+                    : "Finish and find a title"}
                 </button>
               </div>
             </section>
           )}
-          <div className="sp-savebar">
-            <p className="sp-muted">
-              You can return here from Settings → Server setup.
-            </p>
+          <div className="setup-later">
             <button
-              className="sp-button quiet"
+              className="btn quiet"
               disabled={busy}
               onClick={() => void leave(false)}
             >

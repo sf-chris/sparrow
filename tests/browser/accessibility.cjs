@@ -13,11 +13,11 @@ fs.mkdirSync(out,{recursive:true});
  for(const route of ['/','/library','/discover','/activity','/settings','/settings/storage','/settings/people','/settings/defaults','/settings/server','/title/tv/101']){
   await page.goto(base+route);await page.locator('h1').waitFor();await page.waitForTimeout(150);
   const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
-  const overflow=[];for(const width of [360,390,768,1440]){await page.setViewportSize({width,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))overflow.push(width)}
+  const overflow=[];for(const width of [360,390,768,1440]){await page.setViewportSize({width,height:844});await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));await page.waitForTimeout(150);if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))overflow.push(width)}
   results.push({route,violations:audit.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})),overflow});
   await page.setViewportSize({width:390,height:844});
  }
- await page.getByRole('button',{name:/Choose episodes/}).click();await page.getByRole('dialog').waitFor();await page.getByRole('checkbox').first().check();
+ await page.getByRole('button',{name:/Request episodes/}).click();await page.getByRole('dialog').waitFor();await page.getByRole('checkbox').first().check();
  const button=await page.getByRole('button',{name:'Request 1 episode',exact:true}).boundingBox();
  if(!button||button.y+button.height>844)throw new Error('Request footer is outside the phone viewport');
  await page.screenshot({path:out+'/request-episodes-mobile.png',fullPage:true});

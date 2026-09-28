@@ -17,9 +17,9 @@ export default function PasswordField({
   const id = useId();
   const [visible, setVisible] = useState(false);
   return (
-    <div className="sp-field">
+    <div className="field">
       <label htmlFor={id}>{label}</label>
-      <div className="sp-password">
+      <div className="password">
         <input
           id={id}
           required
@@ -37,7 +37,7 @@ export default function PasswordField({
           aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
           aria-pressed={visible}
         >
-          {visible ? <EyeOff size={17} /> : <Eye size={17} />}
+          {visible ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
       {hint && <small id={`${id}-hint`}>{hint}</small>}

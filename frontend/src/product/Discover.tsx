@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams, useLocation } from "react-router-dom";
-import { Search, Sparkles, ArrowUpRight } from "lucide-react";
-import { Doodle } from "./Brand";
-import { api, post } from "./api";
-import { Empty, ErrorNote, Loading, Page, Poster, Section } from "./ui";
+import { Search, ArrowRight } from "lucide-react";
+import { api, post, type Item } from "./api";
+import { Tick } from "./Brand";
+import { Bar, Cover, Empty, ErrorNote, Loading, useResource } from "./ui";
 
 type Card = {
   tmdb_id: number;
@@ -22,22 +22,39 @@ type Research = {
   state: string;
   status_line: string;
 };
+const ideas = [
+  "A mystery for tonight",
+  "Something to watch together",
+  "An adventure somewhere far away",
+];
+
 export default function Discover() {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState(params.get("q") || "");
-  const [mode, setMode] = useState<"title" | "assisted">(
-    params.get("mode") === "assisted" ? "assisted" : "title",
-  );
-  const [cards, setCards] = useState<Card[]>([]);
-  const [research, setResearch] = useState<Research | null>(null);
   const [identity, setIdentity] = useState(params.get("session") || "");
+  const [titles, setTitles] = useState<Card[]>([]);
+  const [research, setResearch] = useState<Research | null>(null);
   const [pollVersion, setPollVersion] = useState(0);
-  const [busy, setBusy] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [searched, setSearched] = useState("");
   const [error, setError] = useState("");
-  const [searched, setSearched] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const owned = useResource(() => api<Item[]>("/catalogue"));
+  const inGuide = useMemo(
+    () =>
+      new Set(
+        (owned.data || []).map((item) => `${item.media_type}:${item.tmdb_id}`),
+      ),
+    [owned.data],
+  );
   useEffect(() => {
-    if (!identity || mode !== "assisted") return;
+    if (!params.get("q") && matchMedia("(pointer: fine)").matches)
+      input.current?.focus();
+  }, []);
+  useEffect(() => {
+    if (!identity) return;
     let cancelled = false,
       timer: number;
     const poll = async () => {
@@ -45,13 +62,12 @@ export default function Discover() {
         const result = await api<Research>(`/discovery/${identity}`);
         if (cancelled) return;
         setResearch(result);
-        setCards(result.cards);
-        setBusy(result.state === "running");
+        setAsking(result.state === "running");
         setError("");
         if (result.state === "running") timer = window.setTimeout(poll, 1500);
       } catch (e) {
         if (!cancelled) {
-          setBusy(false);
+          setAsking(false);
           setError((e as Error).message);
         }
       }
@@ -61,49 +77,50 @@ export default function Discover() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [identity, mode, pollVersion]);
+  }, [identity, pollVersion]);
   useEffect(() => {
-    if (mode !== "title" || query.trim().length < 2) {
-      if (mode === "title") {
-        setCards([]);
-        setBusy(false);
-        setSearched(false);
-        setError("");
-      }
+    const text = query.trim();
+    if (text.length < 2) {
+      setTitles([]);
+      setSearching(false);
+      setSearched("");
       return;
     }
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      setBusy(true);
+      setSearching(true);
       try {
         const result = await api<Card[]>(
-          `/suggest?q=${encodeURIComponent(query.trim())}`,
+          `/suggest?q=${encodeURIComponent(text)}`,
         );
         if (!cancelled) {
-          setCards(result);
+          setTitles(result);
+          setSearched(text);
           setError("");
-          setSearched(true);
         }
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       } finally {
-        if (!cancelled) setBusy(false);
+        if (!cancelled) setSearching(false);
       }
     }, 300);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, mode]);
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (mode === "title") {
-      setParams({ q: query });
-      return;
-    }
+  }, [query]);
+  function remember(text: string, session = identity) {
+    setParams(
+      {
+        ...(text ? { q: text } : {}),
+        ...(session ? { mode: "assisted", session } : {}),
+      },
+      { replace: true },
+    );
+  }
+  async function ask() {
     setError("");
-    setBusy(true);
-    setSearched(true);
+    setAsking(true);
     try {
       const result = await post<{ id: string }>("/discovery", {
         message: query,
@@ -112,288 +129,179 @@ export default function Discover() {
       setResearch(null);
       setIdentity(result.id);
       setPollVersion((v) => v + 1);
-      setParams({ q: query, mode, session: result.id });
+      remember(query, result.id);
     } catch (e) {
       setError((e as Error).message);
-      setBusy(false);
+      setAsking(false);
     }
   }
   async function stop() {
     try {
       await api(`/discovery/${identity}`, { method: "DELETE" });
-      setBusy(false);
+      setAsking(false);
       setResearch((previous) =>
         previous
-          ? { ...previous, state: "closed", status_line: "Search stopped." }
+          ? { ...previous, state: "closed", status_line: "Stopped." }
           : previous,
       );
     } catch (e) {
       setError((e as Error).message);
     }
   }
+  function startOver() {
+    if (asking) void stop();
+    setIdentity("");
+    setResearch(null);
+    setAsking(false);
+    remember(query, "");
+  }
+  const from = { from: location.pathname + location.search };
+  function rows(cards: Card[]) {
+    return (
+      <ul className="results">
+        {cards.map((card) => (
+          <li key={`${card.media_type}:${card.tmdb_id}`}>
+            <Link
+              className="entry"
+              data-nav
+              to={`/title/${card.media_type}/${card.tmdb_id}`}
+              state={from}
+            >
+              <Cover
+                title={card.title}
+                src={
+                  card.poster_url ||
+                  (card.poster_path
+                    ? `https://image.tmdb.org/t/p/w342${card.poster_path}`
+                    : undefined)
+                }
+              />
+              <span className="entry-line">
+                <span className="entry-title">{card.title}</span>
+                {inGuide.has(`${card.media_type}:${card.tmdb_id}`) && (
+                  <span className="owned" title="In your guide">
+                    <Tick />
+                    <span className="sr-only">In your guide</span>
+                  </span>
+                )}
+                <span className="leader" aria-hidden="true" />
+                <span className="entry-meta num">
+                  {[card.year, card.media_type === "tv" ? "Series" : "Film"]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  const typed = query.trim().length >= 2;
   return (
-    <Page className="sp-discover-page" title="Find your next watch.">
-      <div className="sp-discover-console">
-        <div
-          className="sp-tabs"
-          role="tablist"
-          aria-label="Discovery method"
-          onKeyDown={(event) => {
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
-              return;
-            event.preventDefault();
-            const tabs = Array.from(
-              event.currentTarget.querySelectorAll<HTMLButtonElement>(
-                '[role="tab"]',
-              ),
-            );
-            const index = tabs.indexOf(
-              document.activeElement as HTMLButtonElement,
-            );
-            const target =
-              event.key === "Home"
-                ? 0
-                : event.key === "End"
-                  ? tabs.length - 1
-                  : (index +
-                      (event.key === "ArrowRight" ? 1 : -1) +
-                      tabs.length) %
-                    tabs.length;
-            tabs[target].click();
-            tabs[target].focus();
-          }}
+    <main id="main-content" className="page find">
+      <header className="page-head">
+        <h1 className="display">Find</h1>
+      </header>
+      <form
+        className="finder"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          document.querySelector<HTMLElement>(".results [data-nav]")?.focus();
+        }}
+      >
+        <label className="finder-field">
+          <Search size={24} strokeWidth={2.25} aria-hidden="true" />
+          <input
+            ref={input}
+            type="search"
+            data-search
+            aria-label="Find a title or describe a mood"
+            placeholder="A title, or a mood"
+            maxLength={2000}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              remember(e.target.value);
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="btn primary"
+          disabled={asking || !typed}
+          onClick={() => void ask()}
         >
-          <button
-            role="tab"
-            aria-selected={mode === "title"}
-            tabIndex={mode === "title" ? 0 : -1}
-            onClick={() => {
-              setMode("title");
-              setBusy(false);
-              setCards([]);
-              setError("");
-              setParams({ q: query });
-            }}
-          >
-            <Search size={15} className="inline mr-2" />
-            Title search
-          </button>
-          <button
-            role="tab"
-            aria-selected={mode === "assisted"}
-            tabIndex={mode === "assisted" ? 0 : -1}
-            onClick={() => {
-              setMode("assisted");
-              setBusy(research?.state === "running");
-              setCards(research?.cards || []);
-              setError("");
-              setParams({
-                q: query,
-                mode: "assisted",
-                ...(identity ? { session: identity } : {}),
-              });
-            }}
-          >
-            <Sparkles size={15} className="inline mr-2" />
-            Help me find something
-          </button>
-        </div>
-        <form onSubmit={submit} className="sp-form">
-          <label className="sp-field">
-            <span>
-              {mode === "title"
-                ? "Movie or TV title"
-                : "What would you like to watch?"}
-            </span>
-            {mode === "title" ? (
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setParams({ q: e.target.value }, { replace: true });
-                }}
-                placeholder="Search movies and TV shows"
-              />
-            ) : (
-              <textarea
-                className="sp-search-input"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setParams(
-                    {
-                      q: e.target.value,
-                      mode: "assisted",
-                      ...(identity ? { session: identity } : {}),
-                    },
-                    { replace: true },
-                  );
-                }}
-                maxLength={2000}
-                placeholder="A clever mystery, something we can finish tonight…"
-              />
-            )}
-          </label>
-          {mode === "assisted" && (
-            <div className="sp-actions">
-              <button
-                className="sp-button primary"
-                disabled={busy || query.trim().length < 2}
-              >
-                <Sparkles size={16} />
-                {identity
-                  ? "Refine these suggestions"
-                  : "Find something for me"}
+          {identity ? "Ask again" : "Ask Sparrow"}
+          <ArrowRight size={18} strokeWidth={2.5} />
+        </button>
+      </form>
+      <ErrorNote error={error} />
+      {identity && (
+        <section className="picks" aria-labelledby="picks">
+          <Bar id="picks" title="Sparrow’s picks">
+            {asking && (
+              <button className="bar-button" onClick={() => void stop()}>
+                Stop
               </button>
-              {identity && (
+            )}
+            <button className="bar-button" onClick={startOver}>
+              Start over
+            </button>
+          </Bar>
+          {asking && <Loading label="Reading titles and your guide" />}
+          {research?.message && <p className="pick-note">{research.message}</p>}
+          {research && !asking && !research.message && (
+            <p className="muted pick-status" role="status">
+              {research.status_line} Change the words and ask again, or start
+              over.
+            </p>
+          )}
+          {!!research?.cards.length && rows(research.cards)}
+        </section>
+      )}
+      {typed && (!identity || titles.length > 0) && (
+        <section aria-labelledby="titles">
+          <Bar id="titles" title="Titles">
+            {searching && <span>Searching…</span>}
+          </Bar>
+          {titles.length
+            ? rows(titles)
+            : searched &&
+              !searching &&
+              !error && (
+                <Empty title="No title by that name.">
+                  Check the spelling, or ask Sparrow to look for it by
+                  description.
+                </Empty>
+              )}
+        </section>
+      )}
+      {!query && !identity && (
+        <section aria-labelledby="ideas" className="ideas">
+          <Bar id="ideas" title="Ideas" />
+          <ul>
+            {ideas.map((idea) => (
+              <li key={idea}>
                 <button
-                  type="button"
-                  className="sp-button secondary"
+                  className="idea"
+                  data-nav
                   onClick={() => {
-                    if (busy) void stop();
-                    setIdentity("");
-                    setResearch(null);
-                    setCards([]);
-                    setParams({ mode: "assisted" });
-                    setBusy(false);
+                    setQuery(idea);
+                    remember(idea);
+                    input.current?.focus();
                   }}
                 >
-                  New search
+                  <span>{idea}</span>
+                  <span className="leader" aria-hidden="true" />
+                  <ArrowRight size={18} strokeWidth={2.5} aria-hidden="true" />
                 </button>
-              )}
-              {busy && identity && (
-                <button
-                  type="button"
-                  className="sp-button quiet"
-                  onClick={stop}
-                >
-                  Stop search
-                </button>
-              )}
-            </div>
-          )}
-        </form>
-        <p className="sp-discover-hint">
-          {mode === "title"
-            ? "The one you know by heart. The one you almost remember."
-            : "Tell Sparrow the mood, the occasion, or that one scene you remember."}
-        </p>
-      </div>
-      <ErrorNote error={error} />
-      {busy && (
-        <Loading
-          label={
-            mode === "title"
-              ? "Finding titles…"
-              : "Checking titles and your collection…"
-          }
-        />
-      )}
-      {mode === "assisted" && research?.message && (
-        <Section title="A few possibilities">
-          <p className="sp-discovery-answer">{research.message}</p>
-        </Section>
-      )}
-      {mode === "assisted" && research && !busy && !research.message && (
-        <p className="sp-muted" role="status">
-          {research.status_line} You can refine the description or start a new
-          search.
-        </p>
-      )}
-      {!!cards.length && (
-        <Section
-          title={
-            mode === "title"
-              ? "Matching titles"
-              : "Open a title to choose what to get"
-          }
-        >
-          <div className="sp-grid">
-            {cards.map((card) => (
-              <article
-                className="sp-media-card"
-                key={`${card.media_type}:${card.tmdb_id}`}
-              >
-                <Link
-                  to={`/title/${card.media_type}/${card.tmdb_id}`}
-                  state={{ from: location.pathname + location.search }}
-                >
-                  <Poster
-                    title={card.title}
-                    src={
-                      card.poster_url ||
-                      (card.poster_path
-                        ? `https://image.tmdb.org/t/p/w500${card.poster_path}`
-                        : undefined)
-                    }
-                  />
-                  <h3>{card.title}</h3>
-                  <p>
-                    {card.year} ·{" "}
-                    {card.media_type === "tv" ? "TV show" : "Movie"}
-                  </p>
-                </Link>
-              </article>
+              </li>
             ))}
-          </div>
-        </Section>
+          </ul>
+        </section>
       )}
-      {!query && !busy && !research && (
-        <div className="sp-discovery-prompts" aria-label="Ideas to explore">
-          <p className="sp-eyebrow">A FEW LITTLE STARTING POINTS</p>
-          <div>
-            {[
-              {
-                idea: "A mystery for tonight",
-                kind: "spark" as const,
-                label: "PLOT TWISTS, PLEASE",
-              },
-              {
-                idea: "Something to watch together",
-                kind: "heart" as const,
-                label: "BETTER TOGETHER",
-              },
-              {
-                idea: "An adventure somewhere far away",
-                kind: "orbit" as const,
-                label: "A LITTLE ESCAPISM",
-              },
-            ].map(({ idea, kind, label }) => (
-              <button
-                key={idea}
-                onClick={() => {
-                  setMode("assisted");
-                  setQuery(idea);
-                  setParams({ mode: "assisted", q: idea });
-                }}
-              >
-                <Doodle kind={kind} />
-                <span className="sp-prompt-label">{label}</span>
-                <span className="sp-prompt-title">{idea}</span>
-                <ArrowUpRight size={20} />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {!cards.length &&
-        !busy &&
-        !error &&
-        mode === "title" &&
-        query.length > 0 && (
-          <Empty
-            title={
-              searched && query.length > 1
-                ? "No matching titles yet."
-                : "There’s something good out there."
-            }
-          >
-            {searched && query.length > 1
-              ? "Try another spelling, or describe it in Help me find something."
-              : "Find a favourite, explore a new show, or let Sparrow help you decide."}
-          </Empty>
-        )}
-    </Page>
+    </main>
   );
 }

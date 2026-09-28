@@ -9,29 +9,20 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { Link, useLocation } from "react-router-dom";
-import {
-  AlertCircle,
-  ArrowRight,
-  Loader2,
-  RefreshCw,
-  Play,
-  ArrowUpRight,
-  X,
-} from "lucide-react";
-import { Mark } from "./Brand";
-import type { Item } from "./api";
+import { Scissors, X } from "lucide-react";
+import { Bird } from "./Brand";
+import type { Asset, Item } from "./api";
 
 export function Page({
   title,
-  description,
+  lede,
   action,
   className = "",
   embedded = false,
   children,
 }: {
-  title: string;
-  description?: string;
+  title: ReactNode;
+  lede?: ReactNode;
   action?: ReactNode;
   className?: string;
   embedded?: boolean;
@@ -42,21 +33,65 @@ export function Page({
   return (
     <Container
       id={embedded ? undefined : "main-content"}
-      className={`${embedded ? "sp-setup-content" : "sp-page"} ${className}`}
+      className={`${embedded ? "embedded" : "page"} ${className}`}
     >
       {title && (
-        <header className="sp-page-heading">
+        <header className="page-head">
           <div>
-            <Heading>{title}</Heading>
-            {description && <p className="sp-description">{description}</p>}
+            <Heading className="display">{title}</Heading>
+            {lede && <p className="lede">{lede}</p>}
           </div>
-          {action}
+          {action && <div className="page-action">{action}</div>}
         </header>
       )}
       {children}
     </Container>
   );
 }
+
+/** A reversed listings bar: the guide's channel heading. */
+export function Bar({
+  title,
+  children,
+  id,
+}: {
+  title: ReactNode;
+  children?: ReactNode;
+  id?: string;
+}) {
+  return (
+    <div className="bar">
+      <h2 id={id}>{title}</h2>
+      {children && <div className="bar-end">{children}</div>}
+    </div>
+  );
+}
+
+export function Section({
+  title,
+  description,
+  children,
+  action,
+}: {
+  title: string;
+  description?: ReactNode;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <section className="section">
+      <div className="section-head">
+        <div>
+          <h2>{title}</h2>
+          {description && <p>{description}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function ErrorNote({
   error,
   retry,
@@ -66,61 +101,58 @@ export function ErrorNote({
 }) {
   if (!error) return null;
   return (
-    <div className="sp-error" role="alert">
-      <AlertCircle size={20} aria-hidden="true" />
+    <div className="problem" role="alert">
       <p>{error}</p>
       {retry && (
-        <button className="sp-button secondary" onClick={retry}>
-          <RefreshCw size={16} />
+        <button className="btn quiet" onClick={retry}>
           Try again
         </button>
       )}
     </div>
   );
 }
-export function Loading({
-  label = "Loading your collection…",
-}: {
-  label?: string;
-}) {
+
+export function Loading({ label = "Loading" }: { label?: string }) {
   return (
-    <div className="sp-loading" role="status">
-      <Loader2 className="animate-spin" size={22} />
+    <div className="loading" role="status">
+      <Bird />
       <span>{label}</span>
     </div>
   );
 }
+
 export function Empty({
   title,
   children,
   action,
 }: {
   title: string;
-  children: ReactNode;
+  children?: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <div className="sp-empty">
-      <span className="sp-empty-icon">
-        <Mark />
-      </span>
+    <div className="empty">
+      <Bird />
       <h2>{title}</h2>
-      <p>{children}</p>
-      {action}
+      {children && <p>{children}</p>}
+      {action && <div className="actions">{action}</div>}
     </div>
   );
 }
+
 export function Field({
   label,
   hint,
   children,
+  wide = false,
 }: {
   label: string;
-  hint?: string;
+  hint?: ReactNode;
   children: ReactNode;
+  wide?: boolean;
 }) {
   const id = useId(),
-    descriptionId = id + "-description";
+    descriptionId = id + "-hint";
   const direct =
     isValidElement(children) &&
     typeof children.type === "string" &&
@@ -132,7 +164,7 @@ export function Field({
       )
     : children;
   return (
-    <div className="sp-field">
+    <div className={`field ${wide ? "wide" : ""}`}>
       {direct ? (
         <>
           <label htmlFor={id}>{label}</label>
@@ -140,7 +172,7 @@ export function Field({
         </>
       ) : (
         <>
-          <span>{label}</span>
+          <span className="field-label">{label}</span>
           <label>{control}</label>
         </>
       )}
@@ -148,50 +180,28 @@ export function Field({
     </div>
   );
 }
-export function Section({
-  title,
-  description,
-  children,
-  action,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-  action?: ReactNode;
-}) {
-  return (
-    <section className="sp-section">
-      <div className="sp-section-heading">
-        <div>
-          <h2>{title}</h2>
-          {description && <p>{description}</p>}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-export function Status({ value }: { value: string }) {
-  const labels: Record<string, string> = {
-    ready: "Ready to watch",
-    subtitles_pending: "Playable · subtitles needed",
-    unavailable: "Storage unavailable",
-    verifying: "Needs verification",
-    active: "In progress",
-    paused: "Paused",
-    complete: "Complete",
-    abandoned: "Needs attention",
-    pending: "Preparing",
-    failed: "Needs attention",
-  };
-  return <span className={`sp-status ${value}`}>{labels[value] || value}</span>;
+
+/** Exceptions only: the normal, playable state carries no label. */
+const flags: Record<string, [string, string]> = {
+  subtitles_pending: ["Needs subtitles", ""],
+  unavailable: ["Offline", "problem"],
+  verifying: ["Checking", ""],
+  paused: ["Paused", ""],
+  complete: ["Done", "done"],
+  abandoned: ["Needs you", "problem"],
+  failed: ["Needs you", "problem"],
+  attention: ["Needs you", "problem"],
+};
+export function Flag({ value }: { value: string }) {
+  if (!flags[value]) return null;
+  const [label, tone] = flags[value];
+  return <span className={`flag ${tone}`}>{label}</span>;
 }
 export const duration = (seconds: number) =>
   seconds < 60
-    ? "Less than a minute"
+    ? "Under 1 min"
     : seconds >= 3600
-      ? `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+      ? `${Math.floor(seconds / 3600)} hr ${Math.floor((seconds % 3600) / 60)} min`
       : `${Math.floor(seconds / 60)} min`;
 export const bytes = (value: number) =>
   value >= 1e9
@@ -201,7 +211,37 @@ export const itemLink = (item: Item) =>
   item.tmdb_id
     ? `/title/${item.media_type}/${item.tmdb_id}`
     : `/items/${item.id}`;
-export function Poster({
+export const progress = (asset: Asset) =>
+  Math.round(
+    Math.min(
+      100,
+      Math.max(
+        0,
+        (100 * asset.watch!.position) / Math.max(1, asset.watch!.duration),
+      ),
+    ),
+  );
+export const inProgress = (asset: Asset) =>
+  !!asset.watch && !asset.watch.watched && asset.watch.position > 5;
+export const episodeCode = (asset: Pick<Asset, "season" | "episode">) =>
+  asset.episode ? `S${asset.season ?? 1} E${asset.episode}` : "";
+
+export function Meter({ value, label }: { value: number; label: string }) {
+  return (
+    <span
+      className="meter"
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={value}
+    >
+      <span style={{ width: `${value}%` }} />
+    </span>
+  );
+}
+
+export function Cover({
   title,
   src,
   className = "",
@@ -213,80 +253,18 @@ export function Poster({
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
   return (
-    <div className={`sp-poster ${className}`}>
+    <span className={`cover ${className}`}>
       {src && !failed ? (
         <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
       ) : (
-        <div className="sp-poster-fallback">
-          <span className="sp-poster-kicker">SPARROW / COLLECTION</span>
-          <Mark />
+        <span className="cover-empty" aria-hidden="true">
           <span>{title}</span>
-        </div>
+        </span>
       )}
-    </div>
+    </span>
   );
 }
-export function MediaCard({ item }: { item: Item }) {
-  const location = useLocation();
-  const watching = item.assets.find(
-    (a) => a.watch && !a.watch.watched && a.watch.position > 5,
-  );
-  return (
-    <article className="sp-media-card">
-      <Link
-        to={itemLink(item)}
-        state={{ from: location.pathname + location.search }}
-        aria-label={`Open ${item.title}`}
-      >
-        <div className="sp-card-art">
-          <Poster title={item.title} src={item.poster_url} />
-          <span className="sp-card-type">
-            {item.media_type === "tv" ? "Series" : "Film"}
-          </span>
-          <span className="sp-card-hover" aria-hidden="true">
-            {item.state === "ready" ? (
-              <Play size={20} fill="currentColor" />
-            ) : (
-              <ArrowUpRight size={20} />
-            )}
-          </span>
-        </div>
-        {watching && (
-          <div
-            className="sp-card-progress"
-            role="progressbar"
-            aria-label="Watch progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(
-              Math.min(
-                100,
-                Math.max(
-                  0,
-                  (watching.watch!.position /
-                    Math.max(1, watching.watch!.duration)) *
-                    100,
-                ),
-              ),
-            )}
-          >
-            <span
-              style={{
-                width: `${Math.min(100, Math.max(0, (100 * watching.watch!.position) / Math.max(1, watching.watch!.duration)))}%`,
-              }}
-            />
-          </div>
-        )}
-        <h3>{item.title}</h3>
-        <p>
-          {item.year || (item.media_type === "tv" ? "TV show" : "Movie")}
-          {item.year && ` · ${item.media_type === "tv" ? "TV show" : "Movie"}`}
-        </p>
-        <Status value={item.state} />
-      </Link>
-    </article>
-  );
-}
+
 export function useResource<T>(
   load: () => Promise<T>,
   dependencies: unknown[] = [],
@@ -321,30 +299,19 @@ export function useResource<T>(
   }, [refresh, ...dependencies]);
   return { data, error, loading, refresh, setData };
 }
-export function ActionLink({
-  to,
-  children,
-}: {
-  to: string;
-  children: ReactNode;
-}) {
-  return (
-    <Link className="sp-button secondary" to={to}>
-      {children}
-      <ArrowRight size={16} />
-    </Link>
-  );
-}
+
 export function Dialog({
   title,
   children,
   footer,
   onClose,
+  coupon = false,
 }: {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
+  coupon?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLElement | null>(null);
@@ -388,7 +355,7 @@ export function Dialog({
   });
   return (
     <dialog
-      className={`sp-dialog ${footer ? "sp-dialog-with-footer" : ""}`}
+      className={`sheet ${coupon ? "coupon-sheet" : ""}`}
       ref={ref}
       aria-label={title}
       onCancel={onClose}
@@ -404,18 +371,80 @@ export function Dialog({
           onClose();
       }}
     >
-      <div className="sp-dialog-heading">
+      <div className="sheet-head">
+        {coupon && (
+          <Scissors
+            className="sheet-cut"
+            size={18}
+            strokeWidth={2}
+            aria-hidden="true"
+          />
+        )}
         <h2>{title}</h2>
         <button
-          className="sp-button quiet"
+          className="icon-btn"
           aria-label="Close dialog"
           onClick={onClose}
         >
-          <X size={18} />
+          <X size={20} strokeWidth={2.25} />
         </button>
       </div>
-      <div className="sp-dialog-content">{children}</div>
-      {footer && <div className="sp-dialog-footer">{footer}</div>}
+      <div className="sheet-body">{children}</div>
+      {footer && <div className="sheet-foot">{footer}</div>}
     </dialog>
   );
+}
+
+/** Arrow-key movement between listed things, for keyboards and TV remotes. */
+export function useSpatialNavigation() {
+  useEffect(() => {
+    const keys: Record<string, [number, number]> = {
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+    };
+    function move(event: KeyboardEvent) {
+      const direction = keys[event.key];
+      const current = document.activeElement as HTMLElement | null;
+      if (
+        !direction ||
+        !current?.matches("[data-nav]") ||
+        event.altKey ||
+        event.metaKey ||
+        event.ctrlKey
+      )
+        return;
+      const origin = current.getBoundingClientRect();
+      const ox = origin.left + origin.width / 2,
+        oy = origin.top + origin.height / 2;
+      const scope = current.closest("dialog[open]") || document;
+      let best: HTMLElement | null = null,
+        bestScore = Infinity;
+      scope.querySelectorAll<HTMLElement>("[data-nav]").forEach((candidate) => {
+        if (candidate === current || !candidate.getClientRects().length) return;
+        const box = candidate.getBoundingClientRect();
+        const dx = box.left + box.width / 2 - ox,
+          dy = box.top + box.height / 2 - oy;
+        const along = dx * direction[0] + dy * direction[1];
+        if (along <= 4) return;
+        const across = Math.abs(dx * direction[1] + dy * direction[0]);
+        const score = along + across * 2.5;
+        if (score < bestScore) {
+          bestScore = score;
+          best = candidate;
+        }
+      });
+      if (best) {
+        event.preventDefault();
+        (best as HTMLElement).focus();
+        (best as HTMLElement).scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+        });
+      }
+    }
+    window.addEventListener("keydown", move);
+    return () => window.removeEventListener("keydown", move);
+  }, []);
 }

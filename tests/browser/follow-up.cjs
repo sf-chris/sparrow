@@ -42,6 +42,9 @@ fs.mkdirSync(out, { recursive: true });
   async function audit(name) {
     for (const width of [360, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: width < 700 ? 844 : 1000 });
+      // Media queries apply on the next frame after an emulated resize.
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      await page.waitForTimeout(150);
       await page.evaluate(() => document.fonts.ready);
       await page.evaluate(() =>
         Promise.all(
@@ -63,11 +66,11 @@ fs.mkdirSync(out, { recursive: true });
       assert.equal(overflow, false, JSON.stringify(results.at(-1)));
       assert.equal(violations.length, 0, JSON.stringify(results.at(-1)));
       if (name === "security" && width > 900) {
-        const heading = await page.locator(".sp-page-heading").boundingBox();
-        const navigation = await page.locator(".sp-settings-nav").boundingBox();
+        const heading = await page.locator(".page-head").boundingBox();
+        const navigation = await page.locator(".settings-index nav").boundingBox();
         assert(
           Math.abs(heading.y - navigation.y) < 4,
-          "Settings content must start beside its navigation",
+          `Settings content must start beside its navigation (${heading.y}, ${navigation.y})`,
         );
       }
       if ([390, 1440].includes(width))
@@ -78,15 +81,12 @@ fs.mkdirSync(out, { recursive: true });
     }
   }
   await go("/");
-  await page.locator(".sp-continue").first().waitFor();
-  assert.equal(await page.locator(".sp-cinema-feature").count(), 0);
-  assert.equal(await page.locator(".sp-curiosity-card").count(), 0);
+  await page.locator(".tonight-item").first().waitFor();
   await audit("home");
   await page.setViewportSize({ width: 360, height: 844 });
-  assert.equal(await page.locator(".sp-header-search").count(), 0);
   await page
-    .locator(".sp-bottom-nav")
-    .getByRole("link", { name: "Discover", exact: true })
+    .getByRole("navigation", { name: "Mobile navigation" })
+    .getByRole("link", { name: "Find", exact: true })
     .click();
   assert.equal(new URL(page.url()).pathname, "/discover");
   await audit("discover");
@@ -98,7 +98,7 @@ fs.mkdirSync(out, { recursive: true });
     0,
   );
   assert.equal(
-    await page.getByText("Signed-in browsers", { exact: true }).count(),
+    await page.getByText("Signed in", { exact: true }).count(),
     0,
   );
   const signout = await page
@@ -109,12 +109,12 @@ fs.mkdirSync(out, { recursive: true });
     "Sign out must be visible without scrolling preferences",
   );
   for (const name of [
-    "Storage & import",
+    "Storage",
     "People",
-    "Server settings",
-    "Household defaults",
+    "Connections",
+    "Defaults",
     "Logs",
-    "Account & security",
+    "Account",
   ]) {
     assert.equal(
       await page
@@ -158,15 +158,14 @@ fs.mkdirSync(out, { recursive: true });
     .getByRole("button", { name: "End session", exact: true })
     .first()
     .click();
-  await page.waitForFunction(
-    (count) => document.querySelectorAll(".sp-row button").length < count,
-    sessionsBefore,
-  );
+  await expect(
+    page.getByRole("button", { name: "End session", exact: true }),
+  ).toHaveCount(sessionsBefore - 1);
   await other.close();
   await go("/settings/logs?limit=1");
-  await page.locator(".sp-log-entry").first().waitFor();
+  await page.locator(".log-entry").first().waitFor();
   await audit("logs");
-  const firstEntry = page.locator(".sp-log-entry").first();
+  const firstEntry = page.locator(".log-entry").first();
   const pageStatus = page.getByRole("navigation", { name: "Log pages" }).getByRole("status");
   // Different events can share a summary and displayed second. Include the
   // collapsed context, and wait for the response's page number to be rendered.
@@ -189,7 +188,7 @@ fs.mkdirSync(out, { recursive: true });
   assert.equal(parameters.get("category"), "request");
   assert.equal(parameters.get("q"), "Harbour");
   await page.reload();
-  await page.locator(".sp-log-entry").first().waitFor();
+  await page.locator(".log-entry").first().waitFor();
   assert.equal(
     await page.getByLabel("Title or request", { exact: true }).inputValue(),
     "Harbour",
@@ -204,20 +203,20 @@ fs.mkdirSync(out, { recursive: true });
   await page
     .getByLabel("Until", { exact: true })
     .fill(`${year + 1}-01-01T00:00`);
-  await page.locator(".sp-log-entry").first().waitFor();
+  await page.locator(".log-entry").first().waitFor();
   const from = new URL(page.url()).searchParams.get("since");
   const until = new URL(page.url()).searchParams.get("until");
   await page.getByRole("button", { name: "Next", exact: true }).click();
   assert.equal(new URL(page.url()).searchParams.get("since"), from);
   assert.equal(new URL(page.url()).searchParams.get("until"), until);
-  await page.locator(".sp-log-entry").first().waitFor();
+  await page.locator(".log-entry").first().waitFor();
   await audit("logs-time-range");
   await page
     .getByLabel("Title or request", { exact: true })
     .fill("No such film in this fixture");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await page
-    .getByRole("heading", { name: "No events match these filters." })
+    .getByRole("heading", { name: "No events match." })
     .waitFor();
   await audit("logs-empty");
   await page.route("**/api/v1/logs*", (route) =>
@@ -232,18 +231,18 @@ fs.mkdirSync(out, { recursive: true });
   await go("/settings/logs");
   await page.getByRole("alert").waitFor();
   assert.equal(
-    await page.getByRole("heading", { name: /No .*events/ }).count(),
+    await page.getByRole("heading", { name: /^No events/ }).count(),
     0,
   );
   await audit("logs-error");
   await page.unroute("**/api/v1/logs*");
   await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await page.locator(".sp-log-entry").first().waitFor();
+  await page.locator(".log-entry").first().waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await go("/settings/logs");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await page
-    .getByRole("heading", { name: "Less scrolling. More good stuff." })
+    .getByRole("heading", { name: "Say what you want to watch." })
     .waitFor();
   assert.equal(new URL(page.url()).pathname, "/");
   assert.equal(await page.getByLabel("Username", { exact: true }).count(), 0);

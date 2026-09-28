@@ -1,39 +1,39 @@
 # A look around Sparrow
 
-The approved bright interface, captured from the production frontend on
-11 September 2026. These are real application screens using the isolated
+The household-guide interface, captured from the production frontend on
+28 September 2026. These are real application screens using the isolated
 browser fixture: six fictional titles, original geometric covers and generated
 video. They contain no personal library, credentials or paid-provider results.
 
-## Settle in
+## The cover
 
-![Public welcome page](landing-desktop.png)
+![Public cover page](landing-desktop.png)
 
-## Pick up where you left off
+## Tonight, coming up, and everything you have
 
-![Home with Continue watching and library posters](home-desktop.png)
+![The Guide with Tonight, Coming up and the A–Z collection](home-desktop.png)
 
-## Find something good
+## A title, or a mood
 
-![Discovery with direct title search and illustrated conversation prompts](discover-desktop.png)
+![Find with one search box and ideas](discover-desktop.png)
 
-## Make it yours
+## Exactly the episodes you want
 
-![Show detail and episode choices](title-desktop.png)
+![A series page with its episode listing](title-desktop.png)
 
 | Screen | Desktop · 1440 × 1000 | Phone · 390 × 844 |
 | --- | --- | --- |
-| Welcome | [View](landing-desktop.png) | [View](landing-mobile.png) |
-| Home | [View](home-desktop.png) | [View](home-mobile.png) |
-| Library | [View](library-desktop.png) | [View](library-mobile.png) |
-| Discover | [View](discover-desktop.png) | [View](discover-mobile.png) |
-| Show detail | [View](title-desktop.png) | [View](title-mobile.png) |
+| Cover | [View](landing-desktop.png) | [View](landing-mobile.png) |
+| Guide | [View](home-desktop.png) | [View](home-mobile.png) |
+| Collection as covers | [View](library-desktop.png) | [View](library-mobile.png) |
+| Find | [View](discover-desktop.png) | [View](discover-mobile.png) |
+| Series | [View](title-desktop.png) | [View](title-mobile.png) |
 | Preferences | [View](preferences-desktop.png) | [View](preferences-mobile.png) |
 
 Phone images capture one viewport so the bottom navigation stays in its natural
-position. The app scrolls normally to the remaining content. More account,
-security, log, dialog and failure states are in the
-[follow-up validation gallery](../follow-up-validation/README.md).
+position. The app scrolls normally to the remaining content. Every other
+screen and dialog, before and after the redesign, is in the
+[redesign gallery](../redesign/README.md).
 
 ## Reproduce the captures
 

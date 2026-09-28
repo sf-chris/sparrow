@@ -15,12 +15,16 @@ const path = require('node:path');
   async function audit(name, widths = [360, 390, 768, 1440]) {
     for (const width of widths) {
       await page.setViewportSize({ width, height: width > 700 ? 1000 : 844 });
-      await page.evaluate(() => Promise.all([document.fonts.load('400 14px "DM Sans"'), document.fonts.load('600 24px "DM Sans"')]));
+      // Media queries apply on the next frame after an emulated resize.
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      await page.waitForTimeout(150);
+      await page.evaluate(() => Promise.all([document.fonts.load('400 16px "Archivo"'), document.fonts.load('900 48px "Archivo"')]));
       await page.evaluate(() => document.fonts.ready);
       await page.evaluate(() => Promise.all([...document.images].map(image => image.decode().catch(() => {}))));
       const layout = await page.evaluate(() => ({
         overflow: document.documentElement.scrollWidth > innerWidth,
-        fonts: [...document.fonts].filter(f => ['DM Sans'].includes(f.family)).every(f => f.status === 'loaded'),
+        offenders: [...document.querySelectorAll('body *')].filter(el => el.getBoundingClientRect().right > innerWidth + 1).map(el => `${el.tagName.toLowerCase()}.${el.getAttribute('class') || ''}`).slice(0, 6),
+        fonts: [...document.fonts].some(f => f.family.replace(/"/g, '') === 'Archivo' && f.status === 'loaded'),
         brokenImages: [...document.images].filter(i => !i.complete || !i.naturalWidth).length,
         clippedControls: [...document.querySelectorAll('button, input, select, textarea')].filter(el => {
           const r = el.getBoundingClientRect();
@@ -46,20 +50,21 @@ const path = require('node:path');
     if (login.status() !== 200) throw new Error('Fixture login failed');
     await page.goto(base + '/discover');
     await page.getByRole('button', { name: /A mystery for tonight/ }).click();
-    const prompt = page.getByRole('textbox', { name: 'What would you like to watch?', exact: true });
+    const prompt = page.getByRole('searchbox', { name: 'Find a title or describe a mood', exact: true });
     if (await prompt.inputValue() !== 'A mystery for tonight') throw new Error('Discovery suggestion did not fill the prompt');
-    if (!page.url().includes('mode=assisted')) throw new Error('Discovery mode not preserved in URL');
+    if (!new URL(page.url()).searchParams.get('q')) throw new Error('Discovery draft not preserved in URL');
+    if (await page.getByRole('button', { name: 'Ask Sparrow', exact: true }).isDisabled()) throw new Error('A filled draft should offer Ask Sparrow');
     await audit('discovery-prompt', [390, 1440]);
     await page.reload(); await prompt.waitFor();
     if (await prompt.inputValue() !== 'A mystery for tonight') throw new Error('Discovery prompt lost after reload');
     // Controlled UI states only; the server's collection stays intact.
     await page.route('**/api/v1/catalogue', route => route.fulfill({ json: [] }));
-    await page.goto(base + '/library'); await page.getByRole('heading', { name: 'Your collection starts here.' }).waitFor();
+    await page.goto(base + '/library'); await page.getByRole('heading', { name: 'Nothing listed yet.' }).waitFor();
     await audit('empty-library', [390, 1440]);
     await page.unroute('**/api/v1/catalogue');
     await page.route('**/api/v1/catalogue', route => route.fulfill({ status: 503, json: { detail: 'The collection is temporarily unavailable. Try again.' } }));
     await page.reload(); await page.getByRole('alert').waitFor();
-    if (await page.getByRole('heading', { name: 'No titles match those filters.' }).count()) throw new Error('Load failure was presented as an empty result');
+    if (await page.getByRole('heading', { name: /^(No match|Nothing listed yet)\./ }).count()) throw new Error('Load failure was presented as an empty result');
     await audit('library-error', [390, 1440]);
     await page.unroute('**/api/v1/catalogue');
     await page.getByRole('button', { name: 'Try again', exact: true }).click();

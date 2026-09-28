@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Check, Copy, Plus, Save, Users, HardDrive } from "lucide-react";
+import { Check, Copy, Plus, Scissors } from "lucide-react";
 import {
   api,
   patch,
@@ -17,10 +16,9 @@ import {
   Loading,
   Page,
   Section,
-  Status,
-  bytes,
   useResource,
 } from "./ui";
+import { Tick } from "./Brand";
 import SubtitleProviderSettings from "./SubtitleProviderSettings";
 import { PreferenceFields } from "./Preferences";
 
@@ -54,29 +52,25 @@ export function Defaults() {
   }
   return (
     <Page
-      title="Household defaults"
-      description="The starting point for everyone. Personal overrides stay personal; server limits always apply."
+      title="Defaults"
+      lede="Where everyone starts. Personal changes stay personal; server limits always apply."
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.data ? (
         <>
-          <Section title="Default preferences">
-            <div className="sp-panel">
-              <PreferenceFields
-                values={{ ...resource.data.defaults, ...draft }}
-                onChange={(key, value) => {
-                  setDraft({ ...draft, [key]: value });
-                  setSaved(false);
-                }}
-              />
-            </div>
-          </Section>
+          <PreferenceFields
+            values={{ ...resource.data.defaults, ...draft }}
+            onChange={(key, value) => {
+              setDraft({ ...draft, [key]: value });
+              setSaved(false);
+            }}
+          />
           <Section
             title="Server limits"
-            description="These apply to every request, including work managed by agents."
+            description="Every request follows these, including work Sparrow’s agents do."
           >
-            <div className="sp-panel sp-form-grid">
-              <Field label="Maximum picture quality">
+            <div className="form-grid">
+              <Field label="Highest quality">
                 <select
                   value={policy.max_quality || resource.data.policy.max_quality}
                   onChange={(e) =>
@@ -88,10 +82,7 @@ export function Defaults() {
                   ))}
                 </select>
               </Field>
-              <Field
-                label="Maximum file size (GB)"
-                hint="Zero means no server size limit."
-              >
+              <Field label="File size limit (GB)" hint="0 means no limit.">
                 <input
                   type="number"
                   min={0}
@@ -108,7 +99,7 @@ export function Defaults() {
                   }
                 />
               </Field>
-              <Field label="Maximum agent steps per wake">
+              <Field label="Agent steps per wake">
                 <input
                   type="number"
                   min={1}
@@ -127,7 +118,7 @@ export function Defaults() {
               </Field>
               <Field
                 label="Reasoning budget (USD)"
-                hint="Each request has its own allowance. Each followed title also shares this amount across all collection reviews, without an automatic reset. Raise the limit and retry if collection care stops."
+                hint="Per request. Each followed title shares one allowance across its reviews, with no automatic reset; raise it and retry if following stops."
               >
                 <input
                   type="number"
@@ -148,21 +139,21 @@ export function Defaults() {
               </Field>
             </div>
           </Section>
-          <div className="sp-savebar">
-            <span className="sp-success" role="status">
-              {saved ? "Household defaults saved." : ""}
+          <div className="savebar">
+            <span className="done-note" role="status">
+              {saved && (
+                <>
+                  <Tick /> Saved
+                </>
+              )}
             </span>
-            <button
-              className="sp-button primary"
-              disabled={busy}
-              onClick={save}
-            >
+            <button className="btn primary" disabled={busy} onClick={save}>
               {busy ? "Saving…" : "Save defaults"}
             </button>
           </div>
         </>
       ) : (
-        resource.loading && <Loading label="Loading household defaults…" />
+        resource.loading && <Loading label="Loading defaults" />
       )}
     </Page>
   );
@@ -209,26 +200,26 @@ export function ServerSettings({
       embedded={!!setupSection}
       title={
         setupSection === "providers"
-          ? "Connect title search and agents"
+          ? "Title search and agents"
           : setupSection === "downloads"
-            ? "Connect your download app"
-            : "Server settings"
+            ? "Download app"
+            : "Connections"
       }
-      description={
+      lede={
         setupSection === "providers"
-          ? "TMDB supplies title and episode information. Anthropic powers discovery and collection care. Keys are stored on your server."
+          ? "TMDB supplies title and episode facts. Anthropic powers asking, fetching and following. Keys stay on your server."
           : setupSection === "downloads"
-            ? "Use an existing Transmission or qBittorrent app. Sparrow does not install a download app for you."
-            : "Connect Sparrow to title information and its reasoning service. Storage lives in Storage & import."
+            ? "Use an existing Transmission or qBittorrent app. Sparrow doesn’t install one."
+            : "The services Sparrow uses. Folders live in Storage."
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.data ? (
-        <div className="sp-form">
+        <div className="form">
           {setupSection !== "downloads" && (
-            <Section title="Connections">
+            <Section title="Services">
               {setupSection && (
-                <p className="sp-muted">
+                <p className="muted section-note">
                   Create a key in{" "}
                   <a
                     href="https://www.themoviedb.org/settings/api"
@@ -249,13 +240,13 @@ export function ServerSettings({
                   provider.
                 </p>
               )}
-              <div className="sp-panel sp-form-grid">
+              <div className="form-grid">
                 <Field
                   label="TMDB API key"
                   hint={
                     values.tmdb_api_key_configured
-                      ? "Configured. Leave blank to keep the current key."
-                      : "Used to find movies, shows and episode information."
+                      ? "Saved. Leave blank to keep it."
+                      : "Finds films, series and episodes."
                   }
                 >
                   <input
@@ -269,8 +260,8 @@ export function ServerSettings({
                   label="Anthropic API key"
                   hint={
                     values.anthropic_api_key_configured
-                      ? "Configured. Leave blank to keep the current key."
-                      : "Used by discovery and management agents. Watching existing media works without it."
+                      ? "Saved. Leave blank to keep it."
+                      : "For asking and fetching. Watching works without it."
                   }
                 >
                   <input
@@ -284,7 +275,7 @@ export function ServerSettings({
                   <>
                     <Field
                       label="Acquisition source"
-                      hint="This release includes one source. Extra source connectors are a later feature."
+                      hint="This release has one source."
                     >
                       <select
                         value={values.preferred_search_engines?.[0] || "apibay"}
@@ -304,13 +295,13 @@ export function ServerSettings({
                           )}
                       </select>
                     </Field>
-                    <Field label="Routine reasoning model">
+                    <Field label="Everyday model">
                       <input
                         value={values.cheap_model || ""}
                         onChange={(e) => set("cheap_model", e.target.value)}
                       />
                     </Field>
-                    <Field label="Difficult-task reasoning model">
+                    <Field label="Hard-case model">
                       <input
                         value={values.smart_model || ""}
                         onChange={(e) => set("smart_model", e.target.value)}
@@ -324,10 +315,10 @@ export function ServerSettings({
           {!setupSection && <SubtitleProviderSettings />}
           {setupSection !== "providers" && (
             <Section
-              title="Download app on this server"
-              description="For Windows acquisition, configure the download app on the Windows node instead."
+              title="Download app"
+              description="On this server. A paired Windows machine sets its own in Sparrow Node."
             >
-              <div className="sp-panel sp-form-grid">
+              <div className="form-grid">
                 <Field label="Download app">
                   <select
                     value={tc.type || "none"}
@@ -375,10 +366,7 @@ export function ServerSettings({
                     }
                   />
                 </Field>
-                <Field
-                  label="Password"
-                  hint="Leave blank to keep a saved password."
-                >
+                <Field label="Password" hint="Leave blank to keep it.">
                   <input
                     type="password"
                     autoComplete="off"
@@ -388,7 +376,7 @@ export function ServerSettings({
                     }
                   />
                 </Field>
-                <Field label="Concurrent download limit">
+                <Field label="Downloads at once">
                   <input
                     type="number"
                     min={1}
@@ -399,10 +387,7 @@ export function ServerSettings({
                     }
                   />
                 </Field>
-                <Field
-                  label="Seeding ratio limit"
-                  hint="Zero means no ratio limit."
-                >
+                <Field label="Seeding ratio limit" hint="0 means no limit.">
                   <input
                     type="number"
                     min={0}
@@ -415,7 +400,7 @@ export function ServerSettings({
                 </Field>
                 <Field
                   label="Seeding time limit (hours)"
-                  hint="Zero means no time limit."
+                  hint="0 means no limit."
                 >
                   <input
                     type="number"
@@ -430,31 +415,26 @@ export function ServerSettings({
             </Section>
           )}
           {setupSection === "downloads" && (
-            <p className="sp-muted">
-              If Sparrow runs in Docker, the host must be reachable from its
-              container. Use the download machine’s LAN address; localhost
-              refers to the Sparrow container.
+            <p className="muted">
+              In Docker, use the download machine’s network address: “localhost”
+              means the Sparrow container itself.
             </p>
           )}
-          <div className="sp-savebar">
-            <span className="sp-success" role="status">
-              {saved ? "Server settings saved." : ""}
+          <div className="savebar">
+            <span className="done-note" role="status">
+              {saved && (
+                <>
+                  <Tick /> Saved
+                </>
+              )}
             </span>
-            <button
-              className="sp-button primary"
-              disabled={busy}
-              onClick={save}
-            >
-              {busy
-                ? "Saving…"
-                : setupSection
-                  ? "Save and continue"
-                  : "Save settings"}
+            <button className="btn primary" disabled={busy} onClick={save}>
+              {busy ? "Saving…" : setupSection ? "Save and continue" : "Save"}
             </button>
           </div>
         </div>
       ) : (
-        resource.loading && <Loading label="Loading server settings…" />
+        resource.loading && <Loading label="Loading connections" />
       )}
     </Page>
   );
@@ -530,50 +510,57 @@ export function People({ currentUser }: { currentUser: User }) {
       setError((e as Error).message);
     }
   }
+  const roleName = (value: string) =>
+    value === "requester"
+      ? "Can request"
+      : value === "admin"
+        ? "Administrator"
+        : "Can watch";
   return (
     <Page
       title="People"
-      description="Good stories are better shared. Give everyone a space of their own."
+      lede="Everyone gets their own place to resume, and their own preferences."
       action={
         <button
-          className="sp-button primary"
+          className="btn primary"
           onClick={() => {
             setDialog(true);
             setInvite("");
+            setCopied(false);
           }}
         >
-          <Plus size={16} />
+          <Plus size={18} strokeWidth={2.5} />
           Invite someone
         </button>
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.data ? (
-        <div className="sp-people-grid">
+        <ul className="cast">
           {resource.data.map((user) => (
-            <article className="sp-person-card" key={user.id}>
-              <span className="sp-avatar" aria-hidden="true">
-                {user.name.slice(0, 1).toUpperCase()}
-              </span>
-              <div>
-                <h3>
+            <li
+              className={`cast-member ${user.disabled ? "off" : ""}`}
+              key={user.id}
+            >
+              <div className="cast-line">
+                <span className="cast-name">
                   {user.name}
-                  {user.id === currentUser.id ? " · You" : ""}
-                </h3>
-                <p>
-                  {user.username} ·{" "}
-                  {user.role === "requester"
-                    ? "Can watch and request"
-                    : user.role === "admin"
-                      ? "Administrator"
-                      : "Can watch"}
-                  {user.disabled ? " · Access disabled" : ""}
-                </p>
+                  <span className="meta">Signs in as {user.username}</span>
+                </span>
+                <span className="leader" aria-hidden="true" />
+                <span className="cast-role">
+                  {user.id === currentUser.id
+                    ? `${roleName(user.role)} · you`
+                    : roleName(user.role)}
+                </span>
+                {user.disabled && (
+                  <span className="flag problem">No access</span>
+                )}
               </div>
-              <div className="sp-actions">
-                {user.id !== currentUser.id && (
+              {user.id !== currentUser.id && (
+                <div className="actions">
                   <button
-                    className="sp-button secondary"
+                    className="btn"
                     onClick={() => {
                       setEditing(user);
                       setRole(user.role);
@@ -591,21 +578,16 @@ export function People({ currentUser }: { currentUser: User }) {
                   >
                     Edit access
                   </button>
-                )}
-                {user.id !== currentUser.id && (
-                  <button
-                    className={`sp-button ${user.disabled ? "secondary" : "quiet"}`}
-                    onClick={() => disable(user)}
-                  >
+                  <button className="btn quiet" onClick={() => disable(user)}>
                     {user.disabled ? "Restore access" : "Disable access"}
                   </button>
-                )}
-              </div>
-            </article>
+                </div>
+              )}
+            </li>
           ))}
-        </div>
+        </ul>
       ) : (
-        resource.loading && <Loading label="Loading household accounts…" />
+        resource.loading && <Loading label="Loading the household" />
       )}
       {editing && (
         <Dialog
@@ -613,7 +595,7 @@ export function People({ currentUser }: { currentUser: User }) {
           onClose={() => setEditing(null)}
           footer={
             <button
-              className="sp-button primary"
+              className="btn primary"
               disabled={busy}
               onClick={saveAccess}
             >
@@ -621,23 +603,23 @@ export function People({ currentUser }: { currentUser: User }) {
             </button>
           }
         >
-          <div className="sp-form">
+          <div className="form">
             <ErrorNote error={error} />
             <Field label="Role">
               <select value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="viewer">Watch the collection</option>
-                <option value="requester">Watch and request titles</option>
-                <option value="admin">Manage the server</option>
+                <option value="viewer">Can watch</option>
+                <option value="requester">Can watch and request</option>
+                <option value="admin">Administrator</option>
               </select>
             </Field>
-            <Field label="Storage access">
+            <Field label="Storage">
               <select value={scope} onChange={(e) => setScope(e.target.value)}>
-                <option value="all">All current and future libraries</option>
-                <option value="none">No libraries</option>
+                <option value="all">Everything, now and later</option>
+                <option value="none">Nothing</option>
                 {editing &&
                   editing.library_scope &&
                   editing.library_scope.length > 1 && (
-                    <option value="keep">Keep current libraries</option>
+                    <option value="keep">Keep current storage</option>
                   )}
                 {nodes.data?.map((n) => (
                   <option key={n.id} value={n.id}>
@@ -646,23 +628,28 @@ export function People({ currentUser }: { currentUser: User }) {
                 ))}
               </select>
             </Field>
-            <p className="sp-muted">
-              Changing access signs this person out so the new permissions apply
-              immediately.
+            <p className="muted">
+              Saving signs them out so the change applies at once.
             </p>
           </div>
         </Dialog>
       )}
       {dialog && (
         <Dialog title="Invite someone" onClose={() => setDialog(false)}>
-          <div className="sp-form">
+          <div className="form">
             <ErrorNote error={error} />
             {invite ? (
-              <>
-                <p className="sp-muted">
-                  Share this invitation link with the person you want to invite.
-                </p>
-                <Field label="Invitation link">
+              <div className="coupon ticket">
+                <Scissors
+                  className="coupon-cut"
+                  size={18}
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
+                <Field
+                  label="Invitation link"
+                  hint="Works once, for seven days. Send it to them privately."
+                >
                   <input
                     readOnly
                     value={invite}
@@ -670,45 +657,42 @@ export function People({ currentUser }: { currentUser: User }) {
                   />
                 </Field>
                 <button
-                  className="sp-button primary"
+                  className="btn primary"
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(invite);
                       setCopied(true);
                     } catch {
-                      setError(
-                        "Select the invitation link and copy it manually.",
-                      );
+                      setError("Select the link and copy it yourself.");
                     }
                   }}
                 >
-                  {copied ? <Check size={16} /> : <Copy size={16} />}{" "}
-                  {copied ? "Copied" : "Copy invitation"}
+                  {copied ? (
+                    <Check size={18} strokeWidth={2.5} />
+                  ) : (
+                    <Copy size={18} strokeWidth={2.25} />
+                  )}
+                  {copied ? "Copied" : "Copy link"}
                 </button>
-              </>
+              </div>
             ) : (
               <>
-                <p className="sp-muted">
-                  A personal invitation, valid for seven days and usable once.
-                </p>
                 <Field label="What can they do?">
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
                   >
-                    <option value="viewer">Watch the collection</option>
-                    <option value="requester">Watch and request titles</option>
-                    <option value="admin">Manage the server</option>
+                    <option value="viewer">Can watch</option>
+                    <option value="requester">Can watch and request</option>
+                    <option value="admin">Administrator</option>
                   </select>
                 </Field>
-                <Field label="Which storage libraries?">
+                <Field label="Which storage?">
                   <select
                     value={scope}
                     onChange={(e) => setScope(e.target.value)}
                   >
-                    <option value="all">
-                      All current and future libraries
-                    </option>
+                    <option value="all">Everything, now and later</option>
                     {nodes.data?.map((node) => (
                       <option key={node.id} value={node.id}>
                         {node.name}
@@ -717,7 +701,7 @@ export function People({ currentUser }: { currentUser: User }) {
                   </select>
                 </Field>
                 <button
-                  className="sp-button primary"
+                  className="btn primary"
                   disabled={busy}
                   onClick={create}
                 >

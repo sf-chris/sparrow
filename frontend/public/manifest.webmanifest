@@ -2,12 +2,12 @@
   "id": "/",
   "name": "Sparrow",
   "short_name": "Sparrow",
-  "description": "A happy little home for your films and shows.",
+  "description": "The household guide to your own films and series.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#faf9f6",
-  "theme_color": "#faf9f6",
+  "background_color": "#eae9e5",
+  "theme_color": "#fad827",
   "icons": [
     {
       "src": "/icon.svg",

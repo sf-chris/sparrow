@@ -5,18 +5,17 @@ import {
   Plus,
   RefreshCw,
   FolderOpen,
-  Copy,
   Check,
+  Scissors,
 } from "lucide-react";
 import { api, patch, post, type NodeInfo } from "./api";
 import {
+  Bar,
   Dialog,
-  Empty,
   ErrorNote,
   Field,
   Loading,
   Page,
-  Section,
   bytes,
   useResource,
 } from "./ui";
@@ -106,18 +105,18 @@ export default function Storage({
   return (
     <Page
       embedded={onboarding}
-      title="Storage & import"
-      description="Keep files where you want them. Pair a storage node, or use folders on this server."
+      title="Storage"
+      lede="Where your films and series live. Use folders on this server, or pair another machine."
       action={
         <button
-          className="sp-button primary"
+          className="btn primary"
           onClick={() => {
             setPairingId(undefined);
             setPairing(true);
             setCode("");
           }}
         >
-          <Plus size={16} />
+          <Plus size={18} strokeWidth={2.5} />
           Pair storage
         </button>
       }
@@ -130,54 +129,73 @@ export default function Storage({
         }}
       />
       {nodes.loading && !nodes.data ? (
-        <Loading label="Checking storage…" />
+        <Loading label="Checking storage" />
       ) : (
-        <Section
-          title="Connected storage"
-          action={
+        <section aria-labelledby="devices">
+          <Bar id="devices" title="Connected">
             <button
-              className="sp-button quiet"
+              className="bar-button"
               onClick={() => {
                 void nodes.refresh();
                 void onChanged?.();
               }}
             >
-              <RefreshCw size={15} />
+              <RefreshCw size={14} strokeWidth={2.5} />
               Refresh
             </button>
-          }
-        >
-          <div className="sp-form">
+          </Bar>
+          <ul className="devices">
             {nodes.data?.map((node) => {
               const root = node.capabilities.roots.find(
                 (r) => r.id === "library",
               );
+              const status = node.disabled
+                ? ["Revoked", "problem"]
+                : !node.online
+                  ? ["Offline", "problem"]
+                  : root?.available
+                    ? ["", ""]
+                    : ["Needs a folder", "problem"];
               return (
-                <article className="sp-panel sp-storage-card" key={node.id}>
-                  <div className="sp-row" style={{ paddingTop: 0 }}>
-                    <div className="flex gap-3 items-start">
-                      <HardDrive
-                        size={22}
-                        className="text-[var(--sp-accent)] mt-1"
-                      />
-                      <div>
-                        <h2>{node.name}</h2>
-                        <p>
-                          {node.disabled
-                            ? "Access revoked"
-                            : node.online
-                              ? root?.available
-                                ? "Connected · Library available"
-                                : "Connected · Choose or reconnect a library folder"
-                              : "Offline · Files and progress are preserved"}
-                        </p>
-                      </div>
+                <li className="device-card" key={node.id}>
+                  <HardDrive size={26} strokeWidth={2} aria-hidden="true" />
+                  <div className="device-body">
+                    <div className="request-top">
+                      <h2>{node.name}</h2>
+                      {status[0] && (
+                        <span className={`flag ${status[1]}`}>{status[0]}</span>
+                      )}
                     </div>
-                    <div className="sp-actions">
-                      {node.id !== "local" && (
+                    <p className="meta num">
+                      {root?.free_bytes !== undefined
+                        ? `${bytes(root.free_bytes)} free`
+                        : root?.error || "No library folder yet"}
+                      {" · "}
+                      {node.capabilities.probe
+                        ? "Media checks ready"
+                        : "Media tools need attention"}
+                    </p>
+                    {!node.online && !node.disabled && (
+                      <p className="muted">
+                        Files and progress are kept while it’s away.
+                      </p>
+                    )}
+                    <div className="actions">
+                      {node.id === "local" ? (
+                        <button
+                          className="btn"
+                          onClick={() => {
+                            setLibrary(cfg.data?.library_dir || "");
+                            setStaging(cfg.data?.staging_dir || "");
+                            setLocal(true);
+                          }}
+                        >
+                          Choose folders
+                        </button>
+                      ) : (
                         <>
                           <button
-                            className="sp-button quiet"
+                            className="btn"
                             onClick={() => {
                               setPairingId(node.id);
                               setName(node.name);
@@ -189,7 +207,7 @@ export default function Storage({
                           </button>
                           {!node.disabled && (
                             <button
-                              className="sp-button quiet"
+                              className="btn quiet"
                               onClick={async () => {
                                 try {
                                   await api(`/admin/nodes/${node.id}`, {
@@ -206,88 +224,67 @@ export default function Storage({
                           )}
                         </>
                       )}
-                      {node.id === "local" && (
-                        <button
-                          className="sp-button secondary"
-                          onClick={() => {
-                            setLibrary(cfg.data?.library_dir || "");
-                            setStaging(cfg.data?.staging_dir || "");
-                            setLocal(true);
-                          }}
-                        >
-                          Choose folders
-                        </button>
-                      )}
                       {!onboarding && (
                         <button
-                          className="sp-button secondary"
+                          className="btn"
                           disabled={
                             busy === node.id || !node.online || !root?.available
                           }
                           onClick={() => preview(node)}
                         >
-                          <FolderOpen size={16} />
+                          <FolderOpen size={17} strokeWidth={2.25} />
                           {busy === node.id
-                            ? "Scanning…"
+                            ? "Looking…"
                             : "Import existing media"}
                         </button>
                       )}
                     </div>
                   </div>
-                  <div className="sp-actions sp-muted mt-4">
-                    <span>
-                      {root?.free_bytes !== undefined
-                        ? `${bytes(root.free_bytes)} free`
-                        : root?.error || "No library folder configured"}
-                    </span>
-                    <span>·</span>
-                    <span>
-                      {node.capabilities.probe
-                        ? "Media inspection ready"
-                        : "Media tools need attention"}
-                    </span>
-                  </div>
-                </article>
+                </li>
               );
             })}
-          </div>
-        </Section>
+          </ul>
+        </section>
       )}
-      <p className="sp-muted">
-        Import previews your files and lets you correct title matches. Existing
-        files stay in place.
+      <p className="muted storage-note">
+        Import shows what it found before anything is added. Files stay where
+        they are.
       </p>
       {pairing && (
-        <Dialog title="Pair a storage node" onClose={() => setPairing(false)}>
-          <div className="sp-form">
+        <Dialog title="Pair storage" onClose={() => setPairing(false)}>
+          <div className="form">
             <ErrorNote error={error} />
             {code ? (
               <>
-                <p className="sp-muted">
-                  Open Sparrow Node on your storage machine. Enter this server
-                  address and pairing code. The code expires in ten minutes.
-                </p>
-                <Field label="Server address">
-                  <input
-                    readOnly
-                    value={location.origin}
-                    onFocus={(e) => e.target.select()}
+                <div className="coupon ticket">
+                  <Scissors
+                    className="coupon-cut"
+                    size={18}
+                    strokeWidth={2}
+                    aria-hidden="true"
                   />
-                </Field>
-                <Field label="Pairing code">
-                  <input
-                    readOnly
-                    value={code}
-                    onFocus={(e) => e.target.select()}
-                  />
-                </Field>
-                <p className="sp-muted">
-                  Choose the library folder and a separate staging folder in the
-                  node installer, then start the node. Its library will appear
-                  here when it connects.
+                  <Field label="Server address">
+                    <input
+                      readOnly
+                      value={location.origin}
+                      onFocus={(e) => e.target.select()}
+                    />
+                  </Field>
+                  <Field label="Pairing code" hint="Expires in ten minutes.">
+                    <input
+                      className="big-code"
+                      readOnly
+                      value={code}
+                      onFocus={(e) => e.target.select()}
+                    />
+                  </Field>
+                </div>
+                <p className="muted">
+                  Open Sparrow Node on the other machine, enter both, choose a
+                  library folder and a separate incoming folder, then start it.
                 </p>
                 <button
-                  className="sp-button primary"
+                  className="btn primary"
                   onClick={() => {
                     setPairing(false);
                     void nodes.refresh();
@@ -299,7 +296,7 @@ export default function Storage({
               </>
             ) : (
               <>
-                <Field label="Storage name">
+                <Field label="Name">
                   <input
                     value={name}
                     maxLength={100}
@@ -307,11 +304,11 @@ export default function Storage({
                   />
                 </Field>
                 <button
-                  className="sp-button primary"
+                  className="btn primary"
                   disabled={busy === "pair"}
                   onClick={pair}
                 >
-                  {busy === "pair" ? "Creating code…" : "Generate pairing code"}
+                  {busy === "pair" ? "Creating code…" : "Get pairing code"}
                 </button>
               </>
             )}
@@ -319,17 +316,29 @@ export default function Storage({
         </Dialog>
       )}
       {local && (
-        <Dialog title="Folders on this server" onClose={() => setLocal(false)}>
-          <div className="sp-form">
+        <Dialog
+          title="Folders on this server"
+          onClose={() => setLocal(false)}
+          footer={
+            <button
+              className="btn primary"
+              disabled={busy === "local"}
+              onClick={saveLocal}
+            >
+              Save folders
+            </button>
+          }
+        >
+          <div className="form">
             <ErrorNote error={error} />
-            <p className="sp-muted">
-              These paths belong to the Linux server. To use Windows folders,
-              pair a Windows storage node. With Docker, enter the mounted paths
-              visible inside the container. Folders must already exist.
+            <p className="muted">
+              Paths on this Linux server; in Docker, the mounted paths inside
+              the container. Folders must already exist. For Windows folders,
+              pair a Windows machine instead.
             </p>
             <Field
               label="Library folder"
-              hint="Where existing movies and shows live."
+              hint="Where your films and series are."
             >
               <input
                 value={library}
@@ -347,13 +356,6 @@ export default function Storage({
                 placeholder="/media/incoming"
               />
             </Field>
-            <button
-              className="sp-button primary"
-              disabled={busy === "local"}
-              onClick={saveLocal}
-            >
-              Save folders
-            </button>
           </div>
         </Dialog>
       )}
@@ -404,36 +406,34 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
   }
   return (
     <Dialog
-      title={done === null ? "Review your import" : "Added to your collection"}
+      title={done === null ? "Review your import" : "Added to your guide"}
       onClose={onClose}
     >
-      <div className="sp-form">
+      <div className="form">
         <ErrorNote error={error} />
         {done !== null ? (
           <>
             <p>
-              {done} {done === 1 ? "file is" : "files are"} ready in your
-              collection. The originals stayed in place.
+              {done} {done === 1 ? "file is" : "files are"} in your guide. The
+              originals stayed where they were.
             </p>
-            <Link className="sp-button primary" to="/library">
-              Open your library
+            <Link className="btn primary" to="/">
+              Open the guide
             </Link>
           </>
         ) : (
           <>
-            <p className="sp-muted">
-              {scan.candidates.length} video files found. Confirm the title and
-              episode for each selected file. Names are suggestions; Sparrow
-              checks the actual media before importing.
+            <p className="muted">
+              {scan.candidates.length} video files found. Check the title and
+              episode for each one you choose. Names are only suggestions;
+              Sparrow checks the media itself before importing.
             </p>
             {scan.candidates.length === 0 && (
-              <p className="sp-muted">
-                No supported video files were found in this folder.
-              </p>
+              <p className="muted">No supported video files in this folder.</p>
             )}
-            <div className="sp-actions">
+            <div className="actions">
               <button
-                className="sp-button secondary"
+                className="btn"
                 disabled={busy}
                 onClick={() =>
                   setSelected(
@@ -447,18 +447,15 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
               >
                 Select {Math.min(scan.candidates.length, 100)} files
               </button>
-              <button
-                className="sp-button quiet"
-                onClick={() => setSelected({})}
-              >
+              <button className="btn quiet" onClick={() => setSelected({})}>
                 Clear
               </button>
             </div>
-            <div style={{ maxHeight: "44vh", overflowY: "auto" }}>
+            <div className="import-list">
               {scan.candidates.map((candidate) => (
-                <div className="sp-row" key={candidate.id}>
-                  <div className="w-full">
-                    <label className="sp-checkbox">
+                <div className="import-row" key={candidate.id}>
+                  <div>
+                    <label className="check">
                       <input
                         type="checkbox"
                         checked={Boolean(selected[candidate.id])}
@@ -473,10 +470,10 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
                           })
                         }
                       />
-                      <span className="break-all">{candidate.path}</span>
+                      <span className="path">{candidate.path}</span>
                     </label>
                     {selected[candidate.id] && (
-                      <div className="sp-form mt-3">
+                      <div className="form import-match">
                         <Field label="Title">
                           <input
                             value={selected[candidate.id].title}
@@ -492,21 +489,21 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
                             }
                           />
                         </Field>
-                        <div className="sp-actions">
+                        <div className="actions">
                           <button
-                            className="sp-button secondary"
+                            className="btn"
                             onClick={() => setMatching(candidate)}
                           >
-                            Match a movie or show
+                            Match a title
                           </button>
-                          <span className="sp-muted">
+                          <span className="muted">
                             {selected[candidate.id].tmdb_id
-                              ? "Matched to catalogue"
+                              ? "Matched"
                               : "Using your title"}
                           </span>
                         </div>
                         {selected[candidate.id].media_type === "tv" && (
-                          <div className="sp-form-grid">
+                          <div className="form-grid">
                             <Field label="Season">
                               <input
                                 type="number"
@@ -548,7 +545,7 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
               ))}
             </div>
             <button
-              className="sp-button primary"
+              className="btn primary"
               disabled={busy || !Object.keys(selected).length}
               onClick={confirm}
             >
@@ -606,12 +603,12 @@ function MatchTitle({
   }
   return (
     <Dialog title="Find the correct title" onClose={onClose}>
-      <div className="sp-form">
-        <Field label="Movie or show title">
+      <div className="form">
+        <Field label="Film or series">
           <input value={query} onChange={(e) => setQuery(e.target.value)} />
         </Field>
         <button
-          className="sp-button primary"
+          className="btn primary"
           disabled={busy || query.trim().length < 2}
           onClick={search}
         >
@@ -620,17 +617,19 @@ function MatchTitle({
         <ErrorNote error={error} />
         {results.map((card) => (
           <button
-            className="sp-row text-left"
+            className="match-row"
             key={`${card.media_type}-${card.tmdb_id}`}
             onClick={() => onSelect(card)}
           >
             <div>
               <h3>{card.title}</h3>
               <p>
-                {card.year} · {card.media_type === "tv" ? "TV show" : "Movie"}
+                {[card.year, card.media_type === "tv" ? "Series" : "Film"]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             </div>
-            <Check size={16} />
+            <Check size={18} strokeWidth={2.5} />
           </button>
         ))}
       </div>

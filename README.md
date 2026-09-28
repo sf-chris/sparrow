@@ -2,11 +2,11 @@
   <img src="frontend/public/icon.svg" width="72" height="72" alt="Sparrow bird" />
 </p>
 <h1 align="center">Sparrow</h1>
-<p align="center"><strong>Less scrolling. More good stuff.</strong><br />A little home for your films, shows and people. Hosted by you.</p>
+<p align="center"><strong>Say what you want to watch.</strong><br />The household guide to your own films and series. Hosted by you.</p>
 <p align="center">
   <a href="https://github.com/sf-chris/sparrow/actions/workflows/ci.yml"><img src="https://github.com/sf-chris/sparrow/actions/workflows/ci.yml/badge.svg?branch=main" alt="Product checks" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-7050b5" alt="AGPL-3.0-or-later license" /></a>
-  <a href="ROADMAP.md"><img src="https://img.shields.io/badge/status-alpha-eee8f8?labelColor=302d3c" alt="Alpha" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-181410" alt="AGPL-3.0-or-later license" /></a>
+  <a href="ROADMAP.md"><img src="https://img.shields.io/badge/status-alpha-fad827?labelColor=181410" alt="Alpha" /></a>
 </p>
 <p align="center">
   <a href="#get-started">Get started</a> ·
@@ -16,7 +16,7 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-![Sparrow Home: a compact Continue watching shelf above a colourful collection of films and shows](docs/screenshots/home-desktop.png)
+![The Sparrow Guide: today's page with Tonight, Coming up and an A–Z listing of the collection](docs/screenshots/home-desktop.png)
 
 Sparrow brings your media into one personal collection. Find a film or choose the
 exact episodes you want, let its agents find and organise them, then settle in
@@ -29,12 +29,12 @@ storage and physical phones is the next focus; see [what still needs work](#what
 
 ## Make a night of it
 
-- **Your collection, together.** Browse films and shows, filter your library,
-  import existing files and resume from a compact Continue watching shelf.
-- **Find your next watch.** Search by title or explore with conversational
-  discovery. Review the film, season or individual episodes before requesting.
+- **One guide.** Tonight's resumes, what's coming up and your whole collection
+  on one page, as an A–Z listing or covers. Arrow keys work from the couch.
+- **One box.** Type a title, or describe a mood and ask Sparrow. Review the
+  film, season or individual episodes before requesting.
 - **Ask once, follow along.** Persistent agents inspect sources, verify media
-  and organise the result. Activity shows progress and recovery actions; Logs
+  and organise the result. Requests shows progress and recovery actions; Logs
   keeps readable operational history with filters and expandable details.
 - **A player that belongs here.** Watch in the browser with seeking, audio and
   caption choices, personal progress and an optional compatible playback format.
@@ -47,19 +47,19 @@ storage and physical phones is the next focus; see [what still needs work](#what
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/discover-desktop.png" alt="Discover with title search and illustrated prompts" /></td>
-    <td width="50%"><img src="docs/screenshots/title-desktop.png" alt="A show page with viewing actions and individual episodes" /></td>
+    <td width="50%"><img src="docs/screenshots/discover-desktop.png" alt="Find: one box for a title or a mood, with ideas" /></td>
+    <td width="50%"><img src="docs/screenshots/title-desktop.png" alt="A series page with Resume, Request episodes and the episode listing" /></td>
   </tr>
   <tr>
-    <td align="center"><strong>A title. A mood. A maybe.</strong></td>
-    <td align="center"><strong>One show, exactly your way.</strong></td>
+    <td align="center"><strong>A title, or a mood.</strong></td>
+    <td align="center"><strong>Exactly the episodes you want.</strong></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/screenshots/home-mobile.png" width="245" alt="Sparrow Home on a phone" />
+  <img src="docs/screenshots/home-mobile.png" width="245" alt="The Sparrow Guide on a phone" />
   &nbsp;
-  <img src="docs/screenshots/library-mobile.png" width="245" alt="Sparrow Library on a phone" />
+  <img src="docs/screenshots/library-mobile.png" width="245" alt="The collection as covers on a phone" />
 </p>
 <p align="center"><em>Actual application captures with fictional titles and original fixture artwork.</em><br /><a href="docs/screenshots/README.md">Browse the desktop and phone gallery →</a></p>
 
