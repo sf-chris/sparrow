@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const out = process.env.SPARROW_VISUAL_OUT || 'tests/browser/artifacts/themes';
 const base = process.env.SPARROW_BROWSER_URL || 'http://127.0.0.1:8891';
 const headers = { 'X-Sparrow-Request': '1' };
-const themes = ['', 'cinema', 'clear', 'saturday', 'repertory', 'console'];
+const themes = ['', 'cinema', 'clear', 'saturday'];
 const routes = ['/', '/discover', '/activity', '/settings', '/settings/people', '/settings/storage', '/title/tv/101'];
 fs.mkdirSync(out, { recursive: true });
 
@@ -69,13 +69,13 @@ const frame = page => page.evaluate(() => new Promise(done => requestAnimationFr
 
     // The next visit on this device paints the theme before the app has loaded.
     const guest = await browser.newContext();
-    await guest.addInitScript(() => localStorage.setItem('sparrow-theme', 'console'));
+    await guest.addInitScript(() => localStorage.setItem('sparrow-theme', 'cinema'));
     const cover = await guest.newPage();
     let painted = '';
     cover.on('domcontentloaded', async () => { painted = await cover.evaluate(() => document.documentElement.dataset.theme || '').catch(() => ''); });
     await cover.goto(base + '/login');
     await cover.locator('h1').waitFor();
-    assert.equal(painted, 'console', 'The saved theme was not applied before the app loaded');
+    assert.equal(painted, 'cinema', 'The saved theme was not applied before the app loaded');
     await guest.close();
 
     await page.locator('.theme-card', { hasText: 'Guide' }).click();

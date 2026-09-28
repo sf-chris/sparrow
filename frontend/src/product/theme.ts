@@ -10,26 +10,14 @@ export const themes = [
   {
     id: "clear",
     name: "Clear",
-    note: "Large type and strong contrast.",
-    colour: "#000000",
+    note: "Large print and strong contrast.",
+    colour: "#f7f5f0",
   },
   {
     id: "saturday",
     name: "Saturday",
     note: "Bright and chunky, for kids.",
     colour: "#2f5fe0",
-  },
-  {
-    id: "repertory",
-    name: "Repertory",
-    note: "A film programme, for film lovers.",
-    colour: "#f7f6f2",
-  },
-  {
-    id: "console",
-    name: "Console",
-    note: "Dense monospace, for whoever runs the server.",
-    colour: "#0b0e0b",
   },
 ] as const;
 

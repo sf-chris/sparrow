@@ -103,7 +103,7 @@ def check_password(password: str, encoded: str) -> bool:
 
 # Interface themes each person can choose. The empty value follows Sparrow's
 # official theme, so a change to the default reaches everyone who never chose.
-THEMES = ("", "cinema", "clear", "saturday", "repertory", "console")
+THEMES = ("", "cinema", "clear", "saturday")
 
 
 class Accounts:
