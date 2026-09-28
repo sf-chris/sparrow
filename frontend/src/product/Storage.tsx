@@ -155,11 +155,8 @@ export default function Storage({
               return (
                 <article className="sp-panel sp-storage-card" key={node.id}>
                   <div className="sp-row" style={{ paddingTop: 0 }}>
-                    <div className="flex gap-3 items-start">
-                      <HardDrive
-                        size={22}
-                        className="text-[var(--sp-accent)] mt-1"
-                      />
+                    <div className="sp-node-head">
+                      <HardDrive size={22} className="sp-node-icon" />
                       <div>
                         <h2>{node.name}</h2>
                         <p>
@@ -234,7 +231,7 @@ export default function Storage({
                       )}
                     </div>
                   </div>
-                  <div className="sp-actions sp-muted mt-4">
+                  <div className="sp-actions sp-muted">
                     <span>
                       {root?.free_bytes !== undefined
                         ? `${bytes(root.free_bytes)} free`
@@ -457,7 +454,7 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
             <div style={{ maxHeight: "44vh", overflowY: "auto" }}>
               {scan.candidates.map((candidate) => (
                 <div className="sp-row" key={candidate.id}>
-                  <div className="w-full">
+                  <div className="sp-grow">
                     <label className="sp-checkbox">
                       <input
                         type="checkbox"
@@ -473,10 +470,10 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
                           })
                         }
                       />
-                      <span className="break-all">{candidate.path}</span>
+                      <span className="sp-path">{candidate.path}</span>
                     </label>
                     {selected[candidate.id] && (
-                      <div className="sp-form mt-3">
+                      <div className="sp-form">
                         <Field label="Title">
                           <input
                             value={selected[candidate.id].title}
@@ -620,7 +617,7 @@ function MatchTitle({
         <ErrorNote error={error} />
         {results.map((card) => (
           <button
-            className="sp-row text-left"
+            className="sp-row sp-choice"
             key={`${card.media_type}-${card.tmdb_id}`}
             onClick={() => onSelect(card)}
           >

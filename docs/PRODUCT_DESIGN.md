@@ -1,108 +1,72 @@
 # Product design contract
 
-The current direction replaces the rejected dark cinematic redesign on
-`design/sparrow-reimagined`. The owner's brief is a public landing page, smaller
-controls and typography, a brighter palette, and a little whimsy throughout.
+Sparrow's interface is **distilled daylight**: white, ink and one leaf green.
+The artwork carries the colour; the interface gets out of its way. It replaces
+the earlier pastel illustrated style. It is deliberately not the rejected dark
+cinematic direction on `design/sparrow-reimagined` or the picture-house print
+proposal. [IMPLEMENTATION.md](IMPLEMENTATION.md) records the implemented scope;
+[redesign/README.md](redesign/README.md) has before/after captures of every page.
 
-The owner likes this visual style. The personal-cinema follow-up now gives
-artwork and watching shelves more space, simplifies settings and adds operational
-history. [IMPLEMENTATION.md](IMPLEMENTATION.md) records the implemented scope;
-[NEARBY_DISCOVERY.md](NEARBY_DISCOVERY.md) records the isolated discovery prototype.
+## Principles
 
-## A happy little home for the good stuff
+1. **Say it once.** No eyebrows, badges or captions that repeat a heading.
+   "Ready to watch" only appears when something is *not* ready. Preference
+   sources appear only when they differ from the household default.
+2. **One accent, used for state.** Green marks progress, live work, focus and
+   the active tab. Actions are ink; nothing else is coloured.
+3. **Artwork in frames, not behind text.** Backdrops sit in rounded frames, and
+   text never depends on an image for contrast.
+4. **One typeface.** Hanken Grotesk (variable, bundled locally): 700–750 for
+   titles with tight tracking, 550–650 for controls, 400 for reading. Tabular
+   figures for times and counts.
+5. **Every control is reachable.** 44px targets, visible focus, real labels,
+   segmented controls built from native radios and tabs.
 
-Sparrow uses light paper, plum ink, lilac actions, and mint and pink supporting
-surfaces. Original line illustrations bring a small bird, a television, books,
-a cup, and playful stars into the welcome experience. Discovery uses small
-heart, star and orbit drawings. There are no landscape or sunset brand assets.
-Real titles still use their catalogue artwork; missing art gets a geometric,
-locally rendered fallback.
+| Token          | Value                     | Use                           |
+| -------------- | ------------------------- | ----------------------------- |
+| `--bg`         | `oklch(0.99 0.002 120)`   | Page, inputs, dialogs         |
+| `--bg-2`       | `oklch(0.962 0.004 120)`  | Grouped panels                |
+| `--fg`         | `oklch(0.21 0.012 150)`   | Text, primary actions         |
+| `--fg-2/3`     | `oklch(0.40 / 0.47 …)`    | Secondary text (AA on panels) |
+| `--accent`     | `oklch(0.60 0.15 148)`    | Progress, live, focus         |
+| `--accent-text`| `oklch(0.46 0.12 148)`    | Green text (AA)               |
+| `--attention`  | `oklch(0.58 0.19 32)`     | Needs attention, errors       |
 
-| Role           | Value     |
-| -------------- | --------- |
-| Page           | `#faf9f6` |
-| Surface        | `#ffffff` |
-| Text           | `#302d3c` |
-| Secondary text | `#696372` |
-| Primary action | `#7050b5` |
-| Lilac          | `#eee8f8` |
-| Mint           | `#e6f1e4` |
-| Pink           | `#f9e8ed` |
-| Border         | `#dedbe5` |
-
-DM Sans is the single locally bundled typeface. Page titles are 24–26px,
-section headings 17–18px, body copy 12–13px, and desktop controls 36–39px high.
-The landing headline is 49px at its largest, 38px on phones. Main touch controls
-increase to 40–44px and text inputs to 16px on phones. Small decorative captions
-never carry the only explanation of an action. Contrast and visible keyboard
-focus remain required.
+Radii are 8px (posters, inputs) and 16px (frames, panels); buttons are pills.
+Motion is limited to hover lifts, a dialog rise and the landing shelf filling;
+reduced motion disables transitions and animation.
 
 ## Screen compositions
 
-- **Public home:** a welcome page before any sign-in form. It introduces the
-  collection, discovery, and household with a restrained headline, original
-  illustration, and three pastel panels. Sign in and Open your Sparrow lead to
-  `/login`. On an unconfigured server those actions lead to `/setup`. The hero
-  starts 22–28px below the navigation, with copy aligned to its top.
-- **Account entry:** a compact light card, with a quiet illustration on desktop
-  and a simple header on phones. Setup and invitation links open their forms
-  directly. Setup-code prefill, password visibility, autocomplete, validation,
-  and invitations retain their existing contracts. Back navigation returns to
-  the landing page; sign-out returns there too.
-- **Server setup:** after the administrator chooses household defaults, guide
-  them through connections, storage, downloads and a measured setup summary.
-  Offer existing-library use without API keys or a download app. Save progress
-  on the server; Finish later preserves an unfinished state and a visible return
-  link. Existing administrators with unfinished setup join the same flow.
-  Household viewers only receive their personal preferences welcome. Saved keys
-  and download settings are labelled as configured, not live-verified access.
-- **Home:** one short greeting, a compact horizontal Continue watching row
-  with up to twelve recent in-progress copies, then library posters. Resume
-  cards show artwork, progress and a visible play action; they never expand
-  into a hero. Phone shelves scroll horizontally. Empty collections use a welcome
-  illustration and real next steps appropriate to the account's permissions.
-- **Library:** a compact header, result count, tidy filter bar, and poster grid.
-  Search, type, availability and sort persist in the URL. Phone filters use
-  two columns, with a full-width availability control.
-- **Discover:** a modest centred heading and white search panel, followed by
-  three pastel illustrated prompts. Prompts fill an editable draft without
-  starting paid work or acquiring anything. Mode tabs support arrow/Home/End
-  keys; drafts and title return links preserve context.
-- **Title:** poster, plum title and synopsis on a light lilac panel. A subdued
-  catalogue backdrop supplies texture without making text depend on the image.
-  Real Play/Resume controls, episodes, season filtering, copies, exact request
-  scope and collection care remain explicit.
-- **Activity:** title-led request rows, small scope tags, recovery controls and
-  expandable journals. A request link from Logs narrows to that request, including
-  completed work. Errors cannot masquerade as empty work.
-- **Settings:** a compact desktop sidebar, wrapping phone navigation, white
-  grouped forms and visible inheritance/reset controls. People have initial
-  tiles and access actions; storage has mint device icons and connected-folder
-  cards. Server/defaults, import, matching, pairing, password and care flows
-  share the same compact control and dialog system. Sign out sits separately
-  below the navigation and returns to the public landing page. Account & security
-  contains a compact password row whose button opens the shared password-change
-  dialog, followed by browser-revocation controls; preferences has no duplicate
-  administration links or session feed.
-- **Logs:** operational history with readable summaries, title/request context,
-  timestamp, severity and a next action. Technical identifiers expand separately.
-  Time/category/severity/title filters persist through snapshot pagination and
-  reload. Empty and failed loads are distinct.
-- **Player:** video remains on a dark viewing surface. Its surrounding page,
-  track settings, subtitle repair and recovery use the light shared system.
-  Optional conversion sits under Playback help, explaining that it changes the
-  browser's playback format while preserving the original file.
-- **Dialogs and states:** warm white dialogs, lilac focus and sticky action
-  footers; restrained mint success and pink error states; lilac empty states
-  with the bird. Focus containment, Escape and focus restoration remain intact.
+- **Front page:** "Ask for a film. Sparrow does the rest." beside a shelf of
+  poster slots filling themselves (two still arriving). Three one-line steps
+  below: Ask, Sparrow fetches, Watch. One action: set up or sign in.
+- **Entry:** a single narrow column with the mark; no illustration. Setup-code
+  prefill, invitations, password visibility and autocomplete are unchanged.
+- **Home:** greeting, then one feature: the most recent in-progress title (or
+  the newest title) in a 16:9 frame with Resume/Play and Details. Below:
+  *Continue watching* (other in-progress copies), *On the way* (active requests,
+  linked to Activity) and *Recently added* as a single scrolling row.
+- **Library:** title and count, a sticky filter row (search, Films/Series
+  segments, availability, sort — all in the URL) and a poster grid.
+- **Title:** back link, a wide artwork frame, the poster overlapping it, then
+  title, facts, synopsis and actions. Episodes are a numbered list with
+  progress; collection care follows.
+- **Discover:** one large underlined field. "I know the name" searches as you
+  type; "Describe it" starts the discovery agent. Mood prompts fill the draft
+  and never start paid work on their own.
+- **Activity:** requests as a list with a status dot, scope, plain-language
+  state and an expandable timeline of what Sparrow did.
+- **Player:** the video in a dark frame on the light page; audio and subtitle
+  choices, playback help and subtitle care below.
+- **Settings:** profile block and a text index on the left (chips on phones,
+  with Sign out beside the profile); forms in grey panels with white inputs.
 
-Desktop navigation remains horizontal. Phones use four compact bottom links.
-Discover is the single search destination in navigation; there is no duplicate
-search link beside the account. `Ctrl/Cmd+K` still opens Discover. Page headers
-omit decorative eyebrow lines and retain descriptions only where they explain
-an action. `Page`, `Section`, `Field`, `Dialog`, `Poster` and the
-state components in `frontend/src/product/ui.tsx` define common behavior;
-`product.css` owns visual tokens and responsive layouts.
+Desktop navigation is a quiet top bar with a green dot under the active link;
+phones use a four-item tab bar. `Ctrl/Cmd+K` opens Discover. `Page`, `Section`,
+`Field`, `Dialog`, `Poster`, `Progress` and the state components live in
+`frontend/src/product/ui.tsx`; `frontend/src/product/sparrow.css` owns every
+visual token and layout. Tailwind is not used.
 
 ## Product and verification boundaries
 
@@ -121,12 +85,10 @@ as recorded in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
 ## Artwork and font provenance
 
-The original SVG mark, television/bird welcome illustration and discovery
-doodles live in `frontend/src/product/Brand.tsx`; `frontend/public/icon.svg`
-repeats the mark. DM Sans is bundled locally with its SIL OFL notice under
-`frontend/public/assets/font-licenses/`. Retired cinematic artwork and the
-unused Instrument Serif font have been removed.
+The sparrow mark (one silhouette, one eye) lives in `frontend/src/product/Brand.tsx`;
+`frontend/public/icon.svg` repeats it. Missing artwork is replaced by the title
+set in type on a tint derived from its name. Hanken Grotesk is bundled locally
+with its SIL OFL notice under `frontend/public/assets/font-licenses/`.
 
 The browser fixture creates original geometric posters/backdrops for fictional
-titles. The [current gallery](screenshots/README.md) captures the production
-frontend using those fixtures; production uses actual catalogue images.
+titles. Production uses actual catalogue images.

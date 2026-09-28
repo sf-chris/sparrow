@@ -366,3 +366,22 @@ physical-device acceptance is implied.
 [desktop summary](product-validation/onboarding-review-desktop.png) preserve the
 isolated evidence. Existing viewing, household, accessibility and design journeys
 also pass, including 55 redesign layouts and 40 follow-up layouts.
+
+## Distilled daylight redesign — 28 September 2026
+
+Every page was redrawn from first principles around one rule: say it once. The
+pastel illustrations, doodles, DM Sans, Tailwind and the 3,080-line stylesheet are
+gone; one 2,360-line `sparrow.css` (35 KB, 8 KB gzipped) and Hanken Grotesk
+replace them. Home now leads with a single resumable feature and shows active
+requests (*On the way*); Library type filtering is a segmented control; Discover
+is one large field with *I know the name* / *Describe it*; Activity is a list with
+an expandable timeline. Behaviour, API use, permissions, URL-persisted filters,
+dialog focus handling and playback are unchanged. The reduced-motion rule now
+disables transitions instead of shortening them, which had delayed layout changes
+by a frame after a resize.
+
+Validation: `tests/browser/ci.sh` passes all ten suites, including axe audits and
+overflow checks at 360/390/768/1440px; 161 backend tests pass (two opt-in
+live-model tests skipped); build and `npm audit` are clean. Tests changed only
+where wording or selectors changed. Before/after captures of 22 pages are in
+[redesign/](redesign/README.md), reproducible with `tests/browser/tour.cjs`.

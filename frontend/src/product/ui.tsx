@@ -10,17 +10,9 @@ import {
   type ReactNode,
 } from "react";
 import { Link, useLocation } from "react-router-dom";
-import {
-  AlertCircle,
-  ArrowRight,
-  Loader2,
-  RefreshCw,
-  Play,
-  ArrowUpRight,
-  X,
-} from "lucide-react";
-import { Mark } from "./Brand";
-import type { Item } from "./api";
+import { AlertCircle, ArrowRight, RefreshCw, X } from "lucide-react";
+import { hueOf } from "./Brand";
+import type { Asset, Item } from "./api";
 
 export function Page({
   title,
@@ -42,13 +34,13 @@ export function Page({
   return (
     <Container
       id={embedded ? undefined : "main-content"}
-      className={`${embedded ? "sp-setup-content" : "sp-page"} ${className}`}
+      className={`${embedded ? "sp-embedded" : "sp-page"} ${className}`}
     >
       {title && (
-        <header className="sp-page-heading">
+        <header className="sp-head">
           <div>
             <Heading>{title}</Heading>
-            {description && <p className="sp-description">{description}</p>}
+            {description && <p className="sp-lede">{description}</p>}
           </div>
           {action}
         </header>
@@ -67,11 +59,11 @@ export function ErrorNote({
   if (!error) return null;
   return (
     <div className="sp-error" role="alert">
-      <AlertCircle size={20} aria-hidden="true" />
+      <AlertCircle size={18} aria-hidden="true" />
       <p>{error}</p>
       {retry && (
-        <button className="sp-button secondary" onClick={retry}>
-          <RefreshCw size={16} />
+        <button className="sp-button quiet" onClick={retry}>
+          <RefreshCw size={15} />
           Try again
         </button>
       )}
@@ -79,13 +71,13 @@ export function ErrorNote({
   );
 }
 export function Loading({
-  label = "Loading your collection…",
+  label = "Loading your library…",
 }: {
   label?: string;
 }) {
   return (
     <div className="sp-loading" role="status">
-      <Loader2 className="animate-spin" size={22} />
+      <span className="sp-pulse" aria-hidden="true" />
       <span>{label}</span>
     </div>
   );
@@ -101,9 +93,6 @@ export function Empty({
 }) {
   return (
     <div className="sp-empty">
-      <span className="sp-empty-icon">
-        <Mark />
-      </span>
       <h2>{title}</h2>
       <p>{children}</p>
       {action}
@@ -161,7 +150,7 @@ export function Section({
 }) {
   return (
     <section className="sp-section">
-      <div className="sp-section-heading">
+      <div className="sp-section-head">
         <div>
           <h2>{title}</h2>
           {description && <p>{description}</p>}
@@ -201,6 +190,33 @@ export const itemLink = (item: Item) =>
   item.tmdb_id
     ? `/title/${item.media_type}/${item.tmdb_id}`
     : `/items/${item.id}`;
+export const progressOf = (asset: Asset) =>
+  Math.round(
+    Math.min(
+      100,
+      Math.max(
+        0,
+        ((asset.watch?.position || 0) /
+          Math.max(1, asset.watch?.duration || 1)) *
+          100,
+      ),
+    ),
+  );
+export function Progress({ value, label }: { value: number; label: string }) {
+  return (
+    <div
+      className="sp-progress"
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={value}
+    >
+      <span style={{ width: `${value}%` }} />
+    </div>
+  );
+}
+/** Artwork, or the title set in type on a tint derived from its name. */
 export function Poster({
   title,
   src,
@@ -217,9 +233,10 @@ export function Poster({
       {src && !failed ? (
         <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
       ) : (
-        <div className="sp-poster-fallback">
-          <span className="sp-poster-kicker">SPARROW / COLLECTION</span>
-          <Mark />
+        <div
+          className="sp-poster-type"
+          style={{ "--hue": hueOf(title) } as React.CSSProperties}
+        >
           <span>{title}</span>
         </div>
       )}
@@ -232,57 +249,23 @@ export function MediaCard({ item }: { item: Item }) {
     (a) => a.watch && !a.watch.watched && a.watch.position > 5,
   );
   return (
-    <article className="sp-media-card">
+    <article className="sp-tile">
       <Link
         to={itemLink(item)}
         state={{ from: location.pathname + location.search }}
         aria-label={`Open ${item.title}`}
       >
-        <div className="sp-card-art">
-          <Poster title={item.title} src={item.poster_url} />
-          <span className="sp-card-type">
-            {item.media_type === "tv" ? "Series" : "Film"}
-          </span>
-          <span className="sp-card-hover" aria-hidden="true">
-            {item.state === "ready" ? (
-              <Play size={20} fill="currentColor" />
-            ) : (
-              <ArrowUpRight size={20} />
-            )}
-          </span>
-        </div>
+        <Poster title={item.title} src={item.poster_url} />
         {watching && (
-          <div
-            className="sp-card-progress"
-            role="progressbar"
-            aria-label="Watch progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(
-              Math.min(
-                100,
-                Math.max(
-                  0,
-                  (watching.watch!.position /
-                    Math.max(1, watching.watch!.duration)) *
-                    100,
-                ),
-              ),
-            )}
-          >
-            <span
-              style={{
-                width: `${Math.min(100, Math.max(0, (100 * watching.watch!.position) / Math.max(1, watching.watch!.duration)))}%`,
-              }}
-            />
-          </div>
+          <Progress value={progressOf(watching)} label="Watch progress" />
         )}
         <h3>{item.title}</h3>
         <p>
-          {item.year || (item.media_type === "tv" ? "TV show" : "Movie")}
-          {item.year && ` · ${item.media_type === "tv" ? "TV show" : "Movie"}`}
+          {[item.year, item.media_type === "tv" ? "Series" : "Film"]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
-        <Status value={item.state} />
+        {item.state !== "ready" && <Status value={item.state} />}
       </Link>
     </article>
   );
@@ -407,7 +390,7 @@ export function Dialog({
       <div className="sp-dialog-heading">
         <h2>{title}</h2>
         <button
-          className="sp-button quiet"
+          className="sp-icon-button"
           aria-label="Close dialog"
           onClick={onClose}
         >

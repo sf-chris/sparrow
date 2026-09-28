@@ -23,9 +23,11 @@ import {
   Loading,
   Page,
   Poster,
+  Progress,
   Section,
   Status,
   duration,
+  progressOf,
   useResource,
 } from "./ui";
 
@@ -85,81 +87,98 @@ export default function Title({ user }: { user: User }) {
         {resource.loading && <Loading label="Loading this title…" />}
       </Page>
     );
+  const seasonCount = title.seasons.filter((s) => s.season_number > 0).length;
+  const shown = [...assets]
+    .filter(
+      (asset) =>
+        visibleSeason === "all" || String(asset.season || 1) === visibleSeason,
+    )
+    .sort(
+      (a, b) =>
+        (a.season || 0) - (b.season || 0) ||
+        (a.episode || 0) - (b.episode || 0),
+    );
   return (
-    <Page title="" className="sp-title-page">
+    <main id="main-content" className="sp-page sp-title">
       <Link className="sp-back" to={returnTo}>
-        <ArrowLeft size={15} />
+        <ArrowLeft size={16} />
         {returnTo.startsWith("/discover")
           ? "Back to discovery"
-          : "Your collection"}
+          : "Back to library"}
       </Link>
-      <ErrorNote error={resource.error} retry={resource.refresh} />
-      <div className="sp-title-hero">
-        <Backdrop className="sp-title-backdrop" src={title.backdrop_url} />
-        <Poster title={title.title} src={title.poster_url} />
-        <div className="sp-title-copy">
-          <p className="sp-eyebrow">
-            {title.media_type === "tv" ? "TV show" : "Movie"}
-            {title.year && ` · ${title.year}`}
-          </p>
-          <h1>{title.title}</h1>
-          <div className="sp-title-meta">
-            {title.runtime ? <span>{duration(title.runtime * 60)}</span> : null}
-            {title.media_type === "tv" && title.seasons.length > 0 && (
-              <span>
-                {
-                  title.seasons.filter((season) => season.season_number > 0)
-                    .length
-                }{" "}
-                seasons
-              </span>
-            )}
-            {next && <Status value="ready" />}
-          </div>
-          <p className="sp-description">
-            {title.overview || "A place for this title in your collection."}
-          </p>
-          <div className="sp-actions">
-            {next && (
-              <Link className="sp-button primary" to={`/watch/${next.id}`}>
-                <Play size={17} fill="currentColor" />
-                {next.watch?.position && !next.watch.watched
-                  ? "Resume"
-                  : "Play"}
-                {next.episode ? ` episode ${next.episode}` : ""}
-              </Link>
-            )}
-            {user.role !== "viewer" && title.tmdb_id && (
-              <button
-                className={`sp-button ${next ? "secondary" : "primary"}`}
-                onClick={() => setRequestOpen(true)}
-              >
-                <Plus size={17} />
-                {title.media_type === "movie"
-                  ? "Request movie"
-                  : "Choose episodes"}
-              </button>
-            )}
-            {active && (
-              <Link className="sp-button secondary" to="/activity">
-                View request
-              </Link>
-            )}
-          </div>
-          {assets.some((a) => a.state === "unavailable") && (
-            <p className="sp-muted mt-4">
-              Some files are on storage that’s currently unavailable. Your
-              collection and progress are saved.
-            </p>
-          )}
+      <section className="sp-marquee">
+        <div className="sp-marquee-art">
+          <Backdrop
+            src={title.backdrop_url || title.poster_url}
+            title={title.title}
+          />
         </div>
-      </div>
+        <div className="sp-marquee-copy">
+          <Poster
+            className="sp-marquee-poster"
+            title={title.title}
+            src={title.poster_url}
+          />
+          <div>
+            <p className="sp-kicker">
+              {[
+                title.media_type === "tv" ? "Series" : "Film",
+                title.year,
+                title.runtime ? duration(title.runtime * 60) : "",
+                title.media_type === "tv" && seasonCount
+                  ? `${seasonCount} season${seasonCount === 1 ? "" : "s"}`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+            <h1>{title.title}</h1>
+            <p className="sp-overview">
+              {title.overview || "A place for this title in your collection."}
+            </p>
+            <div className="sp-actions">
+              {next && (
+                <Link className="sp-button primary" to={`/watch/${next.id}`}>
+                  <Play size={16} fill="currentColor" />
+                  {next.watch?.position && !next.watch.watched
+                    ? "Resume"
+                    : "Play"}
+                  {next.episode ? ` episode ${next.episode}` : ""}
+                </Link>
+              )}
+              {user.role !== "viewer" && title.tmdb_id && (
+                <button
+                  className={`sp-button ${next ? "secondary" : "primary"}`}
+                  onClick={() => setRequestOpen(true)}
+                >
+                  <Plus size={16} />
+                  {title.media_type === "movie"
+                    ? "Request movie"
+                    : "Choose episodes"}
+                </button>
+              )}
+              {active && (
+                <Link className="sp-button quiet" to="/activity">
+                  View request
+                </Link>
+              )}
+            </div>
+            {assets.some((a) => a.state === "unavailable") && (
+              <p className="sp-quiet">
+                Some files are on storage that’s currently unavailable. Your
+                collection and progress are saved.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+      <ErrorNote error={resource.error} retry={resource.refresh} />
       {assets.length > 0 ? (
         <Section
+          title={title.media_type === "tv" ? "Episodes" : "Copies"}
           action={
             title.media_type === "tv" ? (
               <select
-                className="sp-season-select"
                 aria-label="Show episodes from"
                 value={visibleSeason}
                 onChange={(event) => setVisibleSeason(event.target.value)}
@@ -175,35 +194,17 @@ export default function Title({ user }: { user: User }) {
               </select>
             ) : undefined
           }
-          title={
-            title.media_type === "tv"
-              ? "In your collection"
-              : "Available copies"
-          }
         >
-          <div className="sp-panel">
-            {[...assets]
-              .filter(
-                (asset) =>
-                  visibleSeason === "all" ||
-                  String(asset.season || 1) === visibleSeason,
-              )
-              .sort(
-                (a, b) =>
-                  (a.season || 0) - (b.season || 0) ||
-                  (a.episode || 0) - (b.episode || 0),
-              )
-              .map((asset) => (
-                <Episode key={asset.id} asset={asset} />
-              ))}
-          </div>
+          <ol className="sp-episodes">
+            {shown.map((asset) => (
+              <Episode key={asset.id} asset={asset} />
+            ))}
+          </ol>
         </Section>
       ) : (
         <Empty
           title={
-            active
-              ? "Sparrow has your request."
-              : "This title is waiting for a place in your collection."
+            active ? "Sparrow has your request." : "Not in your collection yet."
           }
           action={
             active ? (
@@ -214,8 +215,8 @@ export default function Title({ user }: { user: User }) {
           }
         >
           {active
-            ? "You’ll find updates and any useful next steps in Activity."
-            : "Choose exactly what you want, or import an existing copy from Storage settings."}
+            ? "Updates and any useful next steps appear in Activity."
+            : "Choose exactly what you want, or import a copy you already own from Storage settings."}
         </Empty>
       )}
       {user.role !== "viewer" && title.tmdb_id && (
@@ -235,33 +236,43 @@ export default function Title({ user }: { user: User }) {
           }}
         />
       )}
-    </Page>
+    </main>
   );
 }
 function Episode({ asset }: { asset: Asset }) {
+  const started = !!asset.watch?.position && !asset.watch.watched;
   return (
-    <div className="sp-episode">
+    <li className="sp-episode">
       <span className="sp-episode-number">
-        {asset.episode ? String(asset.episode).padStart(2, "0") : "↗"}
+        {asset.episode ? asset.episode : "—"}
       </span>
-      <div>
+      <div className="sp-episode-copy">
         <h3>
           {asset.episode
             ? `Season ${asset.season} · Episode ${asset.episode}`
             : "Movie"}
-          {asset.watch?.watched ? " · Watched" : ""}
         </h3>
         <p>
-          {duration(asset.facts.duration)} · <Status value={asset.state} />
+          {duration(asset.facts.duration)}
+          {asset.watch?.watched ? " · Watched" : ""}
+          {asset.state !== "ready" && (
+            <>
+              {" · "}
+              <Status value={asset.state} />
+            </>
+          )}
         </p>
+        {started && (
+          <Progress value={progressOf(asset)} label="Watch progress" />
+        )}
       </div>
       {asset.state === "ready" && (
         <Link className="sp-button secondary" to={`/watch/${asset.id}`}>
-          <Play size={14} />
-          {asset.watch?.position && !asset.watch.watched ? "Resume" : "Play"}
+          <Play size={14} fill="currentColor" />
+          {started ? "Resume" : "Play"}
         </Link>
       )}
-    </div>
+    </li>
   );
 }
 function RequestSheet({
@@ -396,7 +407,7 @@ function RequestSheet({
               <Loading label="Checking episode information…" />
             ) : (
               <div>
-                <div className="sp-savebar" style={{ marginTop: 0 }}>
+                <div className="sp-picker-head">
                   <span className="sp-muted">{selected.length} selected</span>
                   <button
                     className="sp-button quiet"
@@ -416,7 +427,7 @@ function RequestSheet({
                     Select aired episodes
                   </button>
                 </div>
-                <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                <div className="sp-picker">
                   {episodes.map((ep) => (
                     <label className="sp-checkbox" key={ep.episode_number}>
                       <input
@@ -467,7 +478,7 @@ function RequestSheet({
           </select>
         </Field>
         {values && (
-          <div className="sp-panel">
+          <div className="sp-request-prefs">
             <p className="sp-muted">Your preferences</p>
             <p>
               {values.preferred_quality} preferred ·{" "}

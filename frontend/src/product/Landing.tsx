@@ -1,115 +1,66 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Play, Library, Wand2, Users } from "lucide-react";
-import { Mark, PlayroomArt, Doodle } from "./Brand";
+import { ArrowRight } from "lucide-react";
+import { Mark } from "./Brand";
+
+// A shelf filling itself: abstract slots, no real or invented titles.
+const shelf = [210, 28, -1, 150, 330, -1, 60, 250, 0, 190, -2, 290];
 
 export default function Landing({ needsSetup }: { needsSetup: boolean }) {
   const entry = needsSetup ? "/setup" : "/login";
   return (
-    <main className="sp-auth sp-landing">
-      <header className="sp-landing-nav">
-        <Link className="sp-brand" to="/" aria-label="Sparrow home">
+    <main className="sp-front">
+      <header className="sp-front-bar">
+        <Link className="sp-wordmark" to="/" aria-label="Sparrow home">
           <Mark />
           <span>sparrow</span>
         </Link>
-        <nav aria-label="Welcome navigation">
-          <a className="sp-landing-about" href="#little-things">
-            Meet Sparrow
-          </a>
-          <Link className="sp-button secondary" to={entry}>
-            {needsSetup ? "Set up Sparrow" : "Sign in"}
-            <ArrowRight size={15} />
-          </Link>
-        </nav>
+        <Link className="sp-button secondary" to={entry}>
+          {needsSetup ? "Set up Sparrow" : "Sign in"}
+        </Link>
       </header>
-      <section className="sp-landing-hero">
-        <div className="sp-landing-copy">
-          <p className="sp-landing-tag">
-            <span /> Your own little watch-world
-          </p>
+      <section className="sp-front-hero">
+        <div className="sp-front-copy">
           <h1>
-            Less scrolling.
-            <br />
-            More{" "}
-            <span>
-              good stuff.
-              <svg viewBox="0 0 300 16" fill="none" aria-hidden="true">
-                <path
-                  d="M3 10c87-9 190-9 293-5M11 15c96-8 190-9 268-6"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </span>
+            Ask for a film. <span>Sparrow does the rest.</span>
           </h1>
           <p>
-            Your favourite films. That show you keep meaning to watch. A happy
-            little home for all of it.
+            It finds what you asked for, checks it’s the real thing, files it in
+            your library and keeps your shows up to date. You just press play.
           </p>
-          <Link className="sp-button primary" to={entry}>
-            <Play size={14} fill="currentColor" />
-            {needsSetup ? "Make yourself at home" : "Open your Sparrow"}
-            <ArrowRight size={16} />
+          <Link className="sp-button primary sp-button-large" to={entry}>
+            {needsSetup ? "Set up your server" : "Open Sparrow"}
+            <ArrowRight size={18} />
           </Link>
-          <span className="sp-landing-small">
-            Your collection. Your people. Your pace.
-          </span>
         </div>
-        <div className="sp-landing-illustration">
-          <PlayroomArt />
-          <span className="sp-hand-note">
-            good company, great stories
-            <Doodle kind="spark" />
-          </span>
-        </div>
-      </section>
-      <section
-        className="sp-landing-features"
-        id="little-things"
-        aria-labelledby="little-things-title"
-      >
-        <div className="sp-landing-section-heading">
-          <h2 id="little-things-title">
-            A little bird takes care of the little things.
-          </h2>
-          <span>You get the good part.</span>
-        </div>
-        <div className="sp-landing-feature-grid">
-          <article>
-            <Library size={21} />
-            <span className="sp-feature-number">01</span>
-            <h3>All together now.</h3>
-            <p>
-              Bring your films and shows into one lovely, organised collection.
-              Pick up right where you left off.
-            </p>
-          </article>
-          <article>
-            <Wand2 size={21} />
-            <span className="sp-feature-number">02</span>
-            <h3>A title. A mood. A maybe.</h3>
-            <p>
-              Find the one you had in mind, or let a little curiosity lead you
-              to your next favourite.
-            </p>
-          </article>
-          <article>
-            <Users size={21} />
-            <span className="sp-feature-number">03</span>
-            <h3>Room for your people.</h3>
-            <p>
-              A shared collection, with watch history and preferences that are
-              just yours. Everybody gets comfy.
-            </p>
-          </article>
+        <div className="sp-shelf" aria-hidden="true">
+          {shelf.map((hue, index) => (
+            <span
+              key={index}
+              className={hue === -1 ? "arriving" : hue === -2 ? "empty" : ""}
+              style={
+                {
+                  "--hue": hue,
+                  "--delay": `${index * 90}ms`,
+                } as React.CSSProperties
+              }
+            />
+          ))}
         </div>
       </section>
-      <footer className="sp-landing-footer">
-        <span>
-          <Mark /> A little less managing. A lot more watching.
-        </span>
-        <span>Make a night of it.</span>
-      </footer>
+      <ol className="sp-front-steps">
+        <li>
+          <strong>Ask.</strong> By name, or by mood — “something we can finish
+          tonight”.
+        </li>
+        <li>
+          <strong>Sparrow fetches.</strong> Every file is checked against the
+          real runtime, never trusted by its name.
+        </li>
+        <li>
+          <strong>Watch.</strong> On any screen in the house, with your own
+          progress and preferences.
+        </li>
+      </ol>
     </main>
   );
 }

@@ -39,7 +39,7 @@ export default function InstallApp() {
         </p>
         {prompt && (
           <button
-            className="sp-button secondary mt-4"
+            className="sp-button secondary"
             onClick={async () => {
               await prompt.prompt();
               await prompt.userChoice;

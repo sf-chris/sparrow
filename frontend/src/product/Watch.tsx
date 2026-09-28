@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { api, post, type Asset, type Effective } from "./api";
 import { SubtitleRepair, type Caption } from "./SubtitleRepair";
-import { ErrorNote, Field, Loading, Page, useResource } from "./ui";
+import { ErrorNote, Field, Loading, useResource } from "./ui";
 
 type Playback = {
   id: string;
@@ -37,27 +37,34 @@ export default function Watch() {
       ),
     [assetId],
   );
+  const asset = resource.data?.asset;
   return (
-    <Page
-      className="sp-player-page"
-      title={resource.data?.title || "Your player"}
-    >
-      <Link
-        className="sp-back"
-        to={
-          resource.data ? `/items/${resource.data.asset.item_id}` : "/library"
-        }
-      >
-        <ArrowLeft size={15} />
-        Back to title
-      </Link>
+    <main id="main-content" className="sp-page sp-watch">
+      <header className="sp-watch-head">
+        <Link
+          className="sp-back"
+          to={asset ? `/items/${asset.item_id}` : "/library"}
+        >
+          <ArrowLeft size={16} />
+          Back to title
+        </Link>
+        <h1>
+          {resource.data?.title || "Your player"}
+          {asset?.episode ? (
+            <span>
+              {" "}
+              · S{asset.season} E{asset.episode}
+            </span>
+          ) : null}
+        </h1>
+      </header>
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {resource.loading && !resource.data ? (
         <Loading label="Opening your media…" />
       ) : (
         resource.data && <Player key={assetId} {...resource.data} />
       )}
-    </Page>
+    </main>
   );
 }
 function Player({
@@ -290,49 +297,49 @@ function Player({
           </div>
         )}
       </div>
-      {session && (
-        <div className="sp-player-settings sp-form-grid">
-          <Field label="Audio">
-            <select
-              value={session.audio_index ?? ""}
-              onChange={(e) => {
-                position.current = video.current?.currentTime;
-                setAudio(Number(e.target.value));
-              }}
-            >
-              {asset.facts.audio_tracks.map((t) => (
-                <option key={t.index} value={t.index}>
-                  {trackLabel(t, "Audio track")}
-                  {t.default ? " · default" : ""}
-                </option>
-              ))}
-              {!asset.facts.audio_tracks.length && (
-                <option value="">No audio track</option>
-              )}
-            </select>
-          </Field>
-          <Field label="Subtitles">
-            <select
-              value={subtitle}
-              onChange={(e) => setSubtitle(Number(e.target.value))}
-            >
-              <option value={-1}>Off</option>
-              {session.subtitles.map((t) => (
-                <option key={t.index} value={t.index}>
-                  {trackLabel(t, "Subtitles")}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-      )}
-      <div className="sp-savebar">
-        <span className="sp-muted">
+      <div className="sp-player-controls">
+        {session && (
+          <div className="sp-player-settings">
+            <Field label="Audio">
+              <select
+                value={session.audio_index ?? ""}
+                onChange={(e) => {
+                  position.current = video.current?.currentTime;
+                  setAudio(Number(e.target.value));
+                }}
+              >
+                {asset.facts.audio_tracks.map((t) => (
+                  <option key={t.index} value={t.index}>
+                    {trackLabel(t, "Audio track")}
+                    {t.default ? " · default" : ""}
+                  </option>
+                ))}
+                {!asset.facts.audio_tracks.length && (
+                  <option value="">No audio track</option>
+                )}
+              </select>
+            </Field>
+            <Field label="Subtitles">
+              <select
+                value={subtitle}
+                onChange={(e) => setSubtitle(Number(e.target.value))}
+              >
+                <option value={-1}>Off</option>
+                {session.subtitles.map((t) => (
+                  <option key={t.index} value={t.index}>
+                    {trackLabel(t, "Subtitles")}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
+        <p className="sp-quiet sp-player-note">
           {session?.mode === "hls"
             ? "Converting video for this browser."
-            : "Plays directly from your collection."}{" "}
-          Your progress saves automatically.
-        </span>
+            : "Playing directly from your collection."}{" "}
+          Progress saves automatically.
+        </p>
       </div>
       {!transcode && (
         <details className="sp-playback-help">

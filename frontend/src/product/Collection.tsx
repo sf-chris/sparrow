@@ -1,16 +1,9 @@
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import {
-  Play,
-  ArrowUpRight,
-  ArrowRight,
-  Search,
-  Compass,
-  Plus,
-} from "lucide-react";
-import { Backdrop, PlayroomArt } from "./Brand";
-import { api, type Item, type User, type Asset } from "./api";
+import { Play, ArrowRight, Search } from "lucide-react";
+import { Backdrop } from "./Brand";
+import { api, type Item, type User, type Asset, type Job } from "./api";
 import {
   ActionLink,
   Empty,
@@ -18,23 +11,16 @@ import {
   Loading,
   MediaCard,
   Page,
+  Progress,
   Section,
   duration,
   itemLink,
+  progressOf,
   useResource,
 } from "./ui";
 
-function watchProgress(asset: Asset) {
-  return Math.round(
-    Math.min(
-      100,
-      Math.max(
-        0,
-        (asset.watch!.position / Math.max(1, asset.watch!.duration)) * 100,
-      ),
-    ),
-  );
-}
+const remaining = (asset: Asset) =>
+  duration(Math.max(0, asset.facts.duration - (asset.watch?.position || 0)));
 
 export default function Collection({
   home = false,
@@ -44,7 +30,15 @@ export default function Collection({
   user: User;
 }) {
   const resource = useResource(() => api<Item[]>("/catalogue"));
-  useWebSocket(() => void resource.refresh());
+  const requests = useResource(() =>
+    home && user.role !== "viewer"
+      ? api<Job[]>("/jobs").catch(() => [])
+      : Promise.resolve([] as Job[]),
+  );
+  useWebSocket(() => {
+    void resource.refresh();
+    if (home) void requests.refresh();
+  });
   useEffect(() => {
     const timer = window.setInterval(resource.refresh, 15000);
     return () => clearInterval(timer);
@@ -88,247 +82,321 @@ export default function Collection({
     .sort((a, b) => b.asset.watch!.updated - a.asset.watch!.updated)
     .slice(0, 12);
   const empty = resource.data?.length === 0;
+  const first = user.name.split(" ")[0];
+
+  if (!home)
+    return (
+      <Page
+        className="sp-library"
+        title="Library"
+        action={
+          resource.data && !empty ? (
+            <span className="sp-count">
+              {items.length} {items.length === 1 ? "title" : "titles"}
+            </span>
+          ) : undefined
+        }
+      >
+        <ErrorNote error={resource.error} retry={resource.refresh} />
+        {!resource.data ? (
+          resource.loading && <Loading />
+        ) : empty ? (
+          <Empty
+            title="Your collection starts here."
+            action={
+              <div className="sp-actions">
+                {user.role === "admin" && (
+                  <ActionLink to="/settings/storage">
+                    Connect storage & import
+                  </ActionLink>
+                )}
+                {user.role !== "viewer" && (
+                  <ActionLink to="/discover">Find a movie or show</ActionLink>
+                )}
+              </div>
+            }
+          >
+            {user.role === "viewer"
+              ? "Titles shared with you will appear here. Ask the server owner to add a collection."
+              : "Bring the movies and shows you already own, then let Sparrow find the rest."}
+          </Empty>
+        ) : (
+          <>
+            <div className="sp-filters">
+              <label className="sp-searchfield">
+                <Search size={18} aria-hidden="true" />
+                <input
+                  type="search"
+                  aria-label="Search your library"
+                  placeholder="Search your library"
+                  value={query}
+                  onChange={(event) => filter("q", event.target.value)}
+                />
+              </label>
+              <div
+                className="sp-segments"
+                role="radiogroup"
+                aria-label="Media type"
+              >
+                {[
+                  ["", "All"],
+                  ["movie", "Films"],
+                  ["tv", "Series"],
+                ].map(([value, label]) => (
+                  <label key={value}>
+                    <input
+                      type="radio"
+                      name="media-type"
+                      value={value}
+                      checked={type === value}
+                      onChange={() => filter("type", value)}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <select
+                aria-label="Availability"
+                value={state}
+                onChange={(event) => filter("state", event.target.value)}
+              >
+                <option value="">Any availability</option>
+                <option value="ready">Ready to watch</option>
+                <option value="unavailable">Storage unavailable</option>
+                <option value="subtitles_pending">
+                  Subtitles need attention
+                </option>
+                <option value="verifying">Needs verification</option>
+              </select>
+              <select
+                aria-label="Sort titles"
+                value={sort}
+                onChange={(event) => filter("sort", event.target.value)}
+              >
+                <option value="recent">Recently added</option>
+                <option value="title">A–Z</option>
+                <option value="year">Newest release</option>
+              </select>
+            </div>
+            {items.length ? (
+              <div className="sp-grid">
+                {items.map((item) => (
+                  <MediaCard key={item.id} item={item} />
+                ))}
+              </div>
+            ) : (
+              <Empty
+                title="No titles match those filters."
+                action={
+                  <button
+                    className="sp-button secondary"
+                    onClick={() => setParams({})}
+                  >
+                    Clear filters
+                  </button>
+                }
+              >
+                Try a different title, or show everything.
+              </Empty>
+            )}
+          </>
+        )}
+      </Page>
+    );
+
+  const featured = continuing[0];
+  const lead = featured?.item || resource.data?.[0];
+  const leadAsset =
+    featured?.asset ||
+    lead?.assets.find(
+      (asset) => asset.state === "ready" && !asset.watch?.watched,
+    );
+  const onTheWay = (requests.data || []).filter(
+    (job) => ["active", "paused"].includes(job.status) || job.needs_attention,
+  );
   return (
-    <Page
-      className={home ? "sp-home-page" : "sp-library-page"}
-      title={
-        home
-          ? `What’s on tonight, ${user.name.split(" ")[0]}?`
-          : "Your library."
-      }
-    >
+    <main id="main-content" className="sp-page sp-home">
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {!resource.data ? (
-        resource.loading && <Loading />
+        <>
+          <h1 className="sp-hello">Welcome back, {first}.</h1>
+          {resource.loading && <Loading />}
+        </>
+      ) : empty || !lead ? (
+        <section className="sp-first-run" aria-labelledby="home-title">
+          <h1 className="sp-hello" id="home-title">
+            Welcome back, {first}.
+          </h1>
+          <h2>Nothing to watch yet.</h2>
+          <p>
+            {user.role === "viewer"
+              ? "Your household’s films and shows will appear here once the server owner adds them."
+              : user.role === "admin"
+                ? "Point Sparrow at the films and shows you already own, or name something and it will fetch it."
+                : "Name something you’d like to watch and Sparrow will fetch it."}
+          </p>
+          <div className="sp-actions">
+            {user.role === "admin" && (
+              <Link className="sp-button primary" to="/settings/storage">
+                Bring your collection
+              </Link>
+            )}
+            <Link
+              className={`sp-button ${user.role === "admin" ? "secondary" : "primary"}`}
+              to="/discover"
+            >
+              {user.role === "viewer"
+                ? "Explore titles"
+                : "Find a film or show"}
+            </Link>
+          </div>
+        </section>
       ) : (
         <>
-          {home && empty && (
-            <section
-              className="sp-feature sp-feature-empty"
-              aria-label="Welcome to your collection"
+          <h1 className="sp-hello">Welcome back, {first}.</h1>
+          <section className="sp-hero" aria-label={lead.title}>
+            <Link
+              className="sp-hero-art"
+              to={itemLink(lead)}
+              tabIndex={-1}
+              aria-hidden="true"
             >
-              <PlayroomArt />
-              <div className="sp-feature-copy">
-                <p className="sp-eyebrow">A LITTLE ROOM FOR YOUR FAVOURITES</p>
-                <h2>Make yourself at home.</h2>
-                <p>
-                  {user.role === "viewer"
-                    ? "Your household’s stories will appear here. Ask your server owner to add a collection."
-                    : "Your films. Your shows. All the stories you want to get lost in, together in one place."}
-                </p>
-                <div className="sp-actions">
-                  {user.role === "admin" ? (
-                    <Link className="sp-button primary" to="/settings/storage">
-                      <Plus size={17} />
-                      Bring your collection
-                    </Link>
-                  ) : (
-                    <Link className="sp-button primary" to="/discover">
-                      <Compass size={17} />
-                      Explore titles
-                    </Link>
-                  )}
-                  {user.role === "admin" && (
-                    <Link className="sp-button secondary" to="/discover">
-                      Find your first film <ArrowUpRight size={16} />
-                    </Link>
-                  )}
+              <Backdrop
+                src={lead.backdrop_url || lead.poster_url}
+                title={lead.title}
+              />
+            </Link>
+            <div className="sp-hero-copy">
+              <p className="sp-kicker">
+                {featured
+                  ? featured.asset.episode
+                    ? `Season ${featured.asset.season} · Episode ${featured.asset.episode}`
+                    : "Continue watching"
+                  : "Newest in your library"}
+              </p>
+              <h2 className="sp-hero-title">{lead.title}</h2>
+              {featured ? (
+                <div className="sp-hero-progress">
+                  <Progress
+                    value={progressOf(featured.asset)}
+                    label={`Watch progress for ${lead.title}`}
+                  />
+                  <span>{remaining(featured.asset)} left</span>
                 </div>
-              </div>
-            </section>
-          )}
-          {home && continuing.length > 0 && (
-            <Section
-              title="Continue watching"
-              action={
-                <Link className="sp-button quiet" to="/library">
-                  Your library <ArrowRight size={16} />
+              ) : (
+                lead.overview && (
+                  <p className="sp-hero-overview">{lead.overview}</p>
+                )
+              )}
+              <div className="sp-actions">
+                {leadAsset?.state === "ready" && (
+                  <Link
+                    className="sp-button primary"
+                    to={`/watch/${leadAsset.id}`}
+                    aria-label={`${featured ? "Resume" : "Play"} ${lead.title}`}
+                  >
+                    <Play size={16} fill="currentColor" />
+                    {featured ? "Resume" : "Play"}
+                  </Link>
+                )}
+                <Link className="sp-button secondary" to={itemLink(lead)}>
+                  Details
                 </Link>
-              }
-            >
+              </div>
+              {featured && featured.asset.state !== "ready" && (
+                <p className="sp-quiet">Storage unavailable · progress saved</p>
+              )}
+            </div>
+          </section>
+          {continuing.length > 1 && (
+            <Section title="Continue watching">
               <div
-                className="sp-continue-grid"
+                className="sp-rail"
                 role="region"
                 aria-label="Continue watching titles"
               >
-                {continuing.map(({ item, asset }) => (
+                {continuing.slice(1).map(({ item, asset }) => (
                   <article className="sp-continue" key={asset.id}>
-                    <div className="sp-continue-art">
-                      <Backdrop
-                        src={item.backdrop_url || item.poster_url}
-                        lazy
+                    <Link
+                      to={
+                        asset.state === "ready"
+                          ? `/watch/${asset.id}`
+                          : itemLink(item)
+                      }
+                      aria-label={`Resume ${item.title}`}
+                    >
+                      <div className="sp-continue-art">
+                        <Backdrop
+                          src={item.backdrop_url || item.poster_url}
+                          title={item.title}
+                          lazy
+                        />
+                        <span className="sp-continue-play" aria-hidden="true">
+                          <Play size={16} fill="currentColor" />
+                        </span>
+                      </div>
+                      <Progress
+                        value={progressOf(asset)}
+                        label={`Watch progress for ${item.title}`}
                       />
-                      {asset.state === "ready" && (
-                        <Link
-                          className="sp-continue-play"
-                          to={`/watch/${asset.id}`}
-                          aria-label={`Resume ${item.title}`}
-                        >
-                          <Play size={20} fill="currentColor" />
-                        </Link>
-                      )}
-                      <div
-                        className="sp-continue-progress"
-                        role="progressbar"
-                        aria-label={`Watch progress for ${item.title}`}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-valuenow={watchProgress(asset)}
-                      >
-                        <span style={{ width: `${watchProgress(asset)}%` }} />
-                      </div>
-                    </div>
-                    <div className="sp-continue-info">
-                      <div>
-                        <h3>
-                          <Link to={itemLink(item)}>{item.title}</Link>
-                        </h3>
-                        <p>
-                          {asset.episode
-                            ? `S${asset.season} · E${asset.episode} · `
-                            : ""}
-                          {duration(
-                            Math.max(
-                              0,
-                              asset.facts.duration - asset.watch!.position,
-                            ),
-                          )}{" "}
-                          left
-                        </p>
-                        {asset.state !== "ready" && (
-                          <p>Storage unavailable · progress saved</p>
-                        )}
-                      </div>
-                      <ArrowUpRight size={17} />
-                    </div>
+                      <h3>{item.title}</h3>
+                      <p>
+                        {asset.episode
+                          ? `S${asset.season} E${asset.episode} · `
+                          : ""}
+                        {remaining(asset)} left
+                        {asset.state !== "ready" && " · storage unavailable"}
+                      </p>
+                    </Link>
                   </article>
                 ))}
               </div>
             </Section>
           )}
-          {empty ? (
-            !home && (
-              <Empty
-                title="Your collection starts here."
-                action={
-                  <div className="sp-actions justify-center">
-                    {user.role === "admin" && (
-                      <ActionLink to="/settings/storage">
-                        Connect storage & import
-                      </ActionLink>
-                    )}
-                    {user.role !== "viewer" && (
-                      <ActionLink to="/discover">
-                        Find a movie or show
-                      </ActionLink>
-                    )}
-                  </div>
-                }
-              >
-                {user.role === "viewer"
-                  ? "Titles shared with you will appear here. Ask the server owner to add a collection."
-                  : "Bring the movies and shows you already own, then let Sparrow help with the rest."}
-              </Empty>
-            )
-          ) : (
+          {onTheWay.length > 0 && (
             <Section
-              title={
-                home ? "Now showing in your library" : "The whole collection"
-              }
+              title="On the way"
               action={
-                home ? (
-                  <Link className="sp-button quiet" to="/library">
-                    View all <ArrowRight size={16} />
-                  </Link>
-                ) : (
-                  <span className="sp-library-count">
-                    <strong>{items.length}</strong>{" "}
-                    {items.length === 1 ? "title" : "titles"}
-                  </span>
-                )
+                <Link className="sp-more" to="/activity">
+                  Activity <ArrowRight size={15} />
+                </Link>
               }
             >
-              {!home && (
-                <div className="sp-toolbar">
-                  <label className="sp-search">
-                    <Search size={18} />
-                    <input
-                      aria-label="Search your library"
-                      placeholder="Find something in your library…"
-                      value={query}
-                      onChange={(event) => filter("q", event.target.value)}
-                    />
-                  </label>
-                  <select
-                    aria-label="Media type"
-                    value={type}
-                    onChange={(event) => filter("type", event.target.value)}
-                  >
-                    <option value="">Films & series</option>
-                    <option value="movie">Movies</option>
-                    <option value="tv">TV shows</option>
-                  </select>
-                  <select
-                    aria-label="Availability"
-                    value={state}
-                    onChange={(event) => filter("state", event.target.value)}
-                  >
-                    <option value="">Any availability</option>
-                    <option value="ready">Ready to watch</option>
-                    <option value="unavailable">Storage unavailable</option>
-                    <option value="subtitles_pending">
-                      Subtitles need attention
-                    </option>
-                    <option value="verifying">Needs verification</option>
-                  </select>
-                  <select
-                    aria-label="Sort titles"
-                    value={sort}
-                    onChange={(event) => filter("sort", event.target.value)}
-                  >
-                    <option value="recent">Library order</option>
-                    <option value="title">Title: A–Z</option>
-                    <option value="year">Newest release</option>
-                  </select>
-                </div>
-              )}
-              {items.length ? (
-                <div className={home ? "sp-grid sp-poster-shelf" : "sp-grid"}>
-                  {(home ? items.slice(0, 12) : items).map((item) => (
-                    <MediaCard key={item.id} item={item} />
-                  ))}
-                </div>
-              ) : (
-                <Empty
-                  title="No titles match those filters."
-                  action={
-                    <button
-                      className="sp-button secondary"
-                      onClick={() => setParams({})}
-                    >
-                      Clear filters
-                    </button>
-                  }
-                >
-                  Try a different title or show everything in your collection.
-                </Empty>
-              )}
+              <ul className="sp-arrivals">
+                {onTheWay.slice(0, 4).map((job) => (
+                  <li key={job.id}>
+                    <Link to={`/activity?request=${job.id}`}>
+                      <span
+                        className={`sp-dot ${job.needs_attention ? "attention" : job.status}`}
+                        aria-hidden="true"
+                      />
+                      <strong>{job.title}</strong>
+                      <span>
+                        {job.state_line ||
+                          "Sparrow is checking what this needs."}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </Section>
           )}
-          {home && (
-            <section className="sp-home-discover">
-              <div>
-                <h2>Your next favourite is out there.</h2>
-                <p>Have a title in mind? Or just a feeling? Start there.</p>
-              </div>
-              <Link className="sp-button secondary" to="/discover">
-                <Compass size={17} />
-                Find your next watch <ArrowUpRight size={17} />
+          <Section
+            title="Recently added"
+            action={
+              <Link className="sp-more" to="/library">
+                Library <ArrowRight size={15} />
               </Link>
-            </section>
-          )}
+            }
+          >
+            <div className="sp-grid sp-grid-row">
+              {(resource.data || []).slice(0, 12).map((item) => (
+                <MediaCard key={item.id} item={item} />
+              ))}
+            </div>
+          </Section>
         </>
       )}
-    </Page>
+    </main>
   );
 }
