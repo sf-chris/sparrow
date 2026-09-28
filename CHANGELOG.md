@@ -9,6 +9,9 @@ All notable changes to Sparrow are documented here.
   Guide replaces Home and Library, Find has one box for a title or a mood, and
   arrow keys move between titles for keyboards and TV remotes. Tailwind and
   DM Sans are removed; a before/after gallery covers all 25 screens.
+- All interface copy rewritten in a listings voice, including the request,
+  log, Find, Following and subtitle status lines the server sends. The voice
+  rules are in the product design contract.
 - Dedicated operational Logs with scoped history, grouped repeats, filters,
   stable pagination and useful failure/recovery context.
 - Focused account/security page, current-browser identification, session

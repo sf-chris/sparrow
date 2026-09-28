@@ -114,8 +114,8 @@ export default function Shell({
   }, [navigate]);
   const notice = setupPending && user.welcomed && pathname !== "/setup" && (
     <div className="notice" role="status">
-      <span>Server setup isn’t finished.</span>
-      <Link to="/setup">Continue setup</Link>
+      <span>Setup isn’t finished.</span>
+      <Link to="/setup">Finish setup</Link>
     </div>
   );
   const signOut = (

@@ -218,7 +218,7 @@ export default function Collection({ user }: { user: User }) {
       {notice}
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {!resource.data ? (
-        resource.loading && <Loading label="Opening the guide" />
+        resource.loading && <Loading label="Loading the guide" />
       ) : !all.length ? (
         <Empty
           title="Nothing listed yet."
@@ -226,7 +226,7 @@ export default function Collection({ user }: { user: User }) {
             user.role === "admin" ? (
               <>
                 <Link className="btn primary" to="/settings/storage">
-                  Add your library
+                  Import your files
                 </Link>
                 <Link className="btn" to="/discover">
                   Find a title
@@ -240,8 +240,10 @@ export default function Collection({ user }: { user: User }) {
           }
         >
           {user.role === "viewer"
-            ? "Titles shared with you will be listed here."
-            : "Add the films and series you own, or ask for something new."}
+            ? "Films and series you can watch will be listed here."
+            : user.role === "admin"
+              ? "Import films and series you have, or request something new."
+              : "Find a film or series and request it."}
         </Empty>
       ) : (
         <div
@@ -314,8 +316,7 @@ export default function Collection({ user }: { user: User }) {
                               />
                               {asset.state !== "ready" && (
                                 <p className="meta">
-                                  <Flag value="unavailable" /> Your place is
-                                  saved.
+                                  <Flag value="unavailable" />
                                 </p>
                               )}
                             </div>
@@ -337,7 +338,9 @@ export default function Collection({ user }: { user: User }) {
               {coming.length > 0 && (
                 <section aria-labelledby="coming-up">
                   <Bar id="coming-up" title="Coming up">
-                    <Link to="/activity">Requests</Link>
+                    <Link to="/activity">
+                      See all<span className="sr-only"> requests</span>
+                    </Link>
                   </Bar>
                   <ol className="slots">
                     {coming.map((job) => (
@@ -400,7 +403,7 @@ export default function Collection({ user }: { user: User }) {
                 <input
                   type="search"
                   data-search
-                  aria-label="Search your library"
+                  aria-label="Search the collection"
                   placeholder="Search"
                   value={query}
                   onChange={(event) => filter("q", event.target.value)}
@@ -436,7 +439,7 @@ export default function Collection({ user }: { user: User }) {
                 value={state}
                 onChange={(event) => filter("state", event.target.value)}
               >
-                <option value="">Any state</option>
+                <option value="">Any status</option>
                 <option value="ready">Playable</option>
                 <option value="subtitles_pending">Needs subtitles</option>
                 <option value="unavailable">Offline</option>
@@ -445,7 +448,7 @@ export default function Collection({ user }: { user: User }) {
             </div>
             {!items.length ? (
               <Empty
-                title="No match."
+                title="Nothing matches."
                 action={
                   <button className="btn" onClick={() => setParams({})}>
                     Clear filters

@@ -104,8 +104,7 @@ export default function Activity() {
                   <p className="meta">{scope(job)}</p>
                   {job.status !== "paused" && (
                     <p className="request-note">
-                      {job.state_line ||
-                        "Sparrow is checking what this request needs."}
+                      {job.state_line || "Starting…"}
                     </p>
                   )}
                   {open && (
@@ -169,9 +168,8 @@ export default function Activity() {
             </Link>
           }
         >
-          {selectedRequest
-            ? "It may have been removed, or your access changed."
-            : "New requests and their progress appear here."}
+          {selectedRequest &&
+            "It may have been removed, or your access changed."}
         </Empty>
       )}
       <CollectionCare titles={titles} />
@@ -230,9 +228,7 @@ function JournalEntries({ id }: { id: string }) {
           ))}
         </ol>
       ) : (
-        <p className="muted">
-          The first note appears when Sparrow starts checking.
-        </p>
+        <p className="muted">No notes yet.</p>
       )}
     </div>
   );

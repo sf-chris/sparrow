@@ -30,15 +30,15 @@ export default function Onboarding({
   const [busy, setBusy] = useState(false);
   const state = resource.data;
   const steps: { id: Step; label: string }[] = [
-    { id: "start", label: "How to start" },
+    { id: "start", label: "Start" },
     ...(state?.mode === "library"
       ? []
-      : [{ id: "providers" as Step, label: "Connections" }]),
+      : [{ id: "providers" as Step, label: "Keys" }]),
     { id: "storage", label: "Storage" },
     ...(state?.mode === "library"
       ? []
       : [{ id: "downloads" as Step, label: "Downloads" }]),
-    { id: "review", label: "Review" },
+    { id: "review", label: "Finish" },
   ];
   async function update(
     values: Partial<Pick<Setup, "mode" | "step" | "deferred">>,
@@ -61,7 +61,7 @@ export default function Onboarding({
       (!current.tmdb_configured || !current.reasoning_configured)
     )
       throw new Error(
-        "Add both API keys to find and download automatically, or choose Watch my existing collection.",
+        "Add both keys, or go back and choose Watch my existing collection.",
       );
     await update({ step });
   }
@@ -89,54 +89,50 @@ export default function Onboarding({
   const checks = state
     ? [
         {
-          label: "Title information",
+          label: "TMDB key",
           ok: state.tmdb_configured,
           value: state.tmdb_configured
-            ? "Key saved"
+            ? "Saved"
             : state.mode === "library"
-              ? "Optional for your own files"
-              : "Add a TMDB key",
+              ? "Optional"
+              : "Missing",
           step: "providers" as Step,
         },
         {
-          label: "Agents",
+          label: "Anthropic key",
           ok: state.reasoning_configured,
           value: state.reasoning_configured
-            ? "Key saved"
+            ? "Saved"
             : state.mode === "library"
-              ? "Optional for watching"
-              : "Add an Anthropic key",
+              ? "Optional"
+              : "Missing",
           step: "providers" as Step,
         },
         {
           label: "Library",
           ok: state.libraries.length > 0,
           value: state.libraries.length
-            ? `Ready on ${state.libraries.join(", ")}`
-            : "Connect a library folder with media tools",
+            ? state.libraries.join(", ")
+            : "No library folder yet",
           step: "storage" as Step,
         },
         {
           label: "Downloads",
           ok: state.download_destinations.length > 0,
           value: state.download_destinations.length
-            ? `Set up on ${state.download_destinations.join(", ")}`
+            ? state.download_destinations.join(", ")
             : state.mode === "library"
               ? "Later"
-              : "Connect a download app beside writable library and incoming folders",
+              : "No download app yet",
           step: "downloads" as Step,
         },
       ]
     : [];
   return (
-    <Page
-      className="setup-page"
-      title="Setup"
-      lede="Connect what you want to use. Progress saves as you go."
-    >
+    <Page className="setup-page" title="Setup">
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {!state ? (
-        <Loading label="Loading your setup" />
+        <Loading label="Loading setup" />
       ) : (
         <>
           <nav className="steps" aria-label="Setup steps">
@@ -176,8 +172,8 @@ export default function Onboarding({
                 >
                   <strong>Find and download for me</strong>
                   <span id="choice-autopilot" aria-hidden="true">
-                    Needs title information, an Anthropic key, storage and a
-                    download app.
+                    Needs a TMDB key, an Anthropic key, storage and a download
+                    app.
                   </span>
                 </button>
                 <button
@@ -194,7 +190,7 @@ export default function Onboarding({
                 >
                   <strong>Watch my existing collection</strong>
                   <span id="choice-library" aria-hidden="true">
-                    No keys or download app. Add downloads later.
+                    Needs storage only. Add the rest any time.
                   </span>
                 </button>
               </div>
@@ -212,7 +208,8 @@ export default function Onboarding({
               <Storage onboarding onChanged={resource.refresh} />
               <div className="savebar">
                 <p className="muted">
-                  Downloads need a separate, writable incoming folder.
+                  {state.mode !== "library" &&
+                    "Downloads need a separate incoming folder Sparrow can write to."}
                 </p>
                 <button
                   className="btn primary"
@@ -243,15 +240,15 @@ export default function Onboarding({
               />
               <div className="row">
                 <p className="muted">
-                  On a paired Windows machine, set up its download app in
-                  Sparrow Node instead.
+                  Downloading on a paired Windows computer? Set up its download
+                  app in Sparrow Node.
                 </p>
                 <button
                   className="btn"
                   disabled={busy}
                   onClick={() => void update({ step: "review" })}
                 >
-                  Use my paired machine
+                  Skip
                 </button>
               </div>
             </>
@@ -284,16 +281,13 @@ export default function Onboarding({
                 ))}
               </ul>
               <p className="muted">
-                Keys are checked on your first request. Nothing is downloaded or
-                billed during setup.{" "}
-                <Link to="/settings/defaults">
-                  Household defaults and spending limits
-                </Link>
+                Keys are tested on the first request. Nothing is downloaded or
+                charged during setup.{" "}
+                <Link to="/settings/defaults">Set spending limits</Link>
               </p>
               {!state.can_finish && (
                 <p role="status" className="muted">
-                  Some steps still need attention. Fix them above, or finish
-                  later from Settings.
+                  Finish the open steps, or come back later.
                 </p>
               )}
               <div className="savebar">
@@ -310,8 +304,8 @@ export default function Onboarding({
                   onClick={() => void leave(true)}
                 >
                   {state.mode === "library"
-                    ? "Finish and import media"
-                    : "Finish and find a title"}
+                    ? "Finish and import"
+                    : "Finish and find something"}
                 </button>
               </div>
             </section>

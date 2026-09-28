@@ -36,7 +36,7 @@ export default function SubtitleProviderSettings() {
   return (
     <Section
       title="Subtitles"
-      description="Included and local subtitle files work without an account. OpenSubtitles finds more; its download limits apply."
+      description="Subtitles in or beside your files work without this. OpenSubtitles finds more, within its download limits."
     >
       <div className="form">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
@@ -88,7 +88,7 @@ export default function SubtitleProviderSettings() {
             )}
           </span>
           <button className="btn" disabled={busy} onClick={save}>
-            {busy ? "Saving…" : "Save subtitle service"}
+            {busy ? "Saving…" : "Save"}
           </button>
         </div>
       </div>

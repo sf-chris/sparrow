@@ -457,16 +457,16 @@ class Curation:
                         fingerprint=fingerprint,
                         reviewed_at=time.time(),
                         message=(
-                            "Authorised requests are already in progress. Checking again when they change."
+                            "Waiting for open requests to finish."
                             if current.get("active_requests")
-                            else "Your authorised collection is up to date."
+                            else "Up to date."
                         ),
                     )
                     self.close_sessions(identity, CaseState.COMPLETED)
                     return
                 if not self.service.runtime._api_key_getter():
                     raise ToolError(
-                        "Connect the reasoning service, then retry collection care."
+                        "Add an Anthropic key, then check again."
                     )
                 if unfinished and not force:
                     if session.wake_at > time.time():
@@ -493,7 +493,7 @@ class Curation:
                 if not self.save(
                     row,
                     session_id=session.id,
-                    message="Reviewing the authorised gaps and upgrades.",
+                    message="Checking for missing episodes and upgrades.",
                 ):
                     return
                 await self.service.runtime.wake(
@@ -519,7 +519,7 @@ class Curation:
                         latest,
                         next_check=session.wake_at or time.time() + 3600,
                         message=session.wake_reason
-                        or "Collection review needs attention. Retry to continue.",
+                        or "The check didn’t finish. Check again to continue.",
                     )
             except (ToolError, ValueError) as exc:
                 self.save(row, message=str(exc), next_check=time.time() + 3600)
@@ -544,7 +544,7 @@ class Curation:
                         )
                         self.save(
                             row,
-                            message="Collection information is unavailable. Retry when the server connection recovers.",
+                            message="Couldn’t get title details. Trying again in an hour.",
                             next_check=time.time() + 3600,
                         )
 
@@ -578,7 +578,7 @@ class Curation:
                 row,
                 mandate=mandate.to_dict(),
                 enabled=False,
-                message="Imported monitoring is paused. Review its scope and enable it for your account.",
+                message="Paused when Sparrow was updated. Edit it to turn it back on.",
             )
         with self.accounts.connect() as db:
             db.execute("INSERT INTO care_migrations VALUES('legacy-owner')")
@@ -688,7 +688,7 @@ def install_curation(app, accounts, get_service):
             fingerprint="",
             retry_requested=True,
             next_check=0,
-            message="Queued a fresh collection check.",
+            message="Check queued.",
         )
         return {"queued": True}
 

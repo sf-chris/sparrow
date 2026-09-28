@@ -133,7 +133,7 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(task["state"], "review_pending")
         logged = self.storage.operations.page(self.owner, category="subtitle")
         self.assertEqual(logged["entries"][0]["severity"], "warning")
-        self.assertIn("retry", logged["entries"][0]["summary"])
+        self.assertIn("try again", logged["entries"][0]["summary"].lower())
         track = self.subtitles.tracks(self.owner, self.asset)[0]
         self.assertEqual((await self.client.get(track["url"])).status_code, 404)
         session = await self.start()
