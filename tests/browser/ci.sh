@@ -29,6 +29,7 @@ SPARROW_VISUAL_OUT="$evidence/onboarding" node tests/browser/onboarding.cjs
 SPARROW_VISUAL_OUT="$evidence/viewing" node tests/browser/check.cjs
 SPARROW_VISUAL_OUT="$evidence/entry" node tests/browser/entry.cjs
 SPARROW_VISUAL_OUT="$evidence/accessibility" node tests/browser/accessibility.cjs
+SPARROW_VISUAL_OUT="$evidence/themes" node tests/browser/themes.cjs
 SPARROW_VISUAL_OUT="$evidence/household" node tests/browser/household.cjs
 SPARROW_VISUAL_OUT="$evidence/design" node tests/browser/design.cjs
 SPARROW_VISUAL_OUT="$evidence/reimagined" node tests/browser/reimagined.cjs

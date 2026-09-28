@@ -24,6 +24,8 @@ import Discover from "./product/Discover";
 import Watch from "./product/Watch";
 import Onboarding from "./product/Onboarding";
 import "./product/product.css";
+import "./product/themes.css";
+import { applyTheme } from "./product/theme";
 
 function Guest({
   needsSetup,
@@ -62,6 +64,11 @@ function LibraryAddress() {
 
 export default function App() {
   const auth = useResource(() => api<AuthState>("/auth/status"));
+  const theme = auth.data?.user?.theme;
+  useEffect(() => {
+    // Signed out, the device keeps the last theme it showed.
+    if (theme !== undefined) applyTheme(theme);
+  }, [theme]);
   useEffect(() => {
     const signedOut = () => void auth.refresh();
     window.addEventListener("sparrow:signed-out", signedOut);

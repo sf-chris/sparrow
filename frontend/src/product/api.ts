@@ -45,6 +45,7 @@ export type User = {
   role: "admin" | "requester" | "viewer";
   welcomed: boolean;
   disabled: boolean;
+  theme: string;
   preferences: Partial<Preferences>;
   library_scope: string[] | null;
 };

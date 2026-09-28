@@ -55,6 +55,38 @@ class AccountTests(unittest.TestCase):
             ["fr"],
         )
 
+    def test_theme_is_personal_validated_and_outside_the_preference_contract(self):
+        user = self.invited()
+        self.assertEqual(user["theme"], "")
+        before = self.accounts.user(user["id"])["revision"]
+        chosen = self.accounts.set_theme(user["id"], "clear")
+        self.assertEqual(chosen["theme"], "clear")
+        self.assertEqual(chosen["revision"], before)
+        self.assertEqual(self.accounts.user(self.owner["id"])["theme"], "")
+        with self.assertRaises(ValueError):
+            self.accounts.set_theme(user["id"], "neon")
+        self.assertEqual(self.accounts.set_theme(user["id"], "")["theme"], "")
+
+    def test_databases_from_before_themes_gain_the_default_theme(self):
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as temp:
+            with sqlite3.connect(Path(temp) / "sparrow.db") as db:
+                db.execute(
+                    "CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE "
+                    "COLLATE NOCASE, password TEXT NOT NULL, name TEXT NOT NULL, role TEXT "
+                    "NOT NULL, library_scope TEXT, disabled INTEGER NOT NULL DEFAULT 0, "
+                    "preferences TEXT NOT NULL DEFAULT '{}', revision INTEGER NOT NULL "
+                    "DEFAULT 1, welcomed INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL)"
+                )
+                db.execute(
+                    "INSERT INTO users (id, username, password, name, role, created) "
+                    "VALUES ('u1', 'old', 'x', 'Old', 'admin', 0)"
+                )
+            upgraded = Accounts(temp)
+            self.assertEqual(upgraded.user("u1")["theme"], "")
+            self.assertEqual(upgraded.set_theme("u1", "console")["theme"], "console")
+
     def test_invitations_are_single_use_and_do_not_grant_admin(self):
         token = self.accounts.invite()
         user = self.accounts.create_user(
@@ -208,6 +240,19 @@ class AccountAPITests(unittest.TestCase):
             self.assertEqual(viewer.get("/api/config").status_code, 403)
             self.assertEqual(viewer.get("/api/v1/admin/users").status_code, 403)
             self.assertEqual(viewer.get("/api/v1/preferences").status_code, 200)
+            themed = viewer.put(
+                "/api/v1/appearance", json={"theme": "saturday"}, headers=headers
+            )
+            self.assertEqual(themed.json()["user"]["theme"], "saturday")
+            self.assertEqual(
+                viewer.get("/api/v1/auth/status").json()["user"]["theme"], "saturday"
+            )
+            self.assertEqual(
+                viewer.put(
+                    "/api/v1/appearance", json={"theme": "neon"}, headers=headers
+                ).status_code,
+                422,
+            )
             sessions = viewer.get("/api/v1/sessions").json()
             viewer.delete("/api/v1/sessions/" + sessions[0]["id"], headers=headers)
             self.assertEqual(viewer.get("/api/v1/preferences").status_code, 401)

@@ -188,3 +188,18 @@ SPARROW_GALLERY_OUT=docs/redesign/after node tests/browser/gallery.cjs
 | --- | --- |
 | ![Server settings, before](before/server-desktop.png) | ![Connections, after](after/server-desktop.png) |
 | <img src="before/server-mobile.png" width="260" alt="Server settings on a phone, before" /> | <img src="after/server-mobile.png" width="260" alt="Connections on a phone, after" /> |
+
+## Themes
+
+The Guide is the official theme; the other five are personal choices in
+Preferences. Each row is the same fixture, captured by the theme screenshot
+run: the Guide at 1440 px and a phone at 390 px.
+
+| Theme | Guide | Phone |
+| --- | --- | --- |
+| Guide | ![Guide: the Guide](themes/guide-guide.jpg) | <img src="themes/guide-guide-phone.jpg" width="200" alt="Guide: the Guide on a phone" /> |
+| Cinema | ![Cinema: the Guide](themes/cinema-guide.jpg) | <img src="themes/cinema-guide-phone.jpg" width="200" alt="Cinema: the Guide on a phone" /> |
+| Clear | ![Clear: the Guide](themes/clear-guide.jpg) | <img src="themes/clear-guide-phone.jpg" width="200" alt="Clear: the Guide on a phone" /> |
+| Saturday | ![Saturday: the Guide](themes/saturday-guide.jpg) | <img src="themes/saturday-guide-phone.jpg" width="200" alt="Saturday: the Guide on a phone" /> |
+| Repertory | ![Repertory: the Guide](themes/repertory-guide.jpg) | <img src="themes/repertory-guide-phone.jpg" width="200" alt="Repertory: the Guide on a phone" /> |
+| Console | ![Console: the Guide](themes/console-guide.jpg) | <img src="themes/console-guide-phone.jpg" width="200" alt="Console: the Guide on a phone" /> |

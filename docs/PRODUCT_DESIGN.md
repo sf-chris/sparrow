@@ -123,6 +123,29 @@ between titles, rows and covers anywhere they are listed.
 - **Dialogs:** paper sheets headed by a black bar; bottom sheets on phones.
   Focus containment, Escape and focus restoration are required.
 
+## Themes
+
+The Guide is Sparrow's official theme. Each person can choose another under
+You → Preferences → Theme; it applies at once, is stored with their account
+(outside the preference contract agents use) and is painted before the app
+loads on the device's next visit. Themes change colour, type, shape and
+density. They never change structure, words or behaviour.
+
+| Theme | For | Character |
+| --- | --- | --- |
+| Guide | Everyone (default) | Newsprint listings, teal band, condensed capitals |
+| Cinema | Film nights, the TV across the room | Dark streaming shelves, Manrope, rounded art, no rules |
+| Clear | Older eyes, low vision | Atkinson Hyperlegible Next at a larger size, black on white, heavy focus |
+| Saturday | Kids | Fredoka, colour-coded shelves, chunky buttons with sticker shadows |
+| Repertory | Film lovers | A festival programme: Bodoni Moda italic titles, hairlines, small capitals |
+| Console | Whoever runs the server | JetBrains Mono, phosphor green, bracketed commands, dense rows |
+
+Every theme passes the same axe and overflow checks as the Guide
+(`tests/browser/themes.cjs`). Red stays reserved for problems and the player
+stays dark in all of them. A theme restates the palette and faces in
+`frontend/src/product/themes.css`; decorative characters it adds carry empty
+alternative text so screen readers never announce them.
+
 ## Product and verification boundaries
 
 Use actual collection and account facts. Never invent availability, progress,
@@ -142,5 +165,8 @@ geometric fixture covers are test data, not real titles or recommendations.
 The sparrow doodle, pen circle and tick are original SVG in
 `frontend/src/product/Brand.tsx`; `frontend/public/icon.svg` repeats the
 doodle on teal. Archivo (Omnibus-Type) is bundled locally under the SIL OFL
-with its notice in `frontend/public/assets/font-licenses/`. DM Sans, the
+with its notice in `frontend/public/assets/font-licenses/`. The themes add
+Manrope, Atkinson Hyperlegible Next, Fredoka, Bodoni Moda and JetBrains Mono,
+each a Latin subset bundled locally under the SIL OFL with its notice in the
+same folder; a font downloads only when someone uses its theme. DM Sans, the
 pastel illustrations and Tailwind have been removed.
