@@ -23,7 +23,7 @@ import { Defaults, People, ServerSettings } from "./product/Administration";
 import Discover from "./product/Discover";
 import Watch from "./product/Watch";
 import Onboarding from "./product/Onboarding";
-import "./product/product.css";
+
 
 function Guest({
   needsSetup,
@@ -63,7 +63,7 @@ export default function App() {
   }, [auth.refresh]);
   if (!auth.data)
     return (
-      <main className="sp-auth">
+      <main className="sp-boot">
         {auth.error ? (
           <ErrorNote error={auth.error} retry={auth.refresh} />
         ) : (

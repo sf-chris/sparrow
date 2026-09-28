@@ -39,21 +39,21 @@ export default function Watch() {
   );
   return (
     <Page
-      className="sp-player-page"
-      title={resource.data?.title || "Your player"}
+      className="sp-screening"
+      kicker={
+        <Link
+          className="sp-back"
+          to={resource.data ? `/items/${resource.data.asset.item_id}` : "/library"}
+        >
+          <ArrowLeft size={15} aria-hidden="true" />
+          Back to title
+        </Link>
+      }
+      title={resource.data?.title || "Your screening"}
     >
-      <Link
-        className="sp-back"
-        to={
-          resource.data ? `/items/${resource.data.asset.item_id}` : "/library"
-        }
-      >
-        <ArrowLeft size={15} />
-        Back to title
-      </Link>
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {resource.loading && !resource.data ? (
-        <Loading label="Opening your media…" />
+        <Loading label="Opening your screening…" />
       ) : (
         resource.data && <Player key={assetId} {...resource.data} />
       )}
@@ -239,11 +239,12 @@ function Player({
         tracks[i].mode =
           session?.subtitles[i]?.index === subtitle ? "showing" : "disabled";
   }, [subtitle, session]);
+  const episode = asset.episode ? `Season ${asset.season} · Episode ${asset.episode}` : "";
   return (
     <div className="sp-player">
       <ErrorNote error={error} retry={() => setAttempt((v) => v + 1)} />
       <ErrorNote error={progressError} retry={() => void save()} />
-      <div className="sp-video-wrap">
+      <div className="sp-screen">
         <video
           ref={video}
           controls
@@ -258,8 +259,8 @@ function Player({
             if (session && !busy)
               setError(
                 transcode
-                  ? "This copy still could not play. Check that its storage is connected, then try again."
-                  : "This copy could not play. Open Playback help to try another format, or reconnect its storage.",
+                  ? "This copy still won’t play. Check that its storage is connected, then try again."
+                  : "This copy won’t play in this browser. Open Playback help to try another format, or reconnect its storage.",
               );
           }}
         >
@@ -274,82 +275,74 @@ function Player({
                 const tracks = video.current?.textTracks;
                 if (tracks)
                   for (let i = 0; i < tracks.length; i++)
-                    tracks[i].mode =
-                      session.subtitles[i]?.index === subtitle
-                        ? "showing"
-                        : "disabled";
+                    tracks[i].mode = session.subtitles[i]?.index === subtitle ? "showing" : "disabled";
               }}
             />
           ))}
         </video>
         {(busy || waiting) && (
-          <div className="sp-video-status">
-            <Loading
-              label={busy ? "Opening playback…" : "Waiting for your media…"}
-            />
+          <div className="sp-screen-status">
+            <Loading label={busy ? "Threading the projector…" : "Waiting for your media…"} />
           </div>
         )}
       </div>
-      {session && (
-        <div className="sp-player-settings sp-form-grid">
-          <Field label="Audio">
-            <select
-              value={session.audio_index ?? ""}
-              onChange={(e) => {
-                position.current = video.current?.currentTime;
-                setAudio(Number(e.target.value));
-              }}
-            >
-              {asset.facts.audio_tracks.map((t) => (
-                <option key={t.index} value={t.index}>
-                  {trackLabel(t, "Audio track")}
-                  {t.default ? " · default" : ""}
-                </option>
-              ))}
-              {!asset.facts.audio_tracks.length && (
-                <option value="">No audio track</option>
-              )}
-            </select>
-          </Field>
-          <Field label="Subtitles">
-            <select
-              value={subtitle}
-              onChange={(e) => setSubtitle(Number(e.target.value))}
-            >
-              <option value={-1}>Off</option>
-              {session.subtitles.map((t) => (
-                <option key={t.index} value={t.index}>
-                  {trackLabel(t, "Subtitles")}
-                </option>
-              ))}
-            </select>
-          </Field>
+      <div className="sp-deck">
+        <div className="sp-deck-info">
+          {episode && <span className="sp-label">{episode}</span>}
+          <p className="sp-hint">
+            {session?.mode === "hls"
+              ? "Converted for this browser as it plays."
+              : "Playing directly from your collection."}{" "}
+            Progress saves as you watch.
+          </p>
         </div>
-      )}
-      <div className="sp-savebar">
-        <span className="sp-muted">
-          {session?.mode === "hls"
-            ? "Converting video for this browser."
-            : "Plays directly from your collection."}{" "}
-          Your progress saves automatically.
-        </span>
+        {session && (
+          <div className="sp-deck-tracks">
+            <Field label="Audio">
+              <select
+                value={session.audio_index ?? ""}
+                onChange={(e) => {
+                  position.current = video.current?.currentTime;
+                  setAudio(Number(e.target.value));
+                }}
+              >
+                {asset.facts.audio_tracks.map((t) => (
+                  <option key={t.index} value={t.index}>
+                    {trackLabel(t, "Audio track")}
+                    {t.default ? " · default" : ""}
+                  </option>
+                ))}
+                {!asset.facts.audio_tracks.length && <option value="">No audio track</option>}
+              </select>
+            </Field>
+            <Field label="Subtitles">
+              <select value={subtitle} onChange={(e) => setSubtitle(Number(e.target.value))}>
+                <option value={-1}>Off</option>
+                {session.subtitles.map((t) => (
+                  <option key={t.index} value={t.index}>
+                    {trackLabel(t, "Subtitles")}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
       </div>
       {!transcode && (
-        <details className="sp-playback-help">
+        <details className="sp-disclosure sp-playback-help">
           <summary>Playback help</summary>
-          <p className="sp-muted">
-            Video won’t play, or there’s no sound? Try converting it to a format
-            this browser can play. This may take a moment; your original file
-            stays unchanged.
+          <p className="sp-hint">
+            Picture won’t play, or there’s no sound? Sparrow can convert it into a format this browser
+            understands. It may take a moment to start; your original file isn’t changed.
           </p>
           <button
-            className="sp-button quiet"
+            className="sp-btn sp-btn-line sp-btn-small"
             onClick={() => {
               position.current = video.current?.currentTime;
               setTranscode(true);
             }}
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={14} aria-hidden="true" />
             Try another playback format
           </button>
         </details>
@@ -362,13 +355,7 @@ function Player({
           onReady={(tracks) =>
             setSession((current) =>
               current
-                ? {
-                    ...current,
-                    subtitles: [
-                      ...tracks,
-                      ...current.subtitles.filter((t) => !t.id),
-                    ],
-                  }
+                ? { ...current, subtitles: [...tracks, ...current.subtitles.filter((t) => !t.id)] }
                 : current,
             )
           }
@@ -379,11 +366,7 @@ function Player({
                     ...current,
                     subtitles: current.subtitles.map((t) =>
                       t.id === id
-                        ? {
-                            ...t,
-                            offset: seconds,
-                            url: t.url.split("?")[0] + "?offset=" + seconds,
-                          }
+                        ? { ...t, offset: seconds, url: t.url.split("?")[0] + "?offset=" + seconds }
                         : t,
                     ),
                   }

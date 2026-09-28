@@ -37,7 +37,7 @@ export default function SubtitleProviderSettings() {
       title="Subtitle discovery"
       description="Included tracks and local subtitle files work without an account. Connect OpenSubtitles to find additional tracks; provider download limits apply."
     >
-      <div className="sp-panel sp-form">
+      <div className="sp-sheet sp-form">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         <div className="sp-form-grid">
           <Field
@@ -83,7 +83,7 @@ export default function SubtitleProviderSettings() {
             {saved ? "Subtitle provider saved." : ""}
           </span>
           <button
-            className="sp-button secondary"
+            className="sp-btn sp-btn-line"
             disabled={busy}
             onClick={save}
           >

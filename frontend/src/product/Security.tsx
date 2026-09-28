@@ -22,15 +22,17 @@ export default function Security() {
       setBusy("");
     }
   }
+  const mobile = (label: string) => /Mobile|Android|iPhone|iPad/i.test(label);
   return (
     <Page
+      kicker="Settings"
       title="Account & security"
-      description="Manage your password and the browsers signed in to your account."
+      description="Your password, and every browser that’s signed in as you."
     >
       <PasswordSettings onChanged={resource.refresh} />
       <Section
         title="Signed-in browsers"
-        description="End a session to remove its access. Use Sign out in the settings navigation to leave this browser."
+        description="End a session to sign that browser out. To leave this one, use Sign out."
       >
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {!resource.data && resource.loading ? (
@@ -38,49 +40,46 @@ export default function Security() {
         ) : (
           resource.data &&
           (resource.data.length ? (
-            <div className="sp-panel">
+            <ul className="sp-rows sp-sessions">
               {resource.data.map((session) => (
-                <div className="sp-row" key={session.id}>
-                  <div>
-                    <h3 className="sp-actions">
-                      {/Mobile|Android|iPhone|iPad/i.test(session.label) ? (
-                        <Smartphone size={17} />
-                      ) : (
-                        <Monitor size={17} />
-                      )}
-                      {session.current
-                        ? "This browser"
-                        : /Mobile|Android|iPhone|iPad/i.test(session.label)
-                          ? "Mobile browser"
-                          : "Browser"}
-                    </h3>
-                    <p>
-                      Signed in{" "}
-                      {new Date(session.created * 1000).toLocaleString()}
-                    </p>
-                    <details className="sp-session-detail">
-                      <summary>Browser details</summary>
-                      <p>
-                        {session.label || "No browser information available."}
+                <li className="sp-row" key={session.id}>
+                  <div className="sp-session">
+                    <span className="sp-session-icon" aria-hidden="true">
+                      {mobile(session.label) ? <Smartphone size={18} /> : <Monitor size={18} />}
+                    </span>
+                    <div>
+                      <h3>
+                        {session.current
+                          ? "This browser"
+                          : mobile(session.label)
+                            ? "Mobile browser"
+                            : "Browser"}
+                      </h3>
+                      <p className="sp-label">
+                        Signed in {new Date(session.created * 1000).toLocaleString()}
                       </p>
-                    </details>
+                      <details className="sp-disclosure sp-session-detail">
+                        <summary>Browser details</summary>
+                        <p className="sp-hint">{session.label || "No browser information available."}</p>
+                      </details>
+                    </div>
                   </div>
-                  {!session.current && (
+                  {session.current ? (
+                    <span className="sp-status is-ok">You’re here</span>
+                  ) : (
                     <button
-                      className="sp-button secondary"
+                      className="sp-btn sp-btn-line sp-btn-small"
                       disabled={!!busy}
                       onClick={() => revoke(session.id)}
                     >
                       {busy === session.id ? "Ending…" : "End session"}
                     </button>
                   )}
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           ) : (
-            <Empty title="No active browsers.">
-              Sign in again to manage this account.
-            </Empty>
+            <Empty title="No active browsers.">Sign in again to manage this account.</Empty>
           ))
         )}
       </Section>

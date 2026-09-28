@@ -32,7 +32,7 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
     await (await context.request.get(base + "/api/v1/auth/status")).json()
   ).needs_setup;
   const welcome = () =>
-    page.getByRole("heading", { name: "Less scrolling. More good stuff." });
+    page.getByRole("heading", { name: "Say the word. Dim the lights." });
   async function audit(name) {
     for (const width of [360, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: width > 700 ? 1000 : 844 });
@@ -70,7 +70,7 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
     await page.getByLabel("Setup code", { exact: true }).waitFor();
     await audit("administrator-setup");
     await page
-      .getByRole("link", { name: "Back to the good stuff", exact: true })
+      .getByRole("link", { name: "Back to Sparrow", exact: true })
       .click();
     await welcome().waitFor();
     const code = fs
@@ -131,7 +131,7 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
     await page.getByRole("button", { name: "Finish later", exact: true }).click();
   }
   await page
-    .getByRole("heading", { name: "What’s on tonight, Chris?", exact: true })
+    .getByRole("heading", { name: /^(Good (morning|afternoon|evening), Chris\.|Still up, Chris\?)$/ })
     .waitFor();
   await page.goto(base + "/settings");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();

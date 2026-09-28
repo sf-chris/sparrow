@@ -1,0 +1,393 @@
+.sp-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.sp-app > main,
+.sp-app > .sp-settings {
+  flex: 1 0 auto;
+}
+.sp-skip {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 50;
+  padding: 10px 14px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+}
+.sp-skip:focus {
+  top: 12px;
+}
+
+/* ───────── Wordmark ───────── */
+.sp-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sp-wordmark .sp-mark {
+  width: 30px;
+  height: 30px;
+  color: var(--signal);
+  margin-top: -3px;
+}
+
+/* ───────── Top bar ───────── */
+.sp-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--paper);
+  border-bottom: 1px solid var(--ink);
+}
+.sp-bar::after {
+  /* A second, finer rule: the programme's double line. */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 1px;
+  background: var(--rule);
+  pointer-events: none;
+}
+.sp-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  max-width: var(--measure);
+  min-height: 62px;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+.sp-bar-brand {
+  text-decoration: none;
+  flex: none;
+}
+.sp-bar-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  align-self: stretch;
+  margin-right: auto;
+}
+.sp-bar-nav a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink-2);
+}
+.sp-bar-nav a:hover {
+  color: var(--ink);
+}
+.sp-bar-nav a.active {
+  color: var(--ink);
+}
+.sp-bar-nav a.active::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 4px;
+  background: var(--signal);
+}
+.sp-bar-account,
+.sp-bar-account-out {
+  margin-left: auto;
+}
+.sp-bar-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 4px 0 0;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+.sp-bar-account:hover .sp-avatar,
+.sp-bar-account.active .sp-avatar {
+  background: var(--signal);
+  color: var(--on-signal);
+}
+.sp-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 19px;
+  line-height: 1;
+  transition: background-color 0.15s var(--ease);
+}
+
+.sp-notice-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  margin-top: 5px;
+  padding: 10px var(--gutter);
+  background: var(--inverse);
+  color: var(--inverse-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.sp-notice-strip span::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: var(--signal);
+  vertical-align: 1px;
+}
+.sp-notice-strip a {
+  color: inherit;
+  text-decoration-color: var(--signal);
+  text-decoration-thickness: 2px;
+}
+
+/* ───────── Footer ───────── */
+.sp-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  max-width: var(--measure);
+  width: 100%;
+  margin: 0 auto;
+  padding: 22px var(--gutter) 30px;
+}
+.sp-foot > div {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.sp-foot::before {
+  content: "";
+  flex-basis: 100%;
+  height: 1px;
+  background: var(--ink);
+  margin-bottom: 8px;
+}
+.sp-foot-brand {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* ───────── Mobile dock ───────── */
+.sp-dock {
+  display: none;
+}
+@media (max-width: 760px) {
+  .sp-bar-nav,
+  .sp-bar-account-name {
+    display: none;
+  }
+  .sp-bar-inner {
+    min-height: 56px;
+  }
+  .sp-wordmark {
+    font-size: 22px;
+  }
+  .sp-app:has(.sp-dock) {
+    padding-bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+  .sp-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--paper);
+    border-top: 1px solid var(--ink);
+  }
+  .sp-dock a {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 3px;
+    min-height: 62px;
+    text-decoration: none;
+    color: var(--ink-2);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .sp-dock a.active {
+    color: var(--ink);
+  }
+  .sp-dock a.active::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 22%;
+    right: 22%;
+    height: 4px;
+    background: var(--signal);
+  }
+  .sp-dock a.active svg {
+    color: var(--signal-ink);
+  }
+  .sp-app-watching .sp-dock {
+    display: none;
+  }
+  .sp-app-watching:has(.sp-dock) {
+    padding-bottom: 0;
+  }
+}
+
+/* ───────── Settings layout ───────── */
+.sp-settings {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 0 clamp(24px, 4vw, 56px);
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+.sp-settings > .sp-page {
+  padding-left: 0;
+  padding-right: 0;
+}
+.sp-settings-index {
+  position: sticky;
+  top: 63px;
+  align-self: start;
+  padding: clamp(28px, 5vw, 56px) 0 32px;
+}
+.sp-settings-index > .sp-label {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ink);
+}
+.sp-settings-index ol {
+  counter-reset: none;
+}
+.sp-settings-index li {
+  border-bottom: 1px solid var(--rule);
+}
+.sp-settings-index a {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 0;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink-2);
+}
+.sp-settings-index a:hover {
+  color: var(--ink);
+}
+.sp-settings-number {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.sp-settings-index a.active {
+  color: var(--ink);
+}
+.sp-settings-index a.active .sp-settings-number {
+  color: var(--signal-ink);
+}
+.sp-settings-index a.active span:last-child {
+  text-decoration: underline;
+  text-decoration-color: var(--signal);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+.sp-settings-index {
+  display: grid;
+  grid-template-areas: "label" "nav" "out";
+  align-content: start;
+}
+.sp-settings-index > .sp-label {
+  grid-area: label;
+}
+.sp-settings-index > nav {
+  grid-area: nav;
+}
+.sp-settings-signout {
+  grid-area: out;
+  margin-top: 22px;
+}
+.sp-settings-signout .sp-btn {
+  padding-left: 0;
+}
+@media (max-width: 900px) {
+  .sp-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sp-settings-index {
+    position: static;
+    padding: 18px 0 0;
+    grid-template-areas: "label out" "nav nav";
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .sp-settings-index ol {
+    display: flex;
+    gap: 0 18px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--rule);
+    margin: 0 calc(-1 * var(--gutter));
+    padding: 0 var(--gutter);
+  }
+  .sp-settings-index li {
+    border: 0;
+    flex: none;
+  }
+  .sp-settings-index a {
+    padding: 12px 0;
+    min-height: 44px;
+    font-size: 14px;
+    gap: 7px;
+  }
+  .sp-settings-index > .sp-label {
+    border: 0;
+    padding-bottom: 0;
+  }
+  .sp-settings-signout {
+    margin: 0;
+  }
+  .sp-settings-signout .sp-error {
+    grid-column: 1 / -1;
+  }
+}

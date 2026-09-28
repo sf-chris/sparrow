@@ -4,7 +4,7 @@ import { Backdrop } from "./Brand";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useEffect, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Play, Plus } from "lucide-react";
+import { ArrowLeft, Check, Play, Plus } from "lucide-react";
 import {
   api,
   post,
@@ -23,25 +23,27 @@ import {
   Loading,
   Page,
   Poster,
+  Progress,
   Section,
   Status,
   duration,
+  kind,
+  percent,
   useResource,
 } from "./ui";
+
+const audioNames: Record<string, string> = { original: "Original-language audio", any: "Any audio" };
 
 export default function Title({ user }: { user: User }) {
   const { mediaType, tmdbId, itemId } = useParams();
   const location = useLocation();
   const previous = location.state?.from;
   const returnTo =
-    typeof previous === "string" && /^\/(library|discover)(\?|$)/.test(previous)
-      ? previous
-      : "/library";
+    typeof previous === "string" && /^\/(library|discover)(\?|$)/.test(previous) ? previous : "/library";
   const resource = useResource(async () => {
     if (itemId) {
       const item = await api<Item>(`/items/${itemId}`);
-      if (item.tmdb_id)
-        return api<TitleData>(`/titles/${item.media_type}/${item.tmdb_id}`);
+      if (item.tmdb_id) return api<TitleData>(`/titles/${item.media_type}/${item.tmdb_id}`);
       return {
         title: item.title,
         year: String(item.year || ""),
@@ -66,100 +68,99 @@ export default function Title({ user }: { user: User }) {
   }, [title?.title]);
   const assets = title?.items.flatMap((i) => i.assets) || [];
   const next =
-    assets.find(
-      (a) =>
-        a.state === "ready" &&
-        a.watch &&
-        !a.watch.watched &&
-        a.watch.position > 5,
-    ) ||
+    assets.find((a) => a.state === "ready" && a.watch && !a.watch.watched && a.watch.position > 5) ||
     assets.find((a) => a.state === "ready" && !a.watch?.watched) ||
     assets.find((a) => a.state === "ready");
-  const active = title?.jobs.find((j) =>
-    ["active", "paused"].includes(j.status),
+  const active = title?.jobs.find((j) => ["active", "paused"].includes(j.status));
+  const back = (
+    <Link className="sp-back" to={returnTo}>
+      <ArrowLeft size={15} aria-hidden="true" />
+      {returnTo.startsWith("/discover") ? "Back to discovery" : "Your collection"}
+    </Link>
   );
   if (!title)
     return (
-      <Page title="Your next watch">
+      <Page title="" className="sp-title">
+        {back}
         <ErrorNote error={resource.error} retry={resource.refresh} />
         {resource.loading && <Loading label="Loading this title…" />}
       </Page>
     );
+  const seasons = title.seasons.filter((season) => season.season_number > 0).length;
+  const resuming = !!(next?.watch?.position && !next.watch.watched);
   return (
-    <Page title="" className="sp-title-page">
-      <Link className="sp-back" to={returnTo}>
-        <ArrowLeft size={15} />
-        {returnTo.startsWith("/discover")
-          ? "Back to discovery"
-          : "Your collection"}
-      </Link>
+    <Page title="" className="sp-title">
+      {back}
       <ErrorNote error={resource.error} retry={resource.refresh} />
-      <div className="sp-title-hero">
-        <Backdrop className="sp-title-backdrop" src={title.backdrop_url} />
-        <Poster title={title.title} src={title.poster_url} />
-        <div className="sp-title-copy">
-          <p className="sp-eyebrow">
-            {title.media_type === "tv" ? "TV show" : "Movie"}
+      <div className="sp-feature">
+        <div className="sp-feature-still">
+          <Backdrop src={title.backdrop_url || title.poster_url} />
+        </div>
+        <div className="sp-feature-poster">
+          <Poster title={title.title} src={title.poster_url} />
+        </div>
+        <div className="sp-feature-copy">
+          <p className="sp-label">
+            {kind(title.media_type)}
             {title.year && ` · ${title.year}`}
+            {title.runtime ? ` · ${duration(title.runtime * 60)}` : ""}
+            {title.media_type === "tv" && seasons > 0 && ` · ${seasons} ${seasons === 1 ? "season" : "seasons"}`}
           </p>
           <h1>{title.title}</h1>
-          <div className="sp-title-meta">
-            {title.runtime ? <span>{duration(title.runtime * 60)}</span> : null}
-            {title.media_type === "tv" && title.seasons.length > 0 && (
-              <span>
-                {
-                  title.seasons.filter((season) => season.season_number > 0)
-                    .length
-                }{" "}
-                seasons
-              </span>
-            )}
-            {next && <Status value="ready" />}
-          </div>
-          <p className="sp-description">
+          <p className="sp-feature-overview">
             {title.overview || "A place for this title in your collection."}
           </p>
-          <div className="sp-actions">
+          <div className="sp-actions sp-feature-actions">
             {next && (
-              <Link className="sp-button primary" to={`/watch/${next.id}`}>
-                <Play size={17} fill="currentColor" />
-                {next.watch?.position && !next.watch.watched
-                  ? "Resume"
-                  : "Play"}
+              <Link className="sp-btn sp-btn-play" to={`/watch/${next.id}`}>
+                <Play size={18} fill="currentColor" aria-hidden="true" />
+                {resuming ? "Resume" : "Play"}
                 {next.episode ? ` episode ${next.episode}` : ""}
               </Link>
             )}
             {user.role !== "viewer" && title.tmdb_id && (
               <button
-                className={`sp-button ${next ? "secondary" : "primary"}`}
+                className={`sp-btn ${next ? "sp-btn-line" : "sp-btn-solid"}`}
                 onClick={() => setRequestOpen(true)}
               >
-                <Plus size={17} />
-                {title.media_type === "movie"
-                  ? "Request movie"
-                  : "Choose episodes"}
+                <Plus size={17} aria-hidden="true" />
+                {title.media_type === "movie" ? "Request movie" : "Choose episodes"}
               </button>
             )}
             {active && (
-              <Link className="sp-button secondary" to="/activity">
+              <Link className="sp-btn sp-btn-ghost" to="/activity">
                 View request
               </Link>
             )}
           </div>
+          {next && resuming && next.watch && (
+            <div className="sp-feature-progress">
+              <Progress
+                className="sp-bar-progress"
+                label={`Watch progress for ${title.title}`}
+                value={percent(next.watch.position, next.watch.duration)}
+              />
+              <span className="sp-label">
+                {duration(Math.max(0, next.facts.duration - next.watch.position))} left
+              </span>
+            </div>
+          )}
           {assets.some((a) => a.state === "unavailable") && (
-            <p className="sp-muted mt-4">
-              Some files are on storage that’s currently unavailable. Your
-              collection and progress are saved.
+            <p className="sp-note">
+              Some copies are on storage that’s offline right now. Your collection and progress are
+              safe.
             </p>
           )}
         </div>
       </div>
       {assets.length > 0 ? (
         <Section
+          kicker="In your collection"
+          title={title.media_type === "tv" ? "Episodes" : "Your copies"}
           action={
             title.media_type === "tv" ? (
               <select
-                className="sp-season-select"
+                className="sp-select sp-season-select"
                 aria-label="Show episodes from"
                 value={visibleSeason}
                 onChange={(event) => setVisibleSeason(event.target.value)}
@@ -175,55 +176,36 @@ export default function Title({ user }: { user: User }) {
               </select>
             ) : undefined
           }
-          title={
-            title.media_type === "tv"
-              ? "In your collection"
-              : "Available copies"
-          }
         >
-          <div className="sp-panel">
+          <ol className="sp-listing">
             {[...assets]
-              .filter(
-                (asset) =>
-                  visibleSeason === "all" ||
-                  String(asset.season || 1) === visibleSeason,
-              )
-              .sort(
-                (a, b) =>
-                  (a.season || 0) - (b.season || 0) ||
-                  (a.episode || 0) - (b.episode || 0),
-              )
-              .map((asset) => (
-                <Episode key={asset.id} asset={asset} />
+              .filter((asset) => visibleSeason === "all" || String(asset.season || 1) === visibleSeason)
+              .sort((a, b) => (a.season || 0) - (b.season || 0) || (a.episode || 0) - (b.episode || 0))
+              .map((asset, index) => (
+                <Episode key={asset.id} asset={asset} index={index} />
               ))}
-          </div>
+          </ol>
         </Section>
       ) : (
         <Empty
-          title={
-            active
-              ? "Sparrow has your request."
-              : "This title is waiting for a place in your collection."
-          }
+          title={active ? "Sparrow has your request." : "Not in the house yet."}
           action={
             active ? (
-              <Link className="sp-button secondary" to="/activity">
+              <Link className="sp-btn sp-btn-line" to="/activity">
                 Follow its progress
               </Link>
             ) : undefined
           }
         >
           {active
-            ? "You’ll find updates and any useful next steps in Activity."
-            : "Choose exactly what you want, or import an existing copy from Storage settings."}
+            ? "You’ll find updates, and anything that needs you, in Requests."
+            : user.role === "viewer"
+              ? "This title isn’t in your collection."
+              : "Choose exactly what you’d like, or import a copy you already own from Storage settings."}
         </Empty>
       )}
       {user.role !== "viewer" && title.tmdb_id && (
-        <CollectionCare
-          mediaType={title.media_type}
-          tmdbId={title.tmdb_id}
-          title={title.title}
-        />
+        <CollectionCare mediaType={title.media_type} tmdbId={title.tmdb_id} title={title.title} />
       )}
       {requestOpen && (
         <RequestSheet
@@ -238,32 +220,38 @@ export default function Title({ user }: { user: User }) {
     </Page>
   );
 }
-function Episode({ asset }: { asset: Asset }) {
+
+function Episode({ asset, index }: { asset: Asset; index: number }) {
+  const resume = !!(asset.watch?.position && !asset.watch.watched);
   return (
-    <div className="sp-episode">
-      <span className="sp-episode-number">
-        {asset.episode ? String(asset.episode).padStart(2, "0") : "↗"}
+    <li className="sp-listing-row">
+      <span className="sp-listing-number" aria-hidden="true">
+        {String(asset.episode ?? index + 1).padStart(2, "0")}
       </span>
-      <div>
-        <h3>
-          {asset.episode
-            ? `Season ${asset.season} · Episode ${asset.episode}`
-            : "Movie"}
-          {asset.watch?.watched ? " · Watched" : ""}
-        </h3>
-        <p>
-          {duration(asset.facts.duration)} · <Status value={asset.state} />
+      <div className="sp-listing-info">
+        <h3>{asset.episode ? `Episode ${asset.episode}` : "Feature"}</h3>
+        <p className="sp-label">
+          {asset.episode ? `Season ${asset.season} · ` : ""}
+          {duration(asset.facts.duration)}
         </p>
+        {asset.watch?.watched ? (
+          <span className="sp-status is-quiet">
+            <Check size={12} aria-hidden="true" /> Watched
+          </span>
+        ) : (
+          asset.state !== "ready" && <Status value={asset.state} />
+        )}
       </div>
       {asset.state === "ready" && (
-        <Link className="sp-button secondary" to={`/watch/${asset.id}`}>
-          <Play size={14} />
-          {asset.watch?.position && !asset.watch.watched ? "Resume" : "Play"}
+        <Link className="sp-btn sp-btn-play sp-btn-small" to={`/watch/${asset.id}`}>
+          <Play size={14} fill="currentColor" aria-hidden="true" />
+          {resume ? "Resume" : "Play"}
         </Link>
       )}
-    </div>
+    </li>
   );
 }
+
 function RequestSheet({
   title,
   onClose,
@@ -275,23 +263,17 @@ function RequestSheet({
 }) {
   const nodes = useResource(() => api<NodeInfo[]>("/nodes"));
   const [node, setNode] = useState(
-    title.jobs.find((j) => ["active", "paused"].includes(j.status))?.node_id ||
-      "local",
+    title.jobs.find((j) => ["active", "paused"].includes(j.status))?.node_id || "local",
   );
   const [overrides, setOverrides] = useState<Partial<Preferences>>({});
-  const [season, setSeason] = useState(
-    title.seasons.find((s) => s.season_number > 0)?.season_number || 1,
-  );
-  const [episodes, setEpisodes] = useState<
-    { episode_number: number; name: string; air_date: string }[]
-  >([]);
+  const [season, setSeason] = useState(title.seasons.find((s) => s.season_number > 0)?.season_number || 1);
+  const [episodes, setEpisodes] = useState<{ episode_number: number; name: string; air_date: string }[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
-  const [monitoring, setMonitoring] = useState(
-    title.preferences?.values.monitoring || "exact",
-  );
+  const [monitoring, setMonitoring] = useState(title.preferences?.values.monitoring || "exact");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const todayISO = new Date().toISOString().slice(0, 10);
   useEffect(() => {
     if (title.media_type !== "tv") return;
     let cancelled = false;
@@ -321,8 +303,7 @@ function RequestSheet({
       await post("/jobs", {
         tmdb_id: title.tmdb_id,
         media_type: title.media_type,
-        wanted_episodes:
-          title.media_type === "tv" ? { [season]: selected } : null,
+        wanted_episodes: title.media_type === "tv" ? { [season]: selected } : null,
         node_id: node,
         monitoring,
         preferences: overrides,
@@ -334,16 +315,15 @@ function RequestSheet({
       setBusy(false);
     }
   }
-  const values = title.preferences?.values
-    ? { ...title.preferences.values, ...overrides }
-    : undefined;
+  const values = title.preferences?.values ? { ...title.preferences.values, ...overrides } : undefined;
+  const aired = episodes.filter((e) => e.air_date && e.air_date <= todayISO).map((e) => e.episode_number);
   return (
     <Dialog
       title={`Request ${title.title}`}
       onClose={onClose}
       footer={
         <button
-          className="sp-button primary"
+          className="sp-btn sp-btn-solid"
           disabled={busy || (title.media_type === "tv" && !selected.length)}
           onClick={submit}
         >
@@ -356,100 +336,85 @@ function RequestSheet({
       }
     >
       <div className="sp-form">
-        <div className="sp-request-summary">
-          <Poster title={title.title} src={title.poster_url} />
-          <div>
-            <h3>{title.title}</h3>
-            <p>
-              {title.year} ·{" "}
-              {title.media_type === "tv"
-                ? "Choose exactly the episodes you want."
-                : "One good film, coming to your collection."}
-            </p>
+        <div className="sp-request-head">
+          <div className="sp-request-poster">
+            <Poster title={title.title} src={title.poster_url} />
           </div>
+          <p>
+            <span className="sp-label">
+              {kind(title.media_type)} · {title.year}
+            </span>
+            <br />
+            {title.media_type === "tv"
+              ? "Pick exactly the episodes you want. Nothing else will be fetched unless you ask."
+              : "Sparrow will find a good copy, check it and add it to your collection."}
+          </p>
         </div>
         <ErrorNote error={error || nodes.error} />
         {title.jobs.some((j) => ["active", "paused"].includes(j.status)) && (
-          <p className="sp-muted">
-            This adds your selected episodes to the existing request and applies
-            the preferences shown below. A paused request stays paused.
+          <p className="sp-note">
+            These episodes join the existing request and use the preferences below. A paused request stays
+            paused.
           </p>
         )}
         {title.media_type === "tv" && (
           <>
             <Field label="Season">
-              <select
-                value={season}
-                onChange={(e) => setSeason(Number(e.target.value))}
-              >
+              <select value={season} onChange={(e) => setSeason(Number(e.target.value))}>
                 {title.seasons
                   .filter((s) => s.episode_count > 0)
                   .map((s) => (
                     <option value={s.season_number} key={s.season_number}>
-                      {s.name || `Season ${s.season_number}`} ·{" "}
-                      {s.episode_count} episodes
+                      {s.name || `Season ${s.season_number}`} · {s.episode_count} episodes
                     </option>
                   ))}
               </select>
             </Field>
             {loading ? (
-              <Loading label="Checking episode information…" />
+              <Loading label="Checking the episode list…" />
             ) : (
-              <div>
-                <div className="sp-savebar" style={{ marginTop: 0 }}>
-                  <span className="sp-muted">{selected.length} selected</span>
+              <div className="sp-picker">
+                <div className="sp-picker-head">
+                  <span className="sp-label" role="status">
+                    {selected.length} of {episodes.length} selected
+                  </span>
                   <button
-                    className="sp-button quiet"
-                    onClick={() =>
-                      setSelected(
-                        episodes
-                          .filter(
-                            (e) =>
-                              e.air_date &&
-                              e.air_date <=
-                                new Date().toISOString().slice(0, 10),
-                          )
-                          .map((e) => e.episode_number),
-                      )
-                    }
+                    className="sp-btn sp-btn-ghost sp-btn-small"
+                    onClick={() => setSelected(selected.length === aired.length && aired.length ? [] : aired)}
                   >
-                    Select aired episodes
+                    {selected.length === aired.length && aired.length ? "Clear selection" : "Select aired episodes"}
                   </button>
                 </div>
-                <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                <ul className="sp-picker-list">
                   {episodes.map((ep) => (
-                    <label className="sp-checkbox" key={ep.episode_number}>
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(ep.episode_number)}
-                        onChange={(e) =>
-                          setSelected(
-                            e.target.checked
-                              ? [...selected, ep.episode_number]
-                              : selected.filter((n) => n !== ep.episode_number),
-                          )
-                        }
-                      />
-                      <span>
-                        {ep.episode_number}. {ep.name}
-                        {ep.air_date > new Date().toISOString().slice(0, 10)
-                          ? ` · ${ep.air_date}`
-                          : ""}
-                      </span>
-                    </label>
+                    <li key={ep.episode_number}>
+                      <label className="sp-check">
+                        <input
+                          type="checkbox"
+                          checked={selected.includes(ep.episode_number)}
+                          onChange={(e) =>
+                            setSelected(
+                              e.target.checked
+                                ? [...selected, ep.episode_number]
+                                : selected.filter((n) => n !== ep.episode_number),
+                            )
+                          }
+                        />
+                        <span className="sp-picker-number">{String(ep.episode_number).padStart(2, "0")}</span>
+                        <span>
+                          {ep.name}
+                          {ep.air_date > todayISO && <span className="sp-label"> · Airs {ep.air_date}</span>}
+                        </span>
+                      </label>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
-            <Field label="Future monitoring">
-              <select
-                value={monitoring}
-                onChange={(e) => setMonitoring(e.target.value)}
-              >
-                <option value="exact">Off — only these episodes</option>
-                <option value="keep_current">
-                  Get new episodes as they air
-                </option>
+            <Field label="Future episodes">
+              <select value={monitoring} onChange={(e) => setMonitoring(e.target.value)}>
+                <option value="exact">Only these episodes</option>
+                <option value="keep_current">Also get new episodes as they air</option>
               </select>
             </Field>
           </>
@@ -467,24 +432,17 @@ function RequestSheet({
           </select>
         </Field>
         {values && (
-          <div className="sp-panel">
-            <p className="sp-muted">Your preferences</p>
+          <div className="sp-request-prefs">
+            <p className="sp-label">Using your preferences</p>
             <p>
-              {values.preferred_quality} preferred ·{" "}
-              {values.audio_pref === "original"
-                ? "Original audio"
-                : values.audio_pref}{" "}
-              · {values.subtitle_languages.join(", ")} subtitles
+              {values.preferred_quality} picture · {audioNames[values.audio_pref] || `${values.audio_pref} audio`} ·{" "}
+              {values.subtitle_languages.join(", ") || "no"} subtitles
             </p>
-            <details>
-              <summary className="sp-button quiet">
-                Change preferences for this request
-              </summary>
+            <details className="sp-disclosure">
+              <summary>Change them for this request</summary>
               <PreferenceFields
                 values={values}
-                onChange={(key, value) =>
-                  setOverrides({ ...overrides, [key]: value })
-                }
+                onChange={(key, value) => setOverrides({ ...overrides, [key]: value })}
               />
             </details>
           </div>

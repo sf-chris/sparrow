@@ -54,6 +54,7 @@ export function Defaults() {
   }
   return (
     <Page
+      kicker="Administration"
       title="Household defaults"
       description="The starting point for everyone. Personal overrides stay personal; server limits always apply."
     >
@@ -61,7 +62,7 @@ export function Defaults() {
       {resource.data ? (
         <>
           <Section title="Default preferences">
-            <div className="sp-panel">
+            <div className="sp-sheet">
               <PreferenceFields
                 values={{ ...resource.data.defaults, ...draft }}
                 onChange={(key, value) => {
@@ -75,7 +76,7 @@ export function Defaults() {
             title="Server limits"
             description="These apply to every request, including work managed by agents."
           >
-            <div className="sp-panel sp-form-grid">
+            <div className="sp-sheet sp-form-grid">
               <Field label="Maximum picture quality">
                 <select
                   value={policy.max_quality || resource.data.policy.max_quality}
@@ -153,7 +154,7 @@ export function Defaults() {
               {saved ? "Household defaults saved." : ""}
             </span>
             <button
-              className="sp-button primary"
+              className="sp-btn sp-btn-solid"
               disabled={busy}
               onClick={save}
             >
@@ -214,6 +215,7 @@ export function ServerSettings({
             ? "Connect your download app"
             : "Server settings"
       }
+      kicker={setupSection ? undefined : "Administration"}
       description={
         setupSection === "providers"
           ? "TMDB supplies title and episode information. Anthropic powers discovery and collection care. Keys are stored on your server."
@@ -228,7 +230,7 @@ export function ServerSettings({
           {setupSection !== "downloads" && (
             <Section title="Connections">
               {setupSection && (
-                <p className="sp-muted">
+                <p className="sp-hint">
                   Create a key in{" "}
                   <a
                     href="https://www.themoviedb.org/settings/api"
@@ -249,7 +251,7 @@ export function ServerSettings({
                   provider.
                 </p>
               )}
-              <div className="sp-panel sp-form-grid">
+              <div className="sp-sheet sp-form-grid">
                 <Field
                   label="TMDB API key"
                   hint={
@@ -327,7 +329,7 @@ export function ServerSettings({
               title="Download app on this server"
               description="For Windows acquisition, configure the download app on the Windows node instead."
             >
-              <div className="sp-panel sp-form-grid">
+              <div className="sp-sheet sp-form-grid">
                 <Field label="Download app">
                   <select
                     value={tc.type || "none"}
@@ -430,7 +432,7 @@ export function ServerSettings({
             </Section>
           )}
           {setupSection === "downloads" && (
-            <p className="sp-muted">
+            <p className="sp-hint">
               If Sparrow runs in Docker, the host must be reachable from its
               container. Use the download machine’s LAN address; localhost
               refers to the Sparrow container.
@@ -441,7 +443,7 @@ export function ServerSettings({
               {saved ? "Server settings saved." : ""}
             </span>
             <button
-              className="sp-button primary"
+              className="sp-btn sp-btn-solid"
               disabled={busy}
               onClick={save}
             >
@@ -532,48 +534,51 @@ export function People({ currentUser }: { currentUser: User }) {
   }
   return (
     <Page
+      kicker="The household"
       title="People"
-      description="Good stories are better shared. Give everyone a space of their own."
+      description="Good stories are better shared. Everyone gets their own seat, history and preferences."
       action={
         <button
-          className="sp-button primary"
+          className="sp-btn sp-btn-solid"
           onClick={() => {
             setDialog(true);
             setInvite("");
           }}
         >
-          <Plus size={16} />
+          <Plus size={16} aria-hidden="true" />
           Invite someone
         </button>
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.data ? (
-        <div className="sp-people-grid">
+        <ol className="sp-cast">
           {resource.data.map((user) => (
-            <article className="sp-person-card" key={user.id}>
+            <li className={`sp-cast-member ${user.disabled ? "is-disabled" : ""}`} key={user.id}>
               <span className="sp-avatar" aria-hidden="true">
                 {user.name.slice(0, 1).toUpperCase()}
               </span>
               <div>
                 <h3>
                   {user.name}
-                  {user.id === currentUser.id ? " · You" : ""}
+                  {user.id === currentUser.id && <span className="sp-stamp">You</span>}
                 </h3>
-                <p>
+                <p className="sp-label">
                   {user.username} ·{" "}
                   {user.role === "requester"
-                    ? "Can watch and request"
+                    ? "Watches and requests"
                     : user.role === "admin"
-                      ? "Administrator"
-                      : "Can watch"}
-                  {user.disabled ? " · Access disabled" : ""}
+                      ? "Runs the house"
+                      : "Watches"}
+                  {user.library_scope !== null &&
+                    ` · ${user.library_scope.length ? `${user.library_scope.length} ${user.library_scope.length === 1 ? "library" : "libraries"}` : "No libraries"}`}
                 </p>
+                {user.disabled && <span className="sp-status is-bad">Access disabled</span>}
               </div>
-              <div className="sp-actions">
-                {user.id !== currentUser.id && (
+              {user.id !== currentUser.id && (
+                <div className="sp-actions">
                   <button
-                    className="sp-button secondary"
+                    className="sp-btn sp-btn-line sp-btn-small"
                     onClick={() => {
                       setEditing(user);
                       setRole(user.role);
@@ -591,19 +596,17 @@ export function People({ currentUser }: { currentUser: User }) {
                   >
                     Edit access
                   </button>
-                )}
-                {user.id !== currentUser.id && (
                   <button
-                    className={`sp-button ${user.disabled ? "secondary" : "quiet"}`}
+                    className={`sp-btn sp-btn-small ${user.disabled ? "sp-btn-line" : "sp-btn-ghost"}`}
                     onClick={() => disable(user)}
                   >
                     {user.disabled ? "Restore access" : "Disable access"}
                   </button>
-                )}
-              </div>
-            </article>
+                </div>
+              )}
+            </li>
           ))}
-        </div>
+        </ol>
       ) : (
         resource.loading && <Loading label="Loading household accounts…" />
       )}
@@ -613,7 +616,7 @@ export function People({ currentUser }: { currentUser: User }) {
           onClose={() => setEditing(null)}
           footer={
             <button
-              className="sp-button primary"
+              className="sp-btn sp-btn-solid"
               disabled={busy}
               onClick={saveAccess}
             >
@@ -646,7 +649,7 @@ export function People({ currentUser }: { currentUser: User }) {
                 ))}
               </select>
             </Field>
-            <p className="sp-muted">
+            <p className="sp-hint">
               Changing access signs this person out so the new permissions apply
               immediately.
             </p>
@@ -659,7 +662,7 @@ export function People({ currentUser }: { currentUser: User }) {
             <ErrorNote error={error} />
             {invite ? (
               <>
-                <p className="sp-muted">
+                <p className="sp-hint">
                   Share this invitation link with the person you want to invite.
                 </p>
                 <Field label="Invitation link">
@@ -670,7 +673,7 @@ export function People({ currentUser }: { currentUser: User }) {
                   />
                 </Field>
                 <button
-                  className="sp-button primary"
+                  className="sp-btn sp-btn-solid"
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(invite);
@@ -688,7 +691,7 @@ export function People({ currentUser }: { currentUser: User }) {
               </>
             ) : (
               <>
-                <p className="sp-muted">
+                <p className="sp-hint">
                   A personal invitation, valid for seven days and usable once.
                 </p>
                 <Field label="What can they do?">
@@ -717,7 +720,7 @@ export function People({ currentUser }: { currentUser: User }) {
                   </select>
                 </Field>
                 <button
-                  className="sp-button primary"
+                  className="sp-btn sp-btn-solid"
                   disabled={busy}
                   onClick={create}
                 >

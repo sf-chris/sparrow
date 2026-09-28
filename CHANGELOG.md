@@ -4,6 +4,11 @@ All notable changes to Sparrow are documented here.
 
 ## Unreleased — bright Sparrow and household product foundation
 
+- Ground-up "private picture house" redesign of every page: new mark, palette,
+  bundled type, ticket/print/programme components, dark mode, and clearer
+  navigation (Tonight, Library, Find, Requests). Behaviour is unchanged;
+  before/after captures are in `docs/redesign/`.
+
 - Approved bright design across the actual application: public welcome page,
   compact Continue watching shelf, poster-led library, discovery, titles,
   browser player, settings and dialogs on desktop and phones.

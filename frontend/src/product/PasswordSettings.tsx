@@ -48,13 +48,10 @@ export default function PasswordSettings({
   }
   return (
     <>
-      <section
-        className="sp-password-setting"
-        aria-labelledby="password-heading"
-      >
+      <section className="sp-section sp-password-setting" aria-labelledby="password-heading">
         <div>
           <h2 id="password-heading">Password</h2>
-          <p className="sp-muted">Keep your account secure.</p>
+          <p className="sp-hint">Changing it signs out your other browsers.</p>
           {!open && saved && (
             <p className="sp-success" role="status">
               Password changed.
@@ -62,7 +59,7 @@ export default function PasswordSettings({
           )}
         </div>
         <button
-          className="sp-button secondary"
+          className="sp-btn sp-btn-line"
           onClick={() => {
             setSaved(false);
             setOpen(true);
@@ -75,7 +72,7 @@ export default function PasswordSettings({
         <Dialog title="Change password" onClose={close}>
           <form className="sp-form" onSubmit={save}>
             <ErrorNote error={error} />
-            <p className="sp-muted">
+            <p className="sp-hint">
               Changing your password signs out your other browser sessions.
             </p>
             <PasswordField
@@ -100,7 +97,7 @@ export default function PasswordSettings({
               <span className="sp-success" role="status">
                 {saved ? "Password changed." : ""}
               </span>
-              <button className="sp-button primary" disabled={busy}>
+              <button className="sp-btn sp-btn-solid" disabled={busy}>
                 {busy ? "Saving…" : "Change password"}
               </button>
             </div>

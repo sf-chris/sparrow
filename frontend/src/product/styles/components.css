@@ -1,0 +1,1012 @@
+/* ───────── Buttons ───────── */
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--control);
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  font-family: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s var(--ease),
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+.sp-btn svg {
+  flex: none;
+}
+.sp-btn:disabled,
+.sp-btn[aria-disabled="true"] {
+  opacity: 0.45;
+}
+.sp-btn-solid {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.sp-btn-solid:not(:disabled):hover {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: var(--on-signal);
+}
+.sp-btn-line {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.sp-btn-line:not(:disabled):hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.sp-btn-ghost {
+  padding: 0 4px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 5px;
+}
+.sp-btn-ghost:not(:disabled):hover {
+  text-decoration-color: var(--signal);
+  color: var(--signal-ink);
+}
+.sp-btn-small {
+  min-height: 32px;
+  padding: 0 11px;
+  font-size: 13px;
+}
+/* Play is the only round, red thing in the house. */
+.sp-btn-play {
+  min-height: 48px;
+  padding: 0 24px 0 18px;
+  border-radius: 999px;
+  background: var(--signal);
+  color: var(--on-signal);
+  font-size: 15px;
+  font-weight: 700;
+}
+.sp-btn-play:not(:disabled):hover {
+  transform: translateY(-1px);
+  background: var(--ink);
+  color: var(--paper);
+}
+.sp-btn-play.sp-btn-small {
+  min-height: 34px;
+  padding: 0 14px 0 11px;
+  font-size: 13px;
+}
+.sp-play-disc {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--signal);
+  color: var(--on-signal);
+}
+.sp-play-disc svg {
+  margin-left: 2px;
+}
+.sp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.sp-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--signal);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.sp-link:hover {
+  color: var(--signal-ink);
+}
+.sp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--ink-2);
+  min-height: 32px;
+}
+.sp-back:hover {
+  color: var(--signal-ink);
+}
+
+/* ───────── Page & section ───────── */
+.sp-page {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: clamp(28px, 5vw, 56px) var(--gutter) 72px;
+  animation: sp-rise 0.35s var(--ease) both;
+}
+@keyframes sp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.sp-page > * + * {
+  margin-top: clamp(28px, 4vw, 44px);
+}
+.sp-masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px 32px;
+}
+.sp-masthead > div {
+  min-width: 0;
+  max-width: 900px;
+}
+.sp-masthead .sp-label {
+  display: block;
+  margin-bottom: 12px;
+}
+.sp-masthead h1,
+.sp-masthead .sp-masthead-title {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(46px, 7.4vw, 92px);
+  line-height: 0.9;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.sp-masthead p.sp-lede {
+  margin-top: 16px;
+  max-width: 60ch;
+  font-size: 16px;
+  color: var(--ink-2);
+}
+.sp-embedded .sp-masthead h2 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(34px, 4.6vw, 52px);
+  line-height: 0.95;
+}
+.sp-embedded > * + * {
+  margin-top: 28px;
+}
+
+.sp-section {
+  border-top: 1px solid var(--ink);
+  padding-top: 14px;
+}
+.sp-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 24px;
+  margin-bottom: 20px;
+}
+.sp-section-head > div {
+  min-width: 0;
+}
+.sp-section-head h2 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1;
+}
+.sp-section-head .sp-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--signal-ink);
+}
+.sp-section-head p {
+  margin-top: 8px;
+  max-width: 68ch;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+/* A sheet is a raised piece of paper on the table. */
+.sp-sheet {
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  padding: clamp(18px, 3vw, 28px);
+}
+.sp-rows > * + * {
+  border-top: 1px solid var(--rule);
+}
+.sp-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding: 16px 0;
+}
+.sp-row > div:first-child {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.sp-row h3 {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.sp-row p {
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.sp-stack > * + * {
+  margin-top: 18px;
+}
+.sp-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px 24px;
+}
+.sp-savebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding-top: 18px;
+  margin-top: 22px;
+  border-top: 1px solid var(--rule);
+}
+.sp-savebar > :first-child {
+  flex: 1 1 220px;
+}
+
+/* ───────── Fields ───────── */
+.sp-field {
+  display: grid;
+  gap: 7px;
+  align-content: start;
+  min-width: 0;
+}
+.sp-field > label:first-child,
+.sp-field > .sp-field-label {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.sp-field small {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.sp-input,
+.sp-field input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.sp-field select,
+.sp-field textarea,
+.sp-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--ink) 42%, transparent);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.3;
+  transition: border-color 0.15s var(--ease);
+}
+.sp-field textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+.sp-field input:hover,
+.sp-field select:hover,
+.sp-field textarea:hover,
+.sp-select:hover {
+  border-color: var(--ink);
+}
+.sp-field input:focus-visible,
+.sp-field select:focus-visible,
+.sp-field textarea:focus-visible,
+.sp-select:focus-visible,
+.sp-input:focus-visible {
+  border-color: var(--ink);
+  outline: 2px solid var(--signal);
+  outline-offset: 0;
+}
+.sp-field input[readonly] {
+  background: var(--paper-deep);
+  font-family: var(--mono);
+  font-size: 13.5px;
+}
+.sp-field input:disabled,
+.sp-field select:disabled {
+  opacity: 0.55;
+}
+select.sp-select,
+.sp-field select {
+  appearance: none;
+  padding-right: 38px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+    linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 19px) 52%,
+    calc(100% - 14px) 52%;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+.sp-field input[type="file"] {
+  font-size: 13px;
+  max-width: 100%;
+}
+.sp-field input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font: 600 13px var(--text);
+  cursor: pointer;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--ink);
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: none;
+}
+.sp-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-height: 24px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.sp-check input {
+  margin-top: 1px;
+}
+.sp-password {
+  position: relative;
+}
+.sp-password input {
+  padding-right: 50px !important;
+}
+.sp-password button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 100%;
+  color: var(--ink-2);
+}
+.sp-password button:hover {
+  color: var(--ink);
+}
+.sp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 22px 24px;
+}
+.sp-form > * + * {
+  margin-top: 18px;
+}
+.sp-hint {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* ───────── Status ───────── */
+.sp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.sp-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  flex: none;
+}
+.sp-status.is-ok {
+  color: var(--ok);
+}
+.sp-status.is-live {
+  color: var(--signal-ink);
+}
+.sp-status.is-live::before {
+  border-radius: 50%;
+  animation: sp-onair 1.6s ease-in-out infinite;
+}
+.sp-status.is-warn {
+  color: var(--warn);
+}
+.sp-status.is-bad {
+  color: var(--bad);
+}
+.sp-status.is-quiet {
+  color: var(--ink-3);
+}
+@keyframes sp-onair {
+  50% {
+    opacity: 0.25;
+  }
+}
+.sp-stamp {
+  display: inline-block;
+  padding: 3px 7px 2px;
+  border: 1px solid currentColor;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ───────── Notices: error, success, empty, loading ───────── */
+.sp-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 14px 16px;
+  border-left: 4px solid var(--bad);
+  background: var(--bad-wash);
+  color: var(--ink);
+}
+.sp-error > svg {
+  color: var(--bad);
+  flex: none;
+}
+.sp-error p {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.sp-success {
+  color: var(--ok);
+  font-size: 14px;
+  font-weight: 600;
+}
+.sp-note {
+  padding: 14px 16px;
+  border-left: 4px solid var(--ink);
+  background: var(--paper-deep);
+  font-size: 14px;
+}
+.sp-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.sp-loading::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--signal);
+  animation: sp-onair 1s ease-in-out infinite;
+}
+.sp-empty {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 22px;
+  align-items: start;
+  padding: clamp(22px, 4vw, 36px);
+  border: 1px solid var(--ink);
+  background: var(--sheet);
+}
+.sp-empty .sp-mark {
+  width: 46px;
+  height: 46px;
+  color: var(--signal);
+  grid-row: span 3;
+}
+.sp-empty h2 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(26px, 3.4vw, 36px);
+  line-height: 1;
+}
+.sp-empty p {
+  max-width: 58ch;
+  color: var(--ink-2);
+}
+.sp-empty .sp-actions {
+  margin-top: 10px;
+}
+@media (max-width: 520px) {
+  .sp-empty {
+    grid-template-columns: 1fr;
+  }
+  .sp-empty .sp-mark {
+    grid-row: auto;
+  }
+}
+
+/* ───────── Tabs ───────── */
+.sp-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--rule);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sp-tabs [role="tab"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  margin-bottom: -1px;
+  border-bottom: 3px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.sp-tabs [role="tab"]:hover {
+  color: var(--ink);
+}
+.sp-tabs [role="tab"][aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--signal);
+}
+
+/* Segmented choice (radio buttons styled as a strip) */
+.sp-segments {
+  display: inline-flex;
+  border: 1px solid var(--ink);
+  min-height: 44px;
+}
+.sp-segments label {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sp-segments label + label {
+  border-left: 1px solid var(--ink);
+}
+.sp-segments input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.sp-segments label:has(input:checked) {
+  background: var(--ink);
+  color: var(--paper);
+}
+.sp-segments label:has(input:focus-visible) {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* ───────── Prints: poster cards ───────── */
+.sp-prints {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 36px 22px;
+}
+.sp-print {
+  min-width: 0;
+}
+.sp-print > a {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.sp-print-art {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  background: var(--paper-deep);
+  outline: 1px solid var(--rule);
+  outline-offset: -1px;
+  overflow: hidden;
+  transition: transform 0.25s var(--ease);
+}
+.sp-print-art img,
+.sp-print-art .sp-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sp-print-play {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  opacity: 0;
+  transform: translateY(6px) scale(0.9);
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+.sp-print > a:hover .sp-print-art,
+.sp-print > a:focus-visible .sp-print-art {
+  transform: translateY(-4px);
+}
+.sp-print > a:hover .sp-print-play,
+.sp-print > a:focus-visible .sp-print-play {
+  opacity: 1;
+  transform: none;
+}
+.sp-print-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgb(0 0 0 / 0.35);
+}
+.sp-print-progress span {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+}
+.sp-print-caption {
+  display: grid;
+  gap: 3px;
+  padding-top: 11px;
+}
+.sp-print-caption .sp-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.sp-print-caption h3 {
+  font-family: var(--display);
+  font-weight: 750;
+  font-size: 21px;
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+}
+.sp-print > a:hover h3 {
+  color: var(--signal-ink);
+}
+.sp-print-caption .sp-status {
+  margin-top: 4px;
+}
+
+/* Generated artwork for titles without a catalogue image. */
+.sp-poster {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  padding: 12%;
+  overflow: hidden;
+  background: var(--poster-bg, #17140f);
+  color: var(--poster-ink, #eee8db);
+  container-type: inline-size;
+}
+.sp-poster::before {
+  content: "";
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  bottom: 18%;
+  height: 46%;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background: var(--poster-accent, #cc3a16);
+  transform: rotate(var(--poster-tilt, -6deg));
+}
+.sp-poster > * {
+  position: relative;
+}
+.sp-poster-kicker {
+  font-family: var(--mono);
+  font-size: max(8px, 5.4cqi);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.sp-poster-title {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 14cqi;
+  line-height: 0.9;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.sp-backdrop-fallback {
+  background:
+    radial-gradient(circle at 78% 120%, var(--signal) 0 28%, transparent 28.2%),
+    var(--inverse);
+}
+
+/* ───────── Tickets: continue watching ───────── */
+.sp-tickets {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(420px, 1fr);
+  gap: 18px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 10px;
+  scrollbar-width: thin;
+}
+.sp-tickets:has(> :only-child) {
+  grid-auto-columns: minmax(0, 620px);
+}
+.sp-ticket {
+  --notch: 11px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  min-height: 176px;
+  scroll-snap-align: start;
+  background: var(--sheet);
+  border: 1px solid var(--ink);
+  /* Punch the two notches where the ticket tears. */
+  -webkit-mask:
+    radial-gradient(circle at 55.5% 0, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) top / 100% 51% no-repeat,
+    radial-gradient(circle at 55.5% 100%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) bottom / 100% 51% no-repeat;
+  mask:
+    radial-gradient(circle at 55.5% 0, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) top / 100% 51% no-repeat,
+    radial-gradient(circle at 55.5% 100%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) bottom / 100% 51% no-repeat;
+}
+.sp-ticket-art {
+  position: relative;
+  overflow: hidden;
+  background: var(--inverse);
+}
+.sp-ticket-art > img,
+.sp-ticket-art > .sp-backdrop-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sp-ticket-art .sp-play-disc {
+  position: absolute;
+  left: 16px;
+  bottom: 20px;
+  width: 52px;
+  height: 52px;
+  transition: transform 0.2s var(--ease);
+}
+.sp-ticket-art a:hover .sp-play-disc,
+.sp-ticket-art a:focus-visible .sp-play-disc {
+  transform: scale(1.08);
+}
+.sp-ticket-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  background: rgb(0 0 0 / 0.4);
+}
+.sp-ticket-progress span {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+}
+.sp-ticket-stub {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px 16px 20px;
+  border-left: 2px dashed var(--ink);
+  margin-left: -1px;
+  min-width: 0;
+}
+.sp-ticket-stub .sp-label {
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.sp-ticket-stub h3 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 0.98;
+  overflow-wrap: anywhere;
+}
+.sp-ticket-stub h3 a {
+  text-decoration: none;
+}
+.sp-ticket-stub h3 a:hover {
+  color: var(--signal-ink);
+}
+.sp-ticket-meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--ink-2);
+}
+.sp-ticket-meta strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+@media (max-width: 560px) {
+  .sp-tickets {
+    grid-auto-columns: 86%;
+  }
+  .sp-tickets:has(> :only-child) {
+    grid-auto-columns: 100%;
+  }
+  .sp-ticket {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-height: 168px;
+    -webkit-mask:
+      radial-gradient(circle at 50% 0, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) top / 100% 51% no-repeat,
+      radial-gradient(circle at 50% 100%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) bottom / 100% 51% no-repeat;
+    mask:
+      radial-gradient(circle at 50% 0, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) top / 100% 51% no-repeat,
+      radial-gradient(circle at 50% 100%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) bottom / 100% 51% no-repeat;
+  }
+  .sp-ticket-stub {
+    padding: 14px 14px 14px 16px;
+  }
+  .sp-ticket-stub h3 {
+    font-size: 22px;
+  }
+}
+
+/* ───────── Dialog ───────── */
+.sp-dialog {
+  width: min(600px, calc(100vw - 24px));
+  max-height: min(88vh, 900px);
+  padding: 0;
+  border: 0;
+  border-top: 6px solid var(--signal);
+  background: var(--paper);
+  color: var(--ink);
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+}
+.sp-dialog[open] {
+  display: flex;
+  animation: sp-dialog-in 0.22s var(--ease) both;
+}
+@keyframes sp-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+.sp-dialog::backdrop {
+  background: var(--scrim);
+}
+.sp-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.sp-dialog-head h2 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+.sp-dialog-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: -6px -8px 0 0;
+  flex: none;
+  color: var(--ink-2);
+}
+.sp-dialog-close:hover {
+  color: var(--signal-ink);
+}
+.sp-dialog-body {
+  padding: 20px 22px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.sp-dialog-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--ink);
+  background: var(--sheet);
+}
+@media (max-width: 560px) {
+  .sp-dialog {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 92dvh;
+    margin: auto 0 0;
+  }
+  .sp-dialog-foot .sp-btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* Disclosure */
+.sp-disclosure > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+.sp-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.sp-disclosure > summary::before {
+  content: "+";
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1;
+}
+.sp-disclosure[open] > summary::before {
+  content: "–";
+}
+.sp-disclosure > summary:hover {
+  color: var(--signal-ink);
+}
+.sp-disclosure > :not(summary) {
+  margin-top: 12px;
+}

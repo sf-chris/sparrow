@@ -1,28 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  body {
-    margin: 0;
-    background: #faf9f6;
-  }
-  html,
-  #root {
-    min-height: 100%;
-  }
-  * {
-    box-sizing: border-box;
-  }
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: #faf9f6;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #b7acc7;
-    border-radius: 6px;
-  }
-}
+@import "./product/styles/base.css";
+@import "./product/styles/components.css";
+@import "./product/styles/shell.css";
+@import "./product/styles/front.css";
+@import "./product/styles/screens.css";
+@import "./product/styles/settings.css";

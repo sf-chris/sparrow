@@ -52,11 +52,12 @@ export default function Logs({ user }: { user: User }) {
   const query = params.toString();
   return (
     <Page
-      title="Logs"
+      kicker="The house log"
+      title="Activity log"
       description={
         user.role === "admin"
-          ? "Requests, downloads and the work that keeps your cinema running. Includes household and system events."
-          : "Your requests and playback, plus changes to the storage and library you can access."
+          ? "Requests, downloads, imports and the housekeeping that keeps the picture house running — for everyone on this server."
+          : "Your requests and playback, plus changes to the storage and libraries you can use."
       }
     >
       <HistoryPage
@@ -133,7 +134,7 @@ function HistoryPage({
               onChange={(event) => setQ(event.target.value)}
               placeholder="Find a title or request ID"
             />
-            <button className="sp-button secondary">Search</button>
+            <button className="sp-btn sp-btn-line">Search</button>
           </div>
         </div>
         <Field label="Category">
@@ -205,25 +206,25 @@ function HistoryPage({
         </details>
       </form>
       <div className="sp-log-tools">
-        <p className="sp-muted">
+        <p className="sp-hint">
           Recent history · up to 90 days. Repeated events are grouped within
           five-minute windows.
         </p>
         <div className="sp-actions">
           {filtering && (
             <button
-              className="sp-button quiet"
+              className="sp-btn sp-btn-ghost"
               onClick={() => setParams(new URLSearchParams())}
             >
               Clear filters
             </button>
           )}
           <button
-            className="sp-button secondary"
+            className="sp-btn sp-btn-line"
             disabled={resource.loading}
             onClick={refresh}
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={15} aria-hidden="true" />
             Refresh
           </button>
         </div>
@@ -255,7 +256,7 @@ function HistoryPage({
                     <div className="sp-log-actions">
                       {entry.action && (
                         <Link
-                          className="sp-button quiet"
+                          className="sp-btn sp-btn-ghost"
                           to={entry.action.href}
                         >
                           {entry.action.label}
@@ -263,7 +264,7 @@ function HistoryPage({
                         </Link>
                       )}
                       {entry.repeats > 1 && (
-                        <span className="sp-muted">
+                        <span className="sp-hint">
                           Repeated {entry.repeats} times
                         </span>
                       )}
@@ -308,7 +309,7 @@ function HistoryPage({
                 action={
                   filtering ? (
                     <button
-                      className="sp-button secondary"
+                      className="sp-btn sp-btn-line"
                       onClick={() => setParams(new URLSearchParams())}
                     >
                       Clear filters
@@ -324,7 +325,7 @@ function HistoryPage({
             {(data.total > 0 || data.page > 1) && (
               <nav className="sp-log-pagination" aria-label="Log pages">
                 <button
-                  className="sp-button secondary"
+                  className="sp-btn sp-btn-line"
                   disabled={data.page <= 1 || resource.loading}
                   onClick={() => page(data.page - 1)}
                 >
@@ -337,7 +338,7 @@ function HistoryPage({
                   {data.total} events
                 </span>
                 <button
-                  className="sp-button secondary"
+                  className="sp-btn sp-btn-line"
                   disabled={
                     data.page * data.limit >= data.total || resource.loading
                   }
