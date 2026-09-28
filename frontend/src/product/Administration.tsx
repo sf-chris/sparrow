@@ -53,7 +53,7 @@ export function Defaults() {
   return (
     <Page
       title="Defaults"
-      lede="Where everyone starts. Personal changes stay personal; server limits always apply."
+      lede="Everyone starts with these and can change their own."
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.data ? (
@@ -67,7 +67,7 @@ export function Defaults() {
           />
           <Section
             title="Server limits"
-            description="Every request follows these, including work Sparrow’s agents do."
+            description="No one can go past these, including Sparrow."
           >
             <div className="form-grid">
               <Field label="Highest quality">
@@ -99,7 +99,10 @@ export function Defaults() {
                   }
                 />
               </Field>
-              <Field label="Agent steps per wake">
+              <Field
+                label="Agent steps per turn"
+                hint="An agent stops and waits after this many."
+              >
                 <input
                   type="number"
                   min={1}
@@ -117,8 +120,8 @@ export function Defaults() {
                 />
               </Field>
               <Field
-                label="Reasoning budget (USD)"
-                hint="Per request. Each followed title shares one allowance across its reviews, with no automatic reset; raise it and retry if following stops."
+                label="Spending limit (USD)"
+                hint="Per request. Each followed title gets one limit in total. Raise it if following stops."
               >
                 <input
                   type="number"
@@ -200,17 +203,17 @@ export function ServerSettings({
       embedded={!!setupSection}
       title={
         setupSection === "providers"
-          ? "Title search and agents"
+          ? "Keys"
           : setupSection === "downloads"
             ? "Download app"
             : "Connections"
       }
       lede={
         setupSection === "providers"
-          ? "TMDB supplies title and episode facts. Anthropic powers asking, fetching and following. Keys stay on your server."
+          ? "Both keys stay on this server."
           : setupSection === "downloads"
-            ? "Use an existing Transmission or qBittorrent app. Sparrow doesn’t install one."
-            : "The services Sparrow uses. Folders live in Storage."
+            ? "Connect Transmission or qBittorrent. Sparrow doesn’t install one."
+            : undefined
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
@@ -220,15 +223,15 @@ export function ServerSettings({
             <Section title="Services">
               {setupSection && (
                 <p className="muted section-note">
-                  Create a key in{" "}
+                  Get them from{" "}
                   <a
                     href="https://www.themoviedb.org/settings/api"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    TMDB API settings
+                    TMDB
                   </a>{" "}
-                  and{" "}
+                  and the{" "}
                   <a
                     href="https://platform.claude.com/settings/keys"
                     target="_blank"
@@ -236,8 +239,7 @@ export function ServerSettings({
                   >
                     Claude Console
                   </a>
-                  , then paste them below. Anthropic API usage is billed by the
-                  provider.
+                  .
                 </p>
               )}
               <div className="form-grid">
@@ -246,7 +248,7 @@ export function ServerSettings({
                   hint={
                     values.tmdb_api_key_configured
                       ? "Saved. Leave blank to keep it."
-                      : "Finds films, series and episodes."
+                      : "Film, series and episode details."
                   }
                 >
                   <input
@@ -261,7 +263,7 @@ export function ServerSettings({
                   hint={
                     values.anthropic_api_key_configured
                       ? "Saved. Leave blank to keep it."
-                      : "For asking and fetching. Watching works without it."
+                      : "Needed for requests and Ask Sparrow, not for watching. Anthropic bills for use."
                   }
                 >
                   <input
@@ -274,8 +276,8 @@ export function ServerSettings({
                 {!setupSection && (
                   <>
                     <Field
-                      label="Acquisition source"
-                      hint="This release has one source."
+                      label="Search source"
+                      hint="Only one source is available."
                     >
                       <select
                         value={values.preferred_search_engines?.[0] || "apibay"}
@@ -290,7 +292,7 @@ export function ServerSettings({
                               value={values.preferred_search_engines[0]}
                               disabled
                             >
-                              Previous source unavailable
+                              Previous source (unavailable)
                             </option>
                           )}
                       </select>
@@ -330,7 +332,7 @@ export function ServerSettings({
                       })
                     }
                   >
-                    <option value="none">Not configured</option>
+                    <option value="none">None</option>
                     <option value="transmission">Transmission</option>
                     <option value="qbittorrent">qBittorrent</option>
                   </select>
@@ -416,8 +418,8 @@ export function ServerSettings({
           )}
           {setupSection === "downloads" && (
             <p className="muted">
-              In Docker, use the download machine’s network address: “localhost”
-              means the Sparrow container itself.
+              In Docker, “localhost” is the Sparrow container. Use the download
+              app’s network address.
             </p>
           )}
           <div className="savebar">
@@ -512,14 +514,13 @@ export function People({ currentUser }: { currentUser: User }) {
   }
   const roleName = (value: string) =>
     value === "requester"
-      ? "Can request"
+      ? "Watch and request"
       : value === "admin"
-        ? "Administrator"
-        : "Can watch";
+        ? "Admin"
+        : "Watch only";
   return (
     <Page
       title="People"
-      lede="Everyone gets their own place to resume, and their own preferences."
       action={
         <button
           className="btn primary"
@@ -587,7 +588,7 @@ export function People({ currentUser }: { currentUser: User }) {
           ))}
         </ul>
       ) : (
-        resource.loading && <Loading label="Loading the household" />
+        resource.loading && <Loading label="Loading people" />
       )}
       {editing && (
         <Dialog
@@ -607,19 +608,19 @@ export function People({ currentUser }: { currentUser: User }) {
             <ErrorNote error={error} />
             <Field label="Role">
               <select value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="viewer">Can watch</option>
-                <option value="requester">Can watch and request</option>
-                <option value="admin">Administrator</option>
+                <option value="viewer">Watch only</option>
+                <option value="requester">Watch and request</option>
+                <option value="admin">Admin</option>
               </select>
             </Field>
-            <Field label="Storage">
+            <Field label="Titles from">
               <select value={scope} onChange={(e) => setScope(e.target.value)}>
-                <option value="all">Everything, now and later</option>
-                <option value="none">Nothing</option>
+                <option value="all">All storage, including new</option>
+                <option value="none">No storage</option>
                 {editing &&
                   editing.library_scope &&
                   editing.library_scope.length > 1 && (
-                    <option value="keep">Keep current storage</option>
+                    <option value="keep">Current storage (no change)</option>
                   )}
                 {nodes.data?.map((n) => (
                   <option key={n.id} value={n.id}>
@@ -628,9 +629,7 @@ export function People({ currentUser }: { currentUser: User }) {
                 ))}
               </select>
             </Field>
-            <p className="muted">
-              Saving signs them out so the change applies at once.
-            </p>
+            <p className="muted">Saving signs them out everywhere.</p>
           </div>
         </Dialog>
       )}
@@ -648,7 +647,7 @@ export function People({ currentUser }: { currentUser: User }) {
                 />
                 <Field
                   label="Invitation link"
-                  hint="Works once, for seven days. Send it to them privately."
+                  hint="Works once, for 7 days. Send it privately."
                 >
                   <input
                     readOnly
@@ -663,7 +662,7 @@ export function People({ currentUser }: { currentUser: User }) {
                       await navigator.clipboard.writeText(invite);
                       setCopied(true);
                     } catch {
-                      setError("Select the link and copy it yourself.");
+                      setError("Couldn’t copy. Select the link and copy it.");
                     }
                   }}
                 >
@@ -677,22 +676,22 @@ export function People({ currentUser }: { currentUser: User }) {
               </div>
             ) : (
               <>
-                <Field label="What can they do?">
+                <Field label="Role">
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
                   >
-                    <option value="viewer">Can watch</option>
-                    <option value="requester">Can watch and request</option>
-                    <option value="admin">Administrator</option>
+                    <option value="viewer">Watch only</option>
+                    <option value="requester">Watch and request</option>
+                    <option value="admin">Admin</option>
                   </select>
                 </Field>
-                <Field label="Which storage?">
+                <Field label="Titles from">
                   <select
                     value={scope}
                     onChange={(e) => setScope(e.target.value)}
                   >
-                    <option value="all">Everything, now and later</option>
+                    <option value="all">All storage, including new</option>
                     {nodes.data?.map((node) => (
                       <option key={node.id} value={node.id}>
                         {node.name}
@@ -705,7 +704,7 @@ export function People({ currentUser }: { currentUser: User }) {
                   disabled={busy}
                   onClick={create}
                 >
-                  {busy ? "Creating…" : "Create invitation"}
+                  {busy ? "Creating…" : "Create link"}
                 </button>
               </>
             )}

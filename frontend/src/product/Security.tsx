@@ -23,15 +23,12 @@ export default function Security() {
     }
   }
   return (
-    <Page
-      title="Account"
-      lede="Your password and the browsers signed in as you."
-    >
+    <Page title="Account">
       <PasswordSettings onChanged={resource.refresh} />
-      <Section title="Signed in">
+      <Section title="Devices">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {!resource.data && resource.loading ? (
-          <Loading label="Loading browsers" />
+          <Loading label="Loading devices" />
         ) : (
           resource.data &&
           (resource.data.length ? (
@@ -59,7 +56,7 @@ export default function Security() {
                               : "Browser"}
                         </h3>
                         <p className="num">
-                          Since{" "}
+                          Signed in{" "}
                           {new Date(session.created * 1000).toLocaleString()}
                         </p>
                         <details className="disclosure">
@@ -76,7 +73,11 @@ export default function Security() {
                         disabled={!!busy}
                         onClick={() => revoke(session.id)}
                       >
-                        {busy === session.id ? "Ending…" : "End session"}
+                        {busy === session.id ? "Signing out…" : "Sign out"}
+                        <span className="sr-only">
+                          {" "}
+                          of {phone ? "phone or tablet" : "browser"}
+                        </span>
                       </button>
                     )}
                   </li>
@@ -84,7 +85,7 @@ export default function Security() {
               })}
             </ul>
           ) : (
-            <Empty title="No browsers.">
+            <Empty title="No devices.">
               Sign in again to manage this account.
             </Empty>
           ))

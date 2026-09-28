@@ -72,7 +72,7 @@ export default function Watch() {
       </header>
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {resource.loading && !data ? (
-        <Loading label="Opening your media" />
+        <Loading label="Loading" />
       ) : (
         data && <Player key={assetId} {...data} />
       )}
@@ -150,9 +150,7 @@ function Player({
       });
       setProgressError("");
     } catch (e) {
-      setProgressError(
-        `Your progress could not be saved. ${(e as Error).message}`,
-      );
+      setProgressError(`Couldn’t save your place. ${(e as Error).message}`);
     }
   };
   useEffect(() => {
@@ -239,7 +237,7 @@ function Player({
           if (disposed) return;
           if (!Hls.isSupported()) {
             setError(
-              "This browser cannot play the prepared stream. Try a current Chrome, Firefox, Edge or Safari browser.",
+              "This browser can’t play this stream. Try Chrome, Firefox, Edge or Safari.",
             );
             return;
           }
@@ -253,17 +251,13 @@ function Player({
           hls.on(Hls.Events.ERROR, (_, data) => {
             if (data.fatal)
               setError(
-                "Playback was interrupted. Check that your storage is connected, then try again.",
+                "Playback stopped. Check the storage is connected, then try again.",
               );
           });
           hls.loadSource(session.url);
           hls.attachMedia(element);
         })
-        .catch(() =>
-          setError(
-            "The player could not load. Refresh the page and try again.",
-          ),
-        );
+        .catch(() => setError("The player didn’t load. Refresh the page."));
     const timer = window.setInterval(() => {
       if (!element.paused) void save();
     }, 5000);
@@ -338,8 +332,8 @@ function Player({
             if (session && !busy)
               setError(
                 transcode
-                  ? "This copy still could not play. Check that its storage is connected, then try again."
-                  : "This copy could not play. Open Playback help to try another format, or reconnect its storage.",
+                  ? "This copy still won’t play. Check its storage is connected, then try again."
+                  : "This copy won’t play. Try another format under Playback help.",
               );
           }}
         >
@@ -364,9 +358,7 @@ function Player({
         </video>
         {(busy || waiting) && (
           <div className="screen-status">
-            <Loading
-              label={busy ? "Starting playback" : "Waiting for your media"}
-            />
+            <Loading label={busy ? "Starting" : "Buffering"} />
           </div>
         )}
         <div className="controls" role="group" aria-label="Playback controls">
@@ -486,8 +478,8 @@ function Player({
           <summary>Playback help</summary>
           <div className="help-body">
             <p>
-              No picture or no sound? Convert it to a format this browser can
-              play. It takes a moment; the original file is not changed.
+              No picture or no sound? Play a converted stream instead. The file
+              itself isn’t changed.
             </p>
             <button
               className="btn"

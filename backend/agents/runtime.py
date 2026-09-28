@@ -326,7 +326,7 @@ class AgentRuntime:
             session.status = SessionStatus.HIBERNATING
             session.outcome = CaseState.FAILED
             session.wake_at = time.time() + 300
-            session.wake_reason = "Something went wrong on my side — retrying shortly."
+            session.wake_reason = "Something went wrong. Trying again in 5 minutes."
             self.store.save_session(session)
         await self._notify(session)
 
@@ -426,7 +426,9 @@ class AgentRuntime:
                     else CaseState.NEEDS_INPUT
                 )
                 session.wake_reason = (
-                    "Work limit reached. Review this request before continuing."
+                    "Reached the spending limit. Raise it in Defaults, then try again."
+                    if dollars >= policy["max_agent_dollars"]
+                    else "Reached the agent step limit. Try again to continue."
                 )
                 session.wake_at = 0
                 break
@@ -436,7 +438,7 @@ class AgentRuntime:
             if limited:
                 session.outcome = CaseState.BUDGET_LIMITED
                 session.wake_at = 0
-                session.wake_reason = "The next reasoning call could exceed this request’s estimated budget. Review the budget before continuing."
+                session.wake_reason = "Stopped before going over the spending limit. Raise it in Defaults, then try again."
                 break
             if not self.authority_valid(session, ctx.job_revision):
                 return
@@ -446,7 +448,7 @@ class AgentRuntime:
                 session.outcome = CaseState.WAITING
                 session.wake_at = time.time() + 600
                 session.wake_reason = (
-                    "Can't reach my reasoning service — retrying soon."
+                    "Can't reach Anthropic. Trying again in 10 minutes."
                 )
                 self.store.save_session(session)
                 return
@@ -465,7 +467,9 @@ class AgentRuntime:
             tool_uses = [b for b in response.content if b.type == "tool_use"]
             if not tool_uses:
                 session.outcome = CaseState.NEEDS_INPUT
-                session.wake_reason = "The review ended without a verified outcome. Retry or clarify the request to continue."
+                session.wake_reason = (
+                    "Stopped without a result. Try again, or change the request."
+                )
                 break
 
             results = []
@@ -505,7 +509,7 @@ class AgentRuntime:
             session.outcome = CaseState.WAITING
         session.spend.turns += 1
         if session.wake_at == 0.0 and not session.wake_reason:
-            session.wake_reason = "Waiting for the next event."
+            session.wake_reason = "Waiting for an update."
         self.store.save_session(session)
 
         # Events that arrived at the very end: run again.

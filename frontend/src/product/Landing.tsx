@@ -13,7 +13,7 @@ export default function Landing({ needsSetup }: { needsSetup: boolean }) {
       <header className="cover-top">
         <Logotype />
         <p>
-          <span>The household guide to your own films and series</span>
+          <span>Home edition</span>
           <span className="num">{today}</span>
         </p>
       </header>
@@ -21,8 +21,7 @@ export default function Landing({ needsSetup }: { needsSetup: boolean }) {
         <div className="cover-lines">
           <h1 className="display">Say what you want to watch.</h1>
           <p className="lede">
-            Sparrow finds it, checks it and files it on your own server.
-            Everyone at home picks up where they left off.
+            Sparrow finds it and adds it to your collection.
           </p>
           <div className="actions">
             <Link className="btn primary" to={needsSetup ? "/setup" : "/login"}>
@@ -42,16 +41,14 @@ export default function Landing({ needsSetup }: { needsSetup: boolean }) {
                 <Circled>
                   <strong>“Something clever we can finish tonight”</strong>
                 </Circled>
-                <span className="meta">
-                  Sparrow suggests three. You pick one.
-                </span>
+                <span className="meta">Asked Sparrow · 3 picks</span>
               </span>
             </li>
             <li className="demo-row">
               <span className="slot-time num">20:42</span>
               <span className="slot-body">
                 <strong>Northern Signal</strong>
-                <span className="meta">Season 2 · checked and filed</span>
+                <span className="meta">Season 2 · new</span>
               </span>
               <Tick />
             </li>
@@ -74,14 +71,12 @@ export default function Landing({ needsSetup }: { needsSetup: boolean }) {
             </li>
           </ol>
           <figcaption className="sr-only">
-            An example evening: a request, a title arriving, and a show to
-            resume.
+            An example listing: a question for Sparrow, a new season and an
+            episode to resume.
           </figcaption>
         </figure>
       </section>
-      <footer className="cover-foot">
-        Runs on your own server. No Sparrow account needed.
-      </footer>
+      <footer className="cover-foot">Runs on your own server.</footer>
     </main>
   );
 }

@@ -25,6 +25,18 @@ type RepairState = {
   tracks: Track[];
   tasks: { id: string; state: string; message: string }[];
 };
+const names = new Intl.DisplayNames(["en"], { type: "language" });
+const languageName = (code: string) => {
+  try {
+    return names.of(code.replace(/_/g, "-")) || code;
+  } catch {
+    return code;
+  }
+};
+const styles: Record<string, string> = {
+  sdh: "dialogue and sounds",
+  forced: "foreign dialogue",
+};
 export function SubtitleRepair({
   assetId,
   audio,
@@ -63,7 +75,7 @@ export function SubtitleRepair({
           .map((t, i) => ({
             ...t,
             index: 10000 + i,
-            title: `${t.language} · checked ${t.kind}`,
+            title: `${languageName(t.language)}${styles[t.kind] ? ` · ${styles[t.kind]}` : ""} · checked`,
           })),
       );
   }, [resource.data, audio]);
@@ -72,7 +84,7 @@ export function SubtitleRepair({
     setError("");
     try {
       if (file && file.size > 2 * 1024 * 1024)
-        throw new Error("Choose a subtitle file smaller than 2 MB.");
+        throw new Error("Choose a subtitle file under 2 MB.");
       await post(`/assets/${assetId}/subtitles/repair`, {
         audio_index: audio,
         language,
@@ -116,21 +128,21 @@ export function SubtitleRepair({
   const status =
     latest &&
     (latest.state === "ready"
-      ? "Subtitles checked"
+      ? "Fixed"
       : running
-        ? "Preparing subtitles"
+        ? "In progress"
         : latest.state === "review_pending"
-          ? "Ready for review"
+          ? "Review didn’t finish"
           : latest.state === "cancelled"
-            ? "Repair stopped"
-            : "Subtitles need attention");
+            ? "Stopped"
+            : "Couldn’t fix");
   return (
     <details
       className="disclosure help subtitle-care"
       open={!!latest && latest.state !== "ready"}
     >
       <summary>
-        Subtitle care
+        Subtitle help
         {status && <span className="meta"> · {status}</span>}
       </summary>
       <div className="help-body form">
@@ -142,13 +154,12 @@ export function SubtitleRepair({
           </div>
         )}
         <p className="muted">
-          Finds a matching track, aligns it to this audio and checks samples of
-          dialogue. Original files stay as they are.
+          Finds subtitles for this audio and syncs them to the dialogue.
         </p>
         <div className="form-grid">
           <Field
             label="Language"
-            hint="Automatic checks need captions in the spoken language."
+            hint="Sync checks only work in the spoken language."
           >
             <select
               value={language}
@@ -186,7 +197,7 @@ export function SubtitleRepair({
             onClick={() => void repair()}
           >
             <RefreshCw size={16} strokeWidth={2.5} />
-            Find and repair
+            Find and sync
           </button>
           {running && (
             <button
@@ -194,7 +205,7 @@ export function SubtitleRepair({
               disabled={busy}
               onClick={() => void action("DELETE")}
             >
-              Stop repair
+              Stop
             </button>
           )}
           {latest?.state === "review_pending" && (
@@ -203,12 +214,12 @@ export function SubtitleRepair({
               disabled={busy}
               onClick={() => void action("POST", "/review")}
             >
-              Retry review
+              Try the review again
             </button>
           )}
         </div>
         <Field
-          label="Use your own subtitle file"
+          label="Upload a subtitle file"
           hint=".srt, .vtt, .ass or .ssa, under 2 MB."
         >
           <input
@@ -224,8 +235,8 @@ export function SubtitleRepair({
         </Field>
         {selected?.id && (
           <Field
-            label="Your subtitle delay (seconds)"
-            hint="Positive shows captions later. Only changes your playback."
+            label="Subtitle delay (seconds)"
+            hint="Positive numbers show subtitles later. Only for you."
           >
             <input
               type="number"
@@ -240,9 +251,7 @@ export function SubtitleRepair({
         {resource.data?.tracks.some((t) => t.original_url) && (
           <details className="disclosure">
             <summary>Original subtitle files</summary>
-            <p className="muted">
-              Kept before alignment; their timing is unchecked.
-            </p>
+            <p className="muted">As found, before syncing.</p>
             <div className="actions">
               {resource.data.tracks
                 .filter((t) => t.original_url)
@@ -254,7 +263,7 @@ export function SubtitleRepair({
                     href={t.original_url}
                     download={`${t.language}-original.vtt`}
                   >
-                    Download {t.language}
+                    Download {languageName(t.language)}
                   </a>
                 ))}
             </div>

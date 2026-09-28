@@ -35,6 +35,13 @@ import {
 } from "./ui";
 import { scope } from "./Collection";
 
+/** An air date the way a listings page prints it: "Airs 5 Oct". */
+const airs = (date: string) =>
+  new Date(date + "T00:00").toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+  });
+
 export default function Title({ user }: { user: User }) {
   const { mediaType, tmdbId, itemId } = useParams();
   const location = useLocation();
@@ -165,13 +172,15 @@ export default function Title({ user }: { user: User }) {
               </strong>
               <span>{scope(active)}</span>
               <Link className="link" to={`/activity?request=${active.id}`}>
-                Details
+                See request
               </Link>
             </p>
           )}
           {assets.some((a) => a.state === "unavailable") && (
             <p className="muted">
-              Some files are on storage that’s offline. Your place is saved.
+              {tv
+                ? "Some episodes are on storage that’s offline."
+                : "This film is on storage that’s offline."}
             </p>
           )}
           {user.role !== "viewer" && title.tmdb_id && (
@@ -215,20 +224,21 @@ export default function Title({ user }: { user: User }) {
         </section>
       ) : (
         <Empty
-          title={active ? "Coming up." : "Not in your guide yet."}
+          title={active ? "Coming up." : "Not in your collection."}
           action={
             active ? (
               <Link className="btn" to={`/activity?request=${active.id}`}>
-                Follow the request
+                See request
               </Link>
             ) : undefined
           }
         >
-          {active
-            ? "Sparrow is working on it. Progress notes are in Requests."
-            : user.role === "viewer"
-              ? "Ask someone who can request titles to add it."
-              : "Request it, or import a copy you already have from Storage."}
+          {!active &&
+            (user.role === "viewer"
+              ? "Ask someone who can request it."
+              : user.role === "admin"
+                ? "Request it, or import your own copy in Storage."
+                : undefined)}
         </Empty>
       )}
       {requestOpen && (
@@ -393,10 +403,12 @@ function RequestSheet({
           onClick={submit}
         >
           {busy
-            ? "Sending request…"
+            ? "Requesting…"
             : title.media_type === "movie"
               ? "Request film"
-              : `Request ${selected.length} episode${selected.length === 1 ? "" : "s"}`}
+              : selected.length
+                ? `Request ${selected.length} episode${selected.length === 1 ? "" : "s"}`
+                : "Choose episodes"}
         </button>
       }
     >
@@ -414,7 +426,7 @@ function RequestSheet({
         </div>
         <ErrorNote error={error || nodes.error} />
         {title.jobs.some((j) => ["active", "paused"].includes(j.status)) && (
-          <p className="muted">Adds to your current request.</p>
+          <p className="muted">Adds to the open request.</p>
         )}
         {title.media_type === "tv" && (
           <>
@@ -434,7 +446,7 @@ function RequestSheet({
               </select>
             </Field>
             {loading ? (
-              <Loading label="Checking episodes" />
+              <Loading label="Loading episodes" />
             ) : (
               <fieldset className="checklist">
                 <legend className="checklist-head">
@@ -473,20 +485,22 @@ function RequestSheet({
                       </span>
                       <span>{ep.name}</span>
                       {ep.air_date > today && (
-                        <span className="meta num">Airs {ep.air_date}</span>
+                        <span className="meta num">
+                          Airs {airs(ep.air_date)}
+                        </span>
                       )}
                     </label>
                   ))}
                 </div>
               </fieldset>
             )}
-            <Field label="Future episodes">
+            <Field label="New episodes">
               <select
                 value={monitoring}
                 onChange={(e) => setMonitoring(e.target.value)}
               >
-                <option value="exact">Only these</option>
-                <option value="keep_current">New ones as they air</option>
+                <option value="exact">Just the ones I chose</option>
+                <option value="keep_current">Add them as they air</option>
               </select>
             </Field>
           </>
@@ -506,11 +520,16 @@ function RequestSheet({
         {values && (
           <details className="disclosure order-prefs">
             <summary>
-              Preferences: {values.preferred_quality},{" "}
+              For this request: {values.preferred_quality} ·{" "}
               {values.audio_pref === "original"
                 ? "original audio"
-                : values.audio_pref}
-              , {values.subtitle_languages.join(", ") || "no"} subtitles
+                : values.audio_pref === "any"
+                  ? "any audio"
+                  : `${values.audio_pref} audio`}{" "}
+              ·{" "}
+              {values.subtitle_languages.length
+                ? `${values.subtitle_languages.join(", ")} subtitles`
+                : "no subtitles"}
             </summary>
             <PreferenceFields
               values={values}

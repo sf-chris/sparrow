@@ -44,12 +44,12 @@ export function PreferenceFields({
           <div className="source">
             <span>Yours</span>
             <button type="button" onClick={() => onReset?.(key)}>
-              Use household default
+              Use household setting
             </button>
           </div>
         ) : sources?.[key] === "policy" ? (
           <div className="source">
-            <span>Limited by the server</span>
+            <span>Server limit</span>
           </div>
         ) : null}
       </div>
@@ -113,7 +113,7 @@ export function PreferenceFields({
             "subtitle_mode",
             "Show subtitles",
             select("subtitle_mode", [
-              ["auto", "When useful"],
+              ["auto", "In my languages"],
               ["always", "Always"],
               ["off", "Off"],
             ]),
@@ -129,7 +129,7 @@ export function PreferenceFields({
           )}
           {field(
             "require_subtitles",
-            "Before it’s ready",
+            "New arrivals",
             <span className="check">
               <input
                 type="checkbox"
@@ -138,13 +138,13 @@ export function PreferenceFields({
                   onChange("require_subtitles", e.target.checked)
                 }
               />
-              Subtitles must be ready too
+              Wait for subtitles
             </span>,
           )}
         </div>
       </fieldset>
       <fieldset className="preference-group">
-        <legend>Picture and space</legend>
+        <legend>Picture and file size</legend>
         <div className="form-grid">
           {field(
             "preferred_quality",
@@ -154,7 +154,7 @@ export function PreferenceFields({
           {field(
             "min_quality",
             "Lowest quality",
-            select("min_quality", [["any", "Any verified video"], ...quality]),
+            select("min_quality", [["any", "Any"], ...quality]),
           )}
           {field(
             "max_file_size_gb",
@@ -173,7 +173,7 @@ export function PreferenceFields({
           )}
           {field(
             "prefer_smaller_files",
-            "Space",
+            "Smaller files",
             <span className="check">
               <input
                 type="checkbox"
@@ -182,7 +182,7 @@ export function PreferenceFields({
                   onChange("prefer_smaller_files", e.target.checked)
                 }
               />
-              Prefer smaller files that still fit
+              Prefer them at the same quality
             </span>,
           )}
         </div>
@@ -192,12 +192,12 @@ export function PreferenceFields({
         <div className="form-grid">
           {field(
             "monitoring",
-            "Future episodes",
+            "New episodes",
             select("monitoring", [
               ["exact", "Only what I request"],
-              ["keep_current", "New ones as they air"],
+              ["keep_current", "Add them as they air"],
             ]),
-            "You can still choose on each request.",
+            "You can change this on each request.",
           )}
         </div>
       </fieldset>
@@ -292,9 +292,9 @@ export default function Preferences({
       }
       lede={
         ownerSetup
-          ? "Defaults for everyone on this server. Each person can change their own."
+          ? "Everyone starts with these and can change their own."
           : welcome
-            ? "These are the household defaults. Keep them, or make them yours."
+            ? "You start with the household’s settings."
             : "Anything you haven’t changed follows the household."
       }
     >

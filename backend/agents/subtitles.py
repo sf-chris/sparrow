@@ -221,7 +221,7 @@ class Subtitles:
                 "audio_index": audio_index,
                 "upload": upload,
                 "attempts": [],
-                "message": "Waiting to prepare subtitles.",
+                "message": "Waiting to start.",
                 "job_id": job.id if job else "",
                 "job_revision": job.revision if job else 0,
             }
@@ -363,7 +363,7 @@ class Subtitles:
             self.update(
                 task,
                 "review_pending",
-                "Alignment passed. Connect the reasoning service to review the sampled dialogue, then retry review.",
+                "Synced. The final review needs an Anthropic key. Add one, then try the review again.",
             )
             return
         self.attach(service)
@@ -384,7 +384,7 @@ class Subtitles:
         self.update(
             task,
             "reviewing",
-            "Checking representative dialogue and timings.",
+            "Checking dialogue and timing.",
             review_session=session.id,
         )
         await service.runtime.wake(
@@ -402,7 +402,7 @@ class Subtitles:
             self.update(
                 current,
                 "review_pending",
-                "The quality review did not finish. Check the reasoning service and retry review.",
+                "The review didn’t finish. Try the review again.",
             )
             service.store.save_session(session)
 
@@ -421,7 +421,7 @@ class Subtitles:
             async with lock:
                 user, asset = self.authority(task)
                 self.update(
-                    task, "finding", "Checking included subtitles and local files."
+                    task, "finding", "Looking for subtitles in and beside the file."
                 )
                 listing = await self.nodes.execute(
                     asset["node_id"],
@@ -552,7 +552,7 @@ class Subtitles:
                         self.update(
                             task,
                             "aligning",
-                            "Aligning captions against the audio and checking dialogue samples.",
+                            "Syncing subtitles to the audio.",
                         )
                         operation = hashlib.sha256(
                             (task["id"] + candidate["id"]).encode()
@@ -626,7 +626,7 @@ class Subtitles:
                         self.update(
                             task,
                             "finding",
-                            "Trying the next suitable subtitle.",
+                            "Trying another subtitle file.",
                             attempts=attempts,
                         )
                 else:
@@ -649,8 +649,7 @@ class Subtitles:
                 self.update(
                     current,
                     "needs_attention",
-                    str(exc)[:1500]
-                    or "Subtitle preparation could not finish. Try again.",
+                    str(exc)[:1500] or "Couldn’t fix the subtitles. Try again.",
                 )
 
 
