@@ -101,6 +101,11 @@ def check_password(password: str, encoded: str) -> bool:
         return False
 
 
+# Interface themes each person can choose. The empty value follows Sparrow's
+# official theme, so a change to the default reaches everyone who never chose.
+THEMES = ("", "cinema", "clear", "saturday")
+
+
 class Accounts:
     def __init__(self, data_dir: str | Path):
         self.path = Path(data_dir) / "sparrow.db"
@@ -129,6 +134,11 @@ class Accounts:
                 "INSERT OR IGNORE INTO server_preferences VALUES (1, ?, ?, 1)",
                 (Preferences().model_dump_json(), Policy().model_dump_json()),
             )
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
+            if "theme" not in columns:
+                db.execute(
+                    "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT ''"
+                )
 
     @contextmanager
     def connect(self):
@@ -320,6 +330,18 @@ class Accounts:
                 (defaults.model_dump_json(), policy.model_dump_json()),
             )
         return self.server_settings()
+
+    def set_theme(self, user_id, theme):
+        """Appearance only: it never changes the preference contract agents use."""
+        if theme not in THEMES:
+            raise ValueError("Choose one of the listed themes.")
+        with self.connect() as db:
+            changed = db.execute(
+                "UPDATE users SET theme=? WHERE id=?", (theme, user_id)
+            ).rowcount
+        if not changed:
+            raise ValueError("Account no longer exists.")
+        return self.user(user_id)
 
     def set_preferences(self, user_id, patch, welcomed=True):
         user = self.user(user_id)

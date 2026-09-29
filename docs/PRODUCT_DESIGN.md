@@ -1,132 +1,172 @@
 # Product design contract
 
-The current direction replaces the rejected dark cinematic redesign on
-`design/sparrow-reimagined`. The owner's brief is a public landing page, smaller
-controls and typography, a brighter palette, and a little whimsy throughout.
+Sparrow looks and behaves like the household's own weekly TV guide: what you
+have is listed, what you want is circled, and what is coming is billed. It
+replaces the earlier pastel "happy little home" design (and the rejected dark
+cinematic direction). The owner chose this direction on 28 September 2026 from
+an [impeccable](https://github.com/pbakaus/impeccable) direction round, with
+structural UX change approved. [IMPLEMENTATION.md](IMPLEMENTATION.md) records
+the implemented scope.
 
-The owner likes this visual style. The personal-cinema follow-up now gives
-artwork and watching shelves more space, simplifies settings and adds operational
-history. [IMPLEMENTATION.md](IMPLEMENTATION.md) records the implemented scope;
-[NEARBY_DISCOVERY.md](NEARBY_DISCOVERY.md) records the isolated discovery prototype.
+The use scene decides the details: evenings, on a phone on the couch and on a
+TV-connected computer across the room. Type is large and condensed, focus is
+visible at distance, and every list works with arrow keys.
 
-## A happy little home for the good stuff
+## Print, pen and highlighter
 
-Sparrow uses light paper, plum ink, lilac actions, and mint and pink supporting
-surfaces. Original line illustrations bring a small bird, a television, books,
-a cup, and playful stars into the welcome experience. Discovery uses small
-heart, star and orbit drawings. There are no landscape or sunset brand assets.
-Real titles still use their catalogue artwork; missing art gets a geometric,
-locally rendered fallback.
+| Role | Value | Use |
+| --- | --- | --- |
+| Newsprint | `#eae9e5` | Page |
+| Lifted paper | `#f6f5f2` | Inputs, coupons, sheet footers |
+| Print black | `#181410` | Text, rules, reversed bars, primary buttons |
+| Secondary ink | `#433f3a` | Supporting text |
+| Channel teal | `#156068` | Sparrow's band: masthead, day band, cover and sign-in |
+| On teal | `#f3f2ec` | Type and rules on the band |
+| Marigold | `#f1c45e` | Small doses only: the current choice on black, play buttons, progress on artwork, focus on teal |
+| Biro blue | `#0a4ac5` | The household's hand: links, focus, request circles, ticks |
+| Red | `#b70012` | Problems only |
+| Screen | `#0b0a08` | The player |
 
-| Role           | Value     |
-| -------------- | --------- |
-| Page           | `#faf9f6` |
-| Surface        | `#ffffff` |
-| Text           | `#302d3c` |
-| Secondary text | `#696372` |
-| Primary action | `#7050b5` |
-| Lilac          | `#eee8f8` |
-| Mint           | `#e6f1e4` |
-| Pink           | `#f9e8ed` |
-| Border         | `#dedbe5` |
+Large fields are the mid-dark teal, never a bright colour, so the guide stays
+comfortable in a dark room (the first bright-yellow version was too glaring).
+Marigold never covers an area larger than a button and never carries text
+meaning on newsprint. Selected tabs and segments are black with marigold text;
+the selected masthead link is a newsprint pill. Focus rings are biro blue on
+paper and marigold on teal.
+All text pairs meet WCAG AA; the tokens live in `frontend/src/product/product.css`.
 
-DM Sans is the single locally bundled typeface. Page titles are 24–26px,
-section headings 17–18px, body copy 12–13px, and desktop controls 36–39px high.
-The landing headline is 49px at its largest, 38px on phones. Main touch controls
-increase to 40–44px and text inputs to 16px on phones. Small decorative captions
-never carry the only explanation of an action. Contrast and visible keyboard
-focus remain required.
+**Type.** Archivo is the single, locally bundled variable family (weight
+100–900, width 62–125%), a Franklin-Gothic-style grotesk. Display uses width
+62–68% at weight 900 in capitals; listing titles use 76–82% at weight 750–850;
+bar labels use 112–115% capitals; body text is 100%. Numbers are tabular.
+The root size grows from 16px on phones and laptops to about 18px at 1920px
+and 22px at 2560px, so a TV across the room gets a proportionally larger guide.
 
-## Screen compositions
+**Grammar.** Reversed black bars name listing sections. Dotted leaders join a
+title to its facts. A left column carries time: real event times in Logs, and
+honest age since the last update (“now”, “12m”, “2h”) for requests, never an
+invented broadcast time. A–Z index letters hang in the gutter. Flags are small boxed capitals, used only for exceptions (offline,
+needs subtitles, checking, paused, stuck); a playable title carries no label.
+Every input, select and segmented choice is a square coupon field; only
+buttons and tabs are pills. The request form is a dashed coupon with a
+scissors mark. The biro circle draws once around wanted titles (Coming up and
+open requests) and nowhere else; a biro tick marks watched, saved and already
+in your collection. The loading state is the sparrow doodle drawing itself.
 
-- **Public home:** a welcome page before any sign-in form. It introduces the
-  collection, discovery, and household with a restrained headline, original
-  illustration, and three pastel panels. Sign in and Open your Sparrow lead to
-  `/login`. On an unconfigured server those actions lead to `/setup`. The hero
-  starts 22–28px below the navigation, with copy aligned to its top.
-- **Account entry:** a compact light card, with a quiet illustration on desktop
-  and a simple header on phones. Setup and invitation links open their forms
-  directly. Setup-code prefill, password visibility, autocomplete, validation,
-  and invitations retain their existing contracts. Back navigation returns to
-  the landing page; sign-out returns there too.
-- **Server setup:** after the administrator chooses household defaults, guide
-  them through connections, storage, downloads and a measured setup summary.
-  Offer existing-library use without API keys or a download app. Save progress
-  on the server; Finish later preserves an unfinished state and a visible return
-  link. Existing administrators with unfinished setup join the same flow.
-  Household viewers only receive their personal preferences welcome. Saved keys
-  and download settings are labelled as configured, not live-verified access.
-- **Home:** one short greeting, a compact horizontal Continue watching row
-  with up to twelve recent in-progress copies, then library posters. Resume
-  cards show artwork, progress and a visible play action; they never expand
-  into a hero. Phone shelves scroll horizontally. Empty collections use a welcome
-  illustration and real next steps appropriate to the account's permissions.
-- **Library:** a compact header, result count, tidy filter bar, and poster grid.
-  Search, type, availability and sort persist in the URL. Phone filters use
-  two columns, with a full-width availability control.
-- **Discover:** a modest centred heading and white search panel, followed by
-  three pastel illustrated prompts. Prompts fill an editable draft without
-  starting paid work or acquiring anything. Mode tabs support arrow/Home/End
-  keys; drafts and title return links preserve context.
-- **Title:** poster, plum title and synopsis on a light lilac panel. A subdued
-  catalogue backdrop supplies texture without making text depend on the image.
-  Real Play/Resume controls, episodes, season filtering, copies, exact request
-  scope and collection care remain explicit.
-- **Activity:** title-led request rows, small scope tags, recovery controls and
-  expandable journals. A request link from Logs narrows to that request, including
-  completed work. Errors cannot masquerade as empty work.
-- **Settings:** a compact desktop sidebar, wrapping phone navigation, white
-  grouped forms and visible inheritance/reset controls. People have initial
-  tiles and access actions; storage has mint device icons and connected-folder
-  cards. Server/defaults, import, matching, pairing, password and care flows
-  share the same compact control and dialog system. Sign out sits separately
-  below the navigation and returns to the public landing page. Account & security
-  contains a compact password row whose button opens the shared password-change
-  dialog, followed by browser-revocation controls; preferences has no duplicate
-  administration links or session feed.
-- **Logs:** operational history with readable summaries, title/request context,
-  timestamp, severity and a next action. Technical identifiers expand separately.
-  Time/category/severity/title filters persist through snapshot pagination and
-  reload. Empty and failed loads are distinct.
-- **Player:** video remains on a dark viewing surface. Its surrounding page,
-  track settings, subtitle repair and recovery use the light shared system.
-  Optional conversion sits under Playback help, explaining that it changes the
-  browser's playback format while preserving the original file.
-- **Dialogs and states:** warm white dialogs, lilac focus and sticky action
-  footers; restrained mint success and pink error states; lilac empty states
-  with the bird. Focus containment, Escape and focus restoration remain intact.
+## Voice
 
-Desktop navigation remains horizontal. Phones use four compact bottom links.
-Discover is the single search destination in navigation; there is no duplicate
-search link beside the account. `Ctrl/Cmd+K` still opens Discover. Page headers
-omit decorative eyebrow lines and retain descriptions only where they explain
-an action. `Page`, `Section`, `Field`, `Dialog`, `Poster` and the
-state components in `frontend/src/product/ui.tsx` define common behavior;
-`product.css` owns visual tokens and responsive layouts.
+Sparrow reads like a listings page, not an assistant: short, factual, British
+English. Apple TV, BBC iPlayer and printed TV guides are the reference.
+
+- Sections are nouns (Tonight, Coming up, Collection, Following). Buttons say
+  what happens (Play, Resume S1 E3, Request, Follow this series, Import files).
+- No lede under a page title. Keep one only when it changes what someone will
+  do, as on Defaults and Preferences.
+- Hints state consequences people can't see: cost, sign-outs, expiry, what is
+  left unchanged. Never reassurance, and never an explanation of the product.
+- State, not narration: “Starting…”, “Paused”, “Stuck”. Sparrow never speaks
+  in the first person; only Ask Sparrow and Sparrow's picks name it.
+- Errors say what happened and what to do, in two short sentences at most:
+  “This copy won't play. Try another format under Playback help.” No “please”
+  and no apologies.
+- No rhetorical rhythm: no lists of three for effect, no paired fragments, no
+  semicolons, no em dashes.
+- The household's words: film, series, season, episode, collection, storage,
+  download app. Not media, content, assets, transfers, staging or reasoning.
+- Digits for numbers: “7 days”, “24 min left”, “S1 E3”, “Airs 5 Oct”.
+
+Request flags are Stuck (needs a retry), Stopped (cancelled or given up),
+Failed and Arrived. Title flags are Offline, Needs subtitles and Checking.
+
+## Structure
+
+Navigation is **Guide · Find · Requests**, plus the account initial for
+settings. Phones use a four-item tab bar (Guide, Find, Requests, You).
+`Ctrl/Cmd+K` opens Find; `/` focuses the page's search field; arrow keys move
+between titles, rows and covers anywhere they are listed.
+
+- **Cover (public):** a teal magazine cover. Giant logotype, one line
+  (“Say what you want to watch.”), one action (Sign in, or Set up Sparrow on a
+  new server) and a labelled example listing showing a request, an arrival and
+  a resume. Sign-in, setup and invitations are coupons on the same cover.
+- **Guide (`/`):** the day's page and the whole library in one place. The day
+  name, set huge in the teal band that continues from the masthead, is the
+  heading and the only display-size title in the app besides a title's own name. **Tonight** lists up to four resumable items (twelve on
+  demand) with a still, time left and a direct play button. **Coming up** lists
+  open requests with their last update time, circled title and status.
+  **Collection** is an A–Z listing with cover thumbnails, or a covers view.
+  Search, type, sort, availability and view persist in the URL. `/library`
+  redirects here with its filters.
+- **Find (`/discover`):** one box for a title or a mood. Title matches appear
+  as you type and are marked when already in your collection. **Ask Sparrow** is the
+  only way to start paid discovery; its answer appears as Sparrow's picks. Ideas
+  fill the box without starting anything. Drafts and sessions persist in the URL.
+- **Title:** a feature spread. Big condensed title, facts line, synopsis, one
+  primary action (Play or Resume with the episode) and Request. Open requests
+  show as a circled “Coming up”. Following is a single line with Edit and
+  Check now. Episodes and copies are listed below with progress and ticks.
+- **Requests (`/activity`):** a timed listing of requests with scope, the
+  agent's latest note, recovery actions and expandable notes, then Following.
+  `?request=` narrows to one request, including completed work.
+- **Player:** the black TV screen with Sparrow's own controls: a large marigold
+  play button, back 10s and forward 30s, a marigold scrubber, tabular times, mute
+  and full screen (Space/K, ←/→, M, F). Audio and subtitle choices sit under the
+  video; Playback help and Subtitle help are disclosures.
+- **Settings:** a left index grouped You (Preferences, Account, Logs),
+  Household (People, Defaults) and Server (Storage, Connections, Setup), with
+  Sign out beneath. On phones the index becomes a scrolling strip with Sign
+  out beside it. People is a cast list; Storage lists devices; Logs is a timed
+  listing (time, title, summary, action) whose filters persist through
+  pagination and reload. Preferences label only personal or server-limited values.
+- **Setup:** numbered steps with the current step circled; two start choices;
+  a check list with ticks for what is ready.
+- **Dialogs:** paper sheets headed by a black bar; bottom sheets on phones.
+  Focus containment, Escape and focus restoration are required.
+
+## Themes
+
+The Guide is Sparrow's official theme. Each person can choose another under
+You → Preferences → Theme; it applies at once, is stored with their account
+(outside the preference contract agents use) and is painted before the app
+loads on the device's next visit. Themes change colour, type, shape and
+density. They never change structure, words or behaviour.
+
+| Theme | For | Character |
+| --- | --- | --- |
+| Guide | Everyone (default) | Newsprint listings, teal band, condensed capitals |
+| Cinema | Film nights, the TV across the room | Dark streaming shelves, Manrope, rounded art, no rules |
+| Clear | Older eyes, low vision | Large print: Atkinson Hyperlegible Next, warm paper, no dark fields, one blue, amber focus halo |
+| Saturday | Kids | Fredoka, round blue shelves, sunshine buttons that press down, tilted posters |
+
+Cinema is the only dark theme. Clear and Saturday each use one colour and one
+highlight; their character comes from type size and shape, not more colours.
+
+Every theme passes the same axe and overflow checks as the Guide
+(`tests/browser/themes.cjs`). Red stays reserved for problems and the player
+stays dark in all of them. A theme restates the palette and faces in
+`frontend/src/product/themes.css`.
 
 ## Product and verification boundaries
 
 Use actual collection and account facts. Never invent availability, progress,
 recommendations, household permissions or request authority for presentation.
 Existing copies, preference inheritance, scope, acquisition limits, media
-verification and backend permissions remain authoritative.
+verification and backend permissions remain authoritative. Example content on
+the public cover is labelled as an example.
 
-Inspect real browser renders at 360, 390, 768 and 1440px, including errors, empty
-collections, unavailable artwork and supporting dialogs. Browser scripts and
-screenshots live in [reimagined-validation](reimagined-validation/README.md) and
-[follow-up-validation](follow-up-validation/README.md).
-Fictional geometric fixture covers are test data, not real library titles or
-recommendations. Physical-device, Windows and live-provider boundaries remain
-as recorded in [IMPLEMENTATION.md](IMPLEMENTATION.md).
+Inspect real browser renders at 360, 390, 768 and 1440px, and at 1920px for
+TV use, including errors, empty collections, unavailable artwork and dialogs.
+`tests/browser/ci.sh` runs the journeys with axe checks; `tests/browser/gallery.cjs`
+photographs every screen from a fresh fixture for design review. Fictional
+geometric fixture covers are test data, not real titles or recommendations.
 
 ## Artwork and font provenance
 
-The original SVG mark, television/bird welcome illustration and discovery
-doodles live in `frontend/src/product/Brand.tsx`; `frontend/public/icon.svg`
-repeats the mark. DM Sans is bundled locally with its SIL OFL notice under
-`frontend/public/assets/font-licenses/`. Retired cinematic artwork and the
-unused Instrument Serif font have been removed.
-
-The browser fixture creates original geometric posters/backdrops for fictional
-titles. The [current gallery](screenshots/README.md) captures the production
-frontend using those fixtures; production uses actual catalogue images.
+The sparrow doodle, pen circle and tick are original SVG in
+`frontend/src/product/Brand.tsx`; `frontend/public/icon.svg` repeats the
+doodle on teal. Archivo (Omnibus-Type) is bundled locally under the SIL OFL
+with its notice in `frontend/public/assets/font-licenses/`. The themes add
+Manrope, Atkinson Hyperlegible Next and Fredoka, each a Latin subset bundled
+locally under the SIL OFL with its notice in the same folder; a font downloads
+only when someone uses its theme. DM Sans, the pastel illustrations and
+Tailwind have been removed.

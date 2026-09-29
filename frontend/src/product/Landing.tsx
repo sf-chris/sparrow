@@ -1,115 +1,82 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Play, Library, Wand2, Users } from "lucide-react";
-import { Mark, PlayroomArt, Doodle } from "./Brand";
+import { Play } from "lucide-react";
+import { Circled, Logotype, Tick } from "./Brand";
 
 export default function Landing({ needsSetup }: { needsSetup: boolean }) {
-  const entry = needsSetup ? "/setup" : "/login";
+  const today = new Date().toLocaleDateString([], {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
   return (
-    <main className="sp-auth sp-landing">
-      <header className="sp-landing-nav">
-        <Link className="sp-brand" to="/" aria-label="Sparrow home">
-          <Mark />
-          <span>sparrow</span>
-        </Link>
-        <nav aria-label="Welcome navigation">
-          <a className="sp-landing-about" href="#little-things">
-            Meet Sparrow
-          </a>
-          <Link className="sp-button secondary" to={entry}>
-            {needsSetup ? "Set up Sparrow" : "Sign in"}
-            <ArrowRight size={15} />
-          </Link>
-        </nav>
+    <main className="cover-page" id="main-content">
+      <header className="cover-top">
+        <Logotype />
+        <p>
+          <span>Home edition</span>
+          <span className="num">{today}</span>
+        </p>
       </header>
-      <section className="sp-landing-hero">
-        <div className="sp-landing-copy">
-          <p className="sp-landing-tag">
-            <span /> Your own little watch-world
+      <section className="cover-body">
+        <div className="cover-lines">
+          <h1 className="display">Say what you want to watch.</h1>
+          <p className="lede">
+            Sparrow finds it and adds it to your collection.
           </p>
-          <h1>
-            Less scrolling.
-            <br />
-            More{" "}
-            <span>
-              good stuff.
-              <svg viewBox="0 0 300 16" fill="none" aria-hidden="true">
-                <path
-                  d="M3 10c87-9 190-9 293-5M11 15c96-8 190-9 268-6"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </span>
-          </h1>
-          <p>
-            Your favourite films. That show you keep meaning to watch. A happy
-            little home for all of it.
-          </p>
-          <Link className="sp-button primary" to={entry}>
-            <Play size={14} fill="currentColor" />
-            {needsSetup ? "Make yourself at home" : "Open your Sparrow"}
-            <ArrowRight size={16} />
-          </Link>
-          <span className="sp-landing-small">
-            Your collection. Your people. Your pace.
-          </span>
+          <div className="actions">
+            <Link className="btn primary" to={needsSetup ? "/setup" : "/login"}>
+              {needsSetup ? "Set up Sparrow" : "Sign in"}
+            </Link>
+          </div>
         </div>
-        <div className="sp-landing-illustration">
-          <PlayroomArt />
-          <span className="sp-hand-note">
-            good company, great stories
-            <Doodle kind="spark" />
-          </span>
-        </div>
+        <figure className="cover-demo">
+          <div className="bar">
+            <h2>Tonight</h2>
+            <span className="bar-end">Example</span>
+          </div>
+          <ol>
+            <li className="demo-row">
+              <span className="slot-time num">20:30</span>
+              <span className="slot-body">
+                <Circled>
+                  <strong>“Something clever we can finish tonight”</strong>
+                </Circled>
+                <span className="meta">Asked Sparrow · 3 picks</span>
+              </span>
+            </li>
+            <li className="demo-row">
+              <span className="slot-time num">20:42</span>
+              <span className="slot-body">
+                <strong>Northern Signal</strong>
+                <span className="meta">Season 2 · new</span>
+              </span>
+              <Tick />
+            </li>
+            <li className="demo-row">
+              <span className="slot-time num">21:00</span>
+              <span className="slot-body">
+                <strong>Harbour Lights</strong>
+                <span className="meta leader-line">
+                  <span>S1 E3</span>
+                  <span className="leader" aria-hidden="true" />
+                  <span>24 min left</span>
+                </span>
+                <span className="meter" aria-hidden="true">
+                  <span style={{ width: "58%" }} />
+                </span>
+              </span>
+              <span className="play-dot static" aria-hidden="true">
+                <Play size={16} fill="currentColor" strokeWidth={0} />
+              </span>
+            </li>
+          </ol>
+          <figcaption className="sr-only">
+            An example listing: a question for Sparrow, a new season and an
+            episode to resume.
+          </figcaption>
+        </figure>
       </section>
-      <section
-        className="sp-landing-features"
-        id="little-things"
-        aria-labelledby="little-things-title"
-      >
-        <div className="sp-landing-section-heading">
-          <h2 id="little-things-title">
-            A little bird takes care of the little things.
-          </h2>
-          <span>You get the good part.</span>
-        </div>
-        <div className="sp-landing-feature-grid">
-          <article>
-            <Library size={21} />
-            <span className="sp-feature-number">01</span>
-            <h3>All together now.</h3>
-            <p>
-              Bring your films and shows into one lovely, organised collection.
-              Pick up right where you left off.
-            </p>
-          </article>
-          <article>
-            <Wand2 size={21} />
-            <span className="sp-feature-number">02</span>
-            <h3>A title. A mood. A maybe.</h3>
-            <p>
-              Find the one you had in mind, or let a little curiosity lead you
-              to your next favourite.
-            </p>
-          </article>
-          <article>
-            <Users size={21} />
-            <span className="sp-feature-number">03</span>
-            <h3>Room for your people.</h3>
-            <p>
-              A shared collection, with watch history and preferences that are
-              just yours. Everybody gets comfy.
-            </p>
-          </article>
-        </div>
-      </section>
-      <footer className="sp-landing-footer">
-        <span>
-          <Mark /> A little less managing. A lot more watching.
-        </span>
-        <span>Make a night of it.</span>
-      </footer>
+      <footer className="cover-foot">Runs on your own server.</footer>
     </main>
   );
 }

@@ -770,9 +770,7 @@ class AgentService:
             existing.min_quality = min_quality
             existing.audio_pref = audio_pref
             existing.urgency = Urgency(urgency)
-            existing.state_line = (
-                "Request updated with your selected scope and preferences."
-            )
+            existing.state_line = "Request updated."
             self.store.save_job(existing)
             await self.broadcast({"type": "job_update", "data": existing.to_dict()})
             return existing if was_paused else await self.resume_job(existing.id)
@@ -794,7 +792,7 @@ class AgentService:
             urgency=Urgency(urgency),
             origin=origin,
             original_language=details.get("original_language", ""),
-            state_line="Getting started…",
+            state_line="Starting…",
         )
         session = AgentSession(
             agent=AgentKind.FETCH,

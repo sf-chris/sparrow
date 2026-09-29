@@ -24,6 +24,8 @@ import Discover from "./product/Discover";
 import Watch from "./product/Watch";
 import Onboarding from "./product/Onboarding";
 import "./product/product.css";
+import "./product/themes.css";
+import { applyTheme } from "./product/theme";
 
 function Guest({
   needsSetup,
@@ -54,8 +56,19 @@ function Guest({
   );
 }
 
+/** The guide is the library; old library links keep their filters. */
+function LibraryAddress() {
+  const { search } = useLocation();
+  return <Navigate to={"/" + search} replace />;
+}
+
 export default function App() {
   const auth = useResource(() => api<AuthState>("/auth/status"));
+  const theme = auth.data?.user?.theme;
+  useEffect(() => {
+    // Signed out, the device keeps the last theme it showed.
+    if (theme !== undefined) applyTheme(theme);
+  }, [theme]);
   useEffect(() => {
     const signedOut = () => void auth.refresh();
     window.addEventListener("sparrow:signed-out", signedOut);
@@ -63,11 +76,11 @@ export default function App() {
   }, [auth.refresh]);
   if (!auth.data)
     return (
-      <main className="sp-auth">
+      <main className="boot">
         {auth.error ? (
           <ErrorNote error={auth.error} retry={auth.refresh} />
         ) : (
-          <Loading label="Connecting to Sparrow…" />
+          <Loading label="Opening Sparrow" />
         )}
       </main>
     );
@@ -119,11 +132,11 @@ export default function App() {
                   !auth.data.server_setup.deferred ? (
                     <Navigate to="/setup" replace />
                   ) : (
-                    <Collection user={user} home />
+                    <Collection user={user} />
                   )
                 }
               />
-              <Route path="/library" element={<Collection user={user} />} />
+              <Route path="/library" element={<LibraryAddress />} />
               <Route
                 path="/title/:mediaType/:tmdbId"
                 element={<Title user={user} />}

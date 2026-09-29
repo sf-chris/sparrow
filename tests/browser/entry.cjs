@@ -32,10 +32,13 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
     await (await context.request.get(base + "/api/v1/auth/status")).json()
   ).needs_setup;
   const welcome = () =>
-    page.getByRole("heading", { name: "Less scrolling. More good stuff." });
+    page.getByRole("heading", { name: "Say what you want to watch." });
   async function audit(name) {
     for (const width of [360, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: width > 700 ? 1000 : 844 });
+      // Media queries apply on the next frame after an emulated resize.
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      await page.waitForTimeout(150);
       await page.evaluate(() => document.fonts.ready);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
@@ -70,7 +73,7 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
     await page.getByLabel("Setup code", { exact: true }).waitFor();
     await audit("administrator-setup");
     await page
-      .getByRole("link", { name: "Back to the good stuff", exact: true })
+      .getByRole("link", { name: "Back", exact: true })
       .click();
     await welcome().waitFor();
     const code = fs
@@ -116,7 +119,7 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
     .fill("fixture-password-123");
   await page
     .getByRole("button", {
-      name: setup ? "Create administrator account" : "Sign in",
+      name: setup ? "Create owner account" : "Sign in",
       exact: true,
     })
     .click();
@@ -131,7 +134,10 @@ const out = process.env.SPARROW_VISUAL_OUT || "docs/product-validation";
     await page.getByRole("button", { name: "Finish later", exact: true }).click();
   }
   await page
-    .getByRole("heading", { name: "What’s on tonight, Chris?", exact: true })
+    .getByRole("heading", {
+      level: 1,
+      name: /^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day\b/,
+    })
     .waitFor();
   await page.goto(base + "/settings");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "./api";
 import { ErrorNote, Field, Section, useResource } from "./ui";
+import { Tick } from "./Brand";
 export default function SubtitleProviderSettings() {
   const resource = useResource(() =>
     api<{ configured: boolean; account_configured: boolean }>(
@@ -34,18 +35,18 @@ export default function SubtitleProviderSettings() {
   }
   return (
     <Section
-      title="Subtitle discovery"
-      description="Included tracks and local subtitle files work without an account. Connect OpenSubtitles to find additional tracks; provider download limits apply."
+      title="Subtitles"
+      description="Subtitles in or beside your files work without this. OpenSubtitles finds more, within its download limits."
     >
-      <div className="sp-panel sp-form">
+      <div className="form">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
-        <div className="sp-form-grid">
+        <div className="form-grid">
           <Field
             label="OpenSubtitles API key"
             hint={
               resource.data?.configured
-                ? "Connected. Leave blank to keep your key."
-                : "Get an API key from your OpenSubtitles account."
+                ? "Saved. Leave blank to keep it."
+                : "From your OpenSubtitles account."
             }
           >
             <input
@@ -67,7 +68,7 @@ export default function SubtitleProviderSettings() {
             hint={
               resource.data?.account_configured
                 ? "Saved. Leave blank to keep it."
-                : "Optional account access for downloads."
+                : "Optional, for downloads."
             }
           >
             <input
@@ -78,16 +79,16 @@ export default function SubtitleProviderSettings() {
             />
           </Field>
         </div>
-        <div className="sp-savebar">
-          <span role="status" className="sp-success">
-            {saved ? "Subtitle provider saved." : ""}
+        <div className="actions end">
+          <span role="status" className="done-note">
+            {saved && (
+              <>
+                <Tick /> Saved
+              </>
+            )}
           </span>
-          <button
-            className="sp-button secondary"
-            disabled={busy}
-            onClick={save}
-          >
-            {busy ? "Saving…" : "Save subtitle connection"}
+          <button className="btn" disabled={busy} onClick={save}>
+            {busy ? "Saving…" : "Save"}
           </button>
         </div>
       </div>

@@ -294,7 +294,9 @@ class CurationTests(unittest.IsolatedAsyncioTestCase):
 
         await self.service.runtime.wake(session.id, Event(kind="check"))
         self.service.runtime._call_api.assert_not_called()
-        self.assertIn("budget", self.service.store.get_session(session.id).wake_reason)
+        self.assertIn(
+            "spending limit", self.service.store.get_session(session.id).wake_reason
+        )
 
     async def test_upgrade_contract_requires_the_preferred_quality(self):
         row = self.follow(upgrades=True)

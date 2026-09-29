@@ -28,7 +28,7 @@ export async function api<T>(
     if (response.status === 401 && !path.startsWith("/auth/"))
       window.dispatchEvent(new Event("sparrow:signed-out"));
     throw new RequestError(
-      detail || "Sparrow could not complete that action. Please try again.",
+      detail || "That didn’t work. Try again.",
       response.status,
     );
   }
@@ -45,6 +45,7 @@ export type User = {
   role: "admin" | "requester" | "viewer";
   welcomed: boolean;
   disabled: boolean;
+  theme: string;
   preferences: Partial<Preferences>;
   library_scope: string[] | null;
 };
