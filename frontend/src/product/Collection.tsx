@@ -89,6 +89,14 @@ function Marked({ text, query }: { text: string; query: string }) {
   );
 }
 
+/** A control's value, shown at once. The address updates as a low-priority
+ *  navigation, so a slow device would otherwise show the old value after a press. */
+function useShown(value: string) {
+  const [shown, setShown] = useState(value);
+  useEffect(() => setShown(value), [value]);
+  return [shown, setShown] as const;
+}
+
 function Choice({
   name,
   label,
@@ -104,6 +112,7 @@ function Choice({
   onChange: (value: string) => void;
   className?: string;
 }) {
+  const [shown, setShown] = useShown(value);
   return (
     <fieldset className={`segmented ${className}`}>
       <legend className="sr-only">{label}</legend>
@@ -113,8 +122,11 @@ function Choice({
             type="radio"
             name={name}
             value={option}
-            checked={value === option}
-            onChange={() => onChange(option)}
+            checked={shown === option}
+            onChange={() => {
+              setShown(option);
+              onChange(option);
+            }}
             aria-label={accessible}
           />
           <span>{text}</span>
@@ -146,6 +158,10 @@ export default function Collection({ user }: { user: User }) {
   const state = params.get("state") || "";
   const sort = params.get("sort") || "title";
   const view = params.get("view") === "covers" ? "covers" : "list";
+  // Typed text stays local: syncing it back from a lagging address drops letters.
+  const [search, setSearch] = useState(query);
+  const [sortShown, setSortShown] = useShown(sort);
+  const [stateShown, setStateShown] = useShown(state);
   function filter(key: string, value: string) {
     setParams(
       (previous) => {
@@ -405,8 +421,11 @@ export default function Collection({ user }: { user: User }) {
                   data-search
                   aria-label="Search the collection"
                   placeholder="Search"
-                  value={query}
-                  onChange={(event) => filter("q", event.target.value)}
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    filter("q", event.target.value);
+                  }}
                 />
               </label>
               <Choice
@@ -422,13 +441,14 @@ export default function Collection({ user }: { user: User }) {
               />
               <select
                 aria-label="Sort titles"
-                value={sort}
-                onChange={(event) =>
+                value={sortShown}
+                onChange={(event) => {
+                  setSortShown(event.target.value);
                   filter(
                     "sort",
                     event.target.value === "title" ? "" : event.target.value,
-                  )
-                }
+                  );
+                }}
               >
                 <option value="title">A–Z</option>
                 <option value="year">Year</option>
@@ -436,8 +456,11 @@ export default function Collection({ user }: { user: User }) {
               </select>
               <select
                 aria-label="Availability"
-                value={state}
-                onChange={(event) => filter("state", event.target.value)}
+                value={stateShown}
+                onChange={(event) => {
+                  setStateShown(event.target.value);
+                  filter("state", event.target.value);
+                }}
               >
                 <option value="">Any status</option>
                 <option value="ready">Playable</option>
@@ -450,7 +473,13 @@ export default function Collection({ user }: { user: User }) {
               <Empty
                 title="Nothing matches."
                 action={
-                  <button className="btn" onClick={() => setParams({})}>
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      setSearch("");
+                      setParams({});
+                    }}
+                  >
                     Clear filters
                   </button>
                 }

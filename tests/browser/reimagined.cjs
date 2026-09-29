@@ -155,10 +155,20 @@ fs.mkdirSync(out, { recursive: true });
   }
 
   await go("/library");
+  // A slow TV computer must show a choice at once and never drop typed letters.
+  const cpu = await page.context().newCDPSession(page);
+  await cpu.send("Emulation.setCPUThrottlingRate", { rate: 6 });
   const types = page.getByRole("group", { name: "Media type", exact: true });
   await types.getByLabel("Films", { exact: true }).check();
   await page.getByLabel("Sort titles", { exact: true }).selectOption("year");
-  await page.getByLabel("Search the collection", { exact: true }).fill("quiet");
+  await page
+    .getByLabel("Search the collection", { exact: true })
+    .pressSequentially("quiet", { delay: 20 });
+  await cpu.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  assert.equal(
+    await page.getByLabel("Search the collection").inputValue(),
+    "quiet",
+  );
   await expect(page.locator(".entry")).toHaveCount(1);
   await page
     .getByRole("link", { name: "Open The Quiet Planet", exact: true })
