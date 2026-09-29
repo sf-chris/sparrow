@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  Maximize,
+  Minimize,
+  Pause,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  RotateCw,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { api, post, type Asset, type Effective } from "./api";
 import { SubtitleRepair, type Caption } from "./SubtitleRepair";
-import { ErrorNote, Field, Loading, Page, useResource } from "./ui";
+import { ErrorNote, Field, Loading, episodeCode, useResource } from "./ui";
 
 type Playback = {
   id: string;
@@ -15,6 +26,13 @@ type Playback = {
   subtitles: Caption[];
 };
 const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
+const stamp = (seconds: number) => {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  const h = Math.floor(total / 3600),
+    m = Math.floor((total % 3600) / 60),
+    s = String(total % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+};
 function trackLabel(
   track: { title?: string; language?: string },
   fallback: string,
@@ -37,27 +55,28 @@ export default function Watch() {
       ),
     [assetId],
   );
+  const data = resource.data;
   return (
-    <Page
-      className="sp-player-page"
-      title={resource.data?.title || "Your player"}
-    >
-      <Link
-        className="sp-back"
-        to={
-          resource.data ? `/items/${resource.data.asset.item_id}` : "/library"
-        }
-      >
-        <ArrowLeft size={15} />
-        Back to title
-      </Link>
+    <main id="main-content" className="page player-page">
+      <header className="player-head">
+        <Link className="back" to={data ? `/items/${data.asset.item_id}` : "/"}>
+          <ArrowLeft size={18} strokeWidth={2.5} />
+          Back to title
+        </Link>
+        <h1>
+          {data?.title || "Player"}
+          {data?.asset.episode ? (
+            <span className="num"> {episodeCode(data.asset)}</span>
+          ) : null}
+        </h1>
+      </header>
       <ErrorNote error={resource.error} retry={resource.refresh} />
-      {resource.loading && !resource.data ? (
-        <Loading label="Opening your media…" />
+      {resource.loading && !data ? (
+        <Loading label="Loading" />
       ) : (
-        resource.data && <Player key={assetId} {...resource.data} />
+        data && <Player key={assetId} {...data} />
       )}
-    </Page>
+    </main>
   );
 }
 function Player({
@@ -83,6 +102,36 @@ function Player({
   const [busy, setBusy] = useState(true);
   const [subtitle, setSubtitle] = useState(-1);
   const [waiting, setWaiting] = useState(false);
+  const screen = useRef<HTMLDivElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [time, setTime] = useState(0);
+  const [length, setLength] = useState(asset.facts.duration || 0);
+  const [muted, setMuted] = useState(false);
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const change = () => setFull(document.fullscreenElement === screen.current);
+    document.addEventListener("fullscreenchange", change);
+    return () => document.removeEventListener("fullscreenchange", change);
+  }, []);
+  useEffect(() => {
+    if (video.current) video.current.muted = muted;
+  }, [muted, session?.id]);
+  function toggle() {
+    const element = video.current;
+    if (!element) return;
+    if (element.paused) void element.play().catch(() => {});
+    else element.pause();
+  }
+  function seek(to: number) {
+    const element = video.current;
+    if (!element) return;
+    element.currentTime = Math.max(0, Math.min(to, element.duration || to));
+    setTime(element.currentTime);
+  }
+  function fullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void screen.current?.requestFullscreen?.().catch(() => {});
+  }
   const position = useRef<number | undefined>(undefined);
   const save = async (ended = false, keepalive = false) => {
     const current = active.current,
@@ -101,9 +150,7 @@ function Player({
       });
       setProgressError("");
     } catch (e) {
-      setProgressError(
-        `Your progress could not be saved. ${(e as Error).message}`,
-      );
+      setProgressError(`Couldn’t save your place. ${(e as Error).message}`);
     }
   };
   useEffect(() => {
@@ -190,7 +237,7 @@ function Player({
           if (disposed) return;
           if (!Hls.isSupported()) {
             setError(
-              "This browser cannot play the prepared stream. Try a current Chrome, Firefox, Edge or Safari browser.",
+              "This browser can’t play this stream. Try Chrome, Firefox, Edge or Safari.",
             );
             return;
           }
@@ -204,17 +251,13 @@ function Player({
           hls.on(Hls.Events.ERROR, (_, data) => {
             if (data.fatal)
               setError(
-                "Playback was interrupted. Check that your storage is connected, then try again.",
+                "Playback stopped. Check the storage is connected, then try again.",
               );
           });
           hls.loadSource(session.url);
           hls.attachMedia(element);
         })
-        .catch(() =>
-          setError(
-            "The player could not load. Refresh the page and try again.",
-          ),
-        );
+        .catch(() => setError("The player didn’t load. Refresh the page."));
     const timer = window.setInterval(() => {
       if (!element.paused) void save();
     }, 5000);
@@ -240,17 +283,48 @@ function Player({
           session?.subtitles[i]?.index === subtitle ? "showing" : "disabled";
   }, [subtitle, session]);
   return (
-    <div className="sp-player">
+    <div className="player">
       <ErrorNote error={error} retry={() => setAttempt((v) => v + 1)} />
       <ErrorNote error={progressError} retry={() => void save()} />
-      <div className="sp-video-wrap">
+      <div
+        className={`screen ${playing ? "playing" : ""}`}
+        ref={screen}
+        onKeyDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.matches("input, select, summary")) return;
+          const key = event.key.toLowerCase();
+          if ((key === " " || key === "enter") && target.closest("button"))
+            return;
+          const actions: Record<string, () => void> = {
+            " ": toggle,
+            k: toggle,
+            arrowleft: () => seek(time - 10),
+            arrowright: () => seek(time + 30),
+            m: () => setMuted(!muted),
+            f: fullscreen,
+          };
+          if (!actions[key]) return;
+          event.preventDefault();
+          actions[key]();
+        }}
+      >
         <video
           ref={video}
-          controls
           playsInline
+          tabIndex={-1}
+          onClick={toggle}
+          onPlay={() => setPlaying(true)}
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+          onDurationChange={(e) =>
+            Number.isFinite(e.currentTarget.duration) &&
+            setLength(e.currentTarget.duration)
+          }
           preload="metadata"
           aria-label={`Watch ${title}`}
-          onPause={() => void save()}
+          onPause={() => {
+            setPlaying(false);
+            void save();
+          }}
           onEnded={() => void save(true)}
           onWaiting={() => setWaiting(true)}
           onPlaying={() => setWaiting(false)}
@@ -258,8 +332,8 @@ function Player({
             if (session && !busy)
               setError(
                 transcode
-                  ? "This copy still could not play. Check that its storage is connected, then try again."
-                  : "This copy could not play. Open Playback help to try another format, or reconnect its storage.",
+                  ? "This copy still won’t play. Check its storage is connected, then try again."
+                  : "This copy won’t play. Try another format under Playback help.",
               );
           }}
         >
@@ -283,15 +357,85 @@ function Player({
           ))}
         </video>
         {(busy || waiting) && (
-          <div className="sp-video-status">
-            <Loading
-              label={busy ? "Opening playback…" : "Waiting for your media…"}
-            />
+          <div className="screen-status">
+            <Loading label={busy ? "Starting" : "Buffering"} />
           </div>
         )}
+        <div className="controls" role="group" aria-label="Playback controls">
+          <button
+            className="control play"
+            aria-label={playing ? "Pause" : "Play"}
+            onClick={toggle}
+          >
+            {playing ? (
+              <Pause size={24} fill="currentColor" strokeWidth={0} />
+            ) : (
+              <Play size={24} fill="currentColor" strokeWidth={0} />
+            )}
+          </button>
+          <button
+            className="control jump"
+            aria-label="Back 10 seconds"
+            onClick={() => seek(time - 10)}
+          >
+            <RotateCcw size={20} strokeWidth={2.25} />
+          </button>
+          <button
+            className="control jump"
+            aria-label="Forward 30 seconds"
+            onClick={() => seek(time + 30)}
+          >
+            <RotateCw size={20} strokeWidth={2.25} />
+          </button>
+          <span className="clock num" aria-hidden="true">
+            {stamp(time)}
+          </span>
+          <input
+            className="scrubber"
+            type="range"
+            min={0}
+            max={Math.max(1, Math.floor(length))}
+            step={1}
+            value={Math.floor(Math.min(time, length || time))}
+            aria-label="Position"
+            aria-valuetext={`${stamp(time)} of ${stamp(length)}`}
+            style={
+              {
+                "--played": `${(100 * time) / Math.max(1, length)}%`,
+              } as React.CSSProperties
+            }
+            onChange={(e) => seek(Number(e.target.value))}
+          />
+          <span className="clock num" aria-hidden="true">
+            {stamp(length)}
+          </span>
+          <button
+            className="control"
+            aria-label={muted ? "Unmute" : "Mute"}
+            aria-pressed={muted}
+            onClick={() => setMuted(!muted)}
+          >
+            {muted ? (
+              <VolumeX size={20} strokeWidth={2.25} />
+            ) : (
+              <Volume2 size={20} strokeWidth={2.25} />
+            )}
+          </button>
+          <button
+            className="control"
+            aria-label={full ? "Exit full screen" : "Full screen"}
+            onClick={fullscreen}
+          >
+            {full ? (
+              <Minimize size={20} strokeWidth={2.25} />
+            ) : (
+              <Maximize size={20} strokeWidth={2.25} />
+            )}
+          </button>
+        </div>
       </div>
       {session && (
-        <div className="sp-player-settings sp-form-grid">
+        <div className="tracks">
           <Field label="Audio">
             <select
               value={session.audio_index ?? ""}
@@ -326,32 +470,28 @@ function Player({
           </Field>
         </div>
       )}
-      <div className="sp-savebar">
-        <span className="sp-muted">
-          {session?.mode === "hls"
-            ? "Converting video for this browser."
-            : "Plays directly from your collection."}{" "}
-          Your progress saves automatically.
-        </span>
-      </div>
+      {session?.mode === "hls" && (
+        <p className="player-note meta">Converted for this browser.</p>
+      )}
       {!transcode && (
-        <details className="sp-playback-help">
+        <details className="disclosure help">
           <summary>Playback help</summary>
-          <p className="sp-muted">
-            Video won’t play, or there’s no sound? Try converting it to a format
-            this browser can play. This may take a moment; your original file
-            stays unchanged.
-          </p>
-          <button
-            className="sp-button quiet"
-            onClick={() => {
-              position.current = video.current?.currentTime;
-              setTranscode(true);
-            }}
-          >
-            <RefreshCw size={15} />
-            Try another playback format
-          </button>
+          <div className="help-body">
+            <p>
+              No picture or no sound? Play a converted stream instead. The file
+              itself isn’t changed.
+            </p>
+            <button
+              className="btn"
+              onClick={() => {
+                position.current = video.current?.currentTime;
+                setTranscode(true);
+              }}
+            >
+              <RefreshCw size={16} strokeWidth={2.5} />
+              Try another format
+            </button>
+          </div>
         </details>
       )}
       {session && (

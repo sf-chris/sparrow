@@ -1,12 +1,19 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sparrow</title>
-    <meta name="theme-color" content="#faf9f6" />
+    <meta name="theme-color" content="#156068" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <script>
+      // Paint this device's theme before the app loads, so it never flashes.
+      try {
+        var theme = localStorage.getItem("sparrow-theme");
+        if (theme) document.documentElement.setAttribute("data-theme", theme);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

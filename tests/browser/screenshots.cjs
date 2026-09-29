@@ -29,12 +29,12 @@ const out = process.env.SPARROW_SCREENSHOT_OUT || 'docs/screenshots';
     assert(catalogue.every(item => fixtures.has(item.title)), 'Screenshots require the fictional fixture catalogue.');
     const errors = [];
     for (const [name, route, context, ready] of [
-      ['landing', '/', guest, '.sp-landing-hero'],
-      ['home', '/', owner, '.sp-continue'],
-      ['library', '/library', owner, '.sp-poster'],
-      ['discover', '/discover', owner, '.sp-discover-page'],
-      ['title', '/title/tv/101', owner, '.sp-title-hero'],
-      ['preferences', '/settings', owner, '.sp-preference-groups'],
+      ['landing', '/', guest, '.cover-body'],
+      ['home', '/', owner, '.tonight-item'],
+      ['library', '/?view=covers', owner, '.cover-card'],
+      ['discover', '/discover', owner, '.finder'],
+      ['title', '/title/tv/101', owner, '.feature'],
+      ['preferences', '/settings', owner, '.preference-groups'],
     ]) {
       const page = await context.newPage();
       page.on('pageerror', error => errors.push(error.message));

@@ -37,6 +37,10 @@ class PreferencePatch(Input):
     values: dict
 
 
+class ThemeChoice(Input):
+    theme: str = Field(max_length=32)
+
+
 class DefaultPatch(Input):
     defaults: Preferences
     policy: Policy
@@ -238,6 +242,13 @@ def install_accounts(app, storage, get_service):
     def set_preferences(body: PreferencePatch, request: Request):
         try:
             return accounts.set_preferences(request.state.user["id"], body.values)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @router.put("/appearance")
+    def set_appearance(body: ThemeChoice, request: Request):
+        try:
+            return {"user": accounts.set_theme(request.state.user["id"], body.theme)}
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 

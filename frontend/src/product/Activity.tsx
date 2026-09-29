@@ -1,9 +1,11 @@
 import CollectionCare from "./CollectionCare";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Pause, Play, ChevronDown } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import { api, post, type Job } from "./api";
-import { Empty, ErrorNote, Loading, Page, Status, useResource } from "./ui";
+import { Circled } from "./Brand";
+import { Empty, ErrorNote, Flag, Loading, Page, useResource } from "./ui";
+import { Age, scope } from "./Collection";
 import { useWebSocket } from "../hooks/useWebSocket";
 
 export default function Activity() {
@@ -28,164 +30,162 @@ export default function Activity() {
       setBusy("");
     }
   }
-  const jobs = (resource.data || []).filter((j) =>
-    selectedRequest
-      ? j.id === selectedRequest
-      : filter === "all" || j.status !== "complete",
+  const jobs = (resource.data || [])
+    .filter((j) =>
+      selectedRequest
+        ? j.id === selectedRequest
+        : filter === "all" || j.status !== "complete",
+    )
+    .sort((a, b) => b.updated_at - a.updated_at);
+  const titles = Object.fromEntries(
+    (resource.data || []).map((j) => [`${j.media_type}:${j.tmdb_id}`, j.title]),
   );
   return (
     <Page
-      className="sp-activity-page"
-      title="Activity"
-      description="Your requests, on their way to movie night."
+      className="requests-page"
+      title="Requests"
       action={
-        <Link className="sp-button quiet" to="/settings/logs">
-          View logs
+        <Link className="btn quiet" to="/settings/logs">
+          Logs
         </Link>
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
-      {selectedRequest && (
-        <button className="sp-button quiet" onClick={() => setParams({})}>
-          Show all requests
-        </button>
-      )}
-      <div className="sp-tabs" role="tablist" aria-label="Request history">
-        {[
-          ["current", "Current & needs attention"],
-          ["all", "All requests"],
-        ].map(([value, label]) => (
-          <button
-            key={value}
-            role="tab"
-            aria-selected={filter === value}
-            onClick={() => {
-              setFilter(value);
-              if (selectedRequest) setParams({});
-            }}
-          >
-            {label}
+      <div className="request-tools">
+        <div className="tabs" role="tablist" aria-label="Which requests">
+          {[
+            ["current", "Current"],
+            ["all", "All"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              role="tab"
+              aria-selected={!selectedRequest && filter === value}
+              onClick={() => {
+                setFilter(value);
+                if (selectedRequest) setParams({});
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {selectedRequest && (
+          <button className="btn quiet" onClick={() => setParams({})}>
+            Show all requests
           </button>
-        ))}
+        )}
       </div>
       {!resource.data && resource.error ? null : resource.loading &&
         !resource.data ? (
-        <Loading label="Loading requests…" />
+        <Loading label="Loading requests" />
       ) : jobs.length ? (
-        <div className="sp-form">
-          {jobs.map((job) => (
-            <article
-              id={`request-${job.id}`}
-              className={`sp-panel sp-job sp-request-card ${job.status}`}
-              key={job.id}
-            >
-              <div className="sp-row" style={{ paddingTop: 0 }}>
-                <div>
-                  <Status value={job.status} />
-                  <h2 className="mt-2">
-                    <Link to={`/title/${job.media_type}/${job.tmdb_id}`}>
-                      {job.title}
-                    </Link>
-                  </h2>
-                  <p>
-                    {job.state_line ||
-                      "Sparrow is checking what this request needs."}
-                  </p>
-                  <p className="mt-2 sp-job-scope">
-                    {job.media_type === "movie"
-                      ? "Movie"
-                      : Object.entries(job.wanted_episodes)
-                          .map(
-                            ([season, eps]) =>
-                              `Season ${season} · ${eps.length} episode${eps.length === 1 ? "" : "s"}`,
-                          )
-                          .join(" / ")}
-                  </p>
+        <ol className="requests">
+          {jobs.map((job) => {
+            const open = job.status !== "complete";
+            return (
+              <li
+                id={`request-${job.id}`}
+                className={`request ${job.status}`}
+                key={job.id}
+              >
+                <Age seconds={job.updated_at} />
+                <div className="request-body">
+                  <div className="request-top">
+                    <h2>
+                      <Link to={`/title/${job.media_type}/${job.tmdb_id}`}>
+                        {open ? <Circled>{job.title}</Circled> : job.title}
+                      </Link>
+                    </h2>
+                    <Flag
+                      value={job.needs_attention ? "attention" : job.status}
+                    />
+                  </div>
+                  <p className="meta">{scope(job)}</p>
+                  {job.status !== "paused" && (
+                    <p className="request-note">
+                      {job.state_line || "Starting…"}
+                    </p>
+                  )}
+                  {open && (
+                    <div className="actions">
+                      {job.needs_attention && (
+                        <button
+                          className="btn"
+                          disabled={busy === job.id}
+                          onClick={() => control(job, "retry")}
+                        >
+                          Check again
+                        </button>
+                      )}
+                      {job.status === "active" ? (
+                        <button
+                          className="btn"
+                          disabled={busy === job.id}
+                          onClick={() => control(job, "pause")}
+                        >
+                          <Pause size={16} strokeWidth={2.5} />
+                          Pause
+                        </button>
+                      ) : (
+                        <button
+                          className="btn"
+                          disabled={busy === job.id}
+                          onClick={() =>
+                            control(
+                              job,
+                              job.status === "paused" ? "resume" : "retry",
+                            )
+                          }
+                        >
+                          <Play size={16} strokeWidth={2.5} />
+                          {job.status === "paused" ? "Resume" : "Try again"}
+                        </button>
+                      )}
+                      {["active", "paused"].includes(job.status) && (
+                        <button
+                          className="btn quiet"
+                          disabled={busy === job.id}
+                          onClick={() => control(job, "cancel")}
+                        >
+                          Cancel request
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <Journal job={job} />
                 </div>
-                <div className="sp-actions">
-                  {job.needs_attention && (
-                    <button
-                      className="sp-button secondary"
-                      disabled={busy === job.id}
-                      onClick={() => control(job, "retry")}
-                    >
-                      Check again
-                    </button>
-                  )}
-                  {job.status === "active" ? (
-                    <button
-                      className="sp-button secondary"
-                      disabled={busy === job.id}
-                      onClick={() => control(job, "pause")}
-                    >
-                      <Pause size={15} />
-                      Pause
-                    </button>
-                  ) : (
-                    job.status !== "complete" && (
-                      <button
-                        className="sp-button secondary"
-                        disabled={busy === job.id}
-                        onClick={() =>
-                          control(
-                            job,
-                            job.status === "paused" ? "resume" : "retry",
-                          )
-                        }
-                      >
-                        <Play size={15} />
-                        {job.status === "paused" ? "Resume" : "Try again"}
-                      </button>
-                    )
-                  )}
-                  {["active", "paused"].includes(job.status) && (
-                    <button
-                      className="sp-button quiet"
-                      disabled={busy === job.id}
-                      onClick={() => control(job, "cancel")}
-                    >
-                      Cancel request
-                    </button>
-                  )}
-                </div>
-              </div>
-              <Journal job={job} />
-            </article>
-          ))}
-        </div>
+              </li>
+            );
+          })}
+        </ol>
       ) : (
         <Empty
-          title={
-            selectedRequest
-              ? "This request is no longer available."
-              : "Nothing needs your attention."
-          }
+          title={selectedRequest ? "Request not found." : "Nothing coming up."}
           action={
-            <Link to="/discover" className="sp-button secondary">
-              Find something to watch
+            <Link to="/discover" className="btn">
+              Find something
             </Link>
           }
         >
-          {selectedRequest
-            ? "It may have been removed or your access may have changed. Use Show all requests to return to your activity."
-            : "New requests and their progress will appear here."}
+          {selectedRequest &&
+            "It may have been removed, or your access changed."}
         </Empty>
       )}
-      <CollectionCare />
+      <CollectionCare titles={titles} />
     </Page>
   );
 }
 function Journal({ job }: { job: Job }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="sp-journal">
+    <div className="journal">
       <button
-        className="sp-button quiet"
+        className="journal-toggle"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <ChevronDown size={16} />
-        What Sparrow checked
+        Notes
       </button>
       {open && <JournalEntries id={job.id} />}
     </div>
@@ -205,29 +205,30 @@ function JournalEntries({ id }: { id: string }) {
       }>(`/jobs/${id}`),
     [id],
   );
-  if (resource.loading) return <Loading label="Loading progress…" />;
+  if (resource.loading) return <Loading label="Loading notes" />;
   return (
-    <div className="sp-journal-entries">
+    <div className="journal-entries">
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {resource.data?.journal.length ? (
-        resource.data.journal.map((entry) => (
-          <div className="sp-row" key={entry.id}>
-            <p>{entry.text}</p>
-            <time
-              className="sp-muted"
-              dateTime={new Date(entry.ts * 1000).toISOString()}
-            >
-              {new Date(entry.ts * 1000).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </time>
-          </div>
-        ))
+        <ol>
+          {resource.data.journal.map((entry) => (
+            <li key={entry.id}>
+              <time
+                className="num"
+                dateTime={new Date(entry.ts * 1000).toISOString()}
+              >
+                {new Date(entry.ts * 1000).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hourCycle: "h23",
+                })}
+              </time>
+              <p>{entry.text}</p>
+            </li>
+          ))}
+        </ol>
       ) : (
-        <p className="sp-muted">
-          The first update will appear here when Sparrow begins checking.
-        </p>
+        <p className="muted">No notes yet.</p>
       )}
     </div>
   );

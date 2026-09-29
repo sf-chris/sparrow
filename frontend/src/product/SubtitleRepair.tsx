@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, Upload } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { api, patch, post } from "./api";
-import { ErrorNote, Field, Section, useResource } from "./ui";
+import { ErrorNote, Field, useResource } from "./ui";
 
 export type Caption = {
   index: number;
@@ -24,6 +24,18 @@ type Track = {
 type RepairState = {
   tracks: Track[];
   tasks: { id: string; state: string; message: string }[];
+};
+const names = new Intl.DisplayNames(["en"], { type: "language" });
+const languageName = (code: string) => {
+  try {
+    return names.of(code.replace(/_/g, "-")) || code;
+  } catch {
+    return code;
+  }
+};
+const styles: Record<string, string> = {
+  sdh: "dialogue and sounds",
+  forced: "foreign dialogue",
 };
 export function SubtitleRepair({
   assetId,
@@ -63,7 +75,7 @@ export function SubtitleRepair({
           .map((t, i) => ({
             ...t,
             index: 10000 + i,
-            title: `${t.language} · checked ${t.kind}`,
+            title: `${languageName(t.language)}${styles[t.kind] ? ` · ${styles[t.kind]}` : ""} · checked`,
           })),
       );
   }, [resource.data, audio]);
@@ -72,7 +84,7 @@ export function SubtitleRepair({
     setError("");
     try {
       if (file && file.size > 2 * 1024 * 1024)
-        throw new Error("Choose a subtitle file smaller than 2 MB.");
+        throw new Error("Choose a subtitle file under 2 MB.");
       await post(`/assets/${assetId}/subtitles/repair`, {
         audio_index: audio,
         language,
@@ -113,33 +125,41 @@ export function SubtitleRepair({
       setError((e as Error).message);
     }
   }
+  const status =
+    latest &&
+    (latest.state === "ready"
+      ? "Fixed"
+      : running
+        ? "In progress"
+        : latest.state === "review_pending"
+          ? "Review didn’t finish"
+          : latest.state === "cancelled"
+            ? "Stopped"
+            : "Couldn’t fix");
   return (
-    <Section
-      title="Subtitle care"
-      description="Find a suitable track, align it to this audio, then review dialogue samples. Your original files stay intact."
+    <details
+      className="disclosure help subtitle-care"
+      open={!!latest && latest.state !== "ready"}
     >
-      <div className="sp-panel sp-form">
+      <summary>
+        Subtitle help
+        {status && <span className="meta"> · {status}</span>}
+      </summary>
+      <div className="help-body form">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {latest && (
-          <div role="status">
-            <strong>
-              {latest.state === "ready"
-                ? "Subtitles checked"
-                : running
-                  ? "Preparing your subtitles"
-                  : latest.state === "review_pending"
-                    ? "Ready for quality review"
-                    : latest.state === "cancelled"
-                      ? "Repair stopped"
-                      : "Subtitles need attention"}
-            </strong>
-            <p className="sp-muted">{latest.message}</p>
+          <div role="status" className="care-status">
+            <strong>{status}</strong>
+            <p className="muted">{latest.message}</p>
           </div>
         )}
-        <div className="sp-form-grid">
+        <p className="muted">
+          Finds subtitles for this audio and syncs them to the dialogue.
+        </p>
+        <div className="form-grid">
           <Field
-            label="Repair language"
-            hint="Automatic verification currently needs captions in the spoken language."
+            label="Language"
+            hint="Sync checks only work in the spoken language."
           >
             <select
               value={language}
@@ -162,82 +182,61 @@ export function SubtitleRepair({
               ))}
             </select>
           </Field>
-          <Field label="Subtitle style">
+          <Field label="Style">
             <select value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="full">Full dialogue</option>
-              <option value="sdh">Dialogue and sound descriptions</option>
+              <option value="sdh">Dialogue and sounds</option>
               <option value="forced">Foreign dialogue only</option>
             </select>
           </Field>
         </div>
-        <div className="sp-actions">
+        <div className="actions">
           <button
-            className="sp-button secondary"
+            className="btn"
             disabled={busy || running}
             onClick={() => void repair()}
           >
-            <RefreshCw size={15} />
-            Find & repair subtitles
+            <RefreshCw size={16} strokeWidth={2.5} />
+            Find and sync
           </button>
-          <Field label="Use your own subtitle file">
-            <input
-              type="file"
-              accept=".srt,.vtt,.ass,.ssa"
-              disabled={busy || running}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void repair(file);
-                e.target.value = "";
-              }}
-            />
-          </Field>
           {running && (
             <button
-              className="sp-button quiet"
+              className="btn quiet"
               disabled={busy}
               onClick={() => void action("DELETE")}
             >
-              Stop repair
+              Stop
             </button>
           )}
           {latest?.state === "review_pending" && (
             <button
-              className="sp-button secondary"
+              className="btn"
               disabled={busy}
               onClick={() => void action("POST", "/review")}
             >
-              Retry quality review
+              Try the review again
             </button>
           )}
         </div>
-        {resource.data?.tracks.some((t) => t.original_url) && (
-          <details>
-            <summary className="sp-button quiet">
-              Original subtitle files
-            </summary>
-            <p className="sp-muted">
-              These are preserved before alignment. Their original timing has
-              not been approved.
-            </p>
-            {resource.data.tracks
-              .filter((t) => t.original_url)
-              .slice(0, 10)
-              .map((t) => (
-                <a
-                  className="sp-button quiet"
-                  key={t.id}
-                  href={t.original_url}
-                  download={`${t.language}-original.vtt`}
-                >
-                  Download original · {t.language}
-                </a>
-              ))}
-          </details>
-        )}
+        <Field
+          label="Upload a subtitle file"
+          hint=".srt, .vtt, .ass or .ssa, under 2 MB."
+        >
+          <input
+            type="file"
+            accept=".srt,.vtt,.ass,.ssa"
+            disabled={busy || running}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void repair(file);
+              e.target.value = "";
+            }}
+          />
+        </Field>
         {selected?.id && (
           <Field
-            label="Personal subtitle delay (seconds)"
-            hint="Positive values show captions later. This only changes your playback."
+            label="Subtitle delay (seconds)"
+            hint="Positive numbers show subtitles later. Only for you."
           >
             <input
               type="number"
@@ -249,7 +248,28 @@ export function SubtitleRepair({
             />
           </Field>
         )}
+        {resource.data?.tracks.some((t) => t.original_url) && (
+          <details className="disclosure">
+            <summary>Original subtitle files</summary>
+            <p className="muted">As found, before syncing.</p>
+            <div className="actions">
+              {resource.data.tracks
+                .filter((t) => t.original_url)
+                .slice(0, 10)
+                .map((t) => (
+                  <a
+                    className="btn quiet"
+                    key={t.id}
+                    href={t.original_url}
+                    download={`${t.language}-original.vtt`}
+                  >
+                    Download {languageName(t.language)}
+                  </a>
+                ))}
+            </div>
+          </details>
+        )}
       </div>
-    </Section>
+    </details>
   );
 }

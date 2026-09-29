@@ -2,16 +2,24 @@
 
 All notable changes to Sparrow are documented here.
 
-## Unreleased — bright Sparrow and household product foundation
+## Unreleased — the household guide and product foundation
 
-- Approved bright design across the actual application: public welcome page,
-  compact Continue watching shelf, poster-led library, discovery, titles,
-  browser player, settings and dialogs on desktop and phones.
+- Every screen redesigned as the household's own TV guide: newsprint, print
+  black, channel teal and biro blue in one bundled typeface (Archivo). The
+  Guide replaces Home and Library, Find has one box for a title or a mood, and
+  arrow keys move between titles for keyboards and TV remotes. Tailwind and
+  DM Sans are removed; a before/after gallery covers all 25 screens.
+- Personal themes: the Guide stays the official theme, and each person can
+  choose Cinema, Clear or Saturday in Preferences. Every
+  theme passes the same accessibility checks; fonts load only when used.
+- All interface copy rewritten in a listings voice, including the request,
+  log, Find, Following and subtitle status lines the server sends. The voice
+  rules are in the product design contract.
 - Dedicated operational Logs with scoped history, grouped repeats, filters,
   stable pagination and useful failure/recovery context.
 - Focused account/security page, current-browser identification, session
   revocation, password dialog and visible sign-out in settings.
-- Clearer optional playback conversion and one Discover destination in navigation.
+- Clearer optional playback conversion and one search destination in navigation.
 - Refreshed open-source README, desktop/phone gallery and reproducible screenshot
   capture using fictional media. Isolated browser runs preserve existing previews.
 - Browser checks accept both native and MediaSource HLS; release checks require

@@ -11,7 +11,7 @@ const url=process.env.SPARROW_BROWSER_URL || 'http://127.0.0.1:8891';
 await page.goto(url);await page.getByRole('link',{name:/^(Sign in|Set up Sparrow)$/}).click();await page.getByLabel('Username',{exact:true}).waitFor();
 const needsSetup=await page.getByLabel('Setup code',{exact:true}).count();
 if(needsSetup){
- await page.getByRole('heading',{name:'Set up your Sparrow server',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Set up Sparrow',exact:true}).waitFor();
  await page.screenshot({path:path.join(out,'owner-setup-desktop.png')});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'administrator-setup-mobile.png'),fullPage:true});await page.setViewportSize({width:1440,height:1000});
  const password=page.getByLabel('Password',{exact:true});
@@ -31,14 +31,14 @@ if(needsSetup){
  if(!(await (await page.request.get(url+'/api/v1/auth/status')).json()).needs_setup)throw new Error('Opening a setup link created an account');
  await page.getByLabel('Your name',{exact:true}).fill('Chris');
 }
-await page.getByLabel('Username',{exact:true}).fill('owner');await page.getByLabel('Password',{exact:true}).fill('fixture-password-123');await page.getByRole('button',{name:needsSetup?'Create administrator account':'Sign in',exact:true}).click();
+await page.getByLabel('Username',{exact:true}).fill('owner');await page.getByLabel('Password',{exact:true}).fill('fixture-password-123');await page.getByRole('button',{name:needsSetup?'Create owner account':'Sign in',exact:true}).click();
 if(needsSetup){await page.getByRole('button',{name:'Continue setup',exact:true}).waitFor();await page.screenshot({path:path.join(out,'owner-defaults-desktop.png')});await page.getByRole('button',{name:'Continue setup',exact:true}).click();await page.getByRole('button',{name:'Finish later',exact:true}).click();}
-await page.getByRole('heading',{name:'What’s on tonight, Chris?'}).waitFor({timeout:10000}).catch(async()=>{const welcome=page.getByRole('button',{name:'Continue to Sparrow'});if(await welcome.isVisible())await welcome.click();});
+await page.getByRole('heading',{level:1,name:/^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day\b/}).waitFor({timeout:10000}).catch(async()=>{const welcome=page.getByRole('button',{name:'Continue',exact:true});if(await welcome.isVisible())await welcome.click();});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).waitFor();
 await page.screenshot({path:path.join(out,'home-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).click();await page.getByRole('heading',{name:'The Quiet Planet',exact:true}).waitFor();
 await page.screenshot({path:path.join(out,'movie-desktop.png'),fullPage:true});
-await page.getByRole('link',{name:/^Play$|^Resume$/}).first().click();
+await page.getByRole('link',{name:/^(Play|Resume)\b/}).first().click();
 await page.locator('video').waitFor();await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,{timeout:15000});
 await page.locator('video').evaluate(v=>{v.pause();v.currentTime=12;});
 await page.waitForFunction(()=>Math.abs(document.querySelector('video').currentTime-12)<.5);
@@ -56,18 +56,18 @@ await page.getByRole('link',{name:'Back to title'}).click();
 const saved=await page.request.get(url+'/api/v1/catalogue');const items=await saved.json();
 const watching=items.find(i=>i.title==='The Quiet Planet').assets[0].watch;
 if(!watching||watching.position<10)throw new Error('Resume progress was not saved: '+JSON.stringify(watching));
-for(const [route,name] of [['/library','library'],['/activity','activity'],['/settings','preferences'],['/settings/storage','storage'],['/settings/people','people'],['/settings/server','server'],['/settings/defaults','defaults'],['/discover','discover']]){
+for(const [route,name] of [['/?view=covers','library'],['/activity','activity'],['/settings','preferences'],['/settings/storage','storage'],['/settings/people','people'],['/settings/server','server'],['/settings/defaults','defaults'],['/discover','discover']]){
  await page.goto(url+route);await page.locator('h1').waitFor();await page.waitForTimeout(150);
  await page.screenshot({path:path.join(out,name+'-desktop.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,name+'-mobile.png'),fullPage:true});
  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);if(overflow)throw new Error('Horizontal overflow: '+route);
  await page.setViewportSize({width:1440,height:1000});
 }
-await page.goto(url+'/title/tv/101');await page.getByRole('button',{name:/Choose episodes/}).click();await page.getByRole('dialog').waitFor();
+await page.goto(url+'/title/tv/101');await page.getByRole('button',{name:/Request episodes/}).click();await page.getByRole('dialog').waitFor();
 await page.getByRole('checkbox').first().check();await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'request-episodes-mobile.png'),fullPage:true});
 await page.getByRole('button',{name:'Request 1 episode',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
 const jobs=await (await page.request.get(url+'/api/v1/jobs')).json();if(JSON.stringify(jobs[0].wanted_episodes)!=='{"1":[1]}')throw new Error('Incorrect exact scope');
-await page.goto(url+'/activity');await page.getByRole('heading',{name:'Activity',exact:true}).waitFor();await page.waitForTimeout(250);if(await page.getByRole('button',{name:'Resume',exact:true}).first().isVisible())await page.getByRole('button',{name:'Resume',exact:true}).first().click();await page.getByRole('button',{name:'Pause',exact:true}).first().click();await page.getByRole('button',{name:'Resume',exact:true}).first().waitFor();
+await page.goto(url+'/activity');await page.getByRole('heading',{name:'Requests',exact:true}).waitFor();await page.waitForTimeout(250);if(await page.getByRole('button',{name:'Resume',exact:true}).first().isVisible())await page.getByRole('button',{name:'Resume',exact:true}).first().click();await page.getByRole('button',{name:'Pause',exact:true}).first().click();await page.getByRole('button',{name:'Resume',exact:true}).first().waitFor();
 await page.screenshot({path:path.join(out,'activity-paused-mobile.png'),fullPage:true});
 fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify({passed:true,errors,responses,watching,exact_scope:jobs[0].wanted_episodes},null,2));
 if(errors.length||responses.length)throw new Error(JSON.stringify({errors,responses}));
