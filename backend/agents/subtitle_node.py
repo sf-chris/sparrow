@@ -25,49 +25,256 @@ def model_path(data_dir):
     return Path(os.getenv("SPARROW_TRANSCRIPTION_MODEL") or bundled)
 
 
+# Whole-episode dialogue evidence. On a real Japanese episode large-v3-turbo was
+# the most accurate and about 2.5× faster than medium; medium is far better than
+# the bundled base model, which remains the fallback so evidence still works
+# (with its recorded model) where neither is installed.
+EVIDENCE_OPTIONS = {
+    "beam_size": 5,
+    "word_timestamps": True,
+    "condition_on_previous_text": False,
+    "vad_filter": False,
+    # Whisper retries doubtful decodes at rising temperatures. On music the
+    # default six-step schedule cost up to 7× real time and invented text;
+    # three steps keep one retry for hard dialogue at bounded cost.
+    "temperature": [0.0, 0.3, 0.6],
+    "best_of": 3,
+}
+
+
+EVIDENCE_MODELS = ("whisper-large-v3-turbo", "whisper-medium")
+
+
+def _model_folders(data_dir, name):
+    shared = os.getenv("SPARROW_DATA_DIR")
+    return (
+        *([Path(shared) / "models" / name] if shared else []),
+        Path(data_dir) / "models" / name,
+        model_path(data_dir).parent / name,  # packaged beside base
+    )
+
+
+def evidence_model(data_dir):
+    configured = os.getenv("SPARROW_EVIDENCE_MODEL")
+    for candidate in (
+        *([Path(configured)] if configured else []),
+        *(f for name in EVIDENCE_MODELS for f in _model_folders(data_dir, name)),
+        model_path(data_dir),
+    ):
+        if (candidate / "model.bin").is_file():
+            return candidate
+    return None
+
+
+def listen_model(data_dir, choice):
+    """The reviewer's re-listening model: the evidence model, or a larger one."""
+    if choice == "large":
+        return next(
+            (
+                f
+                for f in _model_folders(data_dir, "whisper-large-v3")
+                if (f / "model.bin").is_file()
+            ),
+            None,
+        )
+    return evidence_model(data_dir)
+
+
+def evidence_threads():
+    # A quarter of the machine, between two and four threads: fast enough for
+    # background work without starving playback or transcoding.
+    return max(2, min(4, (os.cpu_count() or 2) // 4))
+
+
+async def evidence(executor, path, args):
+    """Advance caption-independent speech evidence for one audio stream.
+
+    Each call runs the worker for at most ``budget`` seconds of transcription
+    and returns progress; checkpoints make the next call resume. Completed
+    evidence is reused for as long as the media, stream and model match.
+    """
+    from .subtitle_evidence import evidence_key, load, model_identity
+
+    if file_version(path) != args["version"]:
+        raise NodeError("The video changed before its dialogue could be analysed.")
+    facts = await probe_file(path)
+    audio_index = args.get("audio_index")
+    track = next((t for t in facts["audio_tracks"] if t["index"] == audio_index), None)
+    if not track:
+        raise NodeError("Choose an audio track from this video.")
+    if facts["duration"] > 6 * 3600:
+        raise NodeError("Dialogue analysis currently supports videos up to six hours.")
+    model = evidence_model(executor.data_dir)
+    if not model:
+        raise NodeError(
+            "The speech model is unavailable. Dialogue analysis resumes after the node's media components are installed."
+        )
+    identity = model_identity(model)
+    key = evidence_key(args["version"], audio_index, identity, EVIDENCE_OPTIONS)
+    folder = executor.cache_root / "subtitle-evidence" / key
+    finished = folder / "evidence.json"
+    if not finished.is_file():
+        language = language_code(track["language"])
+        folder.mkdir(parents=True, exist_ok=True)
+        request = folder / "request.json"
+        request.write_text(
+            canonical(
+                {
+                    "folder": str(folder),
+                    "video": str(path),
+                    "version": args["version"],
+                    "audio_index": audio_index,
+                    "language": language if re.fullmatch("[a-z]{2}", language) else None,
+                    "ffmpeg": executable("ffmpeg"),
+                    "ffprobe": executable("ffprobe"),
+                    "model_path": str(model),
+                    "model": identity,
+                    "threads": evidence_threads(),
+                    "options": EVIDENCE_OPTIONS,
+                }
+            ),
+            encoding="utf8",
+        )
+        budget = min(max(float(args.get("budget", 540)), 60.0), 840.0)
+        command = (
+            [sys.executable, "--subtitle-evidence", str(request), str(budget)]
+            if getattr(sys, "frozen", False)
+            else [
+                sys.executable,
+                "-m",
+                "backend.agents.subtitle_evidence",
+                str(request),
+                str(budget),
+            ]
+        )
+        lock = getattr(executor, "_evidence_lock", None)
+        if lock is None:
+            executor._evidence_lock = lock = asyncio.Lock()
+        async with lock:
+            result_path = folder / "result.json"
+            result_path.unlink(missing_ok=True)
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            try:
+                # Extraction and speech detection run before the first chunk,
+                # so allow them time beyond the transcription budget.
+                await asyncio.wait_for(process.wait(), timeout=budget + 600)
+            except asyncio.CancelledError:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+                raise
+            except asyncio.TimeoutError:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+                if not result_path.is_file():
+                    # Completed chunks are checkpointed; the next call resumes.
+                    status = folder / "status.json"
+                    return {
+                        "state": "partial",
+                        "progress": (
+                            load(status).get("progress", 0) if status.is_file() else 0
+                        ),
+                    }
+            if not result_path.is_file():
+                raise NodeError(
+                    "The speech worker stopped unexpectedly. Check the node's media components."
+                )
+            result = load(result_path)
+            if not result["ok"]:
+                raise NodeError(result["error"])
+    status = load(folder / "status.json")
+    if status["state"] != "complete" or not finished.is_file():
+        return {"state": "partial", "progress": status.get("progress", 0)}
+    if file_version(path) != args["version"]:
+        raise NodeError("The video changed during dialogue analysis.")
+    return {
+        "state": "complete",
+        "progress": 1,
+        "path": f"subtitle-evidence/{key}/evidence.json",
+        "version": file_version(finished),
+        "model": identity["name"],
+        "coverage": status["coverage"],
+    }
+
+
+async def subtitle_counts(path, indices):
+    """Cue counts for text subtitle streams without decoding the file per track.
+
+    Matroska muxers record NUMBER_OF_FRAMES statistics tags, which read
+    instantly. Otherwise one counting pass covers every subtitle stream at
+    once. Counts only guide selection; an unknown count is simply absent.
+    """
+    counts = {}
+    if not indices:
+        return counts
+    try:
+        tagged = json.loads(
+            await run_media(
+                "ffprobe", "-select_streams", "s", "-show_entries",
+                "stream=index:stream_tags", "-of", "json", path, timeout=45,
+            )
+        )
+    except (NodeError, ValueError, asyncio.TimeoutError):
+        tagged = {}
+    for stream in tagged.get("streams", []):
+        tags = {k.upper(): str(v) for k, v in (stream.get("tags") or {}).items()}
+        value = next(
+            (v for k, v in sorted(tags.items()) if k.startswith("NUMBER_OF_FRAMES")),
+            "",
+        )
+        if stream.get("index") in indices and value.isdigit():
+            counts[stream["index"]] = int(value)
+    if any(i not in counts for i in indices):
+        try:
+            counted = json.loads(
+                await run_media(
+                    "ffprobe", "-count_packets", "-select_streams", "s",
+                    "-show_entries", "stream=index,nb_read_packets", "-of", "json",
+                    path, timeout=240,
+                )
+            )
+        except (NodeError, ValueError, asyncio.TimeoutError):
+            counted = {}
+        for stream in counted.get("streams", []):
+            value = str(stream.get("nb_read_packets", ""))
+            if stream.get("index") in indices and value.isdigit():
+                counts.setdefault(stream["index"], int(value))
+    return counts
+
+
 async def candidates(executor, path, args):
     before = file_version(path)
     facts = await probe_file(path)
-    out = []
-    for track in facts["subtitle_tracks"]:
-        if track["codec"] in ("subrip", "ass", "ssa", "webvtt", "mov_text", "text"):
-            # The default track can contain only signs, even without a forced
-            # flag. Inspect actual cues before choosing a full-dialogue track.
-            from .subtitle_worker import cues_from_text
-
-            cue_count = 0
-            try:
-                extracted = await run_media(
-                    "ffmpeg",
-                    "-v",
-                    "error",
-                    "-i",
-                    path,
-                    "-map",
-                    f"0:{track['index']}",
-                    "-f",
-                    "webvtt",
-                    "pipe:1",
-                    timeout=60,
-                )
-                cue_count = len(cues_from_text(extracted.decode("utf8"), "vtt"))
-            except (NodeError, ValueError, UnicodeError):
-                pass  # Preparation reports the candidate's concrete error.
-            out.append(
-                {
-                    "id": "embedded:" + str(track["index"]),
-                    "source": "embedded",
-                    "index": track["index"],
-                    "language": language_code(track["language"]),
-                    "kind": (
-                        "forced"
-                        if track["forced"]
-                        else "sdh" if track["hearing_impaired"] else "full"
-                    ),
-                    "title": track["title"] or "Included in this copy",
-                    "cue_count": cue_count,
-                }
-            )
+    text = [
+        track
+        for track in facts["subtitle_tracks"]
+        if track["codec"] in ("subrip", "ass", "ssa", "webvtt", "mov_text", "text")
+    ]
+    # The default track can contain only signs, even without a forced flag.
+    # Cue counts steer selection towards full dialogue; they prove nothing.
+    counts = await subtitle_counts(path, [t["index"] for t in text])
+    out = [
+        {
+            "id": "embedded:" + str(track["index"]),
+            "source": "embedded",
+            "index": track["index"],
+            "language": language_code(track["language"]),
+            "kind": (
+                "forced"
+                if track["forced"]
+                else "sdh" if track["hearing_impaired"] else "full"
+            ),
+            "title": track["title"] or "Included in this copy",
+            "cue_count": counts.get(track["index"], 0),
+        }
+        for track in text
+    ]
     for sidecar in sorted(path.parent.iterdir()):
         if not sidecar.name.startswith(
             path.stem + "."
@@ -133,8 +340,9 @@ async def prepare(executor, path, args):
             "Automatic subtitle repair currently supports videos up to six hours."
         )
     cues_from_text(args["text"], args["format"])
-    if args.get("sample_phase", 0.5) not in (0.25, 0.5):
-        raise NodeError("Choose a supported subtitle sample set.")
+    correction = args.get("correction")
+    if correction is not None and correction.get("kind") not in ("shift", "drift"):
+        raise NodeError("Unsupported subtitle timing correction.")
     folder = executor.cache_root / "subtitles" / identity
     folder.mkdir(parents=True, exist_ok=True)
     packet = {
@@ -144,21 +352,8 @@ async def prepare(executor, path, args):
         "video": str(path),
         "folder": str(folder),
         "duration": facts["duration"],
-        "ffmpeg": executable("ffmpeg"),
-        "model_path": str(model_path(executor.data_dir)),
-        "verify": args.get("verify", True),
-        "repair": args.get("repair", True),
-        "sample_phase": args.get("sample_phase", 0.5),
-        "audio_language": language_code(
-            next(
-                t["language"]
-                for t in facts["audio_tracks"]
-                if t["index"] == audio_index
-            )
-        ),
+        "correction": correction,
     }
-    if not packet["ffmpeg"]:
-        raise NodeError("The packaged media tool is unavailable.")
     request = folder / "request.json"
     request.write_text(canonical(packet), encoding="utf8")
     command = (
@@ -212,3 +407,83 @@ async def prepare(executor, path, args):
     # Avoid retaining a second source-video path and subtitle text in the request packet.
     request.unlink(missing_ok=True)
     return value
+
+
+async def listen(executor, path, args):
+    """Re-recognise one passage of saved evidence audio with other settings.
+
+    The reviewer uses this for doubtful passages: another language hint, a
+    larger model or a wider window. Results are new observations; the saved
+    evidence never changes. Identical requests reuse their stored result.
+    """
+    from .subtitle_evidence import load, model_identity
+
+    key = str(args.get("evidence", ""))
+    if not re.fullmatch("[a-f0-9]{32}", key):
+        raise NodeError("Invalid dialogue evidence.")
+    folder = executor.cache_root / "subtitle-evidence" / key
+    if not (folder / "evidence.json").is_file() or not (folder / "audio.wav").is_file():
+        raise NodeError("That dialogue evidence is no longer stored. Analyse the episode again.")
+    start, end = float(args["start"]), float(args["end"])
+    duration = load(folder / "audio.json")["audio_seconds"]
+    if not (0 <= start < end <= duration + 0.5) or end - start > 60:
+        raise NodeError("Listen to at most 60 seconds of this episode at a time.")
+    language = args.get("language")
+    if language is not None and not re.fullmatch("[a-z]{2}", str(language)):
+        raise NodeError("Use a two-letter language code, or none to detect it.")
+    model = listen_model(executor.data_dir, args.get("model", "standard"))
+    if not model:
+        raise NodeError("A larger speech model is not installed on this storage node.")
+    request = {
+        "kind": "listen",
+        "audio": str(folder / "audio.wav"),
+        "speech": str(folder / "speech.u8"),
+        "duration": duration,
+        "start": round(start, 3),
+        "end": round(end, 3),
+        "language": language,
+        "model_path": str(model),
+        "model": model_identity(model),
+        "threads": evidence_threads(),
+        "options": EVIDENCE_OPTIONS,
+    }
+    identity = hashlib.sha256(canonical(request).encode()).hexdigest()[:32]
+    work = folder / "listens" / identity
+    work.mkdir(parents=True, exist_ok=True)
+    result_path = work / "result.json"
+    if not result_path.is_file():
+        (work / "request.json").write_text(canonical(request), encoding="utf8")
+        command = (
+            [sys.executable, "--subtitle-evidence", str(work / "request.json")]
+            if getattr(sys, "frozen", False)
+            else [
+                sys.executable,
+                "-m",
+                "backend.agents.subtitle_evidence",
+                str(work / "request.json"),
+            ]
+        )
+        lock = getattr(executor, "_listen_lock", None)
+        if lock is None:
+            executor._listen_lock = lock = asyncio.Lock()
+        async with lock:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            try:
+                await asyncio.wait_for(process.wait(), timeout=600)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+                raise
+    if not result_path.is_file():
+        raise NodeError("The speech worker stopped unexpectedly.")
+    result = load(result_path)
+    if not result["ok"]:
+        result_path.unlink(missing_ok=True)
+        raise NodeError(result["error"])
+    return result["value"]

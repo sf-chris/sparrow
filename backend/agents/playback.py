@@ -360,6 +360,9 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 }
                 for t in facts["subtitle_tracks"]
                 if t["codec"] in ("subrip", "ass", "ssa", "webvtt", "mov_text", "text")
+                # A prepared copy of this embedded track replaces it in the list.
+                and "embedded:" + str(t["index"])
+                not in {p.get("source_id") for p in prepared_tracks}
             ],
         }
 

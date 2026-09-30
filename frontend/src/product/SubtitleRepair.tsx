@@ -22,6 +22,7 @@ type Track = {
   url: string;
   offset: number;
   sync_checked: boolean;
+  timing_adjusted?: boolean;
 };
 type RepairState = {
   preferences: {
@@ -88,7 +89,9 @@ export function SubtitleRepair({
   const latest = resource.data?.tasks[0];
   const running =
     !!latest &&
-    ["queued", "finding", "aligning", "reviewing"].includes(latest.state);
+    ["queued", "finding", "aligning", "measuring", "reviewing"].includes(
+      latest.state,
+    );
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => void resource.refresh(), 3000);
@@ -154,22 +157,24 @@ export function SubtitleRepair({
       setError((e as Error).message);
     }
   }
+  const current = resource.data?.tracks.find(
+    (t) => t.id === latest?.track_id && t.state === "ready",
+  );
   const status =
     latest &&
     (latest.state === "ready"
-      ? resource.data?.tracks.some(
-          (t) =>
-            t.id === latest.track_id && t.state === "ready" && t.sync_checked,
-        )
+      ? current?.sync_checked
         ? "Sync checked"
-        : "Subtitles available"
+        : current?.timing_adjusted
+          ? "Timing adjusted"
+          : "Subtitles available"
       : running
         ? "In progress"
         : latest.state === "review_pending"
-          ? "Review didn’t finish"
+          ? "Check didn’t finish"
           : latest.state === "cancelled"
             ? "Stopped"
-            : "Couldn’t fix");
+            : "Needs attention");
   return (
     <details
       className="disclosure help subtitle-care"
@@ -269,7 +274,7 @@ export function SubtitleRepair({
               disabled={busy}
               onClick={() => void action("POST", "/review")}
             >
-              Try the review again
+              Try the check again
             </button>
           )}
         </div>
