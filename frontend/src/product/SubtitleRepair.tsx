@@ -10,6 +10,7 @@ export type Caption = {
   title: string;
   url: string;
   offset?: number;
+  sync_checked?: boolean;
 };
 type Track = {
   audio_index?: number;
@@ -20,10 +21,18 @@ type Track = {
   state: string;
   url: string;
   offset: number;
+  sync_checked: boolean;
 };
 type RepairState = {
+  preferences: {
+    values: {
+      subtitle_languages: string[];
+      subtitle_kind: string;
+      verify_subtitles: boolean;
+    };
+  };
   tracks: Track[];
-  tasks: { id: string; state: string; message: string }[];
+  tasks: { id: string; state: string; message: string; track_id?: string }[];
 };
 const names = new Intl.DisplayNames(["en"], { type: "language" });
 const languageName = (code: string) => {
@@ -43,12 +52,16 @@ export function SubtitleRepair({
   selected,
   onReady,
   onOffset,
+  hasSubtitles = false,
+  expanded = false,
 }: {
   assetId: string;
   audio: number | null;
   selected?: Caption;
   onReady: (tracks: Caption[]) => void;
   onOffset: (id: string, seconds: number) => void;
+  hasSubtitles?: boolean;
+  expanded?: boolean;
 }) {
   const resource = useResource(
     () => api<RepairState>(`/assets/${assetId}/subtitles`),
@@ -58,6 +71,20 @@ export function SubtitleRepair({
     [busy, setBusy] = useState(false),
     [language, setLanguage] = useState("en"),
     [kind, setKind] = useState("full");
+  const [verify, setVerify] = useState(false);
+  const [initialised, setInitialised] = useState(false);
+  useEffect(() => {
+    setInitialised(false);
+  }, [assetId]);
+  useEffect(() => {
+    const prefs = resource.data?.preferences.values;
+    if (prefs && !initialised) {
+      setLanguage(prefs.subtitle_languages[0] || "en");
+      setKind(prefs.subtitle_kind);
+      setVerify(prefs.verify_subtitles);
+      setInitialised(true);
+    }
+  }, [resource.data, initialised]);
   const latest = resource.data?.tasks[0];
   const running =
     !!latest &&
@@ -75,11 +102,11 @@ export function SubtitleRepair({
           .map((t, i) => ({
             ...t,
             index: 10000 + i,
-            title: `${languageName(t.language)}${styles[t.kind] ? ` · ${styles[t.kind]}` : ""} · checked`,
+            title: `${languageName(t.language)}${styles[t.kind] ? ` · ${styles[t.kind]}` : ""}${t.sync_checked ? " · sync checked" : ""}`,
           })),
       );
   }, [resource.data, audio]);
-  async function repair(file?: File) {
+  async function repair(file?: File, fix = false) {
     setBusy(true);
     setError("");
     try {
@@ -89,6 +116,8 @@ export function SubtitleRepair({
         audio_index: audio,
         language,
         kind,
+        verify,
+        repair: fix,
         ...(file
           ? {
               text: await file.text(),
@@ -128,7 +157,12 @@ export function SubtitleRepair({
   const status =
     latest &&
     (latest.state === "ready"
-      ? "Fixed"
+      ? resource.data?.tracks.some(
+          (t) =>
+            t.id === latest.track_id && t.state === "ready" && t.sync_checked,
+        )
+        ? "Sync checked"
+        : "Subtitles available"
       : running
         ? "In progress"
         : latest.state === "review_pending"
@@ -139,7 +173,7 @@ export function SubtitleRepair({
   return (
     <details
       className="disclosure help subtitle-care"
-      open={!!latest && latest.state !== "ready"}
+      open={expanded || (!!latest && latest.state !== "ready")}
     >
       <summary>
         Subtitle help
@@ -154,13 +188,10 @@ export function SubtitleRepair({
           </div>
         )}
         <p className="muted">
-          Finds subtitles for this audio and syncs them to the dialogue.
+          Find a track, check its timing or fix an out-of-sync track.
         </p>
         <div className="form-grid">
-          <Field
-            label="Language"
-            hint="Sync checks only work in the spoken language."
-          >
+          <Field label="Language">
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
@@ -190,15 +221,39 @@ export function SubtitleRepair({
             </select>
           </Field>
         </div>
+        <Field
+          label="Check subtitle sync"
+          hint="Uses AI within the household spending limit."
+        >
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={verify}
+              onChange={(e) => setVerify(e.target.checked)}
+            />{" "}
+            Compare captions with the voice
+          </label>
+        </Field>
         <div className="actions">
           <button
             className="btn"
-            disabled={busy || running}
+            disabled={busy || running || !initialised}
             onClick={() => void repair()}
           >
             <RefreshCw size={16} strokeWidth={2.5} />
-            Find and sync
+            {verify ? "Check subtitles" : "Get subtitles"}
           </button>
+          {(hasSubtitles ||
+            selected ||
+            resource.data?.tracks.some((t) => t.state === "ready")) && (
+            <button
+              className="btn"
+              disabled={busy || running || !initialised}
+              onClick={() => void repair(undefined, true)}
+            >
+              Fix subtitle timing
+            </button>
+          )}
           {running && (
             <button
               className="btn quiet"

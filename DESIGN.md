@@ -36,6 +36,12 @@ repairs. Reuse selected bundled/vendored components with provenance and tests;
 the owner should not have to operate separate subtitle applications. Agents
 cannot override measured facts, permissions or resource guardrails.
 
+Subtitle acceptance means watchability: the track works, matches the actual
+movie/episode and follows the voice without sustained offset or drift. Dialogue
+meaning establishes correspondence; minor translation differences or a few
+seconds of uncertainty do not block a supported timing pass. Preserve usable
+captions rather than rewriting them to satisfy a recogniser.
+
 **3. Verify reality; never trust names.**
 Torrent names lie. Filenames lie. The system trusts only: TMDB (what episodes
 exist, runtimes, air dates), torrent file listings (what a torrent actually

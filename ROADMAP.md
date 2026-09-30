@@ -41,6 +41,32 @@ records the recovery and cleanup changes now implemented and the remaining gates
 acceptance criteria and required removal of obsolete documents, issues/dependencies
 and dead code. Track the next phase there rather than creating competing backlogs.
 
+Subtitle planning refinement, 29 September 2026: the
+[subtitle speech-alignment and verification proposal](docs/SUBTITLE_PLAN.md)
+develops stage 5 and issue #3/P6 around the owner's proposed timestamped audio
+transcription and semantic comparison, with targeted scene review and the exact
+copy of *Four Lions* as the first acceptance case. The opt-in
+[audio trial](docs/agentic-audit/SUBTITLE_TRIAL.md) ran on recorded English fixtures.
+The [Four Lions experiment](docs/agentic-audit/FOUR_LIONS_TRIAL.md) now includes
+actual Sparrow-tool acquisition, foreign-speech samples, live Claude comparisons
+and separate browser rendering. The 30 September iteration adds durable scene
+investigation and draft repairs, a full-soundtrack recognition pass, and 24
+positions tested in Sparrow's actual player using isolated fixture state. It
+also fixes the paused-seek buffering overlay. The owner subsequently clarified
+acceptance as watchability: working track, correct movie and usable voice timing;
+minor prose uncertainty does not block approval. Four Lions passes that standard
+on the recorded evidence. General production/holdout acceptance remains separate;
+no installed subtitle verification flag was changed.
+
+The subsequent [three-anime trial](docs/agentic-audit/ANIME_SUBTITLE_TRIAL.md)
+passes sampled Japanese/English timing and real-player rendering for Haibane
+Renmei S1E8, House of Five Leaves S1E11 and Texhnolyze S1E5. Real shifted and wrong-content
+controls are rejected. Source implementation now includes default subtitle inclusion,
+opt-in paid sync checking and per-title/episode/player actions. It adds bilingual
+phrase measurement, bounded extra samples and a stronger review before translated-track
+rejection. This is tested source/isolated-fixture work, not an installed rollout,
+external-provider acceptance or an unseen holdout benchmark.
+
 Gate A and Gate B below retain the repository's historical July completion
 record. They do not establish readiness for the new Linux/Windows deployment,
 public access or the complete viewing experience. Current review reproductions

@@ -327,6 +327,7 @@ function Player({
           }}
           onEnded={() => void save(true)}
           onWaiting={() => setWaiting(true)}
+          onCanPlay={() => setWaiting(false)}
           onPlaying={() => setWaiting(false)}
           onError={() => {
             if (session && !busy)
@@ -499,6 +500,7 @@ function Player({
           assetId={asset.id}
           audio={session.audio_index}
           selected={session.subtitles.find((t) => t.index === subtitle)}
+          hasSubtitles={session.subtitles.length > 0}
           onReady={(tracks) =>
             setSession((current) =>
               current

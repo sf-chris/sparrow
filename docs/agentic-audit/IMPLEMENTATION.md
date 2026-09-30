@@ -147,3 +147,61 @@ model default. Recovery may retry unfinished work within the existing conserved
 allowance; completed unchanged subscriptions continue making zero model calls.
 No installed deployment, paid/provider acquisition or physical-device acceptance
 was performed. All retained issue scope remains with #3.
+
+## P6 audio-first experiment — 29 September 2026
+
+The [subtitle trial record](SUBTITLE_TRIAL.md) documents an opt-in local
+transcription/semantic-comparison harness and its actual English speech run.
+The initial 18 subtitle/provider/trial tests passed. The subsequent
+[Four Lions experiment](FOUR_LIONS_TRIAL.md) acquired the actual film using
+Sparrow's search/node downloader tools, sampled foreign dialogue with three local
+model configurations, reused the existing Claude CLI sign-in for live reviews,
+and checked native browser captions in isolated excerpts. It exposed missing
+translations, recognition failures and semantic-review problems. The opt-in CLI
+adapter adds no production provider or default change. No subtitle quality pass,
+autonomous installed acquisition or installed-player acceptance is claimed.
+The expanded subtitle/provider/trial suite passes all 21 tests, including CLI
+isolation, invalid-action rejection and cancellation receipts. Compilation and
+dependency consistency pass; production subtitle readiness remains unchanged.
+
+The 30 September continuation adds `subtitle_investigation.py` and an isolated
+speech worker for an actual inspect → recognise → edit draft → reassess loop.
+Source hashes, immutable observations/revisions, writer locking, stale-revision
+checks and patch-intent recovery protect the experiment. A complete soundtrack
+pass and seven scene reviews produced real caption corrections but also exposed
+incorrect approvals and unresolved speech. Full-movie fixture playback through
+Sparrow passed 24 positions and found/fixed the paused-seek buffering overlay.
+The suite now passes **32 subtitle/provider/trial tests** and the frontend build
+passes. The [updated trial record](FOUR_LIONS_TRIAL.md) distinguishes these checks
+from the stricter bilingual quality gate used at that time. No installed account/library,
+production provider, default policy or verified flag was changed.
+
+The owner's subsequent clarification replaces translation perfection with
+watchability: a working track for the actual movie, broadly aligned to the voice.
+Reassessing the same recorded evidence gives **Four Lions a watchability pass**;
+the short uncle wording uncertainty is nonblocking. The trial record preserves
+the earlier strict result. Reviewer prompts now focus on material identity,
+coverage and timing failures and preserve usable captions; measured tool gates
+remain unchanged. General unattended/multi-title acceptance is still separate.
+
+## Anime subtitle controls and review — 30 September 2026
+
+The owner authorized the anime batch and the discussed subtitle controls. Default
+inclusion and opt-in sync checking now share household/personal/request resolution;
+imports and landed copies retain that contract. Basic preparation makes no ASR or
+model call and preserves timings. Title, episode and player actions distinguish
+available captions from sync-checked captions. Older in-flight required-subtitle
+contracts keep their previous verification requirement.
+
+Live trials exposed signs-only default tracks, misleading cross-language lexical
+scores and incorrect model-counted Japanese indices. Actual cue inspection and
+quoted source-phrase measurement address those failures. Translated rejections
+receive a smart-tier second review; tools still refuse approval without passing
+measurements. The eight-call review also has one bounded extra-sampling operation.
+
+The [trial record](ANIME_SUBTITLE_TRIAL.md) reports three sampled watchability passes,
+24 real-player positions, negative offset/wrong-content controls, 77 passing tests,
+the frontend build, costs and iteration failures. All originals remain unchanged.
+The additional-sampling branch has controlled coverage; the recorded live passes
+used their original sample sets. Installed rollout, live provider acceptance,
+physical mobile/Safari and an independent holdout remain separate gates.

@@ -148,11 +148,19 @@ Windows setup runs the service as LocalService with access granted to its unique
 service SID for the approved folders. The workflow still needs to be run on a
 Windows host; no remote Windows address or connection has been supplied.
 
-Automatic subtitle validation currently supports text that matches the spoken
-language. Translated/image subtitles may require an existing embedded track or
-manual alternatives; the automatic pipeline does not label them verified from
-speech-activity correlation alone. OpenSubtitles authentication, quotas and its
-real response contract require a configured-account check before deployment.
+Subtitle preparation now defaults on, with optional paid sync checking off.
+Household/personal/request preferences use the shared resolver; imports and landed
+downloads retain that effective policy. Available and sync-checked tracks have
+distinct labels, and title/episode/player actions can get, check or fix subtitles.
+Basic preparation preserves source timings without ASR or a model call.
+
+Translated text tracks reach a bounded semantic review loop. The reviewer quotes
+matching source-language phrases; tools locate them in independently timestamped
+speech and measure onset/end differences across distributed samples. Cross-language
+lexical equality is not scored as a failed translation. At least three distributed
+matches and a passing measured timing gate are required for approval. Image
+subtitles still need a text alternative. OpenSubtitles authentication, quotas and
+its real response contract still require a configured-account check before deployment.
 
 The remaining release gates are native Windows installer/service/NTFS execution,
 the owner's Windows-to-phone journey, physical mobile/Safari checks, and live
@@ -404,4 +412,3 @@ npm audit and release-tree checks pass. A new capture script,
 [before and after gallery](redesign/README.md) compares all 25 screens. The
 earlier validation galleries remain as dated evidence of the previous design.
 Physical-device, Windows and live-provider release gates are unchanged.
-
