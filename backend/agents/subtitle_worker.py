@@ -72,19 +72,26 @@ def render(cues, vtt=False):
     return "\n".join(lines) + "\n"
 
 
-def sample_cues(cues):
+def sample_cues(cues, phase=0.5):
     substantial = [(i, c) for i, c in enumerate(cues) if len(words(c["text"])) >= 3]
     if not substantial:
         return []
     count = min(5, len(substantial))
     indices = sorted(
-        set(round((len(substantial) - 1) * (i + 0.5) / count) for i in range(count))
+        set(round((len(substantial) - 1) * (i + phase) / count) for i in range(count))
     )
     return [substantial[i] for i in indices]
 
 
 def transcribe_samples(
-    video, cues, audio_index, folder, model_path, ffmpeg, audio_language=None
+    video,
+    cues,
+    audio_index,
+    folder,
+    model_path,
+    ffmpeg,
+    audio_language=None,
+    sample_phase=0.5,
 ):
     from faster_whisper import WhisperModel
 
@@ -101,7 +108,7 @@ def transcribe_samples(
         local_files_only=True,
     )
     samples = []
-    for number, (cue_index, cue) in enumerate(sample_cues(cues)):
+    for number, (cue_index, cue) in enumerate(sample_cues(cues, sample_phase)):
         start = max(0, (cue["start"] + cue["end"]) / 2 - 15)
         audio = folder / f"sample-{number}.wav"
         subprocess.run(
@@ -191,6 +198,25 @@ def inspect_evidence(cues, samples, duration, language):
         reasons.append("Some captions extend beyond this media copy.")
     if any(c["end"] - c["start"] > 45 for c in cues):
         reasons.append("Some captions remain on screen unusually long.")
+    structural_reasons = list(reasons)
+    reviewable = (
+        not structural_reasons and sum(bool(s.get("words")) for s in samples) >= 3
+    )
+    if any(language_code(s["language"]) != language_code(language) for s in samples):
+        # A Japanese/English lexical score of zero is not a translation failure.
+        # Supply the actual source words for the agent's bilingual matching tool.
+        return {
+            "passed": False,
+            "reviewable": reviewable,
+            "structural_reasons": structural_reasons,
+            "requires_correspondences": True,
+            "reasons": reasons
+            + [
+                "Match translated captions to source phrases with the correspondences tool before judging timing."
+            ],
+            "sample_count": len(samples),
+            "lexical_comparison": "not applicable across different languages",
+        }
     for sample in samples:
         cue = sample["subtitle"]
         target = words(cue["text"])
@@ -251,6 +277,8 @@ def inspect_evidence(cues, samples, duration, language):
         )
     return {
         "passed": not reasons,
+        "reviewable": reviewable,
+        "structural_reasons": structural_reasons,
         "reasons": reasons,
         "sample_count": len(matches),
         "strong_matches": len(strong),
@@ -286,6 +314,47 @@ def process(packet):
     source = folder / "input.srt"
     source.write_text(render(cues), encoding="utf8")
     output = folder / "aligned.srt"
+    verify = packet.get("verify", True)
+    repair = packet.get("repair", True)
+    if not repair:
+        if verify:
+            samples = transcribe_samples(
+                video,
+                cues,
+                packet["audio_index"],
+                folder,
+                packet["model_path"],
+                packet["ffmpeg"],
+                packet.get("audio_language"),
+                packet.get("sample_phase", 0.5),
+            )
+            quality = inspect_evidence(
+                cues, samples, packet["duration"], packet["language"]
+            )
+        else:
+            samples = []
+            quality = {
+                "passed": True,
+                "reasons": [],
+                "scope": "structure",
+                "sync_checked": False,
+            }
+        if file_version(video) != packet["version"]:
+            raise ValueError(
+                "The video changed while its subtitles were being prepared."
+            )
+        for name in ("prepared.vtt", "original.vtt"):
+            (folder / name).write_text(render(cues, vtt=True), encoding="utf8")
+        return {
+            "alignment": {"offset_seconds": 0, "scale": 1},
+            "unchanged": True,
+            "quality": quality,
+            "original_quality": quality,
+            "samples": samples,
+            "cue_count": len(cues),
+            "original_sha256": hashlib.sha256(original.encode("utf8")).hexdigest(),
+            "tools": {"alignment": "none", "speech": "local ASR" if verify else "none"},
+        }
     args = make_parser().parse_args(
         [
             str(video),
@@ -311,14 +380,19 @@ def process(packet):
             "Alignment did not find a reliable timing candidate for this video."
         )
     repaired = cues_from_text(output.read_text(encoding="utf-8-sig"), "srt")
-    samples = transcribe_samples(
-        video,
-        repaired,
-        packet["audio_index"],
-        folder,
-        packet["model_path"],
-        packet["ffmpeg"],
-        packet.get("audio_language"),
+    samples = (
+        transcribe_samples(
+            video,
+            repaired,
+            packet["audio_index"],
+            folder,
+            packet["model_path"],
+            packet["ffmpeg"],
+            packet.get("audio_language"),
+            packet.get("sample_phase", 0.5),
+        )
+        if verify
+        else []
     )
     quality = inspect_evidence(
         repaired, samples, packet["duration"], packet["language"]
@@ -332,6 +406,13 @@ def process(packet):
         cues, original_samples, packet["duration"], packet["language"]
     )
     unchanged = original_quality["passed"]
+    if not verify:
+        quality = {
+            "passed": True,
+            "reasons": [],
+            "scope": "structure",
+            "sync_checked": False,
+        }
     if unchanged:
         repaired, samples, quality = cues, original_samples, original_quality
     if file_version(video) != packet["version"]:

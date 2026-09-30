@@ -342,7 +342,10 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                     "index": 10000 + i,
                     "id": t["id"],
                     "language": t["language"],
-                    "title": t["language"] + " · checked " + t["kind"],
+                    "title": t["language"]
+                    + (" · sync checked · " if t["sync_checked"] else " · ")
+                    + t["kind"],
+                    "sync_checked": t["sync_checked"],
                     "url": t["url"],
                     "offset": t["offset"],
                 }

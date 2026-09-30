@@ -164,6 +164,8 @@ fs.mkdirSync(out, { recursive: true });
   await page
     .getByLabel("Search the collection", { exact: true })
     .pressSequentially("quiet", { delay: 20 });
+  assert.equal(new URL(page.url()).searchParams.get("sort"), "year");
+  assert.equal(new URL(page.url()).searchParams.get("type"), "movie");
   await cpu.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   assert.equal(
     await page.getByLabel("Search the collection").inputValue(),

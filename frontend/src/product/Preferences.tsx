@@ -76,6 +76,33 @@ export function PreferenceFields({
         <legend>Sound and subtitles</legend>
         <div className="form-grid">
           {field(
+            "subtitle_auto_prepare",
+            "Include subtitles",
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={values.subtitle_auto_prepare ?? true}
+                onChange={(e) =>
+                  onChange("subtitle_auto_prepare", e.target.checked)
+                }
+              />
+              Find subtitles automatically
+            </label>,
+          )}
+          {field(
+            "verify_subtitles",
+            "Check subtitle sync",
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={values.verify_subtitles ?? false}
+                onChange={(e) => onChange("verify_subtitles", e.target.checked)}
+              />
+              Compare captions with the voice
+            </label>,
+            "Uses AI within the household spending limit. Minor wording differences are allowed.",
+          )}
+          {field(
             "audio_pref",
             "Preferred audio",
             select("audio_pref", [

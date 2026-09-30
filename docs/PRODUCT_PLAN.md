@@ -49,6 +49,24 @@ Every consequential tool rechecks user/role authority, request revision, destina
 
 **2. Subtitles become built-in automation with agent quality review.**
 
+Owner clarification, 30 September 2026: the quality question is whether someone
+can comfortably watch with the subtitles. Confirm the track loads and renders,
+belongs to the actual movie/episode and follows the voice without a sustained
+early/late offset or drift. Use meaning to establish dialogue correspondence.
+Minor translation prose differences and brief isolated uncertainties are
+nonblocking; preserve an otherwise usable track. Investigate or repair broken
+tracks, wrong content, substantial missing captions and material sync problems.
+
+Owner-approved controls: include subtitles by default, with a separate optional
+**Check subtitle sync** preference at household, personal and request level.
+Basic preparation keeps original timings and uses no speech/model review. Opt-in
+checking extracts local speech evidence and uses the configured subtitle reviewer
+within the household allowance. Each title/episode and player offers **Get subtitles**,
+**Check subtitles** and **Fix subtitle timing**. Label available tracks separately
+from tracks whose sync was checked. An explicit required-subtitle request still
+prepares subtitles even when background inclusion is disabled; requiring them
+does not silently enable paid checking.
+
 The owner installs Sparrow and receives subtitle discovery, alignment and repair as one feature. Prefer well-maintained, pinned libraries or bundled local executables behind Sparrow interfaces. Vendor a small useful core when that gives better control; record its upstream revision, local changes and a test/update process. Do not copy whole applications just to remove a package name. Bundling removes separate installation/configuration, but reused code still has provenance, licences and maintenance needs. External subtitle catalogues remain external sources; local inspection and alignment should continue without them.
 
 ffsubsync's published licence permits reuse with its notices; alass publishes GPLv3 terms. Choose exact components and their transitive dependencies at the integration proof, retain notices/source requirements as applicable, and make no licence changes to Sparrow merely for this plan. [ffsubsync licence](https://raw.githubusercontent.com/smacke/ffsubsync/master/LICENSE), [alass licence](https://raw.githubusercontent.com/kaegi/alass/master/LICENSE).
