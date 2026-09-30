@@ -293,6 +293,27 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("Read this page's captions", errors[0])
 
+    async def test_a_retime_keeps_a_read_page_read(self):
+        await self.manager(review=True)
+        lines, captions = self.checked_review()
+        calls = [
+            response("gloss", {"page": 1, "lines": lines}),
+            response("retime", {"mode": "shift", "seconds": -0.04}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("verdict", {"approved": True, "reason": "Matches."}),
+        ]
+        task = await self.request(self.foreign(verify=True), calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        session = self.service.store.get_session(task["data"]["review_session"])
+        errors = [
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("is_error")
+        ]
+        self.assertEqual(errors, [])
+
     async def test_manager_settles_what_cheap_page_checks_flag(self):
         from types import SimpleNamespace
         from test_discovery import Block
@@ -305,7 +326,7 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
             if "translate" in system.split(".")[0]:
                 calls["translate"] += 1
                 ids = [line.split()[0] for line in prompt.splitlines()[1:] if line.startswith("u")]
-                return {"lines": [{"speech": i, "english": f"line {int(i[1:])}"} for i in ids]}, {"output_tokens": 10}
+                return {"lines": [{"id": i, "english": f"line {int(i[1:])}"} for i in ids]}, {"output_tokens": 10}
             calls["compare"] += 1
             captions = [line.split()[0] for line in prompt.splitlines() if line.startswith("c0")]
             return {
@@ -645,7 +666,7 @@ class ReviewPageTests(unittest.TestCase):
         self.assertTrue(any("Wrong captions remain" in r for r in reasons))
         first[key] = {**first[key], "verdict": "ok", "speech": ["u00150"]}
         reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
-        self.assertTrue(any("away from their speech" in r for r in reasons))
+        self.assertTrue(any("nowhere near" in r for r in reasons))
         first[key] = {**first[key], "speech": [f"u{review.caption_index(key) + 1:05d}"]}
         state["missing"]["2"] = [{"speech": ["u00050"], "note": "uncaptioned"}]
         reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
@@ -662,3 +683,40 @@ class ReviewPageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PageCheckerTests(unittest.TestCase):
+    def setUp(self):
+        self.utterances = [utterance(n, 4.0 * n, f"発話{n}") for n in range(1, 40)]
+        self.pages = review.build_pages(self.utterances, [], 170)
+
+    def test_quoted_text_and_order_recover_lines_and_retries_are_bounded(self):
+        from backend.agents import subtitle_contract
+
+        page = self.pages[0]
+        on_page = review.page_utterances(page, self.utterances)
+        answers = [
+            {"lines": [{"id": u["text"], "english": "quoted"} for u in on_page[:-2]]},
+            {"lines": [{"id": "", "english": "by order"} for _ in on_page]},
+        ]
+        calls = []
+
+        async def checker(system, prompt, schema):
+            calls.append(prompt)
+            return answers[len(calls) - 1], {"output_tokens": 1}
+
+        found = asyncio.run(
+            subtitle_contract.check_pages(checker, [page], self.utterances, [], {}, "ja", compare=False)
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual({found["translations"][u["id"]] for u in on_page[:-2]}, {"quoted"})
+        self.assertEqual({found["translations"][u["id"]] for u in on_page[-2:]}, {"by order"})
+        self.assertEqual(found["spend"]["failures"], [])
+
+        async def refuses(system, prompt, schema):
+            return {"lines": []}, {}
+
+        silent = asyncio.run(subtitle_contract.check_pages(refuses, [page], self.utterances, [], {}, "ja", compare=False))
+        gaps = subtitle_contract.untranslated([page], self.utterances, silent["translations"])
+        self.assertEqual([g["speech"] for g in gaps[str(page["number"])]], [[u["id"] for u in on_page]])
+        self.assertTrue(silent["spend"]["failures"])

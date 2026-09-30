@@ -94,10 +94,15 @@ Everything new lives in `backend/agents/`:
   policy. Pass relevant values to agents and use the same contract in UI/tools.
 - Current model defaults: Fetch smart, Media cheap with self-escalation,
   Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
-  (household switch, needs an Anthropic key) uses Claude Opus 5.5 at high effort
-  with prompt caching and its own per-title allowance; it judges, retimes,
-  edits, replaces or writes subtitles through tools that re-measure every change.
-  Configure with `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT` and
+  (household switch, needs an Anthropic key) uses Claude Opus 5.5 at medium effort
+  with prompt caching; with `OPENAI_API_KEY` it manages cheap page checkers
+  (GPT-6-Luna, GPT-6-Sol second opinion) and reads only what they flag plus two
+  blind audit pages. It judges, retimes, edits, replaces or writes subtitles
+  through tools that re-measure every change. Checker and Opus spend share one
+  per-title allowance (the household per-case limit unless
+  `SPARROW_SUBTITLE_BUDGET` is set); the design target is under $1 per title.
+  Configure with `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT`,
+  `SPARROW_SUBTITLE_CONTRACTOR`, `SPARROW_SUBTITLE_VERIFIER` and
   `SPARROW_SUBTITLE_BUDGET`. Routine subtitle processing,
   including timing measurement and correction for foreign dialogue, is built in
   and makes no model call; no setup-agent implementation is planned now.

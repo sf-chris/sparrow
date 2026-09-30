@@ -43,6 +43,10 @@ from .subtitle_sync import (
 ACTIVE = {"queued", "finding", "aligning", "measuring", "reviewing"}
 DEFAULT_REVIEW_MODEL = "claude-opus-5-5"
 DEFAULT_CONTRACTOR = "gpt-6-luna"
+DEFAULT_VERIFIER = "gpt-6-sol"
+# Above this share of captions flagged wrong, the track is plainly mismatched:
+# skip verification and let the manager replace it.
+MISMATCH_SHARE = 0.3
 AUDIT_PAGES = 2
 QUEUE_LIMIT = 500
 MAX_CANDIDATES = 4
@@ -52,6 +56,18 @@ REVIEW_WAKES = 6
 
 def review_model():
     return os.getenv("SPARROW_SUBTITLE_MODEL") or DEFAULT_REVIEW_MODEL
+
+
+def verifier_model():
+    """A stronger cheap model that re-checks only the checker's flags.
+
+    In the benchmark GPT-6-Sol cleared every false alarm on correct tracks
+    while keeping wrong-episode tracks flagged, for about two cents an episode.
+    """
+    configured = os.getenv("SPARROW_SUBTITLE_VERIFIER")
+    if configured is not None:
+        return configured
+    return DEFAULT_VERIFIER if os.getenv("OPENAI_API_KEY") else ""
 
 
 def contractor_model():
@@ -824,6 +840,7 @@ class Subtitles:
             track_id,
             timing={**timing_summary(measured), "within_tolerance": in_window(measured)},
         )
+        shown = {}
         if rebuild:
             pages = pages_.build_pages(context["utterances"], cues, context["duration"])
             judgements, missing, reopen = {}, {}, []
@@ -832,8 +849,17 @@ class Subtitles:
             judgements, missing, reopen = pages_.carry(
                 pages, context["cues"], pages, cues, state, renamed
             )
+            # A page stays read when its caption IDs still name the same words
+            # (a retime or an edit elsewhere); otherwise it must be read again.
+            same = {
+                str(page["number"])
+                for page in pages
+                if [(i, c["text"]) for i, c in pages_.page_captions(page, context["cues"])]
+                == [(i, c["text"]) for i, c in pages_.page_captions(page, cues)]
+            }
+            shown = {k: v for k, v in state.get("shown", {}).items() if k in same}
         state.update(
-            track=track_id, pages=pages, judgements=judgements, missing=missing, shown={}
+            track=track_id, pages=pages, judgements=judgements, missing=missing, shown=shown
         )
         state["actions"] = (state.get("actions") or [])[-40:] + [
             {"action": action, "track": track_id, "at": time.time()}
@@ -900,6 +926,7 @@ class Subtitles:
                 state["pages"], context["utterances"], found["translations"]
             )
             state["contract"] = {"model": model, "track": "none", "spend": found["spend"], "failures": found["spend"]["failures"], "hints": found["hints"]}
+            self.charge_checkers(task, state, [found["spend"]])
             self.review_state(task, state)
             if state["written"]:
                 await self.use_written_draft(context)
@@ -914,6 +941,19 @@ class Subtitles:
             state.get("translations"),
         )
         state["translations"] = found["translations"]
+        verified = None
+        wrong = sum(e["verdict"] == "wrong" for page in found["verdicts"].values() for e in page.values())
+        if verifier_model() and wrong <= MISMATCH_SHARE * max(1, len(context["cues"])):
+            verified = await subtitle_contract.verify_flags(
+                self.contract_caller(verifier_model()),
+                state["pages"],
+                context["utterances"],
+                context["cues"],
+                found["translations"],
+                context["deltas"],
+                found["verdicts"],
+                found["missing"],
+            )
         judgements = {}
         for key, record in found["verdicts"].items():
             kept = {k: v for k, v in state.get("judgements", {}).get(key, {}).items() if keep_manager and v.get("by") == "manager"}
@@ -924,11 +964,15 @@ class Subtitles:
         state["contract"] = {
             "model": model,
             "track": context["track"]["id"],
+            "verifier": verified and verified["model"],
+            "mismatched": wrong > MISMATCH_SHARE * max(1, len(context["cues"])),
             "spend": {
-                "calls": spend.get("calls", 0) + found["spend"]["calls"],
-                "dollars": round(spend.get("dollars", 0) + found["spend"]["dollars"], 4),
+                "calls": spend.get("calls", 0) + found["spend"]["calls"] + (verified or {}).get("calls", 0),
+                "dollars": round(
+                    spend.get("dollars", 0) + found["spend"]["dollars"] + (verified or {}).get("dollars", 0), 4
+                ),
             },
-            "failures": found["spend"]["failures"],
+            "failures": found["spend"]["failures"] + (verified or {}).get("failures", []),
             "hints": found["hints"],
             "snapshot": pages_.contractor_snapshot({"judgements": judgements}),
         }
@@ -938,7 +982,40 @@ class Subtitles:
                 state["pages"], context["cues"], context["utterances"], task["id"], AUDIT_PAGES
             )
         state["audit"] = audit
+        self.charge_checkers(task, state, [found["spend"], verified or {}])
         self.review_state(task, state)
+
+    def charge_checkers(self, task, state, spends):
+        """Record page-checker spend against this title's allowance.
+
+        A closed ledger session in the review's budget scope carries it, so
+        one allowance (and the household's accounting) covers the checkers
+        and the manager together.
+        """
+        service = self.get_service()
+        dollars = sum(s.get("dollars", 0) for s in spends)
+        if not service or dollars <= 0:
+            return
+        ledger = state.get("checker_session") and service.store.get_session(state["checker_session"])
+        if not ledger:
+            ledger = AgentSession(
+                agent=AgentKind.SUBTITLE,
+                user_id=task["user_id"],
+                download_id=task["id"],
+                model=contractor_model(),
+                job_id=task["data"].get("job_id", ""),
+                job_revision=task["data"].get("job_revision") or 1,
+                budget_scope="subtitle:" + task["id"],
+            )
+            ledger.status = SessionStatus.CLOSED
+            ledger.closed_at = time.time()
+        for spend in spends:
+            if spend.get("dollars"):
+                ledger.spend.turns += spend.get("calls", 0)
+                ledger.spend.dollars = round(ledger.spend.dollars + spend["dollars"], 6)
+                ledger.spend.entries.append({"model": spend.get("model", ""), "calls": spend.get("calls", 0), "dollars": spend["dollars"]})
+        service.store.save_session(ledger)
+        state["checker_session"] = ledger.id
 
     def spoken(self, context):
         languages = context["evidence"]["coverage"].get("languages", {})
@@ -970,7 +1047,9 @@ class Subtitles:
                 for i, _ in pages_.page_captions(page, new_cues)
                 if i < len(cues)
             }
-            state["missing"][str(page["number"])] = []
+        gaps = subtitle_contract.untranslated(pages, context["utterances"], state.get("translations", {}))
+        for page in pages:
+            state["missing"][str(page["number"])] = gaps.get(str(page["number"]), [])
         state["contract"]["track"] = new_id
         state["audit"] = {
             "pages": pages_.choose_audits(pages, new_cues, context["utterances"], task["id"], AUDIT_PAGES),
@@ -1059,7 +1138,7 @@ class Subtitles:
                 self.update(
                     task,
                     "review_pending",
-                    "Subtitles ready. Checking stopped at its spending limit; raise it, then try again.",
+                    "Subtitles ready. Checking stopped at its spending limit; raise it in Defaults, then try again.",
                 )
                 return None
             state = task["data"]["review"]
@@ -1821,7 +1900,7 @@ class Subtitles:
                 max_tokens=16000,
                 cache=True,
                 effort=os.getenv("SPARROW_SUBTITLE_EFFORT") or "medium",
-                max_dollars=float(os.getenv("SPARROW_SUBTITLE_BUDGET") or 10),
+                max_dollars=float(os.getenv("SPARROW_SUBTITLE_BUDGET") or 0),  # 0: the household policy.
             )
         )
 

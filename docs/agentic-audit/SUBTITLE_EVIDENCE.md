@@ -100,24 +100,27 @@ A subtitle task now runs:
    candidate tried; without checking it remains as a fallback if nothing better
    is found.
 3. **The subtitle agent**, when the household switches it on and an Anthropic
-   key is set. Opus 5.5 (effort high, prompt caching, its own per-title
-   allowance, `SPARROW_SUBTITLE_BUDGET`, default $10) owns the outcome in
-   Sparrow's persistent tool loop. It reads each page's recognised speech and
-   writes its own reading before that page's captions are revealed, then
-   judges every caption, citing speech lines. It can `retime` the track (a
-   measured or given shift, measured drift, or each section to its measured
-   offset), `edit_captions` (new words, align to cited speech lines, nudge,
-   remove, or add captions for uncaptioned dialogue), `use_source` or
-   `search_online` for another track, `listen` again with a language hint or an
-   alternative or larger recogniser, and, when no source is usable,
-   `write_page` and `use_written` to write the subtitles itself, timed to the
-   speech it cites. Timestamps always come from the audio. Every change is a
-   new copy, re-measured; pages whose captions changed are judged again.
-   Approval is refused while any page is unjudged, any caption is wrong,
-   dialogue is uncaptioned (full tracks), a matched caption sits over 1.5 s from
-   its speech, over a quarter of captions are unclear, or the track or any
-   section is outside 50 ms late / 200 ms early of the voice. A judgement cannot
-   be made in the same step that revealed the captions.
+   key is set. Opus 5.5 (effort medium, prompt caching) owns the outcome in
+   Sparrow's persistent tool loop, within the household's per-case AI allowance
+   (`SPARROW_SUBTITLE_BUDGET` overrides it per title). With an OpenAI key it
+   manages cheap page checkers ([below](#cost-opus-manages-cheap-page-checkers--1-october-2026));
+   without one it reads every page itself: it writes its own reading of each
+   page's recognised speech before that page's captions are revealed, then
+   judges every caption, citing speech lines. Either way it can `retime` the
+   track (a measured or given shift, measured drift, or each section to its
+   measured offset), `edit_captions` (new words, find-and-replace, align to
+   cited speech lines, nudge, remove, or add captions for uncaptioned
+   dialogue), `use_source` or `search_online` for another track, `listen` again
+   with a language hint or an alternative or larger recogniser, and, when no
+   source is usable, write the subtitles itself, timed to the speech it cites.
+   Timestamps always come from the audio. Every change is a new copy,
+   re-measured; captions whose words changed are judged again. Approval is
+   refused while any page is unjudged, any caption is wrong, dialogue is
+   uncaptioned (full tracks), a judged caption is nowhere near the speech it
+   cites (more than 1.5 s from overlapping it), over a quarter of captions are
+   unclear, or the track or any section is outside 50 ms late / 200 ms early of
+   the voice. A judgement cannot be made in the same step that revealed the
+   captions.
 4. **Continue safely.** Review state lives in the task, so a new conversation
    resumes it rather than editing an earlier one; all conversations for a
    title share one allowance. An outage or interrupted turn resumes on the
@@ -137,6 +140,57 @@ fallback, missing key, cancellation) and an end-to-end run on the real Haibane
 file: the 204-cue track was chosen over the 11-cue signs track, measured +217 ms,
 corrected, re-measured at 0 ms and listed in place of the embedded original. Live
 Opus reviews are validated separately on the owner's installation.
+
+## Cost: Opus manages cheap page checkers — 1 October 2026
+
+The owner's target is under $1 per title, including a film written from
+scratch. Opus reading every page cost $0.71–1.80 per episode, so the work is
+split by difficulty:
+
+1. **Free detectors** flag OCR confusions ("l" for "I"), likely signs and clear
+   speech without a caption.
+2. **A page checker** (GPT-6-Luna, low effort, stateless parallel calls)
+   translates each page's recognised speech without seeing the captions, then
+   compares every caption with that translation. Detector marks are hints:
+   lines the voice detector missed are still translated, and an answer that
+   quotes a line's text instead of its ID is matched back, with one retry for
+   anything left out. Lines it never answers for are reported as missing, never
+   dropped. With no track, its translations become the written draft
+   (fragments split at pauses are joined).
+3. **A second opinion** (GPT-6-Sol) re-checks only captions flagged wrong and
+   missing dialogue, skipped when over 30% is flagged (a mismatched track).
+4. **Opus manages**: it reads a report of what still blocks approval (with
+   each flagged item's speech and translation inline), audits two pages blind
+   (misses escalate to more audits), settles or fixes flagged items and gives
+   the verdict. Checker spend is recorded in the title's budget scope, so one
+   allowance covers everything.
+
+Measured on the real API (Opus via the CLI harness, list-price estimates with
+caching), all approved:
+
+| Case | Opus reads all | Manager, 30 Sep | Manager, 1 Oct |
+| --- | --- | --- | --- |
+| Episode, correct track kept | $1.01 | $0.44 | $0.23 |
+| Episode, wrong upload replaced and fixed | $1.80 | $0.49 | $0.39 |
+| Episode, written from scratch | $0.71 | $0.13 | $0.13 |
+| 70-minute film, professional track kept | — | over $1.35, unfinished | $0.58 |
+| 70-minute film, written from scratch | — | $0.18 | $0.19 |
+
+Written subtitles are graded against the professional translation by one fixed
+Opus grader (same meaning = 1, close = ½): the episode draft scores 0.80–0.82
+(Opus writing alone 0.84); the film scored 0.46 before the checker fixes (a
+two-minute scene lost because the model quoted text instead of IDs, and lines
+under music dropped as "no voice detected") and 0.78 after. Its remaining 26
+uncaptioned professional lines are songs and overlapping children's shouting
+that recognition never heard.
+
+The film run also exposed an over-strict gate: a professional caption often
+spans two lines the recogniser split, and the checker may cite only the second,
+so "starts over 1.5 s from its speech" fired on correct captions and Opus merged
+and rewrote a good track to satisfy it (39 text changes, 22 captions lost). The
+gate now asks only that a judged caption overlap its cited speech within 1.5 s;
+precise timing is the acoustic per-section measurement. A retime no longer
+forces re-reading pages whose captions are unchanged.
 
 ## Limits
 

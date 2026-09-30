@@ -62,8 +62,12 @@ then medium at `/data/models/whisper-medium`, then the bundled base model, or th
 directory in `SPARROW_EVIDENCE_MODEL`. `python packaging/fetch_model.py DESTINATION
 whisper_evidence` fetches the pinned turbo revision (about 1.6 GB). The optional
 subtitle agent (Preferences → Subtitle agent) needs an Anthropic key in Settings
-and uses Claude Opus 5.5; `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT` and
-`SPARROW_SUBTITLE_BUDGET` (dollars per title, default 10) adjust it.
+and uses Claude Opus 5.5. Add `OPENAI_API_KEY` to `.env` so Opus manages cheap
+page checkers (GPT-6-Luna, with GPT-6-Sol re-checking flags) instead of reading
+every page itself; measured costs are under $1 per episode or film.
+`SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT`, `SPARROW_SUBTITLE_CONTRACTOR`,
+`SPARROW_SUBTITLE_VERIFIER` and `SPARROW_SUBTITLE_BUDGET` (dollars per title;
+default: the household's per-case AI allowance in Defaults) adjust it.
 
 To serve your trusted home network, create `.env` containing the server's LAN
 address, for example `SPARROW_BIND_ADDRESS=192.168.1.20`, then recreate the container
