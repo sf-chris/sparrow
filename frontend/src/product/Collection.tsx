@@ -163,15 +163,13 @@ export default function Collection({ user }: { user: User }) {
   const [sortShown, setSortShown] = useShown(sort);
   const [stateShown, setStateShown] = useShown(state);
   function filter(key: string, value: string) {
-    setParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        if (value) next.set(key, value);
-        else next.delete(key);
-        return next;
-      },
-      { replace: true },
-    );
+    // History updates before React finishes the navigation render. Reading it
+    // here preserves a preceding filter change when the next input arrives
+    // during that render; useSearchParams' callback still sees the old render.
+    const next = new URLSearchParams(window.location.search);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
   }
   const all = resource.data || [];
   const items = useMemo(() => {
