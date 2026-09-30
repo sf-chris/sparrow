@@ -263,6 +263,36 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("→ line 1", revealed)
         self.assertIn("Judge every caption", results[5]["content"])
 
+    async def test_judging_in_the_same_step_as_the_gloss_is_refused(self):
+        from types import SimpleNamespace
+        from test_discovery import Block
+
+        await self.manager(review=True)
+        lines, captions = self.checked_review()
+        batch = SimpleNamespace(
+            content=[
+                Block("gloss", {"page": 1, "lines": lines}),
+                Block("judge", {"page": 1, "captions": captions, "missing": []}),
+            ]
+        )
+        calls = [
+            batch,
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("verdict", {"approved": True, "reason": "Matches."}),
+        ]
+        task = await self.request(self.foreign(verify=True), calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        session = self.service.store.get_session(task["data"]["review_session"])
+        errors = [
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("is_error")
+        ]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("Read this page's captions", errors[0])
+
     async def test_approval_is_refused_when_captions_do_not_match(self):
         await self.manager(review=True)
         lines, captions = self.checked_review()

@@ -45,6 +45,7 @@ def cli_caller(
     thinking_tokens=None,
     max_output_tokens=4500,
     timeout_seconds=180,
+    system_prompt="Return the requested next tool actions as structured JSON. You cannot hear audio. Never certify a subtitle from text alone.",
 ):
     if not 0 < max_budget_usd <= 1 or effort not in (None, "low", "medium", "high"):
         raise ValueError(
@@ -130,7 +131,7 @@ def cli_caller(
             "--json-schema",
             json.dumps(schema),
             "--system-prompt",
-            "Return the requested next tool actions as structured JSON. You cannot hear audio. Never certify a subtitle from text alone.",
+            system_prompt,
             cwd=str(folder),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
