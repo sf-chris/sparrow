@@ -9,7 +9,14 @@ import struct
 import sys
 import time
 from pathlib import Path
-from .node_executor import NodeError, executable, probe_file, file_version, canonical
+from .node_executor import (
+    NodeError,
+    executable,
+    probe_file,
+    file_version,
+    canonical,
+    run_media,
+)
 from .media_state import language_code
 
 
@@ -24,6 +31,28 @@ async def candidates(executor, path, args):
     out = []
     for track in facts["subtitle_tracks"]:
         if track["codec"] in ("subrip", "ass", "ssa", "webvtt", "mov_text", "text"):
+            # The default track can contain only signs, even without a forced
+            # flag. Inspect actual cues before choosing a full-dialogue track.
+            from .subtitle_worker import cues_from_text
+
+            cue_count = 0
+            try:
+                extracted = await run_media(
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-i",
+                    path,
+                    "-map",
+                    f"0:{track['index']}",
+                    "-f",
+                    "webvtt",
+                    "pipe:1",
+                    timeout=60,
+                )
+                cue_count = len(cues_from_text(extracted.decode("utf8"), "vtt"))
+            except (NodeError, ValueError, UnicodeError):
+                pass  # Preparation reports the candidate's concrete error.
             out.append(
                 {
                     "id": "embedded:" + str(track["index"]),
@@ -36,6 +65,7 @@ async def candidates(executor, path, args):
                         else "sdh" if track["hearing_impaired"] else "full"
                     ),
                     "title": track["title"] or "Included in this copy",
+                    "cue_count": cue_count,
                 }
             )
     for sidecar in sorted(path.parent.iterdir()):
@@ -81,6 +111,8 @@ async def candidates(executor, path, args):
         movie_hash = f"{value & 0xffffffffffffffff:016x}"
     if before != file_version(path):
         raise NodeError("The media changed while subtitle sources were inspected.")
+    # Measured cue counts are selection advice, never proof of sync or meaning.
+    out.sort(key=lambda candidate: -candidate.get("cue_count", 0))
     return {"candidates": out, "movie_hash": movie_hash, "facts": facts}
 
 
@@ -101,6 +133,8 @@ async def prepare(executor, path, args):
             "Automatic subtitle repair currently supports videos up to six hours."
         )
     cues_from_text(args["text"], args["format"])
+    if args.get("sample_phase", 0.5) not in (0.25, 0.5):
+        raise NodeError("Choose a supported subtitle sample set.")
     folder = executor.cache_root / "subtitles" / identity
     folder.mkdir(parents=True, exist_ok=True)
     packet = {
@@ -112,6 +146,9 @@ async def prepare(executor, path, args):
         "duration": facts["duration"],
         "ffmpeg": executable("ffmpeg"),
         "model_path": str(model_path(executor.data_dir)),
+        "verify": args.get("verify", True),
+        "repair": args.get("repair", True),
+        "sample_phase": args.get("sample_phase", 0.5),
         "audio_language": language_code(
             next(
                 t["language"]

@@ -313,7 +313,7 @@ def acquisition_tools(tb):
                         user, a["id"], job.preferences["values"]
                     ):
                         raise ToolError(
-                            "Media is playable, but required subtitles have not passed preparation and review. Wait for subtitles_ready or ask the user to repair subtitles; do not mark the request complete."
+                            "Media is playable, but required subtitles have not met this request's preparation/checking preference. Wait for subtitles_ready or ask the user to get or fix subtitles; do not mark the request complete."
                         )
         job.status = (
             JobStatus.COMPLETE if outcome == "complete" else JobStatus.ABANDONED
@@ -581,6 +581,10 @@ def storage_tools(tb):
         if (
             subtitles
             and job.preferences.get("values", {}).get("subtitle_mode", "off") != "off"
+            and (
+                job.preferences.get("values", {}).get("subtitle_auto_prepare", True)
+                or job.preferences.get("values", {}).get("require_subtitles", False)
+            )
         ):
             user = tb.accounts.user(job.user_id)
             # Optional preparation belongs to the person even after Fetch closes.
@@ -588,6 +592,7 @@ def storage_tools(tb):
                 user,
                 asset,
                 job=job if job.preferences["values"].get("require_subtitles") else None,
+                preferences=job.preferences,
             )
         return {"asset_id": asset, "verified": True, "path": args["path"]}
 

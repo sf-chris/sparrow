@@ -32,6 +32,18 @@ class AccountTests(unittest.TestCase):
             "viewer", "fixture-password-456", "Viewer", invitation=token
         )
 
+    def test_subtitle_checking_defaults_off_and_request_override_is_scoped(self):
+        base = self.accounts.resolve(self.owner["id"])
+        self.assertTrue(base["values"]["subtitle_auto_prepare"])
+        self.assertFalse(base["values"]["verify_subtitles"])
+        self.accounts.set_preferences(self.owner["id"], {"verify_subtitles": True})
+        request = self.accounts.resolve(self.owner["id"], {"verify_subtitles": False})
+        self.assertFalse(request["values"]["verify_subtitles"])
+        self.assertEqual(request["sources"]["verify_subtitles"], "request")
+        self.assertTrue(
+            self.accounts.resolve(self.owner["id"])["values"]["verify_subtitles"]
+        )
+
     def test_inheritance_overrides_reset_and_policy_are_one_contract(self):
         user = self.invited()
         contract = self.accounts.set_preferences(
@@ -163,12 +175,16 @@ class AccountAPITests(unittest.TestCase):
             accounts = install_accounts(app, storage, lambda: None)
             accounts.create_user("owner", "movienow", "Owner", bootstrap=True)
             user = accounts.create_user(
-                "viewer", "movienow", "Viewer",
+                "viewer",
+                "movienow",
+                "Viewer",
                 invitation=accounts.invite("viewer", ["family"]),
             )
             items = [
                 LibraryItem(
-                    id=library, title=library, media_type=MediaType.MOVIE,
+                    id=library,
+                    title=library,
+                    media_type=MediaType.MOVIE,
                     path=f"/{library}/movie.mp4",
                     poster_path=f"/art/{library}-poster.svg",
                     backdrop_path=f"/art/{library}-backdrop.webp",
@@ -183,7 +199,9 @@ class AccountAPITests(unittest.TestCase):
 
             with patch.object(storage, "get_library", return_value=items):
                 anonymous = TestClient(app)
-                self.assertEqual(anonymous.get("/art/family-backdrop.webp").status_code, 401)
+                self.assertEqual(
+                    anonymous.get("/art/family-backdrop.webp").status_code, 401
+                )
                 viewer = TestClient(app)
                 viewer.cookies.set(COOKIE, accounts.new_session(user["id"]))
                 for name, expected in (
@@ -194,7 +212,9 @@ class AccountAPITests(unittest.TestCase):
                     ("unreferenced.webp", 404),
                 ):
                     with self.subTest(artwork=name):
-                        self.assertEqual(viewer.get(f"/art/{name}").status_code, expected)
+                        self.assertEqual(
+                            viewer.get(f"/art/{name}").status_code, expected
+                        )
 
     def test_bootstrap_login_csrf_and_legacy_routes_are_protected(self):
         with tempfile.TemporaryDirectory() as temp:

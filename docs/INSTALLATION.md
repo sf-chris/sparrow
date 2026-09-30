@@ -48,6 +48,15 @@ retains accounts, library mappings, agent history, progress and prepared tracks.
 The application runs as UID 10001 without root capabilities and with one
 coordinator process. `docker compose logs --tail=100 sparrow` shows startup errors.
 
+Subtitle inclusion is on by default; **Check subtitle sync** is a separate,
+optional preference that uses the Anthropic key in Settings. Compose also accepts
+`SPARROW_SMART_MODEL`, `SPARROW_CHEAP_MODEL` and `SPARROW_TRANSCRIPTION_MODEL`
+from `.env`. The image bundles Whisper base. To use a different compatible local
+speech model, first put its files in the persistent volume or a mounted directory,
+then set its **container path**, for example `/data/models/whisper-medium`, and
+recreate the container. The recorded Japanese/English anime trial used Whisper
+medium, Haiku 4.5 and Sonnet 4.6; it does not establish equivalent results for base.
+
 To serve your trusted home network, create `.env` containing the server's LAN
 address, for example `SPARROW_BIND_ADDRESS=192.168.1.20`, then recreate the container
 with `docker compose up -d`. Open that address on the phone and Windows node.

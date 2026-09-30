@@ -125,11 +125,7 @@ def install_product(app, storage, accounts, nodes, get_service):
             "state": (
                 "subtitles_pending"
                 if subtitle_pending
-                else "ready"
-                if ready
-                else "unavailable"
-                if assets
-                else "verifying"
+                else "ready" if ready else "unavailable" if assets else "verifying"
             ),
             "ready_count": len(ready),
             "assets": assets,
@@ -377,9 +373,27 @@ def install_product(app, storage, accounts, nodes, get_service):
             )
 
         try:
-            return await catalogue.confirm_import(
+            result = await catalogue.confirm_import(
                 scan_id, [s.model_dump() for s in body.selections], title, episode_facts
             )
+            subtitles = getattr(request.app.state, "subtitles", None)
+            prefs = accounts.resolve(request.state.user["id"])
+            if (
+                subtitles
+                and (
+                    prefs["values"].get("subtitle_auto_prepare", True)
+                    or prefs["values"].get("require_subtitles", False)
+                )
+                and prefs["values"]["subtitle_mode"] != "off"
+            ):
+                for imported in result["imported"]:
+                    try:
+                        imported["subtitles"] = await subtitles.enqueue(
+                            request.state.user, imported["asset_id"], preferences=prefs
+                        )
+                    except (ToolError, ValueError) as exc:
+                        imported["subtitle_error"] = str(exc)
+            return result
         except NodeError as exc:
             raise HTTPException(422, str(exc)) from exc
 

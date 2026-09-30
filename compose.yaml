@@ -4,6 +4,10 @@ services:
     image: sparrow:local
     restart: unless-stopped
     init: true
+    environment:
+      SPARROW_SMART_MODEL: ${SPARROW_SMART_MODEL:-claude-sonnet-5}
+      SPARROW_CHEAP_MODEL: ${SPARROW_CHEAP_MODEL:-claude-haiku-4-5}
+      SPARROW_TRANSCRIPTION_MODEL: ${SPARROW_TRANSCRIPTION_MODEL:-/opt/sparrow/models/whisper-base}
     ports:
       - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:${SPARROW_PORT:-8888}:8888"
     volumes:
