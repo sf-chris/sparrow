@@ -29,5 +29,9 @@
   "whisper": {
     "repository": "Systran/faster-whisper-base",
     "revision": "ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66"
+  },
+  "whisper_evidence": {
+    "repository": "dropbox-dash/faster-whisper-large-v3-turbo",
+    "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf"
   }
 }

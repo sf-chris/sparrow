@@ -51,8 +51,10 @@ Everything new lives in `backend/agents/`:
   checks that wake the Librarian only for eligible work.
 - `accounts.py`, `nodes.py`, `node_executor.py`, `catalogue.py`, `playback.py` —
   household preferences/permissions, durable portable storage and media delivery.
-- `subtitles.py`, `subtitle_worker.py` — built-in preparation and independent
-  speech evidence, followed by the bounded subtitle-review tool loop.
+- `subtitles.py`, `subtitle_worker.py` — built-in preparation of a playable
+  track; `subtitle_evidence.py` (whole-soundtrack speech evidence on the storage
+  node), `subtitle_sync.py` (measured timing and correction) and
+  `subtitle_review.py` (page-by-page reviewer tools and approval gate).
 
 ### The agents
 
@@ -91,8 +93,11 @@ Everything new lives in `backend/agents/`:
   explicit request choices form a versioned effective contract, within admin
   policy. Pass relevant values to agents and use the same contract in UI/tools.
 - Current model defaults: Fetch smart, Media cheap with self-escalation,
-  Librarian, Discovery and subtitle review cheap with bounded turns and spend.
-  Routine subtitle processing is built in; no setup-agent implementation is planned now.
+  Librarian and Discovery cheap with bounded turns and spend. Subtitle review
+  (opt-in "Check subtitle sync") uses Claude Opus 5.5 with prompt caching,
+  configurable with `SPARROW_SUBTITLE_MODEL`. Routine subtitle processing,
+  including timing measurement and correction for foreign dialogue, is built in
+  and makes no model call; no setup-agent implementation is planned now.
   Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
 - Agent-managed downloads carry `metadata.agent_managed` — the legacy
   enrich/auto-organize path must skip them (the Media Agent owns landing).

@@ -12,7 +12,7 @@ DNS/HTTPS/sharing), TV/Emby/casting and the setup agent are excluded.
 | 2. Household accounts | Owner onboarding, invitations, roles/storage scope, central inherited preferences, explicit request overrides, session revocation and password changes | HTTP tests and actual Chrome household flows; no externally hosted deployment claim |
 | 3. Portable storage | Outbound pairing and credential rotation, durable commands/results, safe publication, import/correction, Linux container, Windows setup/service/installer workflow | Linux container and portable protocol/media tests pass; Windows FFmpeg binaries compile; native installer/service execution and physical Windows remain pending |
 | 4. Watching | Responsive collection/player, authenticated ranges, audio/captions, conversion, personal progress, PWA assets/install guidance | Real Chrome and generated-media HTTP checks, Linux container restart/resume; physical phone/Safari/iOS validation remains pending |
-| 5. Subtitle care | Included/local/provider candidates, FFsubsync timing, independent local speech samples, durable preparation and agent review, repair/upload, personal delay, mandatory readiness | Five labelled English speech cases reproduce successfully; review loop tested with controlled model responses; no live provider or translated-caption quality claim |
+| 5. Subtitle care | Included/local/provider candidates, whole-soundtrack speech evidence, measured timing correction, page-by-page Opus review with a tool-enforced gate, repair/upload, personal delay, mandatory readiness | Onset calibration and three real anime tracks measured; controlled review-loop tests; see [the evidence record](agentic-audit/SUBTITLE_EVIDENCE.md). No live provider claim |
 | 6. Discovery and care | Tool-using conversational Discovery, personal subscriptions, aired scope, gap filling, explicit upgrades, private memory and bounded reasoning | Tool-loop evidence, authority, revision, upgrade and zero-idle-call tests; no paid live-model quality evaluation |
 
 The shared visual contract is [PRODUCT_DESIGN.md](PRODUCT_DESIGN.md). Installation
@@ -46,13 +46,11 @@ by these validation runs.
   password change, permission revocation, subscription editing, subtitle repair
   failure and honest mandatory-caption readiness. Five additional mobile states
   had zero automated accessibility violations.
-- `tests/subtitle_benchmark.py` reproduces the checked-in LibriSpeech fixtures:
-  already-correct captions stay unchanged; a seven-second offset and 4.2% drift
-  are corrected; a changed cut and unrelated caption text are rejected. Metrics,
-  independent speech-match evidence and labelled timing residuals are in
-  `product-validation/subtitle-benchmark.json`. This is English speech with known
-  labels, not a general film/multilingual accuracy claim. Fixture attribution and
-  the CC BY 4.0 licence are in `tests/fixtures/subtitles/ATTRIBUTION.md`.
+- `tests/subtitle_sync_calibration.py` uses the checked-in LibriSpeech fixtures to
+  measure speech-onset timing at known positions, clean and over noise. The
+  earlier FFsubsync/five-sample benchmark and its `product-validation` result
+  describe a retired pipeline. Fixture attribution and the CC BY 4.0 licence are
+  in `tests/fixtures/subtitles/ATTRIBUTION.md`.
 - The Windows FFmpeg/ffprobe build produced x86-64 PE executables from pinned
   sources. That proves compilation, not execution on NTFS or Windows services.
 - The node setup's scrollable form and fixed action area were checked at 620×740

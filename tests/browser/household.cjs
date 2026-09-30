@@ -37,7 +37,7 @@ fs.mkdirSync(out,{recursive:true});
  await page.goto(base+'/title/tv/104');await page.getByRole('button',{name:/^(Edit|Follow this series)$/}).first().click();await page.getByLabel('Which episodes',{exact:true}).selectOption('backfill');await audit('collection-care-dialog');await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});await page.getByRole('button',{name:'Edit',exact:true}).waitFor();await audit('following-show');
  const items=await (await owner.request.get(base+'/api/v1/catalogue')).json();const asset=items.find(i=>i.tmdb_id===103).assets[0];
  await page.goto(base+'/watch/'+asset.id);await page.locator('summary',{hasText:'Subtitle help'}).waitFor();await audit('subtitle-repair');
- await page.getByLabel('Upload a subtitle file',{exact:true}).setInputFiles({name:'invalid.srt',mimeType:'text/plain',buffer:Buffer.from('This is not a subtitle file.')});await page.getByText('Couldn’t fix',{exact:true}).waitFor({timeout:20000});await audit('subtitle-repair-failure');
+ await page.getByLabel('Upload a subtitle file',{exact:true}).setInputFiles({name:'invalid.srt',mimeType:'text/plain',buffer:Buffer.from('This is not a subtitle file.')});await page.getByText('Needs attention',{exact:true}).waitFor({timeout:20000});await audit('subtitle-repair-failure');
  // Mark subtitles mandatory: the library must remain honest while playback is usable.
  await owner.request.patch(base+'/api/v1/preferences',{headers,data:{values:{require_subtitles:true}}});
  const catalogue=await (await owner.request.get(base+'/api/v1/catalogue')).json();if(!catalogue.some(i=>i.state==='subtitles_pending'))throw new Error('Required subtitles appeared ready without verification');

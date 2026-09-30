@@ -170,6 +170,10 @@ class AgentSpec:
     tools: Callable[[AgentSession], list[ToolDef]]
     max_steps: int = MAX_STEPS_PER_WAKE
     max_tokens: int = MAX_TOKENS
+    # Cache the growing conversation prefix: long single-session loops re-send
+    # their history on every call, so cached reads cut input cost about tenfold.
+    cache: bool = False
+    effort: str = ""  # output_config effort; empty uses the model's default
 
 
 class AgentRuntime:
@@ -691,14 +695,21 @@ class AgentRuntime:
         client = self._client()
         try:
             delay = 2.0
+            spec = self._specs[session.agent.value]
+            options = {}
+            if spec.cache:
+                options["cache_control"] = {"type": "ephemeral"}
+            if spec.effort:
+                options["output_config"] = {"effort": spec.effort}
             for attempt in range(3):
                 try:
                     return await client.messages.create(
                         model=session.model,
-                        max_tokens=self._specs[session.agent.value].max_tokens,
+                        max_tokens=spec.max_tokens,
                         system=system,
                         tools=[t.to_api() for t in tools],
                         messages=session.messages,
+                        **options,
                     )
                 except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
                     status = getattr(e, "status_code", None)

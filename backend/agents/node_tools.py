@@ -6,6 +6,7 @@ inventory can acknowledge a file as ready.
 """
 
 import hashlib
+import logging
 import time
 from pathlib import Path, PurePosixPath
 from .runtime import ToolDef, ToolError
@@ -13,6 +14,8 @@ from .models import JobStatus, Event
 from .media_state import audio_satisfies
 from .nodes import Nodes
 from .catalogue import Catalogue
+
+logger = logging.getLogger(__name__)
 from .node_executor import NodeError, canonical
 from .tools import fetch_tools, media_tools, quality_rank
 from ..models import Download, DownloadStatus, LibraryItem, MediaType
@@ -588,12 +591,20 @@ def storage_tools(tb):
         ):
             user = tb.accounts.user(job.user_id)
             # Optional preparation belongs to the person even after Fetch closes.
-            await subtitles.enqueue(
-                user,
-                asset,
-                job=job if job.preferences["values"].get("require_subtitles") else None,
-                preferences=job.preferences,
-            )
+            # The copy is already filed; a subtitle problem must not undo that.
+            try:
+                await subtitles.enqueue(
+                    user,
+                    asset,
+                    job=(
+                        job
+                        if job.preferences["values"].get("require_subtitles")
+                        else None
+                    ),
+                    preferences=job.preferences,
+                )
+            except ToolError as exc:
+                logger.warning("subtitle preparation not queued for %s: %s", asset, exc)
         return {"asset_id": asset, "verified": True, "path": args["path"]}
 
     async def done(ctx, args):

@@ -56,6 +56,12 @@ speech model, first put its files in the persistent volume or a mounted director
 then set its **container path**, for example `/data/models/whisper-medium`, and
 recreate the container. The recorded Japanese/English anime trial used Whisper
 medium, Haiku 4.5 and Sonnet 4.6; it does not establish equivalent results for base.
+Subtitle timing uses whole-episode dialogue evidence built on the storage node. It
+uses Whisper large-v3-turbo when present at `/data/models/whisper-large-v3-turbo`,
+then medium at `/data/models/whisper-medium`, then the bundled base model, or the
+directory in `SPARROW_EVIDENCE_MODEL`. `python packaging/fetch_model.py DESTINATION
+whisper_evidence` fetches the pinned turbo revision (about 1.6 GB). Opt-in sync
+checking uses Claude Opus 5.5; `SPARROW_SUBTITLE_MODEL` overrides it.
 
 To serve your trusted home network, create `.env` containing the server's LAN
 address, for example `SPARROW_BIND_ADDRESS=192.168.1.20`, then recreate the container
@@ -122,8 +128,8 @@ scripts/check.sh
 
 Media tests require FFmpeg/ffprobe on PATH or `SPARROW_FFMPEG` and
 `SPARROW_FFPROBE`. Tests skip live paid model evaluation unless explicitly enabled.
-The measured speech benchmark additionally needs the pinned local model. See
-`tests/subtitle_benchmark.py` and its fixture attribution.
+The speech-onset calibration additionally needs a local Whisper model. See
+`tests/subtitle_sync_calibration.py` and its fixture attribution.
 
 The [contributor guide](../CONTRIBUTING.md#browser-journeys-and-screenshots)
 describes Chrome journeys and reproducible screenshots.

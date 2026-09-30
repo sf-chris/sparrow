@@ -464,6 +464,14 @@ class Executor:
             from .subtitle_node import prepare
 
             return await prepare(self, path, args)
+        if kind == "subtitle_evidence":
+            from .subtitle_node import evidence
+
+            return await evidence(self, path, args)
+        if kind == "subtitle_listen":
+            from .subtitle_node import listen
+
+            return await listen(self, path, args)
         if kind == "hls_segment":
             if self._hls_cache is None:
                 from .hls_cache import HLSCache
@@ -510,9 +518,15 @@ class Executor:
                 raise NodeError("Choose a supported video file.")
             return await probe_file(path)
         if kind in ("stat", "read"):
-            if (
-                not path.is_file()
-                or path.suffix.lower() not in VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS
+            # Saved dialogue evidence is the one non-media document readable,
+            # and only at its exact cache location.
+            evidence = root_id == "cache" and re.fullmatch(
+                r"subtitle-evidence/[a-f0-9]{32}/evidence\.json",
+                str(args.get("path", "")),
+            )
+            if not path.is_file() or (
+                path.suffix.lower() not in VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS
+                and not evidence
             ):
                 raise NodeError("This is not a supported media file.")
             version = file_version(path)
