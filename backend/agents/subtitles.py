@@ -64,10 +64,7 @@ def verifier_model():
     In the benchmark GPT-6-Sol cleared every false alarm on correct tracks
     while keeping wrong-episode tracks flagged, for about two cents an episode.
     """
-    configured = os.getenv("SPARROW_SUBTITLE_VERIFIER")
-    if configured is not None:
-        return configured
-    return DEFAULT_VERIFIER if os.getenv("OPENAI_API_KEY") else ""
+    return configured_model("SPARROW_SUBTITLE_VERIFIER", DEFAULT_VERIFIER)
 
 
 def contractor_model():
@@ -77,10 +74,15 @@ def contractor_model():
     benchmark for under a cent per episode, so it is used whenever an OpenAI
     key is present. Empty means Opus reads every page itself.
     """
-    configured = os.getenv("SPARROW_SUBTITLE_CONTRACTOR")
-    if configured is not None:
-        return configured
-    return DEFAULT_CONTRACTOR if os.getenv("OPENAI_API_KEY") else ""
+    return configured_model("SPARROW_SUBTITLE_CONTRACTOR", DEFAULT_CONTRACTOR)
+
+
+def configured_model(variable, default):
+    """A named model, "off", or blank for the default when an OpenAI key is set."""
+    configured = (os.getenv(variable) or "").strip()
+    if configured.lower() == "off":
+        return ""
+    return configured or (default if os.getenv("OPENAI_API_KEY") else "")
 
 
 def timing_summary(measured):

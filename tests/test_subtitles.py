@@ -686,6 +686,17 @@ if __name__ == "__main__":
 
 
 class PageCheckerTests(unittest.TestCase):
+    def test_blank_overrides_use_the_defaults_and_off_disables(self):
+        from backend.agents import subtitles as module
+
+        blank = {"OPENAI_API_KEY": "key", "SPARROW_SUBTITLE_CONTRACTOR": "", "SPARROW_SUBTITLE_VERIFIER": " "}
+        with patch.dict("os.environ", blank):
+            self.assertEqual((module.contractor_model(), module.verifier_model()), (module.DEFAULT_CONTRACTOR, module.DEFAULT_VERIFIER))
+        with patch.dict("os.environ", {**blank, "SPARROW_SUBTITLE_VERIFIER": "off"}):
+            self.assertEqual(module.verifier_model(), "")
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "", "SPARROW_SUBTITLE_CONTRACTOR": ""}):
+            self.assertEqual(module.contractor_model(), "")
+
     def setUp(self):
         self.utterances = [utterance(n, 4.0 * n, f"発話{n}") for n in range(1, 40)]
         self.pages = review.build_pages(self.utterances, [], 170)
