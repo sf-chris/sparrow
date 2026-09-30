@@ -192,6 +192,36 @@ gate now asks only that a judged caption overlap its cited speech within 1.5 s;
 precise timing is the acoustic per-section measurement. A retime no longer
 forces re-reading pages whose captions are unchanged.
 
+## AltProvider models as the manager — 1 October 2026
+
+`altprovider_loop.py` lets any agent session run on an AltProvider model: the runtime
+keeps its one message format and translates each call to the API
+(function calls, results and encrypted reasoning carried across turns, `store`
+off), so receipts, crash repair, budgets and tools are unchanged. Set
+`SPARROW_SUBTITLE_MODEL=smart-model` to use it for subtitles. Subtitle tools now
+resolve a quoted line or caption text to its ID when unambiguous, which cheap
+models otherwise got wrong repeatedly.
+
+Same five cases, real API spend for AltProvider (Large from the previous round),
+total per title including checkers:
+
+| Case | Large 5.5 medium | the smart model medium | the smart model low | the cheap model medium | the cheap model high |
+| --- | --- | --- | --- | --- | --- |
+| Episode, write | $0.131 | $0.044 | $0.035 | $0.008 | $0.005 |
+| Episode, keep | $0.226 | $0.062 | $0.077 | $0.041 | $0.038 |
+| Episode, wrong upload fixed | $0.392 | $0.138 | $0.124 | $0.064 | $0.065 |
+| Film, write | $0.191 | $0.077 | $0.049 | $0.018 | $0.014 |
+| Film, keep | $0.575 | $0.212 | $0.231 | $0.153 | $0.168 |
+
+All runs were approved and chose the right source. Written quality depends on
+the checker's draft, not the manager: 0.79–0.83 for every manager (one 0.58
+grade re-graded at 0.80; the grader varies by a few points). Edits differ: Large
+and Smart medium made the same corrections on the episodes with no regressions;
+on the film Smart medium, Smart low and Cheap medium each rewrote one correct
+caption to match a garbled transcript. Cheap made several such regressions and
+Cheap high also deleted a correct caption. Film keep checkers now dominate
+($0.15, mostly the Smart second opinion).
+
 ## Limits
 
 Recognition can omit or mishear speech. The detector misses dialogue under

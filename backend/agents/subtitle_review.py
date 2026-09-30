@@ -14,6 +14,7 @@ evidence shows every caption right and every section in time.
 from __future__ import annotations
 
 import math
+import re
 
 from .subtitle_sync import EARLY_TOLERANCE, LATE_TOLERANCE, ONSET_BIAS, TARGET_OFFSET
 
@@ -214,13 +215,57 @@ def known_speech(utterances, listens):
     return ids
 
 
+def _plain(text):
+    return re.sub(r"[\s/]+", "", str(text or ""))
+
+
+def resolve_id(value, prefix, known):
+    """The ID a model meant: as given, found inside its answer, or named by quoting
+    the item's exact text when that text is unambiguous. Otherwise unchanged,
+    so validation reports it."""
+    if not isinstance(value, str):
+        return value
+    if value in known:
+        return value
+    match = re.search(prefix + r"\d{4,6}", value)
+    if match and match.group(0) in known:
+        return match.group(0)
+    quoted = _plain(value)
+    matches = [k for k, text in known.items() if quoted and _plain(text) == quoted]
+    return matches[0] if len(matches) == 1 else value
+
+
+ID_KEYS = {"speech": "u", "align_to": "u", "caption": "c"}
+
+
+def normalise_ids(args, utterances, cues, listens):
+    """Tool arguments with quoted line or caption text replaced by its ID."""
+    known = {
+        "u": {k: u["text"] for k, u in known_speech(utterances, listens).items()},
+        "c": {caption_id(i): c["text"] for i, c in enumerate(cues)},
+    }
+
+    def walk(node, key=None):
+        if isinstance(node, dict):
+            return {k: walk(v, k) for k, v in node.items()}
+        if isinstance(node, list):
+            return [walk(v, key) for v in node]
+        if key in ID_KEYS:
+            return resolve_id(node, ID_KEYS[key], known[ID_KEYS[key]])
+        return node
+
+    return walk(args)
+
+
 def check_gloss(page, utterances, entries):
     expected = {u["id"] for u in page_utterances(page, utterances)}
     glosses = {}
     for entry in entries:
         identity, text = str(entry.get("speech", "")), str(entry.get("english", "")).strip()
         if identity not in expected:
-            raise ValueError(f"{identity or 'A line'} is not recognised speech on page {page['number']}.")
+            raise ValueError(
+                f"{identity[:40] or 'A line'} is not a speech line ID on page {page['number']}; give the ID shown before each line, such as u00012."
+            )
         if not text or len(text) > 200:
             raise ValueError(f"Give a brief English reading for {identity} (or \"?\").")
         glosses[identity] = text

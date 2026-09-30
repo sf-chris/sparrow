@@ -139,22 +139,10 @@ def first_id(value, prefix):
     return match.group(0) if match else ""
 
 
-def _plain(text):
-    return re.sub(r"[\s/]+", "", str(text or ""))
-
-
 def match_id(value, prefix, known):
-    """An answer's ID, or the one item whose text the model quoted instead.
-
-    Small models sometimes return a line's text where its ID belongs; an
-    exact, unambiguous text match recovers it rather than losing the page.
-    """
-    identity = first_id(value, prefix)
-    if identity in known:
-        return identity
-    quoted = _plain(value)
-    matches = [k for k, text in known.items() if quoted and _plain(text) == quoted]
-    return matches[0] if len(matches) == 1 else ""
+    """An answer's ID, or the one item whose text the model quoted instead."""
+    identity = review.resolve_id(str(value or ""), prefix, known)
+    return identity if identity in known else ""
 
 
 def speech_rows(page, utterances, translations=None):
