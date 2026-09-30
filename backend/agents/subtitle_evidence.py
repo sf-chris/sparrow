@@ -659,11 +659,11 @@ def main(path, budget=None):
         try:
             import fcntl
 
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # A worker left running by a restarted server finishes its slice
+            # first; this one then resumes from the saved chunks.
+            fcntl.flock(lock, fcntl.LOCK_EX)
         except ImportError:
             pass
-        except OSError:
-            raise ValueError("Speech evidence for this media is already being built.")
         request = load(request_path)
         value = listen(request) if request.get("kind") == "listen" else build(request, budget)
         result = {"ok": True, "value": value}
