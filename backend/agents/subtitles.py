@@ -24,7 +24,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import subtitle_contract
+from . import openai_loop, subtitle_contract
 from . import subtitle_review as pages_
 from .account_api import administrator
 from .media_state import language_code
@@ -1063,11 +1063,12 @@ class Subtitles:
     async def review(self, task):
         """Run the subtitle agent until it records a verdict; None while pending."""
         service = self.get_service()
-        if not service or not service.runtime._api_key_getter():
+        openai = openai_loop.is_openai_model(review_model())
+        if not service or not (service.runtime._openai_key_getter() if openai else service.runtime._api_key_getter()):
             self.update(
                 task,
                 "review_pending",
-                "Subtitles ready. Checking them needs an Anthropic key. Add one, then try again.",
+                f"Subtitles ready. Checking them needs an {'OpenAI' if openai else 'Anthropic'} key. Add one, then try again.",
             )
             return None
         _, asset = self.authority(task)
@@ -1888,6 +1889,20 @@ class Subtitles:
                 resolve,
             ),
         ]
+
+        def with_ids(handler):
+            # Models sometimes quote a line's or caption's text where its ID
+            # belongs; the tool resolves unambiguous quotes instead of failing.
+            async def run(ctx, args):
+                _, context = await load(ctx)
+                listens = context["state"].get("listens", [])
+                return await handler(ctx, pages_.normalise_ids(args, context["utterances"], context["cues"], listens))
+
+            return run
+
+        for tool in {id(t): t for t in tools + manager_tools}.values():
+            if tool.name in ("gloss", "judge", "edit_captions", "write_page", "resolve"):
+                tool.handler = with_ids(tool.handler)
 
         def toolset(session):
             return manager_tools if managing(session) else tools

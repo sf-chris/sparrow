@@ -30,6 +30,8 @@ Everything new lives in `backend/agents/`:
 - `models.py` — `Job` (a contract against TMDB: wanted episodes, quality
   window, audio, urgency), `AgentSession` (a persistent tool-loop with full
   message history), `JournalEntry`, `Event`, `Spend`.
+- `openai_loop.py` — runs a session on an OpenAI model through the same loop
+  (Responses API translation at the call boundary).
 - `runtime.py` — the loop: wake on event → reason across tool calls →
   hibernate with a trigger or close. Handles persistence, crash repair,
   durable event acknowledgements/tool results, spend tracking and API retries.

@@ -13,6 +13,7 @@ tool belt.
 from __future__ import annotations
 import asyncio
 import logging
+import os
 import json
 import secrets
 import time
@@ -21,6 +22,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 import anthropic
 
+from . import openai_loop
 from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
 
@@ -33,8 +35,22 @@ PRICING_SOURCE = (
 )
 
 
+# OpenAI list prices per million tokens: input, cached input, output. Cached
+# input needs no write premium; reasoning tokens are billed as output.
+OPENAI_RATES = {
+    "gpt-6-luna": (0.10, 0.01, 0.50),
+    "gpt-6-sol": (2.0, 0.20, 10.0),
+    "gpt-6-astra": (10.0, 1.0, 50.0),
+    "gpt-5.6-luna": (0.20, 0.02, 1.20),
+    "gpt-5.6-terra": (2.0, 0.20, 12.0),
+}
+
+
 def rates_for_model(model: str, at: Optional[float] = None) -> dict[str, float]:
     normalized = (model or "").lower()
+    for name, (base_input, cached, output) in OPENAI_RATES.items():
+        if normalized == name or normalized.startswith(name + "-"):
+            return {"input": base_input, "output": output, "cache_write": base_input, "cache_read": cached}
     cache_read_multiplier = 0.1
     if "sonnet-5" in normalized:
         # The announced September price increase was withdrawn by the provider.
@@ -193,6 +209,7 @@ class AgentRuntime:
     ):
         self.store = store
         self._api_key_getter = api_key_getter
+        self._openai_key_getter: Callable[[], str] = lambda: os.getenv("OPENAI_API_KEY", "")
         self._specs: dict[str, AgentSpec] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._on_session_change = on_session_change
@@ -702,6 +719,8 @@ class AgentRuntime:
             return response, False
 
     async def _call_api(self, session: AgentSession, system: str, tools: list[ToolDef]):
+        if openai_loop.is_openai_model(session.model):
+            return await self._call_openai(session, system, tools)
         client = self._client()
         try:
             delay = 2.0
@@ -732,6 +751,34 @@ class AgentRuntime:
             return None
         finally:
             await client.close()
+
+    async def _call_openai(self, session: AgentSession, system: str, tools: list[ToolDef]):
+        """The same call through the OpenAI Responses API (see openai_loop)."""
+        import httpx
+
+        spec = self._specs[session.agent.value]
+        delay = 2.0
+        for attempt in range(3):
+            try:
+                return await openai_loop.create(
+                    self._openai_key_getter(),
+                    session.model,
+                    system,
+                    [t.to_api() for t in tools],
+                    session.messages,
+                    max_tokens=spec.max_tokens,
+                    effort=spec.effort,
+                    cache_key=session.id,
+                )
+            except (openai_loop.OpenAIStatusError, httpx.TransportError) as e:
+                status = getattr(e, "status_code", None)
+                if status and 400 <= status < 500 and status != 429:
+                    raise  # our bug — don't retry blindly
+                logger.warning("OpenAI API error (attempt %d): %s", attempt + 1, e)
+                if attempt < 2:
+                    await asyncio.sleep(delay)
+                delay *= 3
+        return None
 
     # ─── Bookkeeping ─────────────────────────────────────────────────────
 

@@ -25,8 +25,24 @@ def srt(starts):
     )
 
 
+# backend.main loads the developer's .env on import; subtitle tests must not
+# pick up real provider keys or model overrides from it (or spend with them).
+HERMETIC = {
+    "OPENAI_API_KEY": "",
+    "SPARROW_SUBTITLE_MODEL": "",
+    "SPARROW_SUBTITLE_CONTRACTOR": "",
+    "SPARROW_SUBTITLE_VERIFIER": "",
+    "SPARROW_SUBTITLE_BUDGET": "",
+}
+
+
 class SubtitleTests(unittest.IsolatedAsyncioTestCase):
-    asyncSetUp = test_playback.PlaybackTests.asyncSetUp
+    async def asyncSetUp(self):
+        environment = patch.dict("os.environ", HERMETIC)
+        environment.start()
+        self.addCleanup(environment.stop)
+        await test_playback.PlaybackTests.asyncSetUp(self)
+
     asyncTearDown = test_playback.PlaybackTests.asyncTearDown
     browser = test_playback.PlaybackTests.browser
     start = test_playback.PlaybackTests.start
@@ -636,8 +652,14 @@ class ReviewPageTests(unittest.TestCase):
         self.assertFalse(review.glossed(page, self.utterances, partial))
         everything = {u["id"]: "x" for u in on_page}
         self.assertTrue(review.glossed(page, self.utterances, everything))
-        with self.assertRaisesRegex(ValueError, "not recognised speech"):
+        with self.assertRaisesRegex(ValueError, "not a speech line ID"):
             review.check_gloss(page, self.utterances, [{"speech": "u09999", "english": "x"}])
+        quoted = [dict(u, text=f"台詞{n}") for n, u in enumerate(self.utterances)]
+        args = {"lines": [{"speech": "台詞 3", "english": "x"}], "captions": [{"caption": "Caption 7", "speech": ["台詞4", "u00009"]}]}
+        fixed = review.normalise_ids(args, quoted, self.cues, [])
+        self.assertEqual(fixed["lines"][0]["speech"], quoted[3]["id"])
+        self.assertEqual(fixed["captions"][0], {"caption": review.caption_id(6), "speech": [quoted[4]["id"], "u00009"]})
+        self.assertEqual(review.normalise_ids({"speech": ["発話"]}, self.utterances, self.cues, [])["speech"], ["発話"])
         captions = review.page_captions(page, self.cues)
         entries = [
             {"caption": review.caption_id(i), "verdict": "ok", "speech": [on_page[k]["id"]]}
@@ -686,6 +708,13 @@ if __name__ == "__main__":
 
 
 class PageCheckerTests(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict("os.environ", HERMETIC)
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.utterances = [utterance(n, 4.0 * n, f"発話{n}") for n in range(1, 40)]
+        self.pages = review.build_pages(self.utterances, [], 170)
+
     def test_blank_overrides_use_the_defaults_and_off_disables(self):
         from backend.agents import subtitles as module
 
@@ -696,10 +725,6 @@ class PageCheckerTests(unittest.TestCase):
             self.assertEqual(module.verifier_model(), "")
         with patch.dict("os.environ", {"OPENAI_API_KEY": "", "SPARROW_SUBTITLE_CONTRACTOR": ""}):
             self.assertEqual(module.contractor_model(), "")
-
-    def setUp(self):
-        self.utterances = [utterance(n, 4.0 * n, f"発話{n}") for n in range(1, 40)]
-        self.pages = review.build_pages(self.utterances, [], 170)
 
     def test_quoted_text_and_order_recover_lines_and_retries_are_bounded(self):
         from backend.agents import subtitle_contract
