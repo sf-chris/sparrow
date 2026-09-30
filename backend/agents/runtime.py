@@ -177,6 +177,8 @@ class AgentSpec:
     # their history on every call, so cached reads cut input cost about tenfold.
     cache: bool = False
     effort: str = ""  # output_config effort; empty uses the model's default
+    # Allowance per budget scope for this agent kind; 0 uses household policy.
+    max_dollars: float = 0.0
 
 
 class AgentRuntime:
@@ -417,6 +419,7 @@ class AgentRuntime:
             if not self.authority_valid(session, ctx.job_revision):
                 return
             policy = self.policy_getter()
+            allowance = spec.max_dollars or policy["max_agent_dollars"]
             sessions = self._budget_sessions(session)
             dollars = (
                 sum(s.spend.dollars for s in sessions if s.id != session.id)
@@ -425,16 +428,16 @@ class AgentRuntime:
             if (
                 steps
                 >= min(MAX_STEPS_PER_WAKE, spec.max_steps, policy["max_agent_calls"])
-                or dollars >= policy["max_agent_dollars"]
+                or dollars >= allowance
             ):
                 session.outcome = (
                     CaseState.BUDGET_LIMITED
-                    if dollars >= policy["max_agent_dollars"]
+                    if dollars >= allowance
                     else CaseState.NEEDS_INPUT
                 )
                 session.wake_reason = (
                     "Reached the spending limit. Raise it in Defaults, then try again."
-                    if dollars >= policy["max_agent_dollars"]
+                    if dollars >= allowance
                     else "Reached the agent step limit. Try again to continue."
                 )
                 session.wake_at = 0
@@ -660,11 +663,14 @@ class AgentRuntime:
                 len(session.messages) + len(tools) + 1
             )
             rates = rates_for_model(session.model)
-            estimate = (
-                3
-                * (tokens * rates["cache_write"] + spec.max_tokens * rates["output"])
-                / 1_000_000
+            # A cached loop re-reads its earlier prefix at the cache-read rate and
+            # writes only the new turn; without caching everything is written.
+            inbound = (
+                tokens * rates["cache_read"] + min(tokens, 40_000) * rates["cache_write"]
+                if spec.cache
+                else tokens * rates["cache_write"]
             )
+            estimate = 3 * (inbound + spec.max_tokens * rates["output"]) / 1_000_000
             identity = secrets.token_hex(16)
             with self.store._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
@@ -675,7 +681,8 @@ class AgentRuntime:
                     + ")",
                     scopes,
                 ).fetchone()[0]
-                if spent + held + estimate > self.policy_getter()["max_agent_dollars"]:
+                allowance = spec.max_dollars or self.policy_getter()["max_agent_dollars"]
+                if spent + held + estimate > allowance:
                     return None, True
                 db.execute(
                     "INSERT INTO reasoning_reservations VALUES(?,?,?,?)",

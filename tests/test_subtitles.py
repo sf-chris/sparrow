@@ -319,32 +319,87 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
             all(t["state"] == "rejected" for t in self.subtitles.tracks(self.owner, self.asset))
         )
 
-    async def test_rejected_track_is_set_aside_and_the_next_source_tried(self):
+    async def test_agent_switches_to_a_better_source_itself(self):
         await self.manager(review=True)
         (self.library / "fixture.en.srt").write_text(srt([t + LATE for t in VOICE]))
         lines, captions = self.checked_review()
         calls = [
-            response("verdict", {"approved": False, "reason": "These captions belong to another scene."}),
+            response("sources", {}),
+            response("use_source", {"source": "sidecar:fixture.en.srt"}),
             response("gloss", {"page": 1, "lines": lines}),
             response("judge", {"page": 1, "captions": captions, "missing": []}),
-            response("verdict", {"approved": True, "reason": "Matches throughout."}),
+            response("verdict", {"approved": True, "reason": "The sidecar matches throughout."}),
         ]
         body = {"audio_index": self.facts["audio_tracks"][1]["index"], "verify": True}
-        embedded = srt(VOICE)  # stands in for the file's own track
-
-        async def prepare(node, kind, args, **kw):
-            if args["task_id"] and args["text"].startswith("WEBVTT") and "Line 1" not in args["text"]:
-                args = {**args, "text": embedded, "format": "srt"}
-            return await real(node, kind, args, **kw)
-
-        real = self.nodes.execute
-        task = await self.request(body, calls=calls, prepare=prepare)
+        task = await self.request(body, calls=calls)
         self.assertEqual(task["state"], "ready", task["data"]["message"])
-        outcomes = [a["outcome"] for a in task["data"]["attempts"]]
-        self.assertEqual(outcomes[0], "set_aside")
         chosen = self.subtitles.track(task["data"]["track_id"])
-        self.assertEqual(chosen["data"]["source"], "sidecar")
+        self.assertEqual(chosen["data"]["source_id"], "sidecar:fixture.en.srt")
         self.assertTrue(chosen["data"]["review"]["approved"])
+        self.assertAlmostEqual(chosen["data"]["timing"]["offset"], 0, delta=0.02)
+        outcomes = {a["source_id"]: a["outcome"] for a in task["data"]["attempts"]}
+        self.assertEqual(outcomes["embedded:3"], "set_aside")
+        listed = self.subtitles.tracks(self.owner, self.asset)
+        self.assertEqual([t["state"] for t in listed if t["source"] == "embedded"], ["rejected"])
+
+    async def test_agent_fixes_a_wrong_caption_and_must_judge_it_again(self):
+        await self.manager(review=True)
+        lines, captions = self.checked_review()
+        wrong = [{**c, "verdict": "wrong"} if c["caption"] == "c0003" else c for c in captions]
+        calls = [
+            response("gloss", {"page": 1, "lines": lines}),
+            response("judge", {"page": 1, "captions": wrong, "missing": []}),
+            response("verdict", {"approved": True, "reason": "Close enough."}),
+            response("edit_captions", {"changes": [{"caption": "c0003", "text": "Line 3, corrected.", "align_to": ["u00003"]}]}),
+            response("verdict", {"approved": True, "reason": "Fixed."}),
+            response("page", {"page": 1}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("verdict", {"approved": True, "reason": "Every caption now matches."}),
+        ]
+        task = await self.request(self.foreign(verify=True), calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        track = self.subtitles.tracks(self.owner, self.asset)[0]
+        self.assertTrue(track["sync_checked"])
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertEqual(served[2]["text"], "Line 3, corrected.")
+        self.assertAlmostEqual(served[2]["start"], VOICE[2], delta=0.02)
+        original = cues_from_text((await self.client.get(track["original_url"])).text, "vtt")
+        self.assertEqual(original[2]["text"], "Line 3 of the dialogue.")
+        session = self.service.store.get_session(task["data"]["review_session"])
+        errors = [
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("is_error")
+        ]
+        self.assertIn("Wrong captions remain", errors[0])
+        self.assertIn("Pages not yet judged", errors[1])
+
+    async def test_agent_writes_subtitles_when_none_exist(self):
+        await self.manager(review=True)
+        written = [
+            {"speech": [f"u{n:05d}"], "text": f"Written line {n}."} for n in range(1, 13)
+        ]
+        calls = [
+            response("overview", {}),
+            response("write_page", {"page": 1, "captions": written}),
+            response("use_written", {}),
+            response("verdict", {"approved": True, "reason": "Written from the dialogue."}),
+        ]
+        body = {"language": "fr", "audio_index": self.facts["audio_tracks"][1]["index"], "verify": True}
+        task = await self.request(body, calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertEqual(task["data"]["message"], "Subtitles written from the dialogue and checked.")
+        track = self.subtitles.tracks(self.owner, self.asset)[0]
+        self.assertEqual(track["source"], "written")
+        self.assertTrue(track["sync_checked"])
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertEqual(len(served), 12)
+        self.assertAlmostEqual(served[4]["start"], VOICE[4], delta=0.02)
+        self.assertGreaterEqual(served[4]["end"] - served[4]["start"], 1.0)
+        playback = await self.start(audio_index=self.facts["audio_tracks"][1]["index"])
+        self.assertTrue(any("written by Sparrow" in t["title"] for t in playback["subtitles"]))
 
     async def test_missing_key_leaves_subtitles_playable_and_pending(self):
         await self.manager()
@@ -420,6 +475,30 @@ def utterance(n, t, text="発話"):
     }
 
 
+class RetimeTests(unittest.TestCase):
+    def test_sections_follow_their_measured_offsets(self):
+        cues = [{"start": float(t), "end": t + 1.0, "text": "x"} for t in range(0, 600, 10)]
+        measured = {
+            "measurable": True,
+            "consistent": True,
+            "offset": 0.1,
+            "sections": [
+                {"start": 0, "end": 180, "pairs": 10, "offset": 0.0},
+                {"start": 180, "end": 360, "pairs": 10, "offset": 0.4},
+                {"start": 360, "end": 540, "pairs": 2, "offset": 3.0},
+            ],
+        }
+        moved, _ = review.retime(cues, measured, "sections")
+        self.assertEqual(moved[1]["start"], 10.0)
+        self.assertAlmostEqual(moved[20]["start"], 199.6)
+        # A section with too few measurements follows its nearest measured one.
+        self.assertAlmostEqual(moved[40]["start"], 399.6)
+        shifted, _ = review.retime(cues, measured, "shift")
+        self.assertAlmostEqual(shifted[1]["start"], 9.9)
+        with self.assertRaises(ValueError):
+            review.retime(cues, {"measurable": False}, "sections")
+
+
 class ReviewPageTests(unittest.TestCase):
     def setUp(self):
         self.utterances = [utterance(n, 4.0 * n) for n in range(1, 200)]
@@ -437,8 +516,10 @@ class ReviewPageTests(unittest.TestCase):
     def test_gloss_and_judgement_must_cover_the_page(self):
         page = self.pages[0]
         on_page = review.page_utterances(page, self.utterances)
-        with self.assertRaisesRegex(ValueError, "missing"):
-            review.check_gloss(page, self.utterances, [{"speech": on_page[0]["id"], "english": "x"}])
+        partial = review.check_gloss(page, self.utterances, [{"speech": on_page[0]["id"], "english": "x"}])
+        self.assertFalse(review.glossed(page, self.utterances, partial))
+        everything = {u["id"]: "x" for u in on_page}
+        self.assertTrue(review.glossed(page, self.utterances, everything))
         with self.assertRaisesRegex(ValueError, "not recognised speech"):
             review.check_gloss(page, self.utterances, [{"speech": "u09999", "english": "x"}])
         captions = review.page_captions(page, self.cues)
@@ -463,20 +544,25 @@ class ReviewPageTests(unittest.TestCase):
         measured = {"measurable": True, "consistent": True, "offset": 0.0}
         self.assertEqual(review.gate(state, self.pages, self.cues, self.utterances, "full", measured), [])
         first = state["judgements"]["1"]
-        for key in list(first)[: len(first) * 2 // 3]:
-            first[key]["verdict"] = "wrong"
+        key = next(iter(first))
+        first[key] = {**first[key], "verdict": "wrong"}
         reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
-        self.assertTrue(any("Page 1" in r for r in reasons))
-        for number in ("1", "2", "3"):
-            page = state["judgements"][number]
-            for key in page:
-                page[key] = {"verdict": "ok", "speech": ["u00150"], "note": ""}
+        self.assertTrue(any("Wrong captions remain" in r for r in reasons))
+        first[key] = {**first[key], "verdict": "ok", "speech": ["u00150"]}
         reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
-        self.assertTrue(any("from their speech" in r for r in reasons))
-        late = {"measurable": True, "consistent": True, "offset": 0.4}
-        self.assertTrue(
-            any("still" in r for r in review.gate({**state, "judgements": {}}, [], self.cues, self.utterances, "full", late))
-        )
+        self.assertTrue(any("away from their speech" in r for r in reasons))
+        first[key] = {**first[key], "speech": [f"u{review.caption_index(key) + 1:05d}"]}
+        state["missing"]["2"] = [{"speech": ["u00050"], "note": "uncaptioned"}]
+        reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
+        self.assertTrue(any("no caption" in r for r in reasons))
+        self.assertFalse(any("no caption" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "forced", measured)))
+        state["missing"]["2"] = []
+        late = {"measurable": True, "consistent": True, "offset": 0.4, "sections": []}
+        self.assertTrue(any("overall" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "full", late)))
+        uneven = {**measured, "sections": [{"start": 0, "end": 180, "pairs": 8, "offset": 0.3}]}
+        self.assertTrue(any("Section" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "full", uneven)))
+
+
 
 
 if __name__ == "__main__":

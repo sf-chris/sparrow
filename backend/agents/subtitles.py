@@ -423,8 +423,8 @@ class Subtitles:
         """Every candidate source, best first; stored so restarts resume."""
         values = task["data"]
         language, kind = values["language"], values["kind"]
-        if values.get("upload"):
-            sources = [
+        uploaded = (
+            [
                 {
                     "id": "upload",
                     "source": "upload",
@@ -433,15 +433,9 @@ class Subtitles:
                     "kind": kind,
                 }
             ]
-            audio = values.get("audio_index")
-            if audio is None:
-                audio = self.choose_audio(
-                    user,
-                    asset,
-                    asset["facts"]["audio_tracks"],
-                    values["preferences"]["values"]["audio_pref"],
-                )
-            return sources, audio
+            if values.get("upload")
+            else []
+        )
         listing = await self.nodes.execute(
             asset["node_id"],
             "subtitle_candidates",
@@ -449,6 +443,7 @@ class Subtitles:
             timeout=300,
         )
         self.authority(task)
+        self.update(task, task["state"], task["data"].get("message", ""), movie_hash=listing.get("movie_hash"))
         audio = values.get("audio_index")
         if audio is None:
             audio = self.choose_audio(
@@ -465,6 +460,10 @@ class Subtitles:
         # Exact language tags before untagged tracks; more cues suggest full
         # dialogue rather than signs. Order is advice, never proof.
         local.sort(key=lambda c: (c["language"] != language, -c.get("cue_count", 0)))
+        if uploaded:
+            # The person's file is tried first; the file's own tracks stay
+            # available to the subtitle agent if the upload is wrong.
+            return uploaded + local, audio
         provider = SubtitleProvider(self.provider())
         item = self.catalogue.item(user, asset["item_id"])
         if item and provider.settings.get("api_key"):
@@ -592,6 +591,17 @@ class Subtitles:
                     attempts.append(
                         {"source_id": candidate["id"], "outcome": "failed", "reason": str(exc)[:500]}
                     )
+                    if candidate["source"] == "upload":
+                        # Say what is wrong with the person's own file rather
+                        # than quietly substituting another track.
+                        self.update(
+                            task,
+                            "finding",
+                            "Your subtitle file could not be used.",
+                            attempts=attempts,
+                            upload_failed=f"Your subtitle file could not be used: {exc}"[:500],
+                        )
+                        return False
                     self.update(task, "finding", "Trying another subtitle file.", attempts=attempts)
                     continue
                 attempts.append({"source_id": candidate["id"], "track_id": track, "outcome": "prepared"})
@@ -726,47 +736,127 @@ class Subtitles:
 
     # ─── Review ───────────────────────────────────────────────────────────
 
-    async def review_context(self, task):
-        track = self.track(task["data"].get("track_id"))
-        info = task["data"].get("speech")
-        if not track or not info:
-            return None
-        node = track["node_id"]
-        evidence = await self.speech(node, info)
+    async def measured(self, node, track, evidence, info):
         cues = await self.cues(node, track["data"]["path"], track["data"]["version"])
         key = (track["id"], info["version"]["size_bytes"], info["version"].get("mtime_ns"))
         if key not in self._measures:
-            self._measures = {key: estimate(cues, evidence)}
-        measured = self._measures[key]
+            recent = list(self._measures.items())[-8:]
+            self._measures = {**dict(recent), key: estimate(cues, evidence)}
+        return cues, self._measures[key]
+
+    async def review_context(self, task, asset):
+        info = task["data"].get("speech")
+        if not info:
+            return None
+        node = asset["node_id"]
+        evidence = await self.speech(node, info)
         utterances = evidence["utterances"]
+        duration = evidence["source"]["audio_seconds"]
+        track = self.track(task["data"].get("track_id"))
+        if track and track["state"] == "ready":
+            cues, measured = await self.measured(node, track, evidence, info)
+        else:
+            track, cues = None, []
+            measured = {"measurable": False, "reason": "No subtitle track is in use."}
         state = task["data"].get("review")
-        if not state or state.get("track") != track["id"]:
+        if not state:
             state = {
-                "track": track["id"],
-                "pages": pages_.build_pages(utterances, cues, evidence["source"]["audio_seconds"]),
+                "track": track and track["id"],
+                "pages": pages_.build_pages(utterances, cues, duration),
                 "glosses": {},
                 "judgements": {},
                 "missing": {},
+                "shown": {},
                 "listens": [],
+                "written": {},
+                "actions": [],
             }
         languages = evidence["coverage"].get("languages", {})
         spoken = max(languages, key=languages.get) if languages else ""
         return {
+            "task": task,
+            "asset": asset,
+            "node": node,
+            "info": info,
             "track": track,
             "evidence": evidence,
             "cues": cues,
             "measured": measured,
             "deltas": {p["cue"]: p["delta"] for p in measured.get("pairs", [])},
             "utterances": utterances,
+            "duration": duration,
             "state": state,
             "same_language": language_code(spoken) == task["data"]["language"],
         }
 
     def review_state(self, task, state, message=None):
-        self.update(task, task["state"], message or task["data"].get("message", ""), review=state)
+        self.update(task, "reviewing", message or task["data"].get("message", ""), review=state)
+
+    async def activate(self, context, track_id, action, *, rebuild):
+        """Make a track the one under review, re-measured, keeping what still holds."""
+        task, state = context["task"], context["state"]
+        track = self.track(track_id)
+        cues, measured = await self.measured(context["node"], track, context["evidence"], context["info"])
+        self.save_track(
+            track_id,
+            timing={**timing_summary(measured), "within_tolerance": in_window(measured)},
+        )
+        if rebuild:
+            pages = pages_.build_pages(context["utterances"], cues, context["duration"])
+            judgements, missing, kept = {}, {}, []
+        else:
+            pages = state["pages"]
+            judgements, missing, kept = pages_.carry(pages, context["cues"], pages, cues, state)
+        state.update(
+            track=track_id, pages=pages, judgements=judgements, missing=missing, shown={}
+        )
+        state["actions"] = (state.get("actions") or [])[-40:] + [
+            {"action": action, "track": track_id, "at": time.time()}
+        ]
+        self.update(
+            task,
+            "reviewing",
+            "Correcting the subtitles against the dialogue.",
+            track_id=track_id,
+            measured=track_id,
+            review=state,
+        )
+        return measured, pages, kept
+
+    async def derive(self, context, cues, detail):
+        """A new copy of the track under review with changed captions."""
+        from .subtitle_worker import render
+
+        base, task, asset = context["track"], context["task"], context["asset"]
+        text = render(cues, vtt=True)
+        candidate = {
+            "id": base["data"]["source_id"],
+            "source": base["data"]["source"],
+            "title": base["data"].get("title", ""),
+        }
+        new_id = await self.prepare(
+            task,
+            asset,
+            candidate,
+            text,
+            "vtt",
+            base["data"]["audio_index"],
+            suffix=":" + hashlib.sha256(text.encode()).hexdigest()[:16],
+        )
+        self.save_track(
+            new_id,
+            original_path=base["data"]["original_path"],
+            original_version=base["data"]["original_version"],
+            derived_from=base["id"],
+            edits=(base["data"].get("edits") or [])[-20:] + [detail],
+            correction=base["data"].get("correction") or {"kind": "edited"},
+        )
+        if new_id != base["id"]:
+            self.save_track(base["id"], state="superseded")
+        return new_id
 
     async def review(self, task):
-        """Run the reviewer until it records a verdict; None while pending."""
+        """Run the subtitle agent until it records a verdict; None while pending."""
         service = self.get_service()
         if not service or not service.runtime._api_key_getter():
             self.update(
@@ -775,9 +865,10 @@ class Subtitles:
                 "Subtitles ready. Checking them needs an Anthropic key. Add one, then try again.",
             )
             return None
-        context = await self.review_context(task)
+        _, asset = self.authority(task)
+        context = await self.review_context(task, asset)
         if not context:
-            return {"approved": None, "reason": "Checking needs dialogue analysis, which is unavailable for this media."}
+            return {"approved": False, "track": task["data"].get("track_id"), "reason": "Dialogue analysis is unavailable for this media."}
         self.review_state(task, context["state"])
         self.attach(service)
         sessions = list(task["data"].get("review_sessions", []))
@@ -791,8 +882,8 @@ class Subtitles:
                 service.store.save_session(earlier)
         for _ in range(REVIEW_WAKES):
             task = self.task(task["id"])
-            done = len(task["data"]["review"]["judgements"])
-            total = len(task["data"]["review"]["pages"])
+            state = task["data"]["review"]
+            before = (len(state["judgements"]), len(state.get("actions", [])), len(state.get("written", {})))
             session = AgentSession(
                 agent=AgentKind.SUBTITLE,
                 user_id=task["user_id"],
@@ -808,7 +899,7 @@ class Subtitles:
             self.update(
                 task,
                 "reviewing",
-                f"Checking the captions against the dialogue ({done} of {total} pages).",
+                f"Checking the subtitles against the dialogue ({before[0]} of {len(state['pages'])} pages).",
                 review_session=session.id,
                 review_sessions=sessions,
             )
@@ -818,34 +909,36 @@ class Subtitles:
                     kind="subtitle_review",
                     payload={
                         "description": (
-                            "Review this subtitle track page by page. Start with overview."
-                            if not done
-                            else "Continue the subtitle review. Call overview to see which pages remain."
+                            "Make this title's subtitles right. Start with overview."
+                            if not any(before)
+                            else "Continue the subtitle work. Call overview to see what remains."
                         )
                     },
                 ),
             )
             task = self.task(task["id"])
             outcome = task["data"].get("review_outcome")
-            if outcome and outcome.get("track") == task["data"]["track_id"]:
+            if outcome:
                 return outcome
             session = service.store.get_session(session.id)
             if session.status != SessionStatus.CLOSED and session.wake_at > time.time():
                 # Provider outage or an interrupted turn: the timer resumes
                 # this session and its verdict continues the task.
-                self.update(task, "reviewing", "The subtitle review paused and will continue automatically.")
+                self.update(task, "reviewing", "The subtitle work paused and will continue automatically.")
                 return None
             if session.outcome == CaseState.BUDGET_LIMITED:
                 self.update(
                     task,
                     "review_pending",
-                    "Subtitles ready. Checking stopped at the household AI spending limit; raise it in Defaults, then try again.",
+                    "Subtitles ready. Checking stopped at its spending limit; raise it, then try again.",
                 )
                 return None
-            if len(task["data"]["review"]["judgements"]) == done:
+            state = task["data"]["review"]
+            after = (len(state["judgements"]), len(state.get("actions", [])), len(state.get("written", {})))
+            if after == before:
                 break
             # Progress lives in the tools, so a fresh conversation continues
-            # the review without editing an earlier one.
+            # the work without editing an earlier one.
             session.status = SessionStatus.CLOSED
             session.closed_at = time.time()
             service.store.save_session(session)
@@ -861,32 +954,25 @@ class Subtitles:
         async def load(ctx):
             task = self.task(ctx.session.download_id)
             if not task:
-                raise ToolError("This subtitle review no longer exists.")
-            self.authority(task)
-            context = await self.review_context(task)
+                raise ToolError("This subtitle work no longer exists.")
+            _, asset = self.authority(task)
+            context = await self.review_context(task, asset)
             if not context:
-                raise ToolError("The dialogue evidence for this review is unavailable.")
+                raise ToolError("The dialogue evidence for this title is unavailable.")
             return task, context
 
-        def view(context, page, glossed, ctx=None):
+        def remember_shown(ctx, state, page):
+            # Judging must wait for a later turn than the one that revealed
+            # the captions, so a reviewer cannot judge captions it never read.
+            state.setdefault("shown", {})[str(page["number"])] = [ctx.session.id, len(ctx.session.messages)]
+
+        def view(ctx, context, page):
             state = context["state"]
             total = len(state["pages"])
-            if glossed or context["same_language"]:
-                if ctx is not None:
-                    # Record that this conversation has now been shown the
-                    # captions; judging must wait for a later turn.
-                    state.setdefault("shown", {})[str(page["number"])] = [
-                        ctx.session.id,
-                        len(ctx.session.messages),
-                    ]
+            if context["same_language"] or pages_.glossed(page, context["utterances"], state["glosses"]):
+                remember_shown(ctx, state, page)
                 return pages_.revealed_view(
-                    page,
-                    total,
-                    context["utterances"],
-                    context["cues"],
-                    state["glosses"].get(str(page["number"]), {}),
-                    context["deltas"],
-                    state["listens"],
+                    page, total, context["utterances"], context["cues"], state["glosses"], context["deltas"], state["listens"]
                 )
             return pages_.speech_view(page, total, context["utterances"], state["listens"])
 
@@ -896,10 +982,30 @@ class Subtitles:
                 raise ToolError(f"There is no page {number}; pages run 1–{len(context['state']['pages'])}.")
             return page
 
+        def sources_list(task, context):
+            attempts = {a["source_id"]: a for a in task["data"].get("attempts", [])}
+            current = (context["track"] or {}).get("data", {}).get("source_id")
+            out = []
+            for candidate in task["data"].get("candidates", []):
+                tried = attempts.get(candidate["id"])
+                out.append(
+                    {
+                        "id": candidate["id"],
+                        "kind": candidate["source"],
+                        "title": candidate.get("title", "")[:80],
+                        "language": candidate.get("language", ""),
+                        "style": candidate.get("kind", ""),
+                        "captions": candidate.get("cue_count") or None,
+                        "matches_this_file": candidate.get("hash_match"),
+                        "status": "in use" if candidate["id"] == current else (tried or {}).get("outcome", "untried"),
+                        "note": (tried or {}).get("reason", "")[:160],
+                    }
+                )
+            return out
+
         async def overview(ctx, args):
             task, context = await load(ctx)
             state, track = context["state"], context["track"]
-            timing = track["data"].get("timing") or {}
             listing = []
             for page in state["pages"]:
                 key = str(page["number"])
@@ -910,50 +1016,68 @@ class Subtitles:
                         "to": pages_.ts(page["end"]),
                         "speech_lines": len(pages_.page_utterances(page, context["utterances"])),
                         "captions": len(pages_.page_captions(page, context["cues"])),
-                        "status": "judged" if key in state["judgements"] else "glossed" if key in state["glosses"] else "to do",
+                        "status": (
+                            "judged"
+                            if key in state["judgements"]
+                            else "glossed"
+                            if pages_.glossed(page, context["utterances"], state["glosses"])
+                            else "to do"
+                        ),
+                        **({"written": len(state["written"][key])} if key in state.get("written", {}) else {}),
                     }
                 )
             following = pages_.next_page(state, state["pages"])
             return {
-                "track": {
-                    "language": task["data"]["language"],
-                    "style": task["data"]["kind"],
-                    "source": track["data"].get("title") or track["data"]["source"],
-                    "captions": len(context["cues"]),
-                },
+                "track_in_use": (
+                    {
+                        "source": track["data"]["source_id"],
+                        "title": track["data"].get("title", ""),
+                        "captions": len(context["cues"]),
+                        "changes_so_far": len(track["data"].get("edits") or []),
+                    }
+                    if track
+                    else "none — no usable subtitles were found; write them with write_page and use_written"
+                ),
+                "wanted": {"language": task["data"]["language"], "style": task["data"]["kind"]},
                 "spoken_languages": context["evidence"]["coverage"].get("languages", {}),
                 "captions_revealed_without_gloss": context["same_language"],
-                "timing": {
-                    "caption_start_vs_voice_seconds": timing.get("offset"),
-                    "corrected_from": (timing.get("before") or {}).get("offset"),
-                    "measured_captions": timing.get("paired_captions"),
-                },
+                "timing": pages_.offsets_summary(context["measured"]),
+                "sources": {"total": len(task["data"].get("candidates", [])), "list_with": "sources"},
                 "pages": listing,
                 "progress": pages_.summary(state, state["pages"]),
                 "next": (
                     f"Call page with page={following['number']}."
                     if following
-                    else "Every page is judged; call verdict."
+                    else "Every page is judged; fix anything outstanding, then call verdict."
                 ),
             }
 
         async def page(ctx, args):
             task, context = await load(ctx)
             found = find_page(context, args.get("page"))
-            shown = view(context, found, str(found["number"]) in context["state"]["glosses"], ctx)
+            shown = view(ctx, context, found)
             self.review_state(task, context["state"])
             return shown
 
         async def gloss(ctx, args):
             task, context = await load(ctx)
             found = find_page(context, args.get("page"))
+            state = context["state"]
             try:
-                glosses = pages_.check_gloss(found, context["utterances"], args.get("lines", []))
+                state["glosses"].update(
+                    pages_.check_gloss(found, context["utterances"], args.get("lines", []))
+                )
             except ValueError as exc:
                 raise ToolError(str(exc)) from exc
-            state = context["state"]
-            state["glosses"][str(found["number"])] = glosses
-            shown = view(context, found, True, ctx)
+            missing = [
+                u["id"]
+                for u in pages_.page_utterances(found, context["utterances"])
+                if u["id"] not in state["glosses"]
+            ]
+            if missing:
+                self.review_state(task, state)
+                raise ToolError("Gloss every line on this page first; missing: " + ", ".join(missing[:12]))
+            shown = view(ctx, context, found)
             self.review_state(task, state)
             return shown
 
@@ -962,7 +1086,7 @@ class Subtitles:
             found = find_page(context, args.get("page"))
             state = context["state"]
             key = str(found["number"])
-            if key not in state["glosses"] and not context["same_language"]:
+            if not context["same_language"] and not pages_.glossed(found, context["utterances"], state["glosses"]):
                 raise ToolError("Gloss this page's speech before judging its captions.")
             seen = state.get("shown", {}).get(key)
             if not seen or seen[0] != ctx.session.id or seen[1] >= len(ctx.session.messages):
@@ -982,18 +1106,17 @@ class Subtitles:
                 raise ToolError(str(exc)) from exc
             state["judgements"][key] = judged
             state["missing"][key] = gaps
-            total = len(state["pages"])
-            self.review_state(
-                task,
-                state,
-                f"Checking the captions against the dialogue ({len(state['judgements'])} of {total} pages).",
-            )
             following = pages_.next_page(state, state["pages"])
             progress = pages_.summary(state, state["pages"])
             if not following:
-                return f"Recorded page {key}. Every page is judged: {json.dumps(progress)}. Call verdict."
-            shown = view(context, following, str(following["number"]) in state["glosses"], ctx)
-            self.review_state(task, state)
+                self.review_state(task, state)
+                return f"Recorded page {key}. Every page is judged: {json.dumps(progress)}. Fix anything outstanding, then call verdict."
+            shown = view(ctx, context, following)
+            self.review_state(
+                task,
+                state,
+                f"Checking the subtitles against the dialogue ({len(state['judgements'])} of {len(state['pages'])} pages).",
+            )
             return f"Recorded page {key}. Progress: {json.dumps(progress)}.\n\n" + shown
 
         async def listen(ctx, args):
@@ -1004,12 +1127,11 @@ class Subtitles:
                 pages_.listen_allowance(state, start, end)
             except ValueError as exc:
                 raise ToolError(str(exc)) from exc
-            track = context["track"]
-            _, asset = self.authority(task)
-            key = task["data"]["speech"]["path"].split("/")[1]
+            asset = context["asset"]
+            key = context["info"]["path"].split("/")[1]
             try:
                 heard = await self.nodes.execute(
-                    track["node_id"],
+                    context["node"],
                     "subtitle_listen",
                     {
                         "root_id": asset["root_id"],
@@ -1018,7 +1140,7 @@ class Subtitles:
                         "start": start,
                         "end": end,
                         "language": args.get("language") or None,
-                        "model": args.get("model", "standard"),
+                        "model": args.get("model", "default"),
                     },
                     timeout=660,
                 )
@@ -1038,6 +1160,201 @@ class Subtitles:
                 + ("\n".join(lines) or "(no speech recognised)")
             )
 
+        async def sources(ctx, args):
+            task, context = await load(ctx)
+            return {"sources": sources_list(task, context)}
+
+        async def search_online(ctx, args):
+            task, context = await load(ctx)
+            provider = SubtitleProvider(self.provider())
+            if not provider.settings.get("api_key"):
+                raise ToolError(
+                    "No online subtitle provider is configured. Use the local sources, or write the subtitles."
+                )
+            user, asset = self.authority(task)
+            item = self.catalogue.item(user, asset["item_id"])
+            if not item:
+                raise ToolError("This title's details are unavailable for an online search.")
+            kind = args.get("style") or task["data"]["kind"]
+            try:
+                found = await provider.search(
+                    asset, item, task["data"]["language"], kind, task["data"].get("movie_hash")
+                )
+            except (ToolError, httpx.HTTPError) as exc:
+                raise ToolError(f"The online search failed: {exc}") from exc
+            known = {c["id"] for c in task["data"].get("candidates", [])}
+            added = [c for c in found if c["id"] not in known]
+            if added:
+                self.update(
+                    task,
+                    task["state"],
+                    task["data"].get("message", ""),
+                    candidates=task["data"].get("candidates", []) + added,
+                )
+            return {"added": len(added), "sources": sources_list(self.task(task["id"]), context)}
+
+        async def use_source(ctx, args):
+            task, context = await load(ctx)
+            identity = str(args.get("source", ""))
+            candidate = next((c for c in task["data"].get("candidates", []) if c["id"] == identity), None)
+            if not candidate:
+                raise ToolError("Choose a source ID from sources.")
+            asset = context["asset"]
+            try:
+                text, format_name = await self.fetch_text(task, asset, candidate)
+                new_id = await self.prepare(
+                    task, asset, candidate, text, format_name, task["data"]["audio_index"]
+                )
+            except (NodeError, ToolError, httpx.HTTPError, ValueError) as exc:
+                attempts = task["data"].get("attempts", []) + [
+                    {"source_id": identity, "outcome": "failed", "reason": str(exc)[:500]}
+                ]
+                self.update(task, "reviewing", task["data"].get("message", ""), attempts=attempts)
+                raise ToolError(f"That source could not be prepared: {exc}") from exc
+            previous = context["track"]
+            attempts = [
+                {**a, "outcome": "set_aside", "reason": "Replaced by the subtitle agent."}
+                if previous and a.get("source_id") == previous["data"].get("source_id")
+                else a
+                for a in task["data"].get("attempts", [])
+            ] + [{"source_id": identity, "track_id": new_id, "outcome": "prepared"}]
+            self.update(task, "reviewing", task["data"].get("message", ""), attempts=attempts)
+            if previous:
+                self.save_track(previous["id"], state="rejected")
+            task = self.task(task["id"])
+            context = await self.review_context(task, asset)
+            new = self.track(new_id)
+            cues, measured = await self.measured(context["node"], new, context["evidence"], context["info"])
+            fix = timing_correction(measured)
+            if fix:
+                context["track"], context["cues"] = new, cues
+                new_id = await self.derive(context, pages_.retime(cues, measured, "drift" if fix["kind"] == "drift" else "shift")[0], {"kind": fix["kind"], "source": "measured"})
+            measured, pages, _ = await self.activate(context, new_id, f"use_source {identity}", rebuild=True)
+            return {
+                "now_using": identity,
+                "timing": pages_.offsets_summary(measured),
+                "measured_correction_applied": bool(fix),
+                "pages": len(pages),
+                "next": "Pages were rebuilt for this track; your readings are kept. Call page with page=1.",
+            }
+
+        async def retime_tool(ctx, args):
+            task, context = await load(ctx)
+            if not context["track"]:
+                raise ToolError("No track is in use; choose a source or write the subtitles.")
+            seconds = args.get("seconds")
+            try:
+                cues, detail = pages_.retime(
+                    context["cues"],
+                    context["measured"],
+                    args.get("mode", "shift"),
+                    None if seconds is None else float(seconds),
+                )
+            except ValueError as exc:
+                raise ToolError(str(exc)) from exc
+            before = pages_.offsets_summary(context["measured"])
+            new_id = await self.derive(context, cues, {"kind": "retime", "detail": detail})
+            measured, pages, kept = await self.activate(context, new_id, "retime " + detail, rebuild=False)
+            return {
+                "applied": detail,
+                "before": before,
+                "after": pages_.offsets_summary(measured),
+                "judgements_kept_for_pages": kept,
+            }
+
+        async def edit_captions(ctx, args):
+            task, context = await load(ctx)
+            if not context["track"]:
+                raise ToolError("No track is in use; choose a source or write the subtitles.")
+            try:
+                cues, touched = pages_.edit(
+                    context["cues"],
+                    context["utterances"],
+                    context["state"]["listens"],
+                    args.get("changes", []),
+                    args.get("add", []),
+                )
+            except (ValueError, TypeError) as exc:
+                raise ToolError(str(exc)) from exc
+            new_id = await self.derive(
+                context, cues, {"kind": "edit", "changed": len(args.get("changes", [])), "added": len(args.get("add", []))}
+            )
+            measured, pages, kept = await self.activate(context, new_id, "edit captions", rebuild=False)
+            again = [p["number"] for p in pages if p["number"] not in kept]
+            return {
+                "captions": len(cues),
+                "timing": pages_.offsets_summary(measured),
+                "judge_again": again,
+                "next": (f"Call page with page={again[0]} and judge it again." if again else "Call verdict when ready."),
+            }
+
+        async def write_page(ctx, args):
+            task, context = await load(ctx)
+            found = find_page(context, args.get("page"))
+            state = context["state"]
+            try:
+                state["written"][str(found["number"])] = pages_.check_written(
+                    found, context["utterances"], state["listens"], args.get("captions", [])
+                )
+            except ValueError as exc:
+                raise ToolError(str(exc)) from exc
+            spoken = [p for p in state["pages"] if pages_.page_utterances(p, context["utterances"])]
+            remaining = [p for p in spoken if str(p["number"]) not in state["written"]]
+            state["actions"] = (state.get("actions") or [])[-40:] + [{"action": f"write_page {found['number']}", "at": time.time()}]
+            self.review_state(task, state, "Writing subtitles from the dialogue.")
+            if not remaining:
+                return "Every page with speech is written. Call use_written to build the track."
+            return (
+                f"Recorded page {found['number']}; {len(remaining)} pages with speech remain.\n\n"
+                + pages_.speech_view(remaining[0], len(state["pages"]), context["utterances"], state["listens"])
+            )
+
+        async def use_written(ctx, args):
+            task, context = await load(ctx)
+            state = context["state"]
+            spoken = [p for p in state["pages"] if pages_.page_utterances(p, context["utterances"])]
+            remaining = [p["number"] for p in spoken if str(p["number"]) not in state["written"]]
+            if remaining:
+                raise ToolError("Write every page with speech first; remaining: " + ", ".join(map(str, remaining[:12])))
+            cues = pages_.compose(state["pages"], state["written"], context["utterances"], state["listens"])
+            if not cues:
+                raise ToolError("No captions were written.")
+            from .subtitle_worker import render
+
+            candidate = {"id": "written", "source": "written", "title": "Written by Sparrow from the dialogue"}
+            new_id = await self.prepare(
+                task,
+                context["asset"],
+                candidate,
+                render(cues, vtt=True),
+                "vtt",
+                task["data"]["audio_index"],
+                suffix=":" + hashlib.sha256(json.dumps(state["written"], sort_keys=True).encode()).hexdigest()[:16],
+            )
+            if context["track"]:
+                self.save_track(context["track"]["id"], state="rejected")
+            measured, pages, _ = await self.activate(context, new_id, "use_written", rebuild=True)
+            fresh = self.task(task["id"])
+            state = fresh["data"]["review"]
+            track = self.track(new_id)
+            new_cues = await self.cues(context["node"], track["data"]["path"], track["data"]["version"])
+            if len(new_cues) != len(cues):
+                raise ToolError("The written track did not prepare as composed; write the pages again.")
+            # The agent wrote each caption for the speech it cites; record that
+            # correspondence. It can still view pages and edit before verdict.
+            for page in pages:
+                state["judgements"][str(page["number"])] = {
+                    pages_.caption_id(i): {"verdict": "ok", "speech": cues[i]["speech"], "note": "written from the dialogue"}
+                    for i, _ in pages_.page_captions(page, new_cues)
+                }
+                state["missing"][str(page["number"])] = []
+            self.review_state(fresh, state, "Checking the written subtitles.")
+            return {
+                "captions": len(new_cues),
+                "timing": pages_.offsets_summary(measured),
+                "next": "Review any page with page, fix with edit_captions if needed, then call verdict.",
+            }
+
         async def verdict(ctx, args):
             task, context = await load(ctx)
             approved = args.get("approved") is True
@@ -1046,6 +1363,8 @@ class Subtitles:
                 raise ToolError("Give a short plain reason for the verdict.")
             state = context["state"]
             if approved:
+                if not context["track"]:
+                    raise ToolError("Approval refused: no track is in use.")
                 reasons = pages_.gate(
                     state,
                     state["pages"],
@@ -1057,7 +1376,7 @@ class Subtitles:
                 if reasons:
                     raise ToolError("Approval refused: " + " ".join(reasons))
             outcome = {
-                "track": context["track"]["id"],
+                "track": context["track"] and context["track"]["id"],
                 "approved": approved,
                 "reason": reason,
                 "summary": pages_.summary(state, state["pages"]),
@@ -1065,7 +1384,8 @@ class Subtitles:
                 "model": ctx.session.model,
                 "reviewed_at": time.time(),
             }
-            self.save_track(context["track"]["id"], review=outcome)
+            if context["track"]:
+                self.save_track(context["track"]["id"], review=outcome)
             self.update(task, task["state"], task["data"].get("message", ""), review_outcome=outcome)
             ctx.close = True
             ctx.close_reason = reason
@@ -1078,17 +1398,14 @@ class Subtitles:
             "required": required,
             "additionalProperties": False,
         }
-        speech_ids = {"type": "array", "items": {"type": "string"}}
+        ids = {"type": "array", "items": {"type": "string"}}
+        text = {"type": "string"}
         tools = [
-            ToolDef(
-                "overview",
-                "Track, timing measurement, pages and progress. Call first.",
-                obj({}, []),
-                overview,
-            ),
+            ToolDef("overview", "Track in use, measured timing overall and per section, pages and progress. Call first.", obj({}, []), overview),
+            ToolDef("sources", "Every subtitle source for this title: embedded, beside the file, online or written, with status.", obj({}, []), sources),
             ToolDef(
                 "page",
-                "Show one page: recognised speech only until you gloss it, then speech with your readings and the captions.",
+                "Show one page: recognised speech only until you gloss it, then speech with your readings and the captions with measured timing.",
                 obj({"page": {"type": "integer", "minimum": 1}}, ["page"]),
                 page,
             ),
@@ -1098,13 +1415,7 @@ class Subtitles:
                 obj(
                     {
                         "page": {"type": "integer", "minimum": 1},
-                        "lines": {
-                            "type": "array",
-                            "items": obj(
-                                {"speech": {"type": "string"}, "english": {"type": "string"}},
-                                ["speech", "english"],
-                            ),
-                        },
+                        "lines": {"type": "array", "items": obj({"speech": text, "english": text}, ["speech", "english"])},
                     },
                     ["page", "lines"],
                 ),
@@ -1112,43 +1423,68 @@ class Subtitles:
             ),
             ToolDef(
                 "judge",
-                "Record a verdict for every caption on a glossed page, plus uncaptioned dialogue. Returns the next page.",
+                "Record a verdict for every caption on a page you have read, and uncaptioned dialogue. Returns the next page.",
                 obj(
                     {
                         "page": {"type": "integer", "minimum": 1},
                         "captions": {
                             "type": "array",
                             "items": obj(
-                                {
-                                    "caption": {"type": "string"},
-                                    "verdict": {"type": "string", "enum": list(pages_.VERDICTS)},
-                                    "speech": speech_ids,
-                                    "note": {"type": "string"},
-                                },
+                                {"caption": text, "verdict": {"type": "string", "enum": list(pages_.VERDICTS)}, "speech": ids, "note": text},
                                 ["caption", "verdict", "speech"],
                             ),
                         },
-                        "missing": {
-                            "type": "array",
-                            "items": obj(
-                                {"speech": speech_ids, "note": {"type": "string"}},
-                                ["speech"],
-                            ),
-                        },
+                        "missing": {"type": "array", "items": obj({"speech": ids, "note": text}, ["speech"])},
                     },
                     ["page", "captions", "missing"],
                 ),
                 judge,
             ),
             ToolDef(
+                "retime",
+                "Move the track to follow the voice: shift (measured, or by seconds), drift (measured), or sections (each section by its measured offset). Re-measures and keeps page judgements.",
+                obj({"mode": {"type": "string", "enum": ["shift", "drift", "sections"]}, "seconds": {"type": "number"}}, ["mode"]),
+                retime_tool,
+            ),
+            ToolDef(
+                "edit_captions",
+                "Change captions: new text, align_to speech line IDs, nudge by seconds, or remove; add captions for uncaptioned speech. Re-measures; changed pages must be judged again.",
+                obj(
+                    {
+                        "changes": {
+                            "type": "array",
+                            "items": obj({"caption": text, "text": text, "align_to": ids, "nudge": {"type": "number"}, "remove": {"type": "boolean"}}, ["caption"]),
+                        },
+                        "add": {"type": "array", "items": obj({"speech": ids, "text": text}, ["speech", "text"])},
+                    },
+                    [],
+                ),
+                edit_captions,
+            ),
+            ToolDef("use_source", "Switch to another subtitle source by ID; it is prepared, measured and timing-corrected.", obj({"source": text}, ["source"]), use_source),
+            ToolDef("search_online", "Search the configured online provider for more sources.", obj({"style": {"type": "string", "enum": ["full", "sdh", "forced"]}}, []), search_online),
+            ToolDef(
+                "write_page",
+                "Write your own English captions for one page, each citing the speech lines it translates. Timing comes from that speech.",
+                obj(
+                    {
+                        "page": {"type": "integer", "minimum": 1},
+                        "captions": {"type": "array", "items": obj({"speech": ids, "text": text}, ["speech", "text"])},
+                    },
+                    ["page", "captions"],
+                ),
+                write_page,
+            ),
+            ToolDef("use_written", "Build a track from your written pages and put it in use.", obj({}, []), use_written),
+            ToolDef(
                 "listen",
-                "Re-recognise up to 60 seconds of the soundtrack with another language hint or the larger model. Adds evidence; nothing is replaced.",
+                "Re-recognise up to 60 seconds of the soundtrack with a language hint or another model (alternative or large). Adds evidence; nothing is replaced.",
                 obj(
                     {
                         "start": {"type": "number", "minimum": 0},
                         "end": {"type": "number", "minimum": 0},
-                        "language": {"type": "string"},
-                        "model": {"type": "string", "enum": ["standard", "large"]},
+                        "language": text,
+                        "model": {"type": "string", "enum": ["default", "alternative", "large"]},
                     },
                     ["start", "end"],
                 ),
@@ -1156,11 +1492,8 @@ class Subtitles:
             ),
             ToolDef(
                 "verdict",
-                "Approve or reject the track once every page is judged. Approval is refused unless the judged evidence supports it.",
-                obj(
-                    {"approved": {"type": "boolean"}, "reason": {"type": "string"}},
-                    ["approved", "reason"],
-                ),
+                "Approve when the evidence shows the subtitles right, or reject if they truly cannot be made right. Approval is refused until they are.",
+                obj({"approved": {"type": "boolean"}, "reason": text}, ["approved", "reason"]),
                 verdict,
             ),
         ]
@@ -1173,7 +1506,8 @@ class Subtitles:
                 max_steps=40,
                 max_tokens=16000,
                 cache=True,
-                effort=os.getenv("SPARROW_SUBTITLE_EFFORT", "medium"),
+                effort=os.getenv("SPARROW_SUBTITLE_EFFORT", "high"),
+                max_dollars=float(os.getenv("SPARROW_SUBTITLE_BUDGET", "10")),
             )
         )
 
@@ -1182,8 +1516,7 @@ class Subtitles:
     def set_aside(self, task, track, reason, *, fallback=False):
         attempts = [
             {**a, "outcome": "set_aside", "reason": reason}
-            if a.get("track_id") in (track["id"], track["data"].get("replaces"))
-            or a.get("source_id") == track["data"].get("source_id")
+            if a.get("source_id") == track["data"].get("source_id")
             else a
             for a in task["data"].get("attempts", [])
         ]
@@ -1197,6 +1530,7 @@ class Subtitles:
     def finish(self, task, track_id, *, checked=False, note=""):
         track = self.track(track_id)
         data = track["data"]
+        self.save_track(track_id, state="ready")
         with self.accounts.connect() as db:
             rows = db.execute(
                 "SELECT id,data FROM subtitle_tracks WHERE asset_id=? AND state='ready' AND id!=?",
@@ -1215,16 +1549,20 @@ class Subtitles:
                         (row["id"],),
                     )
         timing = data.get("timing") or {}
-        if checked:
+        if checked and data.get("source") == "written":
+            message = "Subtitles written from the dialogue and checked."
+        elif checked:
             message = "Subtitles checked against the dialogue."
+            if data.get("edits"):
+                message += " Corrections were made to match it."
+            elif data.get("correction"):
+                message += " Their timing was adjusted to follow the voice."
         elif timing.get("within_tolerance") and data.get("correction"):
             message = "Subtitles ready. Their timing was adjusted to follow the voice."
         elif timing.get("within_tolerance"):
             message = "Subtitles ready and in time with the voice."
         else:
             message = "Subtitles ready."
-        if data.get("correction") and checked:
-            message += " Their timing was adjusted to follow the voice."
         self.update(
             task,
             "ready",
@@ -1238,18 +1576,28 @@ class Subtitles:
         if not task:
             return
         try:
-            for _ in range(3 * MAX_CANDIDATES + 4):
+            for _ in range(3 * MAX_CANDIDATES + 6):
                 task = self.task(identity)
                 user, asset = self.authority(task)
                 data = task["data"]
                 track = self.track(data.get("track_id"))
-                if not track or track["state"] != "ready":
+                usable = bool(track and track["state"] == "ready")
+                if not usable and not data.get("writing"):
                     if await self.find(task, user, asset):
+                        continue
+                    task = self.task(identity)
+                    data = task["data"]
+                    if data.get("upload_failed"):
+                        self.update(task, "needs_attention", data["upload_failed"])
+                        return
+                    if data.get("verify") and data.get("audio_index") is not None:
+                        # No usable source: the subtitle agent writes them from the dialogue.
+                        self.update(task, "measuring", "No subtitles found. Listening to the dialogue to write them.", writing=True)
                         continue
                     fallback = self.track(data.get("fallback"))
                     if fallback and fallback["state"] == "ready":
                         self.finish(task, fallback["id"], note="Their timing could not be matched to the dialogue.")
-                        await self.notify_ready(task)
+                        await self.notify_ready(self.task(identity))
                         return
                     reason = next(
                         (a["reason"] for a in reversed(data.get("attempts", [])) if a.get("reason")),
@@ -1257,33 +1605,47 @@ class Subtitles:
                     )
                     self.update(task, "needs_attention", reason)
                     return
-                if self.wants_analysis(task, asset) and data.get("measured") != track["id"]:
+                if usable and self.wants_analysis(task, asset) and data.get("measured") != track["id"]:
                     outcome = await self.measure(task, asset, track)
-                    if outcome == "inconsistent":
-                        self.set_aside(
-                            task,
-                            track,
-                            "Its timing does not follow this title's dialogue.",
-                            fallback=not data.get("verify"),
-                        )
+                    if outcome == "inconsistent" and not data.get("verify"):
+                        self.set_aside(task, track, "Its timing does not follow this title's dialogue.", fallback=True)
+                    elif outcome == "inconsistent":
+                        # The subtitle agent decides what to do with it.
+                        self.update(self.task(identity), "measuring", "Its timing does not follow the dialogue.", measured=track["id"])
                     continue
-                if data.get("verify"):
-                    outcome = data.get("review_outcome")
-                    if not outcome or outcome.get("track") != track["id"]:
-                        outcome = await self.review(task)
-                    if outcome is None:
-                        return
-                    if outcome["approved"] is None:
-                        self.finish(task, track["id"], note="They could not be checked: " + outcome["reason"])
-                        await self.notify_ready(self.task(identity))
-                        return
-                    if not outcome["approved"]:
-                        self.set_aside(self.task(identity), track, outcome["reason"])
-                        continue
-                    self.finish(self.task(identity), track["id"], checked=True)
-                else:
+                if not data.get("verify"):
                     self.finish(task, track["id"])
-                await self.notify_ready(self.task(identity))
+                    await self.notify_ready(self.task(identity))
+                    return
+                if not data.get("speech"):
+                    info = await self.evidence(task, asset)
+                    if not info or info.get("error"):
+                        if usable:
+                            self.finish(task, track["id"], note="They could not be checked: dialogue analysis is unavailable.")
+                            await self.notify_ready(self.task(identity))
+                        else:
+                            self.update(task, "needs_attention", "No subtitles were found, and the dialogue could not be analysed to write them.")
+                        return
+                    self.update(
+                        task,
+                        "measuring",
+                        "Listening complete.",
+                        speech={k: info[k] for k in ("path", "version", "model", "coverage")},
+                    )
+                    continue
+                outcome = data.get("review_outcome")
+                if not outcome:
+                    outcome = await self.review(task)
+                if outcome is None:
+                    return
+                task = self.task(identity)
+                if outcome["approved"] and outcome.get("track"):
+                    self.finish(task, outcome["track"], checked=True)
+                    await self.notify_ready(self.task(identity))
+                    return
+                if task["data"].get("track_id"):
+                    self.save_track(task["data"]["track_id"], state="rejected")
+                self.update(task, "needs_attention", outcome["reason"])
                 return
             self.update(self.task(identity), "needs_attention", "Subtitle work stopped after too many attempts.")
         except asyncio.CancelledError:
@@ -1296,6 +1658,7 @@ class Subtitles:
                     "needs_attention",
                     str(exc)[:1500] or "Couldn’t prepare the subtitles. Try again.",
                 )
+
 
 
 class Input(BaseModel):

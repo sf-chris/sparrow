@@ -23,6 +23,7 @@ type Track = {
   offset: number;
   sync_checked: boolean;
   timing_adjusted?: boolean;
+  source?: string;
 };
 type RepairState = {
   preferences: {
@@ -105,7 +106,7 @@ export function SubtitleRepair({
           .map((t, i) => ({
             ...t,
             index: 10000 + i,
-            title: `${languageName(t.language)}${styles[t.kind] ? ` · ${styles[t.kind]}` : ""}${t.sync_checked ? " · sync checked" : ""}`,
+            title: `${languageName(t.language)}${styles[t.kind] ? ` · ${styles[t.kind]}` : ""}${t.source === "written" ? " · written by Sparrow" : ""}${t.sync_checked ? " · checked" : ""}`,
           })),
       );
   }, [resource.data, audio]);
@@ -164,7 +165,9 @@ export function SubtitleRepair({
     latest &&
     (latest.state === "ready"
       ? current?.sync_checked
-        ? "Sync checked"
+        ? current.source === "written"
+          ? "Written and checked"
+          : "Checked"
         : current?.timing_adjusted
           ? "Timing adjusted"
           : "Subtitles available"
@@ -226,17 +229,14 @@ export function SubtitleRepair({
             </select>
           </Field>
         </div>
-        <Field
-          label="Check subtitle sync"
-          hint="Uses AI within the household spending limit."
-        >
+        <Field label="Subtitle agent" hint="Needs an Anthropic key.">
           <label className="check">
             <input
               type="checkbox"
               checked={verify}
               onChange={(e) => setVerify(e.target.checked)}
             />{" "}
-            Compare captions with the voice
+            Check, fix or write with AI
           </label>
         </Field>
         <div className="actions">
