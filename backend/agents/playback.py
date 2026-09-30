@@ -343,8 +343,10 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                     "id": t["id"],
                     "language": t["language"],
                     "title": t["language"]
-                    + (" · sync checked · " if t["sync_checked"] else " · ")
-                    + t["kind"],
+                    + " · "
+                    + t["kind"]
+                    + (" · written by Sparrow" if t["source"] == "written" else "")
+                    + (" · checked" if t["sync_checked"] else ""),
                     "sync_checked": t["sync_checked"],
                     "url": t["url"],
                     "offset": t["offset"],

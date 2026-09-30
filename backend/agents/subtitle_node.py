@@ -67,17 +67,22 @@ def evidence_model(data_dir):
 
 
 def listen_model(data_dir, choice):
-    """The reviewer's re-listening model: the evidence model, or a larger one."""
+    """The re-listening model: the evidence model, another installed one, or large-v3.
+
+    A second recogniser makes different mistakes, so disagreement is useful
+    evidence; neither is treated as truth.
+    """
+    default = evidence_model(data_dir)
     if choice == "large":
-        return next(
-            (
-                f
-                for f in _model_folders(data_dir, "whisper-large-v3")
-                if (f / "model.bin").is_file()
-            ),
-            None,
-        )
-    return evidence_model(data_dir)
+        names = ("whisper-large-v3",)
+    elif choice == "alternative":
+        names = tuple(n for n in (*EVIDENCE_MODELS, "whisper-large-v3") if default is None or n != default.name)
+    else:
+        return default
+    return next(
+        (f for name in names for f in _model_folders(data_dir, name) if (f / "model.bin").is_file()),
+        None,
+    )
 
 
 def evidence_threads():
@@ -431,9 +436,9 @@ async def listen(executor, path, args):
     language = args.get("language")
     if language is not None and not re.fullmatch("[a-z]{2}", str(language)):
         raise NodeError("Use a two-letter language code, or none to detect it.")
-    model = listen_model(executor.data_dir, args.get("model", "standard"))
+    model = listen_model(executor.data_dir, args.get("model", "default"))
     if not model:
-        raise NodeError("A larger speech model is not installed on this storage node.")
+        raise NodeError("That speech model is not installed on this storage node; use default.")
     request = {
         "kind": "listen",
         "audio": str(folder / "audio.wav"),
