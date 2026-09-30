@@ -43,6 +43,9 @@ def rates_for_model(model: str, at: Optional[float] = None) -> dict[str, float]:
         base_input, output = 10.0, 50.0
         if "5-1" in normalized:
             cache_read_multiplier = 0.025
+    elif "opus-5-5" in normalized:
+        base_input, output = 4.0, 20.0
+        cache_read_multiplier = 0.05
     elif any(
         name in normalized
         for name in ("opus-5", "opus-4-8", "opus-4-7", "opus-4-6", "opus-4-5")

@@ -868,10 +868,17 @@ class Subtitles:
                 raise ToolError("The dialogue evidence for this review is unavailable.")
             return task, context
 
-        def view(context, page, glossed):
+        def view(context, page, glossed, ctx=None):
             state = context["state"]
             total = len(state["pages"])
             if glossed or context["same_language"]:
+                if ctx is not None:
+                    # Record that this conversation has now been shown the
+                    # captions; judging must wait for a later turn.
+                    state.setdefault("shown", {})[str(page["number"])] = [
+                        ctx.session.id,
+                        len(ctx.session.messages),
+                    ]
                 return pages_.revealed_view(
                     page,
                     total,
@@ -931,9 +938,11 @@ class Subtitles:
             }
 
         async def page(ctx, args):
-            _, context = await load(ctx)
+            task, context = await load(ctx)
             found = find_page(context, args.get("page"))
-            return view(context, found, str(found["number"]) in context["state"]["glosses"])
+            shown = view(context, found, str(found["number"]) in context["state"]["glosses"], ctx)
+            self.review_state(task, context["state"])
+            return shown
 
         async def gloss(ctx, args):
             task, context = await load(ctx)
@@ -944,8 +953,9 @@ class Subtitles:
                 raise ToolError(str(exc)) from exc
             state = context["state"]
             state["glosses"][str(found["number"])] = glosses
+            shown = view(context, found, True, ctx)
             self.review_state(task, state)
-            return view(context, found, True)
+            return shown
 
         async def judge(ctx, args):
             task, context = await load(ctx)
@@ -954,6 +964,11 @@ class Subtitles:
             key = str(found["number"])
             if key not in state["glosses"] and not context["same_language"]:
                 raise ToolError("Gloss this page's speech before judging its captions.")
+            seen = state.get("shown", {}).get(key)
+            if not seen or seen[0] != ctx.session.id or seen[1] >= len(ctx.session.messages):
+                raise ToolError(
+                    "Read this page's captions before judging them: call page for it, then judge in a later step."
+                )
             try:
                 judged, gaps = pages_.check_judgement(
                     found,
@@ -977,10 +992,9 @@ class Subtitles:
             progress = pages_.summary(state, state["pages"])
             if not following:
                 return f"Recorded page {key}. Every page is judged: {json.dumps(progress)}. Call verdict."
-            return (
-                f"Recorded page {key}. Progress: {json.dumps(progress)}.\n\n"
-                + view(context, following, str(following["number"]) in state["glosses"])
-            )
+            shown = view(context, following, str(following["number"]) in state["glosses"], ctx)
+            self.review_state(task, state)
+            return f"Recorded page {key}. Progress: {json.dumps(progress)}.\n\n" + shown
 
         async def listen(ctx, args):
             task, context = await load(ctx)
