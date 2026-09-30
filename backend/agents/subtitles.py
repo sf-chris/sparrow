@@ -24,6 +24,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import subtitle_contract
 from . import subtitle_review as pages_
 from .account_api import administrator
 from .media_state import language_code
@@ -41,6 +42,8 @@ from .subtitle_sync import (
 
 ACTIVE = {"queued", "finding", "aligning", "measuring", "reviewing"}
 DEFAULT_REVIEW_MODEL = "claude-opus-5-5"
+DEFAULT_CONTRACTOR = "gpt-6-luna"
+AUDIT_PAGES = 2
 QUEUE_LIMIT = 500
 MAX_CANDIDATES = 4
 EVIDENCE_SLICE = 540
@@ -49,6 +52,19 @@ REVIEW_WAKES = 6
 
 def review_model():
     return os.getenv("SPARROW_SUBTITLE_MODEL") or DEFAULT_REVIEW_MODEL
+
+
+def contractor_model():
+    """The cheaper page checker the subtitle agent manages.
+
+    GPT-6-Luna caught 6 of Opus's 7 flagged problems in the page-check
+    benchmark for under a cent per episode, so it is used whenever an OpenAI
+    key is present. Empty means Opus reads every page itself.
+    """
+    configured = os.getenv("SPARROW_SUBTITLE_CONTRACTOR")
+    if configured is not None:
+        return configured
+    return DEFAULT_CONTRACTOR if os.getenv("OPENAI_API_KEY") else ""
 
 
 def timing_summary(measured):
@@ -82,6 +98,13 @@ class Subtitles:
         self.evidence_locks = {}
         self._documents = {}
         self._measures = {}
+        # Builds the page checker's model caller; tests and benchmarks replace it.
+        self.contract_caller = lambda model: subtitle_contract.caller_for(
+            model,
+            self.get_service().runtime._api_key_getter(),
+            os.getenv("OPENAI_API_KEY", ""),
+            os.getenv("SPARROW_SUBTITLE_CONTRACTOR_EFFORT", ""),
+        )
         with accounts.connect() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS subtitle_tasks(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,asset_id TEXT NOT NULL,state TEXT NOT NULL,data TEXT NOT NULL,updated REAL NOT NULL);
@@ -792,7 +815,7 @@ class Subtitles:
     def review_state(self, task, state, message=None):
         self.update(task, "reviewing", message or task["data"].get("message", ""), review=state)
 
-    async def activate(self, context, track_id, action, *, rebuild):
+    async def activate(self, context, track_id, action, *, rebuild, renamed=None):
         """Make a track the one under review, re-measured, keeping what still holds."""
         task, state = context["task"], context["state"]
         track = self.track(track_id)
@@ -803,10 +826,12 @@ class Subtitles:
         )
         if rebuild:
             pages = pages_.build_pages(context["utterances"], cues, context["duration"])
-            judgements, missing, kept = {}, {}, []
+            judgements, missing, reopen = {}, {}, []
         else:
             pages = state["pages"]
-            judgements, missing, kept = pages_.carry(pages, context["cues"], pages, cues, state)
+            judgements, missing, reopen = pages_.carry(
+                pages, context["cues"], pages, cues, state, renamed
+            )
         state.update(
             track=track_id, pages=pages, judgements=judgements, missing=missing, shown={}
         )
@@ -821,7 +846,8 @@ class Subtitles:
             measured=track_id,
             review=state,
         )
-        return measured, pages, kept
+        context.update(cues=cues, measured=measured, deltas={p["cue"]: p["delta"] for p in measured.get("pairs", [])})
+        return measured, pages, reopen
 
     async def derive(self, context, cues, detail):
         """A new copy of the track under review with changed captions."""
@@ -855,6 +881,104 @@ class Subtitles:
             self.save_track(base["id"], state="superseded")
         return new_id
 
+    async def contract(self, context, *, keep_manager=False):
+        """Have the page checker translate and judge every page of the track in use.
+
+        With no track, its translations become a written draft for the manager
+        to review. Manager verdicts survive when asked (after a source switch
+        they do not, because the captions changed).
+        """
+        task, state = context["task"], context["state"]
+        model = contractor_model()
+        caller = self.contract_caller(model)
+        if context["track"] is None:
+            found = await subtitle_contract.check_pages(
+                caller, state["pages"], context["utterances"], [], {}, self.spoken(context), state.get("translations"), compare=False
+            )
+            state["translations"] = found["translations"]
+            state["written"] = subtitle_contract.draft_from_translations(
+                state["pages"], context["utterances"], found["translations"]
+            )
+            state["contract"] = {"model": model, "track": "none", "spend": found["spend"], "failures": found["spend"]["failures"], "hints": found["hints"]}
+            self.review_state(task, state)
+            if state["written"]:
+                await self.use_written_draft(context)
+            return
+        found = await subtitle_contract.check_pages(
+            caller,
+            state["pages"],
+            context["utterances"],
+            context["cues"],
+            context["deltas"],
+            self.spoken(context),
+            state.get("translations"),
+        )
+        state["translations"] = found["translations"]
+        judgements = {}
+        for key, record in found["verdicts"].items():
+            kept = {k: v for k, v in state.get("judgements", {}).get(key, {}).items() if keep_manager and v.get("by") == "manager"}
+            judgements[key] = {**record, **kept}
+        state["judgements"] = judgements
+        state["missing"] = found["missing"]
+        spend = state.get("contract", {}).get("spend", {})
+        state["contract"] = {
+            "model": model,
+            "track": context["track"]["id"],
+            "spend": {
+                "calls": spend.get("calls", 0) + found["spend"]["calls"],
+                "dollars": round(spend.get("dollars", 0) + found["spend"]["dollars"], 4),
+            },
+            "failures": found["spend"]["failures"],
+            "hints": found["hints"],
+            "snapshot": pages_.contractor_snapshot({"judgements": judgements}),
+        }
+        audit = state.get("audit") or {"pages": [], "done": [], "misses": []}
+        if not audit["pages"]:
+            audit["pages"] = pages_.choose_audits(
+                state["pages"], context["cues"], context["utterances"], task["id"], AUDIT_PAGES
+            )
+        state["audit"] = audit
+        self.review_state(task, state)
+
+    def spoken(self, context):
+        languages = context["evidence"]["coverage"].get("languages", {})
+        return max(languages, key=languages.get) if languages else ""
+
+    async def use_written_draft(self, context):
+        """Put the checker's translated draft in use for the manager to review."""
+        from .subtitle_worker import render
+
+        task, state = context["task"], context["state"]
+        cues = pages_.compose(state["pages"], state["written"], context["utterances"], state["listens"])
+        candidate = {"id": "written", "source": "written", "title": "Written by Sparrow from the dialogue"}
+        new_id = await self.prepare(
+            task,
+            context["asset"],
+            candidate,
+            render(cues, vtt=True),
+            "vtt",
+            task["data"]["audio_index"],
+            suffix=":" + hashlib.sha256(json.dumps(state["written"], sort_keys=True).encode()).hexdigest()[:16],
+        )
+        measured, pages, _ = await self.activate(context, new_id, "draft from page translations", rebuild=True)
+        state = self.task(task["id"])["data"]["review"]
+        track = self.track(new_id)
+        new_cues = await self.cues(context["node"], track["data"]["path"], track["data"]["version"])
+        for page in pages:
+            state["judgements"][str(page["number"])] = {
+                pages_.caption_id(i): {"verdict": "ok", "speech": cues[i]["speech"], "note": "checker's translation", "by": "contractor draft"}
+                for i, _ in pages_.page_captions(page, new_cues)
+                if i < len(cues)
+            }
+            state["missing"][str(page["number"])] = []
+        state["contract"]["track"] = new_id
+        state["audit"] = {
+            "pages": pages_.choose_audits(pages, new_cues, context["utterances"], task["id"], AUDIT_PAGES),
+            "done": [],
+            "misses": [],
+        }
+        self.review_state(self.task(task["id"]), state, "Checking the written subtitles.")
+
     async def review(self, task):
         """Run the subtitle agent until it records a verdict; None while pending."""
         service = self.get_service()
@@ -869,6 +993,11 @@ class Subtitles:
         context = await self.review_context(task, asset)
         if not context:
             return {"approved": False, "track": task["data"].get("track_id"), "reason": "Dialogue analysis is unavailable for this media."}
+        if contractor_model() and context["state"].get("contract", {}).get("track") != (context["track"] or {}).get("id", "none"):
+            self.update(task, "reviewing", "Checking each page of the subtitles against the dialogue.")
+            await self.contract(context)
+            task = self.task(task["id"])
+            context = await self.review_context(task, asset)
         self.review_state(task, context["state"])
         self.attach(service)
         sessions = list(task["data"].get("review_sessions", []))
@@ -948,8 +1077,12 @@ class Subtitles:
     def attach(self, service):
         service.toolbox.subtitles = self
 
+        def managing(session):
+            task = self.task(session.download_id)
+            return bool(task and ((task["data"].get("review") or {}).get("contract")))
+
         async def system(session):
-            return pages_.SYSTEM
+            return pages_.MANAGER_SYSTEM if managing(session) else pages_.SYSTEM
 
         async def load(ctx):
             task = self.task(ctx.session.download_id)
@@ -966,10 +1099,23 @@ class Subtitles:
             # the captions, so a reviewer cannot judge captions it never read.
             state.setdefault("shown", {})[str(page["number"])] = [ctx.session.id, len(ctx.session.messages)]
 
+        def mark_seen(ctx, state, captions):
+            seen = state.setdefault("seen", {})
+            for caption in captions:
+                seen[caption] = [ctx.session.id, len(ctx.session.messages)]
+
         def view(ctx, context, page):
             state = context["state"]
             total = len(state["pages"])
+            audited = page["number"] in (state.get("audit") or {}).get("pages", [])
+            if state.get("contract") and not audited:
+                mark_seen(ctx, state, [pages_.caption_id(i) for i, _ in pages_.page_captions(page, context["cues"])])
+                return pages_.inspect_view(
+                    page, total, context["utterances"], context["cues"], state.get("translations", {}),
+                    state["judgements"], context["deltas"], state["listens"],
+                )
             if context["same_language"] or pages_.glossed(page, context["utterances"], state["glosses"]):
+                mark_seen(ctx, state, [pages_.caption_id(i) for i, _ in pages_.page_captions(page, context["cues"])])
                 remember_shown(ctx, state, page)
                 return pages_.revealed_view(
                     page, total, context["utterances"], context["cues"], state["glosses"], context["deltas"], state["listens"]
@@ -1018,7 +1164,7 @@ class Subtitles:
                         "captions": len(pages_.page_captions(page, context["cues"])),
                         "status": (
                             "judged"
-                            if key in state["judgements"]
+                            if pages_.complete(page, context["cues"], state["judgements"])
                             else "glossed"
                             if pages_.glossed(page, context["utterances"], state["glosses"])
                             else "to do"
@@ -1026,7 +1172,7 @@ class Subtitles:
                         **({"written": len(state["written"][key])} if key in state.get("written", {}) else {}),
                     }
                 )
-            following = pages_.next_page(state, state["pages"])
+            following = pages_.next_page(state, state["pages"], context["cues"])
             return {
                 "track_in_use": (
                     {
@@ -1043,6 +1189,11 @@ class Subtitles:
                 "captions_revealed_without_gloss": context["same_language"],
                 "timing": pages_.offsets_summary(context["measured"]),
                 "sources": {"total": len(task["data"].get("candidates", [])), "list_with": "sources"},
+                "verdicts_needed": {
+                    str(p["number"]): pages_.unjudged(p, context["cues"], state["judgements"])
+                    for p in state["pages"]
+                    if pages_.unjudged(p, context["cues"], state["judgements"])
+                },
                 "pages": listing,
                 "progress": pages_.summary(state, state["pages"]),
                 "next": (
@@ -1086,6 +1237,8 @@ class Subtitles:
             found = find_page(context, args.get("page"))
             state = context["state"]
             key = str(found["number"])
+            if state.get("contract") and found["number"] not in (state.get("audit") or {}).get("pages", []):
+                raise ToolError("Judge only audit pages; settle other captions with resolve.")
             if not context["same_language"] and not pages_.glossed(found, context["utterances"], state["glosses"]):
                 raise ToolError("Gloss this page's speech before judging its captions.")
             seen = state.get("shown", {}).get(key)
@@ -1093,6 +1246,7 @@ class Subtitles:
                 raise ToolError(
                     "Read this page's captions before judging them: call page for it, then judge in a later step."
                 )
+            already = state["judgements"].get(key, {})
             try:
                 judged, gaps = pages_.check_judgement(
                     found,
@@ -1100,13 +1254,31 @@ class Subtitles:
                     context["cues"],
                     state["listens"],
                     args.get("captions", []),
-                    args.get("missing", []),
+                    args.get("missing"),
+                    already,
                 )
             except ValueError as exc:
                 raise ToolError(str(exc)) from exc
-            state["judgements"][key] = judged
-            state["missing"][key] = gaps
-            following = pages_.next_page(state, state["pages"])
+            for entry in judged.values():
+                entry["by"] = "manager"
+            state["judgements"][key] = {**already, **judged}
+            if gaps is not None or key not in state["missing"]:
+                state["missing"][key] = gaps or []
+            audit = state.get("audit") or {}
+            if found["number"] in audit.get("pages", []) and found["number"] not in audit.get("done", []):
+                misses = pages_.audit_outcome(
+                    (state.get("contract") or {}).get("snapshot", {}).get(key, {}), judged, gaps or []
+                )
+                audit.setdefault("done", []).append(found["number"])
+                if misses:
+                    # The checkers missed something here: audit more pages.
+                    audit.setdefault("misses", []).extend(f"page {key}: {m}" for m in misses)
+                    extra = pages_.choose_audits(
+                        state["pages"], context["cues"], context["utterances"],
+                        task["id"] + str(len(audit["pages"])), AUDIT_PAGES, exclude=audit["pages"],
+                    )
+                    audit["pages"] = sorted(audit["pages"] + extra)
+            following = pages_.next_page(state, state["pages"], context["cues"])
             progress = pages_.summary(state, state["pages"])
             if not following:
                 self.review_state(task, state)
@@ -1230,6 +1402,18 @@ class Subtitles:
                 context["track"], context["cues"] = new, cues
                 new_id = await self.derive(context, pages_.retime(cues, measured, "drift" if fix["kind"] == "drift" else "shift")[0], {"kind": fix["kind"], "source": "measured"})
             measured, pages, _ = await self.activate(context, new_id, f"use_source {identity}", rebuild=True)
+            if contractor_model():
+                context["state"]["audit"] = None
+                context["track"] = self.track(new_id)
+                await self.contract(context)
+                task = self.task(task["id"])
+                context = await self.review_context(task, context["asset"])
+                return {
+                    "now_using": identity,
+                    "timing": pages_.offsets_summary(context["measured"]),
+                    "measured_correction_applied": bool(fix),
+                    "next": "The checkers re-read this track; call report.",
+                }
             return {
                 "now_using": identity,
                 "timing": pages_.offsets_summary(measured),
@@ -1254,12 +1438,12 @@ class Subtitles:
                 raise ToolError(str(exc)) from exc
             before = pages_.offsets_summary(context["measured"])
             new_id = await self.derive(context, cues, {"kind": "retime", "detail": detail})
-            measured, pages, kept = await self.activate(context, new_id, "retime " + detail, rebuild=False)
+            measured, pages, reopen = await self.activate(context, new_id, "retime " + detail, rebuild=False)
             return {
                 "applied": detail,
                 "before": before,
                 "after": pages_.offsets_summary(measured),
-                "judgements_kept_for_pages": kept,
+                "pages_needing_verdicts": reopen,
             }
 
         async def edit_captions(ctx, args):
@@ -1267,26 +1451,61 @@ class Subtitles:
             if not context["track"]:
                 raise ToolError("No track is in use; choose a source or write the subtitles.")
             try:
-                cues, touched = pages_.edit(
+                cues, touched, renamed = pages_.edit(
                     context["cues"],
                     context["utterances"],
                     context["state"]["listens"],
                     args.get("changes", []),
                     args.get("add", []),
+                    args.get("replace", []),
                 )
             except (ValueError, TypeError) as exc:
                 raise ToolError(str(exc)) from exc
-            new_id = await self.derive(
-                context, cues, {"kind": "edit", "changed": len(args.get("changes", [])), "added": len(args.get("add", []))}
-            )
-            measured, pages, kept = await self.activate(context, new_id, "edit captions", rebuild=False)
-            again = [p["number"] for p in pages if p["number"] not in kept]
-            return {
-                "captions": len(cues),
-                "timing": pages_.offsets_summary(measured),
-                "judge_again": again,
-                "next": (f"Call page with page={again[0]} and judge it again." if again else "Call verdict when ready."),
+            detail = {
+                "kind": "edit",
+                "changed": len(args.get("changes", [])),
+                "added": len(args.get("add", [])),
+                "replaced": len(renamed),
             }
+            new_id = await self.derive(context, cues, detail)
+            measured, pages, reopen = await self.activate(
+                context, new_id, "edit captions", rebuild=False, renamed=renamed
+            )
+            state = context["state"]
+            if len(cues) == len(context["cues"]):
+                covered = set()
+                for index, cue in enumerate(cues):
+                    verdict = cue.get("manager_verdict")
+                    if verdict:
+                        page_ = pages_.page_of(pages, context["cues"][index]["start"])
+                        state["judgements"].setdefault(str(page_["number"]), {})[pages_.caption_id(index)] = verdict
+                        covered.update(verdict["speech"])
+                for key, items in state.get("missing", {}).items():
+                    state["missing"][key] = [g for g in items if not set(g["speech"]) <= covered]
+                reopen = [
+                    p["number"] for p in pages if not pages_.complete(p, context["cues"], state["judgements"])
+                ]
+            views = []
+            for number in reopen[:2]:
+                # Show the captions that need verdicts, so they can be judged next.
+                views.append(view(ctx, context, pages[number - 1]))
+            self.review_state(task, state)
+            return (
+                json.dumps(
+                    {
+                        "captions": len(cues),
+                        "replaced_in": len(renamed),
+                        "timing": pages_.offsets_summary(measured)["overall_seconds_vs_voice"]
+                        if measured.get("measurable")
+                        else "not measurable",
+                        "verdicts_needed": {
+                            str(n): pages_.unjudged(pages[n - 1], context["cues"], state["judgements"])
+                            for n in reopen
+                        },
+                    }
+                )
+                + ("\n\n" + "\n\n".join(views) if views else "\nNo verdicts needed; call verdict when ready.")
+            )
 
         async def write_page(ctx, args):
             task, context = await load(ctx)
@@ -1355,6 +1574,54 @@ class Subtitles:
                 "next": "Review any page with page, fix with edit_captions if needed, then call verdict.",
             }
 
+        async def report_tool(ctx, args):
+            task, context = await load(ctx)
+            state = context["state"]
+            data = pages_.report(state, state["pages"], context["cues"], context["utterances"], context["measured"])
+            mark_seen(ctx, state, [row["caption"] for row in data["to_settle"]])
+            self.review_state(task, state)
+            return data
+
+        async def resolve(ctx, args):
+            task, context = await load(ctx)
+            state = context["state"]
+            speech = pages_.known_speech(context["utterances"], state["listens"])
+            ids = {pages_.caption_id(i) for i in range(len(context["cues"]))}
+            settled = 0
+            for item in args.get("settle", []):
+                caption = str(item.get("caption", ""))
+                if caption not in ids:
+                    raise ToolError(f"{caption or 'A caption'} does not exist.")
+                seen = state.get("seen", {}).get(caption)
+                if not seen or seen[0] != ctx.session.id or seen[1] >= len(ctx.session.messages):
+                    raise ToolError(f"Look at {caption} (report or page) before settling it.")
+                verdict_ = item.get("verdict")
+                cited = [str(x) for x in item.get("speech", [])]
+                if verdict_ not in pages_.VERDICTS or any(x not in speech for x in cited):
+                    raise ToolError(f"{caption}: use a known verdict and recognised speech IDs.")
+                if verdict_ in ("ok", "loose") and not cited:
+                    raise ToolError(f"{caption}: cite the speech it corresponds to.")
+                index = pages_.caption_index(caption)
+                page_ = pages_.page_of(state["pages"], context["cues"][index]["start"])
+                state["judgements"].setdefault(str(page_["number"]), {})[caption] = {
+                    "verdict": verdict_, "speech": cited, "note": str(item.get("note", ""))[:300], "by": "manager",
+                }
+                settled += 1
+            dismissed = 0
+            for item in args.get("dismiss_missing", []):
+                key, wanted = str(item.get("page", "")), set(map(str, item.get("speech", [])))
+                before = state.get("missing", {}).get(key, [])
+                state.setdefault("missing", {})[key] = [g for g in before if set(g["speech"]) != wanted]
+                dismissed += len(before) - len(state["missing"][key])
+            self.review_state(task, state)
+            remaining = pages_.flagged(state, state["pages"], context["cues"])
+            return {
+                "settled": settled,
+                "dismissed": dismissed,
+                "still_to_settle": len(remaining),
+                "missing_dialogue": sum(len(v) for v in state.get("missing", {}).values()),
+            }
+
         async def verdict(ctx, args):
             task, context = await load(ctx)
             approved = args.get("approved") is True
@@ -1365,7 +1632,8 @@ class Subtitles:
             if approved:
                 if not context["track"]:
                     raise ToolError("Approval refused: no track is in use.")
-                reasons = pages_.gate(
+                check = pages_.manager_gate if state.get("contract") else pages_.gate
+                reasons = check(
                     state,
                     state["pages"],
                     context["cues"],
@@ -1423,7 +1691,7 @@ class Subtitles:
             ),
             ToolDef(
                 "judge",
-                "Record a verdict for every caption on a page you have read, and uncaptioned dialogue. Returns the next page.",
+                "Record verdicts for a page you have read: every caption not yet judged (others may be re-judged), and uncaptioned dialogue (omit missing to keep the earlier list). Returns the next page needing verdicts.",
                 obj(
                     {
                         "page": {"type": "integer", "minimum": 1},
@@ -1436,7 +1704,7 @@ class Subtitles:
                         },
                         "missing": {"type": "array", "items": obj({"speech": ids, "note": text}, ["speech"])},
                     },
-                    ["page", "captions", "missing"],
+                    ["page", "captions"],
                 ),
                 judge,
             ),
@@ -1448,14 +1716,26 @@ class Subtitles:
             ),
             ToolDef(
                 "edit_captions",
-                "Change captions: new text, align_to speech line IDs, nudge by seconds, or remove; add captions for uncaptioned speech. Re-measures; changed pages must be judged again.",
+                "Change captions: new text, align_to speech line IDs, nudge by seconds, or remove; add captions for uncaptioned speech; replace a word or phrase across the whole track (whole words, case-sensitive). Batch fixes in one call. Re-measures and shows captions needing new verdicts.",
                 obj(
                     {
                         "changes": {
                             "type": "array",
-                            "items": obj({"caption": text, "text": text, "align_to": ids, "nudge": {"type": "number"}, "remove": {"type": "boolean"}}, ["caption"]),
+                            "items": obj(
+                                {
+                                    "caption": text,
+                                    "text": text,
+                                    "align_to": ids,
+                                    "nudge": {"type": "number"},
+                                    "remove": {"type": "boolean"},
+                                    "verdict": {"type": "string", "enum": list(pages_.VERDICTS)},
+                                    "speech": ids,
+                                },
+                                ["caption"],
+                            ),
                         },
                         "add": {"type": "array", "items": obj({"speech": ids, "text": text}, ["speech", "text"])},
+                        "replace": {"type": "array", "items": obj({"find": text, "with": text}, ["find", "with"])},
                     },
                     [],
                 ),
@@ -1497,17 +1777,51 @@ class Subtitles:
                 verdict,
             ),
         ]
+        manager_tools = [t for t in tools if t.name not in ("overview", "sources")] + [
+            ToolDef(
+                "report",
+                "Timing, suggested fixes, every flagged caption with its speech and the checker's translation, missing dialogue and audit pages. Call first.",
+                obj({}, []),
+                report_tool,
+            ),
+            ToolDef("sources", "Every subtitle source for this title, with status.", obj({}, []), sources),
+            ToolDef(
+                "resolve",
+                "Settle captions you have looked at with your own verdict (citing speech), and dismiss missing-dialogue items that are not substantive dialogue.",
+                obj(
+                    {
+                        "settle": {
+                            "type": "array",
+                            "items": obj(
+                                {"caption": text, "verdict": {"type": "string", "enum": list(pages_.VERDICTS)}, "speech": ids, "note": text},
+                                ["caption", "verdict", "speech"],
+                            ),
+                        },
+                        "dismiss_missing": {
+                            "type": "array",
+                            "items": obj({"page": {"type": "integer"}, "speech": ids, "reason": text}, ["page", "speech", "reason"]),
+                        },
+                    },
+                    [],
+                ),
+                resolve,
+            ),
+        ]
+
+        def toolset(session):
+            return manager_tools if managing(session) else tools
+
         service.runtime.register(
             AgentSpec(
                 AgentKind.SUBTITLE.value,
                 review_model,
                 system,
-                lambda _: tools,
+                toolset,
                 max_steps=40,
                 max_tokens=16000,
                 cache=True,
-                effort=os.getenv("SPARROW_SUBTITLE_EFFORT", "high"),
-                max_dollars=float(os.getenv("SPARROW_SUBTITLE_BUDGET", "10")),
+                effort=os.getenv("SPARROW_SUBTITLE_EFFORT") or "medium",
+                max_dollars=float(os.getenv("SPARROW_SUBTITLE_BUDGET") or 10),
             )
         )
 

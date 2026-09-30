@@ -293,6 +293,61 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("Read this page's captions", errors[0])
 
+    async def test_manager_settles_what_cheap_page_checks_flag(self):
+        from types import SimpleNamespace
+        from test_discovery import Block
+        from backend.agents import subtitles as module
+
+        await self.manager(review=True)
+        calls = {"translate": 0, "compare": 0}
+
+        async def checker(system, prompt, schema):
+            if "translate" in system.split(".")[0]:
+                calls["translate"] += 1
+                ids = [line.split()[0] for line in prompt.splitlines()[1:] if line.startswith("u")]
+                return {"lines": [{"speech": i, "english": f"line {int(i[1:])}"} for i in ids]}, {"output_tokens": 10}
+            calls["compare"] += 1
+            captions = [line.split()[0] for line in prompt.splitlines() if line.startswith("c0")]
+            return {
+                "captions": [
+                    {"caption": c, "verdict": "wrong" if c == "c0003" else "ok", "speech": [f"u{int(c[1:]):05d}"], "note": "different meaning" if c == "c0003" else ""}
+                    for c in captions
+                ],
+                "missing": [],
+            }, {"output_tokens": 10}
+
+        checker.model = "fixture-checker"
+        self.subtitles.contract_caller = lambda model: checker
+        lines, captions = self.checked_review()
+        calls_to_opus = [
+            response("report", {}),
+            response("page", {"page": 1}),
+            response("gloss", {"page": 1, "lines": lines}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("edit_captions", {"changes": [{"caption": "c0003", "text": "Line 3, corrected.", "verdict": "ok", "speech": ["u00003"]}]}),
+            response("verdict", {"approved": True, "reason": "Audited and settled."}),
+        ]
+        with patch.dict("os.environ", {"SPARROW_SUBTITLE_CONTRACTOR": "fixture-checker"}):
+            task = await self.request(self.foreign(verify=True), calls=calls_to_opus)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertEqual(calls, {"translate": 1, "compare": 1})
+        state = task["data"]["review"]
+        self.assertEqual(state["contract"]["model"], "fixture-checker")
+        self.assertEqual(state["audit"]["done"], [1])
+        track = self.subtitles.tracks(self.owner, self.asset)[0]
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertEqual(served[2]["text"], "Line 3, corrected.")
+        session = self.service.store.get_session(task["data"]["review_session"])
+        report = next(
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("type") == "tool_result"
+        )
+        self.assertIn("c0003", report)
+        self.assertIn("different meaning", report)
+
     async def test_approval_is_refused_when_captions_do_not_match(self):
         await self.manager(review=True)
         lines, captions = self.checked_review()
@@ -497,6 +552,46 @@ class RetimeTests(unittest.TestCase):
         self.assertAlmostEqual(shifted[1]["start"], 9.9)
         with self.assertRaises(ValueError):
             review.retime(cues, {"measurable": False}, "sections")
+
+
+class EditCarryTests(unittest.TestCase):
+    def test_replace_fixes_systematic_errors_and_keeps_verdicts(self):
+        utterances = [utterance(n, 10.0 * n) for n in range(1, 4)]
+        cues = [
+            {"start": 10.0, "end": 12.0, "text": "l'm fine."},
+            {"start": 20.0, "end": 22.0, "text": "Hello, Isla."},
+            {"start": 30.0, "end": 32.0, "text": "lt's late."},
+        ]
+        pages = review.build_pages(utterances, cues, 40)
+        state = {
+            "judgements": {"1": {review.caption_id(i): {"verdict": "ok", "speech": [f"u{i + 1:05d}"], "note": ""} for i in range(3)}},
+            "missing": {"1": []},
+        }
+        new, _, renamed = review.edit(
+            cues, utterances, [], [], [], [{"find": "l'm", "with": "I'm"}, {"find": "lt's", "with": "It's"}]
+        )
+        self.assertEqual([c["text"] for c in new], ["I'm fine.", "Hello, Isla.", "It's late."])
+        judgements, _, reopen = review.carry(pages, cues, pages, new, state, renamed)
+        self.assertEqual(reopen, [])
+        self.assertEqual(len(judgements["1"]), 3)
+        # A reworded caption needs a new verdict; the others keep theirs.
+        reworded, _, _ = review.edit(cues, utterances, [], [{"caption": "c0002", "text": "Hi."}], [])
+        judgements, _, reopen = review.carry(pages, cues, pages, reworded, state, {})
+        self.assertEqual(reopen, [1])
+        self.assertEqual(review.unjudged(pages[0], reworded, judgements), ["c0002"])
+
+    def test_signs_need_no_speech_and_are_not_held_to_it(self):
+        utterances = [utterance(1, 50.0)]
+        cues = [{"start": 5.0, "end": 8.0, "text": "The Bird"}, {"start": 50.0, "end": 52.0, "text": "Hello."}]
+        pages = review.build_pages(utterances, cues, 60)
+        judged, _ = review.check_judgement(
+            pages[0], utterances, cues, [],
+            [{"caption": "c0001", "verdict": "sign", "speech": []}, {"caption": "c0002", "verdict": "ok", "speech": ["u00001"]}],
+            [],
+        )
+        state = {"judgements": {"1": judged}, "missing": {"1": []}, "listens": []}
+        measured = {"measurable": False}
+        self.assertEqual(review.gate(state, pages, cues, utterances, "full", measured), [])
 
 
 class ReviewPageTests(unittest.TestCase):
