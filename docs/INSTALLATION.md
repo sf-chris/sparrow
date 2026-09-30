@@ -60,8 +60,10 @@ Subtitle timing uses whole-episode dialogue evidence built on the storage node. 
 uses Whisper large-v3-turbo when present at `/data/models/whisper-large-v3-turbo`,
 then medium at `/data/models/whisper-medium`, then the bundled base model, or the
 directory in `SPARROW_EVIDENCE_MODEL`. `python packaging/fetch_model.py DESTINATION
-whisper_evidence` fetches the pinned turbo revision (about 1.6 GB). Opt-in sync
-checking uses Claude Opus 5.5; `SPARROW_SUBTITLE_MODEL` overrides it.
+whisper_evidence` fetches the pinned turbo revision (about 1.6 GB). The optional
+subtitle agent (Preferences → Subtitle agent) needs an Anthropic key in Settings
+and uses Claude Opus 5.5; `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT` and
+`SPARROW_SUBTITLE_BUDGET` (dollars per title, default 10) adjust it.
 
 To serve your trusted home network, create `.env` containing the server's LAN
 address, for example `SPARROW_BIND_ADDRESS=192.168.1.20`, then recreate the container

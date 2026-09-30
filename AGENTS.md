@@ -93,9 +93,12 @@ Everything new lives in `backend/agents/`:
   explicit request choices form a versioned effective contract, within admin
   policy. Pass relevant values to agents and use the same contract in UI/tools.
 - Current model defaults: Fetch smart, Media cheap with self-escalation,
-  Librarian and Discovery cheap with bounded turns and spend. Subtitle review
-  (opt-in "Check subtitle sync") uses Claude Opus 5.5 with prompt caching,
-  configurable with `SPARROW_SUBTITLE_MODEL`. Routine subtitle processing,
+  Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
+  (household switch, needs an Anthropic key) uses Claude Opus 5.5 at high effort
+  with prompt caching and its own per-title allowance; it judges, retimes,
+  edits, replaces or writes subtitles through tools that re-measure every change.
+  Configure with `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT` and
+  `SPARROW_SUBTITLE_BUDGET`. Routine subtitle processing,
   including timing measurement and correction for foreign dialogue, is built in
   and makes no model call; no setup-agent implementation is planned now.
   Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.

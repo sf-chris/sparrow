@@ -99,22 +99,29 @@ A subtitle task now runs:
    it or the original is kept. An inconsistent track is set aside and the next
    candidate tried; without checking it remains as a fallback if nothing better
    is found.
-3. **Review**, when "Check subtitle sync" is on. Opus 5.5 (effort medium, prompt
-   caching, 16k output tokens) uses `overview`, `page`, `gloss`, `judge`,
-   `listen` and `verdict`. A page's captions stay hidden until its speech is
-   glossed; `judge` requires a verdict and cited speech for every caption and
-   returns the next page. `listen` re-recognises up to 60 s (eight times, 300 s in
-   total per review) with a language hint or a larger model; results are new
-   evidence. Approval is refused if any page is unjudged, more than 5% of judged
-   captions are wrong, a page of four or more captions is over 30% wrong, full
-   tracks miss substantive dialogue beyond 10% of captions, over 10% of matched
-   captions sit more than 1 s from their cited speech, or timing is outside the
-   window. A rejected track is set aside and the next candidate reviewed.
+3. **The subtitle agent**, when the household switches it on and an Anthropic
+   key is set. Opus 5.5 (effort high, prompt caching, its own per-title
+   allowance, `SPARROW_SUBTITLE_BUDGET`, default $10) owns the outcome in
+   Sparrow's persistent tool loop. It reads each page's recognised speech and
+   writes its own reading before that page's captions are revealed, then
+   judges every caption, citing speech lines. It can `retime` the track (a
+   measured or given shift, measured drift, or each section to its measured
+   offset), `edit_captions` (new words, align to cited speech lines, nudge,
+   remove, or add captions for uncaptioned dialogue), `use_source` or
+   `search_online` for another track, `listen` again with a language hint or an
+   alternative or larger recogniser, and, when no source is usable,
+   `write_page` and `use_written` to write the subtitles itself, timed to the
+   speech it cites. Timestamps always come from the audio. Every change is a
+   new copy, re-measured; pages whose captions changed are judged again.
+   Approval is refused while any page is unjudged, any caption is wrong,
+   dialogue is uncaptioned (full tracks), a matched caption sits over 1.5 s from
+   its speech, over a quarter of captions are unclear, or the track or any
+   section is outside 50 ms late / 200 ms early of the voice. A judgement cannot
+   be made in the same step that revealed the captions.
 4. **Continue safely.** Review state lives in the task, so a new conversation
-   resumes it rather than editing an earlier one; all review sessions share one
-   spending scope. An outage or interrupted turn resumes on the timer; the
-   spending limit or a stalled review leaves captions playable with "Check didn't
-   finish".
+   resumes it rather than editing an earlier one; all conversations for a
+   title share one allowance. An outage or interrupted turn resumes on the
+   timer. With the agent off, steps 1–2 still fix timing without AI.
 
 Supporting fixes: queueing subtitles can no longer fail filing a download; the
 queue holds 500 tasks; stronger requests upgrade a running task; ASS events play
