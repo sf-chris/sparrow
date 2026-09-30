@@ -25,6 +25,8 @@ class Preferences(BaseModel):
     subtitle_languages: list[str] = Field(default_factory=lambda: ["en"], max_length=8)
     subtitle_mode: Literal["auto", "always", "off"] = "auto"
     subtitle_kind: Literal["full", "forced", "sdh"] = "full"
+    subtitle_auto_prepare: bool = True
+    verify_subtitles: bool = False
     require_subtitles: bool = False
     max_file_size_gb: float = Field(default=0, ge=0, le=1000)
     monitoring: Literal["exact", "keep_current"] = "exact"
@@ -316,7 +318,7 @@ class Accounts:
         with self.connect() as db:
             row = db.execute("SELECT * FROM server_preferences WHERE id=1").fetchone()
         return {
-            "defaults": json.loads(row["defaults"]),
+            "defaults": {**Preferences().model_dump(), **json.loads(row["defaults"])},
             "policy": json.loads(row["policy"]),
             "revision": row["revision"],
         }

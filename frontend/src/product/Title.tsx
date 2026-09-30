@@ -1,5 +1,6 @@
 import { PreferenceFields } from "./Preferences";
 import CollectionCare from "./CollectionCare";
+import { SubtitleRepair } from "./SubtitleRepair";
 import { Still, Tick } from "./Brand";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useEffect, useState } from "react";
@@ -72,6 +73,7 @@ export default function Title({ user }: { user: User }) {
   }, [mediaType, tmdbId, itemId]);
   useWebSocket(() => void resource.refresh());
   const [requestOpen, setRequestOpen] = useState(false);
+  const [subtitleAsset, setSubtitleAsset] = useState<Asset | null>(null);
   const [visibleSeason, setVisibleSeason] = useState("all");
   useEffect(() => setVisibleSeason("all"), [mediaType, tmdbId, itemId]);
   const title = resource.data;
@@ -165,6 +167,17 @@ export default function Title({ user }: { user: User }) {
               </button>
             )}
           </div>
+          {next && (
+            <button
+              className="btn quiet"
+              onClick={() => setSubtitleAsset(next)}
+            >
+              {next.facts.subtitle_tracks.length
+                ? "Check / fix subtitles"
+                : "Get subtitles"}
+              {next.episode ? ` · ${episodeCode(next)}` : ""}
+            </button>
+          )}
           {active && (
             <p className="feature-coming">
               <strong>
@@ -216,6 +229,7 @@ export default function Title({ user }: { user: User }) {
               <Episode
                 key={asset.id}
                 asset={asset}
+                onSubtitles={() => setSubtitleAsset(asset)}
                 number={index + 1}
                 tv={tv}
               />
@@ -241,6 +255,22 @@ export default function Title({ user }: { user: User }) {
                 : undefined)}
         </Empty>
       )}
+      {subtitleAsset && (
+        <Dialog
+          title={`Subtitles${subtitleAsset.episode ? ` · ${episodeCode(subtitleAsset)}` : ""}`}
+          onClose={() => setSubtitleAsset(null)}
+        >
+          <SubtitleRepair
+            key={subtitleAsset.id}
+            assetId={subtitleAsset.id}
+            audio={null}
+            expanded
+            hasSubtitles={subtitleAsset.facts.subtitle_tracks.length > 0}
+            onReady={() => {}}
+            onOffset={() => {}}
+          />
+        </Dialog>
+      )}
       {requestOpen && (
         <RequestSheet
           title={title}
@@ -258,10 +288,12 @@ function Episode({
   asset,
   number,
   tv,
+  onSubtitles,
 }: {
   asset: Asset;
   number: number;
   tv: boolean;
+  onSubtitles: () => void;
 }) {
   const watching = inProgress(asset);
   return (
@@ -304,6 +336,15 @@ function Episode({
           <Flag value={asset.state} />
         </span>
       </span>
+      {asset.state === "ready" && (
+        <button
+          className="btn quiet"
+          onClick={onSubtitles}
+          aria-label={`Subtitles${asset.episode ? ` for ${episodeCode(asset)}` : ""}`}
+        >
+          Subtitles
+        </button>
+      )}
       {asset.state === "ready" && (
         <Link className="btn" data-nav to={`/watch/${asset.id}`}>
           <Play size={15} fill="currentColor" strokeWidth={0} />

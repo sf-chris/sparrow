@@ -111,7 +111,10 @@ between titles, rows and covers anywhere they are listed.
 - **Player:** the black TV screen with Sparrow's own controls: a large marigold
   play button, back 10s and forward 30s, a marigold scrubber, tabular times, mute
   and full screen (Space/K, ←/→, M, F). Audio and subtitle choices sit under the
-  video; Playback help and Subtitle help are disclosures.
+  video; Playback help and Subtitle help are disclosures. Subtitle help offers
+  Get subtitles, optional Check subtitle sync, and Fix subtitle timing. Each
+  title/episode also opens those controls. Available tracks are distinguished
+  from sync-checked tracks; paid checking is optional in shared preferences.
 - **Settings:** a left index grouped You (Preferences, Account, Logs),
   Household (People, Defaults) and Server (Storage, Connections, Setup), with
   Sign out beneath. On phones the index becomes a scrolling strip with Sign

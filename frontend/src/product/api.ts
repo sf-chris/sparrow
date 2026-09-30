@@ -56,6 +56,8 @@ export type Preferences = {
   subtitle_languages: string[];
   subtitle_mode: string;
   subtitle_kind: string;
+  subtitle_auto_prepare: boolean;
+  verify_subtitles: boolean;
   require_subtitles: boolean;
   max_file_size_gb: number;
   monitoring: string;
