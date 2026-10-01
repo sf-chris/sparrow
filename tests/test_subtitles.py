@@ -741,10 +741,13 @@ class ReviewPageTests(unittest.TestCase):
         reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
         self.assertTrue(any("nowhere near" in r for r in reasons))
         first[key] = {**first[key], "speech": [f"u{review.caption_index(key) + 1:05d}"]}
-        state["missing"]["2"] = [{"speech": ["u00050"], "note": "uncaptioned"}]
-        reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
+        state["missing"]["2"] = [{"speech": ["u00050"], "note": "a caption is on screen"}]
+        self.assertFalse(any("no caption" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "full", measured)))
+        uncaptioned = self.utterances + [utterance(500, 802.5)]
+        state["missing"]["2"] = [{"speech": ["u00500"], "note": "uncaptioned"}]
+        reasons = review.gate(state, self.pages, self.cues, uncaptioned, "full", measured)
         self.assertTrue(any("no caption" in r for r in reasons))
-        self.assertFalse(any("no caption" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "forced", measured)))
+        self.assertFalse(any("no caption" in r for r in review.gate(state, self.pages, self.cues, uncaptioned, "forced", measured)))
         state["missing"]["2"] = []
         late = {"measurable": True, "consistent": True, "offset": 0.4, "sections": []}
         self.assertTrue(any("overall" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "full", late)))
@@ -807,6 +810,29 @@ class PageCheckerTests(unittest.TestCase):
         gaps = subtitle_contract.untranslated([page], self.utterances, silent["translations"])
         self.assertEqual([g["speech"] for g in gaps[str(page["number"])]], [[u["id"] for u in on_page]])
         self.assertTrue(silent["spend"]["failures"])
+
+
+class CoveredSpeechTests(unittest.TestCase):
+    def test_speech_under_a_caption_is_neither_missing_nor_captioned_twice(self):
+        from backend.agents import subtitle_contract
+
+        utterances = [utterance(1, 10.0), utterance(2, 20.0)]
+        cues = [{"start": 10.0, "end": 12.0, "text": "I'll meet you at the inn later."}]
+        self.assertEqual(review.covering_caption(utterances[0], cues), 0)
+        self.assertIsNone(review.covering_caption(utterances[1], cues))
+        with self.assertRaisesRegex(ValueError, "already on screen"):
+            review.edit(cues, utterances, [], [], [{"text": "See you at the inn later.", "speech": ["u00001"]}], [])
+        cues, _, _ = review.edit(cues, utterances, [], [], [{"text": "Wait for me.", "speech": ["u00002"]}], [])
+        self.assertEqual(len(cues), 2)
+
+        async def checker(system, prompt, schema):
+            return {"captions": [], "missing": [{"speech": ["u00001"], "note": ""}, {"speech": ["u00002"], "note": ""}]}, {}
+
+        checker.model = "fixture"
+        pages = review.build_pages(utterances, cues[:1], 40)
+        found = asyncio.run(subtitle_contract.check_pages(checker, pages, utterances, cues[:1], {}, "ja", {"u00001": "a", "u00002": "b"}))
+        gaps = [g["speech"] for items in found["missing"].values() for g in items]
+        self.assertEqual(gaps, [["u00002"]])
 
 
 class TrackKindTests(unittest.TestCase):

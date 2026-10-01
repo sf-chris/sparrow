@@ -360,6 +360,8 @@ async def check_pages(caller, pages, utterances, cues, deltas, language, transla
                 record[identity] = {"verdict": verdict, "speech": cited, "note": str(entry.get("note", ""))[:300], "by": "contractor"}
             for entry in data.get("missing", []):
                 cited = [i for i in (match_id(s, "u", known) for s in entry.get("speech", [])) if i in speech]
+                # Speech under a caption is not missing, however that caption is worded.
+                cited = [i for i in cited if review.covering_caption(speech[i], cues) is None]
                 if cited:
                     gaps.append({"speech": cited, "note": str(entry.get("note", ""))[:300], "by": "contractor"})
             verdicts[str(page["number"])], missing[str(page["number"])] = record, gaps
