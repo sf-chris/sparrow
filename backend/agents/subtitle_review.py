@@ -70,6 +70,26 @@ def caption_index(identity):
     return int(str(identity)[1:]) - 1
 
 
+COVERED_SHARE = 0.5  # A caption on screen for half a line's speech covers it.
+
+
+def covering_caption(utterance, cues, skip=()):
+    """The index of a caption on screen for most of this speech, if any.
+
+    "Missing dialogue" means nothing is shown while it is spoken; a caption
+    worded or timed differently still covers it.
+    """
+    start, end = speech_start(utterance), utterance["end"]
+    length = max(0.5, end - start)
+    for index, cue in enumerate(cues):
+        if index in skip:
+            continue
+        overlap = min(end, cue["end"]) - max(start, cue["start"])
+        if overlap >= COVERED_SHARE * length:
+            return index
+    return None
+
+
 def speech_start(utterance):
     """Voice onset corrected for detector lag, or the approximate word start."""
     if utterance["onset_source"] == "speech_detector":
@@ -360,7 +380,13 @@ def gate(state, pages, cues, utterances, kind, measured):
     unclear = [k for _, k, e in entries if e["verdict"] == "unclear"]
     if entries and len(unclear) > UNCLEAR_LIMIT * len(entries):
         reasons.append("Too much of the dialogue is unclear to confirm this track; listen again or reject.")
-    gaps = [(n, g) for n, items in state.get("missing", {}).items() for g in items]
+    speech = known_speech(utterances, state.get("listens", []))
+    gaps = [
+        (n, g)
+        for n, items in state.get("missing", {}).items()
+        for g in items
+        if any(s in speech and covering_caption(speech[s], cues) is None for s in g["speech"])
+    ]
     if kind != "forced" and gaps:
         reasons.append(
             f"{len(gaps)} passages of dialogue have no caption (pages {', '.join(sorted({n for n, _ in gaps}, key=int))}); add captions for them."
@@ -558,6 +584,13 @@ def edit(cues, utterances, listens, changes, additions, replacements=()):
         if not text or len(text) > 300:
             raise ValueError("Give each added caption readable text under 300 characters.")
         spoken = [speech[s] for s in cited]
+        shown = [covering_caption(u, edited, removed) for u in spoken]
+        if all(i is not None for i in shown):
+            index = shown[0]
+            raise ValueError(
+                f"{caption_id(index)} (\"{edited[index]['text'][:60]}\") is already on screen while that is said. "
+                "Edit that caption instead of adding a second one, or dismiss the missing item if it already says it."
+            )
         start = round(min(speech_start(u) for u in spoken) + TARGET_OFFSET, 3)
         edited.append(
             {
