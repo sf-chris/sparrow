@@ -122,7 +122,12 @@ def build_pages(utterances, cues, duration):
             cut = max(gaps)[1] if gaps else position + PAGE_SECONDS
         inside = [s for s in spans if position <= s[0] < cut]
         if len(inside) > PAGE_ROWS:
-            cut = inside[PAGE_ROWS][0] - 0.001
+            # Cut before the first row past the limit that starts later than
+            # this page; many rows can share one start time.
+            later = next((s[0] for s in inside[PAGE_ROWS:] if s[0] > position + 0.01), None)
+            if later is not None:
+                cut = later - 0.001
+        cut = max(cut, position + 0.01)  # Always advance.
         if inside:
             pages.append({"start": round(position, 3), "end": round(cut, 3)})
         position = cut

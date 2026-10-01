@@ -544,7 +544,8 @@ class Subtitles:
                 },
                 timeout=300,
             )
-            return result["vtt"], "vtt"
+            # Older storage nodes return WebVTT only.
+            return result.get("text", result.get("vtt")), result.get("format", "vtt")
         if candidate["source"] == "sidecar":
             if candidate["version"]["size_bytes"] > 2 * 1024 * 1024:
                 raise ToolError("This local subtitle is too large.")

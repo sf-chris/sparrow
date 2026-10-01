@@ -454,7 +454,15 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 timeout=60,
             )
             report(request, asset, "captions", False)
-            return Response(result["vtt"], media_type="text/vtt")
+            if "vtt" in result:
+                return Response(result["vtt"], media_type="text/vtt")
+            from .subtitle_worker import cues_from_text, render
+
+            try:
+                vtt = render(cues_from_text(result["text"], result["format"]), vtt=True)
+            except ValueError as exc:
+                raise NodeError(str(exc)) from exc
+            return Response(vtt, media_type="text/vtt")
         except NodeError as exc:
             report(request, asset, "captions", True)
             raise HTTPException(422, str(exc)) from exc
