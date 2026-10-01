@@ -253,6 +253,26 @@ async def subtitle_counts(path, indices):
     return counts
 
 
+SIGNS_TITLE = re.compile(r"\bforced\b|\bsigns?\b|\bs\s*&\s*s\b|\bsongs?\s*(&|and)\s*signs?\b", re.I)
+CAPTIONS_TITLE = re.compile(r"\bsdh\b|\bcc\b|closed.?caption|hearing|\bhoh\b|\bdub(titles?)?\b", re.I)
+
+
+def track_kind(track):
+    """Forced (signs and songs), SDH (captions, often of an English dub) or full.
+
+    Release tags are unreliable: "Signs & Songs" and "English [SDH]" tracks
+    often carry no forced or hearing-impaired flag, and a caption track's
+    sound-effect lines make it look the most complete.
+    """
+    title = track.get("title") or ""
+    complete = re.search(r"\bfull\b|dialog", title, re.I)
+    if track.get("forced") or (SIGNS_TITLE.search(title) and not complete):
+        return "forced"
+    if track.get("hearing_impaired") or CAPTIONS_TITLE.search(title):
+        return "sdh"
+    return "full"
+
+
 async def candidates(executor, path, args):
     before = file_version(path)
     facts = await probe_file(path)
@@ -270,11 +290,7 @@ async def candidates(executor, path, args):
             "source": "embedded",
             "index": track["index"],
             "language": language_code(track["language"]),
-            "kind": (
-                "forced"
-                if track["forced"]
-                else "sdh" if track["hearing_impaired"] else "full"
-            ),
+            "kind": track_kind(track),
             "title": track["title"] or "Included in this copy",
             "cue_count": counts.get(track["index"], 0),
         }
