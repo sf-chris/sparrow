@@ -331,3 +331,22 @@ class PackSelectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, [("local", "download_select", {"hash": "d" * 40, "files": ["Show - 02 [1080p].mkv"]})])
         self.assertEqual(selection["skipped"], 2)
         self.assertEqual(self.storage.get_download("dl-z").metadata["selection"]["bytes"], 310)
+
+
+class TransferSlotTests(unittest.IsolatedAsyncioTestCase):
+    asyncSetUp = ToolGuardrailTests.asyncSetUp
+    asyncTearDown = ToolGuardrailTests.asyncTearDown
+
+    async def test_free_slots_wake_the_longest_waiting_requests_once(self):
+        config = self.storage.get_config()
+        config.max_active_transfers = 2
+        await self.storage.save_config(config)
+        for job in ("first", "second", "third"):
+            self.toolbox.wait_for_slot(job)
+        self.assertEqual(self.toolbox.slots_to_offer(), ["first", "second"])
+        self.assertEqual(self.toolbox.slots_to_offer(), [])  # promised, not woken again
+        self.toolbox.slot_taken("first")
+        await self.storage.add_download(Download(id="dl-a", name="a", magnet_url="magnet:?", status=DownloadStatus.DOWNLOADING))
+        self.assertEqual(self.toolbox.slots_to_offer(), [])  # one active, one promised
+        self.toolbox.slot_taken("second")
+        self.assertEqual(self.toolbox.slots_to_offer(), ["third"])

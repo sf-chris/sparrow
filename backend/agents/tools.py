@@ -201,6 +201,48 @@ class Toolbox:
                                         "Remove it and choose again.", "download_id": download.id}))
         return result
 
+    # ─── Waiting for a transfer slot ────────────────────────────────────
+
+    SLOT_PROMISE = 180.0  # seconds a woken request has to take its slot
+
+    def _waiters(self, db):
+        db.execute("CREATE TABLE IF NOT EXISTS transfer_waiters("
+                   "job_id TEXT PRIMARY KEY, since REAL NOT NULL, woken REAL NOT NULL DEFAULT 0)")
+
+    def wait_for_slot(self, job_id: str) -> None:
+        """Queue a request that hit the transfer limit; it keeps its place."""
+        with self.store._connect() as db:
+            self._waiters(db)
+            db.execute("INSERT INTO transfer_waiters VALUES (?, ?, 0) "
+                       "ON CONFLICT(job_id) DO UPDATE SET woken=0", (job_id, time.time()))
+
+    def slot_taken(self, job_id: str) -> None:
+        with self.store._connect() as db:
+            self._waiters(db)
+            db.execute("DELETE FROM transfer_waiters WHERE job_id=?", (job_id,))
+
+    def slots_to_offer(self) -> list[str]:
+        """The longest-waiting requests to wake for free transfer slots.
+
+        A woken request holds its promise briefly so one slot wakes one
+        request; a request that lets the promise lapse leaves the queue.
+        """
+        limit = max(1, int(self.cfg().max_active_transfers or 1))
+        active = sum(1 for d in self.storage.get_all_downloads()
+                     if d.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED))
+        now = time.time()
+        with self.store._connect() as db:
+            self._waiters(db)
+            db.execute("DELETE FROM transfer_waiters WHERE woken>0 AND woken<?", (now - self.SLOT_PROMISE,))
+            promised = db.execute("SELECT COUNT(*) FROM transfer_waiters WHERE woken>0").fetchone()[0]
+            free = limit - active - promised
+            if free <= 0:
+                return []
+            rows = db.execute("SELECT job_id FROM transfer_waiters WHERE woken=0 ORDER BY since LIMIT ?", (free,)).fetchall()
+            chosen = [r["job_id"] for r in rows]
+            db.executemany("UPDATE transfer_waiters SET woken=? WHERE job_id=?", [(now, j) for j in chosen])
+        return chosen
+
     async def select_soon(self, download_id: str, seconds: float = 120.0) -> None:
         """Apply a pack selection as soon as the file list arrives; the poller
         finishes the job if it takes longer or the server restarts."""
@@ -730,8 +772,10 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
                       if d.metadata.get("agent_managed") and d.status in
                       (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED)]
             if len(active) >= limit:
+                tb.wait_for_slot(job.id)
                 raise ToolError(f"Transfer limit reached: {len(active)} of {limit} slots reserved. "
-                                "Wait for an existing transfer to finish.")
+                                "You're queued and will be woken as soon as a slot opens: "
+                                "hibernate without a timer.")
             mgr, connected, recovery = await tb.connect_torrents()
             tb.require_authority(ctx)
             if not connected:
@@ -757,6 +801,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
             await tb.storage.update_download(dl.id, status=DownloadStatus.DOWNLOADING,
                                              torrent_hash=torrent_hash or info_hash)
             await tb.broadcast({"type": "download_added", "data": dl.to_dict()})
+            tb.slot_taken(job.id)
             if wanted_files:
                 asyncio.create_task(tb.select_soon(dl.id))
             return {"download_id": dl.id, "hash": dl.torrent_hash,
