@@ -807,3 +807,17 @@ class PageCheckerTests(unittest.TestCase):
         gaps = subtitle_contract.untranslated([page], self.utterances, silent["translations"])
         self.assertEqual([g["speech"] for g in gaps[str(page["number"])]], [[u["id"] for u in on_page]])
         self.assertTrue(silent["spend"]["failures"])
+
+
+class TrackKindTests(unittest.TestCase):
+    def test_release_titles_mark_signs_and_caption_tracks(self):
+        from backend.agents.subtitle_node import track_kind
+
+        kinds = {
+            title: track_kind({"title": title, "forced": False, "hearing_impaired": False})
+            for title in ("", "SDH", "English [CC]", "Dub (SDH)", "Signs & Songs@Official (PGS)", "S&S@Tenrai-Sensei",
+                          "Songs & Signs", "Dialogues@Tenrai-Sensei [Non-Honorific]", "English (Full + Signs)", "Latin American")
+        }
+        self.assertEqual({t for t, k in kinds.items() if k == "sdh"}, {"SDH", "English [CC]", "Dub (SDH)"})
+        self.assertEqual({t for t, k in kinds.items() if k == "forced"}, {"Signs & Songs@Official (PGS)", "S&S@Tenrai-Sensei", "Songs & Signs"})
+        self.assertEqual(track_kind({"title": "", "forced": True, "hearing_impaired": False}), "forced")
