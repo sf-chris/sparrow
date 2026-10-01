@@ -592,6 +592,10 @@ class CaptionTextTests(unittest.TestCase):
         self.assertNotIn("<script>", result)
         with self.assertRaises(ValueError):
             cues_from_text("1\n00:00:03,000 --> 00:00:02,000\nbad\n", "srt")
+        # One effect or typesetting event does not discard a good track.
+        good = "".join(f"{n}\n00:00:{n:02d},000 --> 00:00:{n:02d},900\nLine {n}\n\n" for n in range(1, 6))
+        noisy = good + "6\n00:00:07,000 --> 00:00:07,000\neffect\n\n7\n00:00:08,000 --> 00:00:09,000\n" + "x" * 2500 + "\n"
+        self.assertEqual([c["text"] for c in cues_from_text(noisy, "srt")], [f"Line {n}" for n in range(1, 6)])
 
     def test_styled_files_play_in_time_order_without_vector_shapes(self):
         ass = (
