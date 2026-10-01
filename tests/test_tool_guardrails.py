@@ -285,6 +285,8 @@ class PackSelectionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(match_files(self.pack(), ["Show - 02 [1080p].mkv"]), [1])
         self.assertEqual(match_files(self.pack(), ["show/show - 01 [1080p].MKV"]), [0])
+        self.assertEqual(match_files([{"name": "Pack/Show S01E02 DDP2.0 H.264.mkv"}], ["Show S01E02 DDP2 0 H 264.mkv"]), [0])
+        self.assertEqual(match_files(self.pack(), ["Show - 03 [1080p].mkv"]), [])
         manager = Mock(get_files=AsyncMock(return_value=self.pack()), skip_files=AsyncMock(return_value=True))
         download = Download(id="dl-x", name="Show pack", magnet_url="magnet:?", torrent_hash="b" * 40,
                             metadata={"job_id": self.job.id, "wanted_files": ["Show - 02 [1080p].mkv"]})

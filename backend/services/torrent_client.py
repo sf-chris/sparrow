@@ -501,21 +501,27 @@ class TorrentManager:
 
 # ─── Choosing files in a pack ─────────────────────────────────────────────────
 
+def _plain_name(value: str) -> str:
+    return "".join(ch for ch in str(value).lower() if ch.isalnum())
+
+
 def match_files(files: list[dict], wanted: list[str]) -> list[int]:
     """Indices of the torrent's files that were named from its listing.
 
-    A name matches the whole path, its tail, or the file's own name, ignoring
-    case and folder separators.
+    A name matches the whole path, its tail, or the file's own name. Case,
+    folders and punctuation are ignored: indexers rewrite names such as
+    "DDP2.0" as "DDP2 0".
     """
     picked = set()
     for want in wanted:
-        want = str(want).replace("\\", "/").strip().lower()
-        if not want:
+        want = str(want).replace("\\", "/").strip()
+        whole, base = _plain_name(want), _plain_name(want.rsplit("/", 1)[-1])
+        if not base:
             continue
-        base = want.rsplit("/", 1)[-1]
         for index, file in enumerate(files):
-            name = str(file.get("name", "")).replace("\\", "/").lower()
-            if name == want or name.endswith("/" + want) or name.rsplit("/", 1)[-1] == base:
+            name = str(file.get("name", "")).replace("\\", "/")
+            plain = _plain_name(name)
+            if plain == whole or plain.endswith(whole) or _plain_name(name.rsplit("/", 1)[-1]) == base:
                 picked.add(index)
     return sorted(picked)
 
