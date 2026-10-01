@@ -265,3 +265,48 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(old.exists())
         self.assertFalse(new.exists())
         self.assertEqual((self.library / "episode-new.mkv").read_bytes(), b"replacement")
+
+
+class PackSelectionTests(unittest.IsolatedAsyncioTestCase):
+    """Taking one episode from a pack downloads only that episode's file."""
+
+    asyncSetUp = ToolGuardrailTests.asyncSetUp
+    asyncTearDown = ToolGuardrailTests.asyncTearDown
+
+    def pack(self):
+        return [
+            {"name": "Show/Show - 01 [1080p].mkv", "size": 300},
+            {"name": "Show/Show - 02 [1080p].mkv", "size": 310},
+            {"name": "Show/Extras/Show - NCOP.mkv", "size": 50},
+        ]
+
+    async def test_only_the_chosen_file_downloads(self):
+        from backend.agents.tools import match_files
+
+        self.assertEqual(match_files(self.pack(), ["Show - 02 [1080p].mkv"]), [1])
+        self.assertEqual(match_files(self.pack(), ["show/show - 01 [1080p].MKV"]), [0])
+        manager = Mock(get_files=AsyncMock(return_value=self.pack()), skip_files=AsyncMock(return_value=True))
+        download = Download(id="dl-x", name="Show pack", magnet_url="magnet:?", torrent_hash="b" * 40,
+                            metadata={"job_id": self.job.id, "wanted_files": ["Show - 02 [1080p].mkv"]})
+        await self.storage.add_download(download)
+        with patch.object(self.toolbox, "torrents", return_value=manager):
+            selection = await self.toolbox.apply_file_selection(download)
+        manager.skip_files.assert_awaited_once_with("b" * 40, [0, 2])
+        self.assertEqual(selection["files"], ["Show/Show - 02 [1080p].mkv"])
+        self.assertEqual(self.storage.get_download("dl-x").metadata["selection"]["bytes"], 310)
+
+    async def test_waits_for_the_file_list_and_stops_when_nothing_matches(self):
+        waiting = Mock(get_files=AsyncMock(return_value=[]), skip_files=AsyncMock())
+        download = Download(id="dl-y", name="Other pack", magnet_url="magnet:?", torrent_hash="c" * 40,
+                            metadata={"job_id": self.job.id, "wanted_files": ["Show - 05.mkv"]})
+        await self.storage.add_download(download)
+        with patch.object(self.toolbox, "torrents", return_value=waiting):
+            self.assertIsNone(await self.toolbox.apply_file_selection(download))
+        wrong = Mock(get_files=AsyncMock(return_value=self.pack()), skip_files=AsyncMock(), stop_torrent=AsyncMock(return_value=True))
+        with patch.object(self.toolbox, "torrents", return_value=wrong):
+            selection = await self.toolbox.apply_file_selection(download)
+        self.assertIn("error", selection)
+        wrong.stop_torrent.assert_awaited_once()
+        wrong.skip_files.assert_not_awaited()
+        self.assertEqual(self.storage.get_download("dl-y").status, DownloadStatus.ERROR)
+        self.assertEqual(self.events[-1].kind, "download_stalled")
