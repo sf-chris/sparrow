@@ -277,6 +277,32 @@ def normalise_ids(args, utterances, cues, listens):
     return walk(args)
 
 
+def _ocr_plain(text):
+    return re.sub(r"[^a-z0-9]", "", re.sub(r"[l|1]", "i", str(text).lower()))
+
+
+def unheard_rewrites(cues, listens, changes):
+    """Captions whose words a change replaces without a re-listen of that moment.
+
+    The checkers and the editor all read the same transcript, so a misheard
+    pun or name looks wrong to every one of them; a second hearing is the
+    independent check before a professional line is rewritten. Fixes of
+    OCR confusions (l for I) need none.
+    """
+    unheard = []
+    for change in changes:
+        identity, text = str(change.get("caption", "")), change.get("text")
+        if text is None or not (identity[:1] == "c" and identity[1:].isdigit()):
+            continue
+        index = caption_index(identity)
+        if not 0 <= index < len(cues) or _ocr_plain(cues[index]["text"]) == _ocr_plain(text):
+            continue
+        cue = cues[index]
+        if not any(l["start"] <= cue["start"] + 0.5 and l["end"] >= cue["end"] - 0.5 for l in listens):
+            unheard.append((identity, cue))
+    return unheard
+
+
 def check_gloss(page, utterances, entries):
     expected = {u["id"] for u in page_utterances(page, utterances)}
     glosses = {}
@@ -747,7 +773,7 @@ def detect(cues, utterances):
 
 # ─── Manager mode: cheap page checks, Opus on what they flag ─────────────
 
-MANAGER_SYSTEM = """You are the subtitle editor for one episode or film, managing cheaper page checkers. Make its English subtitles right for a viewer: every line of dialogue captioned with what was actually said (natural translation is fine), on screen when the voice speaks. When a track is basically right, change as little as possible: keep its wording, names, terminology and line breaks, and fix only real errors. A professional translation is right by default: puns, jokes, names and idioms are often localised rather than literal, and recognition mishears exactly those words. Rewrite a professional line only when the transcript is clear and the meaning is plainly different; when the transcript looks garbled or the caption could be wordplay, keep the caption (settle it loose or unclear). Read a flagged caption's neighbours first: professional tracks split one spoken sentence across several captions, and a caption carrying its part of the sentence is right; never fold the whole sentence into one of them.
+MANAGER_SYSTEM = """You are the subtitle editor for one episode or film, managing cheaper page checkers. Make its English subtitles right for a viewer: every line of dialogue captioned with what was actually said (natural translation is fine), on screen when the voice speaks. When a track is basically right, change as little as possible: keep its wording, names, terminology and line breaks, and fix only real errors. A professional translation is right by default: puns, jokes, names and idioms are often localised rather than literal, and recognition mishears exactly those words. Rewrite a professional line only when the transcript is clear and the meaning is plainly different; when the transcript looks garbled or the caption could be wordplay, keep the caption (settle it loose or unclear). Read a flagged caption's neighbours first: professional tracks split one spoken sentence across several captions, and a caption carrying its part of the sentence is right; never fold the whole sentence into one of them. Before rewriting a line of the release's own track, listen to its moment: the tool requires a second hearing first.
 
 Local speech recognition transcribed the soundtrack and measured when each line starts. A cheaper model translated each page's speech and gave every caption a verdict. Tools hold the evidence, measure all timing and apply your changes; you never type a timestamp.
 
