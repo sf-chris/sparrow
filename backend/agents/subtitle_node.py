@@ -257,6 +257,18 @@ SIGNS_TITLE = re.compile(r"\bforced\b|\bsigns?\b|\bs\s*&\s*s\b|\bsongs?\s*(&|and
 CAPTIONS_TITLE = re.compile(r"\bsdh\b|\bcc\b|closed.?caption|hearing|\bhoh\b|\bdub(titles?)?\b", re.I)
 
 
+ENGLISH_TITLE = re.compile(r"\benglish\b|\beng\b|\ben[-_](us|gb)\b", re.I)
+
+
+def track_language(track):
+    """The track's language, trusting a title that names English over a
+    contradicting tag ("English Subtitles" released tagged jpn)."""
+    language = language_code(track.get("language") or "")
+    if language != "en" and ENGLISH_TITLE.search(track.get("title") or ""):
+        return "en"
+    return language
+
+
 def track_kind(track, cues=0, fullest=0):
     """Forced (signs and songs), SDH (captions, often of an English dub) or full.
 
@@ -294,7 +306,7 @@ async def candidates(executor, path, args):
             "id": "embedded:" + str(track["index"]),
             "source": "embedded",
             "index": track["index"],
-            "language": language_code(track["language"]),
+            "language": track_language(track),
             "kind": track_kind(track, counts.get(track["index"], 0), fullest),
             "title": track["title"] or "Included in this copy",
             "cue_count": counts.get(track["index"], 0),
