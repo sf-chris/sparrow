@@ -56,3 +56,22 @@ class OpenAILoopTests(unittest.TestCase):
         cost, _ = calculate_usage_cost("gpt-6-sol", 1_000_000, 1_000_000, 0, 1_000_000)
         self.assertAlmostEqual(cost, 2.0 + 10.0 + 0.20)
         self.assertEqual(rates_for_model("gpt-6-luna")["cache_read"], 0.01)
+
+
+class MissingKeyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_missing_openai_key_is_reported_not_retried(self):
+        import tempfile
+        from unittest.mock import AsyncMock, patch
+        from backend.agents.models import AgentKind, AgentSession
+        from backend.agents.runtime import AgentRuntime, AgentSpec
+        from backend.agents.store import AgentStore
+
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = AgentRuntime(AgentStore(folder), lambda: "")
+            runtime._openai_key_getter = lambda: ""
+            runtime.register(AgentSpec(kind=AgentKind.FETCH.value, model=lambda: "gpt-6-sol", system=AsyncMock(return_value="orders"), tools=lambda s: []))
+            session = AgentSession(agent=AgentKind.FETCH, model="gpt-6-sol")
+            with patch.object(openai_loop, "create", AsyncMock()) as create:
+                with self.assertRaisesRegex(openai_loop.OpenAIStatusError, "needs an OpenAI key"):
+                    await runtime._call_openai(session, "orders", [])
+                create.assert_not_called()
