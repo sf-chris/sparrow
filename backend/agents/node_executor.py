@@ -370,6 +370,7 @@ class Executor:
                     "download_remove",
                     "download_stop",
                     "download_start",
+                    "download_select",
                 ):
                     async with self._mutation_lock:
                         if command.get("expires", 0) < time.time():
@@ -704,6 +705,13 @@ class Executor:
             result = await manager.stop_torrent(info_hash)
         elif kind == "download_start":
             result = await manager.start_torrent(info_hash)
+        elif kind == "download_select":
+            if not current:
+                return {"pending": True}
+            from ..services.torrent_client import select_files
+
+            files = [str(f) for f in (args.get("files") or [])][:200]
+            return await select_files(manager, info_hash, files)
         elif kind == "download_remove":
             # Downloader never deletes files; folder jail owns any later cleanup.
             result = await manager.delete_torrent(info_hash, delete_files=False)

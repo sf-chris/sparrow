@@ -5,6 +5,7 @@ Publication retains seeding sources and old copies, with a durable receipt befor
 inventory can acknowledge a file as ready.
 """
 
+import asyncio
 import hashlib
 import logging
 import time
@@ -155,6 +156,7 @@ def acquisition_tools(tb):
                 raise ToolError(
                     "The transfer limit is reached. Wait for an existing download to finish."
                 )
+            wanted_files = [str(f) for f in (args.get("files") or []) if str(f).strip()][:200]
             if not existing:
                 existing = Download(
                     id=identity,
@@ -172,6 +174,7 @@ def acquisition_tools(tb):
                         "agent_managed": True,
                         "node_id": node_id,
                         "desired_control": "",
+                        **({"wanted_files": wanted_files} if wanted_files else {}),
                     },
                 )
                 await tb.storage.add_download(existing)
@@ -213,10 +216,13 @@ def acquisition_tools(tb):
                     "data": tb.storage.get_download(identity).to_dict(),
                 }
             )
+            if wanted_files:
+                asyncio.create_task(tb.select_soon(identity))
             return {
                 "download_id": identity,
                 "staging": f"staging/{identity}",
                 "recorded": True,
+                **({"note": "Only the chosen files will download once the torrent's file list arrives."} if wanted_files else {}),
             }
 
     async def status(ctx, args):
