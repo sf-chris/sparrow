@@ -547,7 +547,9 @@ def replace_words(text, find, replacement):
     """Whole-word, case-sensitive replacement (for systematic errors such as OCR)."""
     import re
 
-    pattern = r"(?<![\w'])" + re.escape(find) + r"(?![\w'])"
+    # A single letter beside a hyphen is part of a stutter ("l-like"), not a word.
+    edge = r"[\w'-]" if len(find) == 1 else r"[\w']"
+    pattern = r"(?<!" + edge + ")" + re.escape(find) + r"(?!" + edge + ")"
     return re.sub(pattern, lambda _: replacement, text)
 
 
@@ -745,7 +747,8 @@ def detect(cues, utterances):
     """
     import re
 
-    pattern = re.compile(r"(?<![\w'])(" + "|".join(re.escape(w) for w in OCR_WORDS) + r")(?![\w'])")
+    # A hyphen joins a stutter ("l-l-like"), so an "l" beside one is no OCR "I".
+    pattern = re.compile(r"(?<![\w'-])(" + "|".join(re.escape(w) for w in OCR_WORDS) + r")(?![\w'-])")
     ocr = {}
     for index, cue in enumerate(cues):
         for word in pattern.findall(cue["text"]):
