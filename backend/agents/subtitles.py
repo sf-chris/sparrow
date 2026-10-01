@@ -42,12 +42,15 @@ from .subtitle_sync import (
 
 ACTIVE = {"queued", "finding", "aligning", "measuring", "reviewing"}
 DEFAULT_REVIEW_MODEL = "claude-opus-5-5"
+DEFAULT_OPENAI_REVIEW_MODEL = "gpt-6-sol"
 DEFAULT_CONTRACTOR = "gpt-6-luna"
 DEFAULT_VERIFIER = "gpt-6-sol"
 # Above this share of captions flagged wrong, the track is plainly mismatched:
 # skip verification and let the manager replace it.
 MISMATCH_SHARE = 0.3
 AUDIT_PAGES = 2
+AUDIT_SAMPLE = 10  # One in this many trusted tracks still gets blind audits.
+TRUSTED_SOURCES = ("embedded:", "sidecar:")
 QUEUE_LIMIT = 500
 MAX_CANDIDATES = 4
 EVIDENCE_SLICE = 540
@@ -55,7 +58,13 @@ REVIEW_WAKES = 6
 
 
 def review_model():
-    return os.getenv("SPARROW_SUBTITLE_MODEL") or DEFAULT_REVIEW_MODEL
+    """The manager. GPT-6-Sol when an OpenAI key is set: it made the same
+    corrections as Opus on the benchmark episodes for about a third of the
+    cost. Otherwise Opus."""
+    configured = os.getenv("SPARROW_SUBTITLE_MODEL")
+    if configured:
+        return configured
+    return DEFAULT_OPENAI_REVIEW_MODEL if os.getenv("OPENAI_API_KEY") else DEFAULT_REVIEW_MODEL
 
 
 def verifier_model():
@@ -979,13 +988,75 @@ class Subtitles:
             "snapshot": pages_.contractor_snapshot({"judgements": judgements}),
         }
         audit = state.get("audit") or {"pages": [], "done": [], "misses": []}
-        if not audit["pages"]:
+        if not audit["pages"] and self.audit_due(task, context):
             audit["pages"] = pages_.choose_audits(
                 state["pages"], context["cues"], context["utterances"], task["id"], AUDIT_PAGES
             )
         state["audit"] = audit
         self.charge_checkers(task, state, [found["spend"], verified or {}])
         self.review_state(task, state)
+
+    def audit_due(self, task, context):
+        """Blind audits keep the page checker honest: always for tracks from
+        uploads, providers or Sparrow itself, and for a steady sample of the
+        file's own tracks."""
+        source = ((context["track"] or {}).get("data") or {}).get("source_id", "")
+        sampled = int(hashlib.sha256(task["id"].encode()).hexdigest(), 16) % AUDIT_SAMPLE == 0
+        return sampled or not source.startswith(TRUSTED_SOURCES)
+
+    async def free_fixes(self, task, asset, context):
+        """Predictable corrections before any model reads the track: OCR
+        confusions such as "l'm" and sections outside the timing window.
+        Returns the refreshed context."""
+        ocr = pages_.detect(context["cues"], context["utterances"]).get("ocr", [])
+        if ocr:
+            cues, _, renamed = pages_.edit(
+                context["cues"],
+                context["utterances"],
+                context["state"].get("listens", []),
+                [],
+                [],
+                [{"find": o["find"], "with": o["with"]} for o in ocr],
+            )
+            if renamed:
+                new_id = await self.derive(context, cues, {"kind": "edit", "replaced": len(renamed), "automatic": "ocr"})
+                await self.activate(context, new_id, "fix scanning errors", rebuild=False, renamed=renamed)
+                context = await self.review_context(self.task(task["id"]), asset)
+        measured = context["measured"]
+        if measured.get("consistent") and pages_.off_sections(measured):
+            cues, detail = pages_.retime(context["cues"], measured, "sections", None)
+            new_id = await self.derive(context, cues, {"kind": "retime", "detail": detail, "automatic": "sections"})
+            await self.activate(context, new_id, "retime " + detail, rebuild=False)
+            context = await self.review_context(self.task(task["id"]), asset)
+        return context
+
+    def checker_outcome(self, task, context):
+        """The cascade: settle the track without the manager when the checkers can.
+
+        A track the checker finds mostly wrong is rejected (the next source is
+        tried); a track with nothing flagged, no missing dialogue and timing in
+        the window is approved unless an audit is due. Anything else goes to
+        the manager."""
+        state, track = context["state"], context["track"]
+        if not track or not state.get("contract"):
+            return None
+        if state["contract"].get("mismatched"):
+            outcome = {"approved": False, "reason": "Most of these subtitles don't match the dialogue."}
+        elif not (state.get("audit") or {}).get("pages") and not pages_.manager_gate(
+            state, state["pages"], context["cues"], context["utterances"], task["data"]["kind"], context["measured"]
+        ):
+            outcome = {"approved": True, "reason": "The page checker found nothing to correct."}
+        else:
+            return None
+        outcome.update(
+            track=track["id"],
+            summary=pages_.summary(state, state["pages"]),
+            model=state["contract"].get("model"),
+            reviewed_at=time.time(),
+        )
+        self.save_track(track["id"], review=outcome)
+        self.update(task, task["state"], task["data"].get("message", ""), review_outcome=outcome)
+        return outcome
 
     def charge_checkers(self, task, state, spends):
         """Record page-checker spend against this title's allowance.
@@ -1076,10 +1147,15 @@ class Subtitles:
         if not context:
             return {"approved": False, "track": task["data"].get("track_id"), "reason": "Dialogue analysis is unavailable for this media."}
         if contractor_model() and context["state"].get("contract", {}).get("track") != (context["track"] or {}).get("id", "none"):
-            self.update(task, "reviewing", "Checking each page of the subtitles against the dialogue.")
+            if context["track"]:
+                context = await self.free_fixes(task, asset, context)
+            self.update(self.task(task["id"]), "reviewing", "Checking each page of the subtitles against the dialogue.")
             await self.contract(context)
             task = self.task(task["id"])
             context = await self.review_context(task, asset)
+            outcome = self.checker_outcome(task, context)
+            if outcome:
+                return outcome
         self.review_state(task, context["state"])
         self.attach(service)
         sessions = list(task["data"].get("review_sessions", []))
@@ -2053,8 +2129,13 @@ class Subtitles:
                     self.finish(task, outcome["track"], checked=True)
                     await self.notify_ready(self.task(identity))
                     return
-                if task["data"].get("track_id"):
-                    self.save_track(task["data"]["track_id"], state="rejected")
+                rejected = self.track(task["data"].get("track_id") or outcome.get("track"))
+                if rejected and rejected["data"].get("source_id") != "written":
+                    # Try the next source; with none left the dialogue is written.
+                    self.set_aside(task, rejected, outcome["reason"])
+                    continue
+                if rejected:
+                    self.save_track(rejected["id"], state="rejected")
                 self.update(task, "needs_attention", outcome["reason"])
                 return
             self.update(self.task(identity), "needs_attention", "Subtitle work stopped after too many attempts.")

@@ -475,7 +475,7 @@ class AgentRuntime:
                 session.outcome = CaseState.WAITING
                 session.wake_at = time.time() + 600
                 session.wake_reason = (
-                    "Can't reach Anthropic. Trying again in 10 minutes."
+                    "Can't reach the AI provider. Trying again in 10 minutes."
                 )
                 self.store.save_session(session)
                 return

@@ -24,3 +24,4 @@ tests/evals/artifacts/
 
 # Local API keys for development and benchmarks; never commit.
 api-keys.txt
+tmdb-keys.txt
