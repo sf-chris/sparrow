@@ -22,10 +22,12 @@ def cues_from_text(text, format_name):
 
     if format_name not in ("srt", "vtt", "ass", "ssa"):
         raise ValueError("Use an SRT, VTT or ASS text subtitle.")
-    if len(text.encode("utf8")) > 2 * 1024 * 1024:
-        raise ValueError("Subtitle files must be smaller than 2 MB.")
+    # Typeset fansub ASS tracks run to several megabytes; uploads are capped
+    # separately at the API.
+    if len(text.encode("utf8")) > 16 * 1024 * 1024:
+        raise ValueError("Subtitle files must be smaller than 16 MB.")
     parsed = pysubs2.SSAFile.from_string(text, format_=format_name)
-    cues = []
+    cues, unusable = [], 0
     for entry in parsed:
         if DRAWING.search(entry.text):
             continue  # ASS vector shapes are typesetting, not readable text.
@@ -34,13 +36,16 @@ def cues_from_text(text, format_name):
             clean = html.unescape(clean)
         if entry.is_comment or not clean:
             continue
-        if entry.start < 0 or entry.end <= entry.start:
-            raise ValueError("The subtitle contains invalid cue timings.")
-        if len(clean) > 2000:
-            raise ValueError("A subtitle cue is too large to display safely.")
+        # Zero-length effect events and oversized typesetting blocks are not
+        # captions; one of them must not discard an otherwise good track.
+        if entry.start < 0 or entry.end <= entry.start or len(clean) > 2000:
+            unusable += 1
+            continue
         cues.append(
             {"start": entry.start / 1000, "end": entry.end / 1000, "text": clean}
         )
+    if unusable > len(cues):
+        raise ValueError("Most of this subtitle's cues have invalid timings or cannot be displayed.")
     if not cues or len(cues) > 20000:
         raise ValueError("Choose a subtitle with 1–20,000 readable cues.")
     # ASS files commonly group events by style (signs after dialogue); play order
