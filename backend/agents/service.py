@@ -893,10 +893,22 @@ class AgentService:
             try:
                 await asyncio.sleep(POLL_INTERVAL)
                 await self.reconcile_transfers()
+                await self.offer_transfer_slots()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("plumbing loop error")
+
+    async def offer_transfer_slots(self) -> None:
+        """Wake the longest-waiting requests when transfer slots free up."""
+        for job_id in self.toolbox.slots_to_offer():
+            job = self.store.get_job(job_id)
+            if not job or job.status != JobStatus.ACTIVE:
+                self.toolbox.slot_taken(job_id)
+                continue
+            await self.emit(Event(
+                kind="transfer_slot_open", job_id=job_id,
+                payload={"description": "A download slot is free. Add your chosen copy now."}))
 
     async def reconcile_transfers(self):
         from .transfer_control import apply_control

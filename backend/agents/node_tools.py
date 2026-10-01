@@ -153,8 +153,10 @@ def acquisition_tools(tb):
                 )
             ]
             if len(active) >= max(1, tb.cfg().max_active_transfers):
+                tb.wait_for_slot(job.id)
                 raise ToolError(
-                    "The transfer limit is reached. Wait for an existing download to finish."
+                    "The transfer limit is reached. You're queued and will be woken as soon "
+                    "as a slot opens: hibernate without a timer."
                 )
             wanted_files = [str(f) for f in (args.get("files") or []) if str(f).strip()][:200]
             if not existing:
@@ -216,6 +218,7 @@ def acquisition_tools(tb):
                     "data": tb.storage.get_download(identity).to_dict(),
                 }
             )
+            tb.slot_taken(job.id)
             if wanted_files:
                 asyncio.create_task(tb.select_soon(identity))
             return {
