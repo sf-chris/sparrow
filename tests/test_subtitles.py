@@ -851,3 +851,7 @@ class TrackKindTests(unittest.TestCase):
         self.assertEqual({t for t, k in kinds.items() if k == "sdh"}, {"SDH", "English [CC]", "Dub (SDH)"})
         self.assertEqual({t for t, k in kinds.items() if k == "forced"}, {"Signs & Songs@Official (PGS)", "S&S@Tenrai-Sensei", "Songs & Signs"})
         self.assertEqual(track_kind({"title": "", "forced": True, "hearing_impaired": False}), "forced")
+        flagged = {"title": "English", "forced": True, "hearing_impaired": False}
+        self.assertEqual(track_kind(flagged, 455, 479), "full")  # mislabelled dialogue track
+        self.assertEqual(track_kind(flagged, 40, 479), "forced")
+        self.assertEqual(track_kind({"title": "Signs & Songs", "forced": False, "hearing_impaired": False}, 455, 479), "forced")
