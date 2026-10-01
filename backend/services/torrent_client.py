@@ -139,6 +139,21 @@ class QBittorrentClient:
             resp = await client.get(f"{self.base_url}/api/v2/torrents/info?filter=all")
             return resp.json()
 
+    async def get_files(self, torrent_hash: str) -> list[dict]:
+        async with httpx.AsyncClient(timeout=10.0, cookies=self._cookies) as client:
+            resp = await client.get(f"{self.base_url}/api/v2/torrents/files", params={"hash": torrent_hash})
+            if resp.status_code != 200:
+                return []
+            return [{"name": f.get("name", ""), "size": f.get("size", 0)} for f in resp.json()]
+
+    async def skip_files(self, torrent_hash: str, indices: list[int]) -> bool:
+        async with httpx.AsyncClient(timeout=10.0, cookies=self._cookies) as client:
+            resp = await client.post(
+                f"{self.base_url}/api/v2/torrents/filePrio",
+                data={"hash": torrent_hash, "id": "|".join(map(str, indices)), "priority": 0},
+            )
+            return resp.status_code == 200
+
     async def get_torrent(self, torrent_hash: str) -> Optional[dict]:
         torrents = await self.get_torrents()
         for t in torrents:
@@ -234,7 +249,7 @@ class TransmissionClient:
 
     async def get_torrents(self) -> list[dict]:
         fields = ["id", "name", "hashString", "status", "percentDone",
-                  "rateDownload", "rateUpload", "eta", "totalSize", "downloadedEver",
+                  "rateDownload", "rateUpload", "eta", "totalSize", "sizeWhenDone", "downloadedEver",
                   "uploadedEver", "secondsSeeding", "uploadRatio",
                   "downloadDir", "error", "errorString"]
         result = await self._rpc("torrent-get", {"fields": fields})
@@ -246,6 +261,16 @@ class TransmissionClient:
             if t.get("hashString", "").lower() == torrent_hash.lower():
                 return t
         return None
+
+    async def get_files(self, torrent_hash: str) -> list[dict]:
+        result = await self._rpc("torrent-get", {"ids": [torrent_hash.lower()], "fields": ["files"]})
+        torrents = result.get("arguments", {}).get("torrents", [])
+        files = torrents[0].get("files", []) if torrents else []
+        return [{"name": f.get("name", ""), "size": f.get("length", 0)} for f in files]
+
+    async def skip_files(self, torrent_hash: str, indices: list[int]) -> bool:
+        result = await self._rpc("torrent-set", {"ids": [torrent_hash.lower()], "files-unwanted": indices})
+        return result.get("result") == "success"
 
     async def delete_torrent(self, torrent_hash: str, delete_files: bool = False) -> bool:
         torrents = await self.get_torrents()
@@ -400,7 +425,7 @@ class TorrentManager:
                     "name": t.get("name", ""),
                     "status": self._tr.map_status(t.get("status", 0)),
                     "progress": t.get("percentDone", 0.0),
-                    "size_bytes": t.get("totalSize", 0),
+                    "size_bytes": t.get("sizeWhenDone") or t.get("totalSize", 0),
                     "downloaded_bytes": t.get("downloadedEver", 0),
                     "download_speed": t.get("rateDownload", 0),
                     "eta_seconds": t.get("eta", -1),
@@ -419,6 +444,32 @@ class TorrentManager:
                 return await self._qbt.delete_torrent(torrent_hash, delete_files)
             elif self._tr:
                 return await self._tr.delete_torrent(torrent_hash, delete_files)
+        except Exception:
+            pass
+        return False
+
+    async def get_files(self, torrent_hash: str) -> list[dict]:
+        """The torrent's files in client order; empty until its metadata arrives."""
+        try:
+            if self._qbt:
+                await self._qbt.login()
+                return await self._qbt.get_files(torrent_hash)
+            elif self._tr:
+                return await self._tr.get_files(torrent_hash)
+        except Exception:
+            pass
+        return []
+
+    async def skip_files(self, torrent_hash: str, indices: list[int]) -> bool:
+        """Leave these files (by index) undownloaded."""
+        if not indices:
+            return True
+        try:
+            if self._qbt:
+                await self._qbt.login()
+                return await self._qbt.skip_files(torrent_hash, indices)
+            elif self._tr:
+                return await self._tr.skip_files(torrent_hash, indices)
         except Exception:
             pass
         return False

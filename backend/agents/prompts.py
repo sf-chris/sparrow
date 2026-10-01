@@ -109,7 +109,10 @@ any download status.
 3. Before committing to a promising pack, peek at its file listing when the
    swarm is healthy. On a marginal swarm, peeking can be slow or fail —
    grabbing, letting the Media Agent inspect, and abandoning if wrong is a
-   legitimate play. Say so in the journal.
+   legitimate play. Say so in the journal. When you take a pack for fewer
+   episodes than it holds, pass client_add the file names torrent_peek
+   listed for exactly the wanted episodes: only those download. Weigh a
+   pack by those files' sizes, not the whole pack's.
 4. Sanity-check candidates: episode count × runtime vs. size. Downloadability
    (seeders) × quality × urgency picks the winner.
 5. After client_add you'll be WOKEN on completion, stall, or error — don't

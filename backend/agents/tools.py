@@ -9,6 +9,7 @@ an agent's good judgment is not a substitute for a seatbelt on rm.
 from __future__ import annotations
 import asyncio
 import json
+import logging
 import os
 import shutil
 import time
@@ -29,6 +30,8 @@ from .models import (AgentKind, AgentSession, Event, JournalEntry, JobStatus,
 from .runtime import ToolCtx, ToolDef, ToolError
 from .store import AgentStore
 from .accounts import Accounts
+
+logger = logging.getLogger("sparrow.agents")
 from .media_state import media_state, file_version, audio_satisfies
 
 TMDB = "https://api.themoviedb.org/3"
@@ -101,6 +104,25 @@ async def _probe_duration_seconds(path: Path) -> float:
     return float((await _probe_media_facts(path))["duration_seconds"])
 
 
+def match_files(files: list[dict], wanted: list[str]) -> list[int]:
+    """Indices of the torrent's files that the agent named from torrent_peek.
+
+    A name matches the whole path, its tail, or the file's own name, ignoring
+    case and folder separators.
+    """
+    picked = set()
+    for want in wanted:
+        want = str(want).replace("\\", "/").strip().lower()
+        if not want:
+            continue
+        base = want.rsplit("/", 1)[-1]
+        for index, file in enumerate(files):
+            name = str(file.get("name", "")).replace("\\", "/").lower()
+            if name == want or name.endswith("/" + want) or name.rsplit("/", 1)[-1] == base:
+                picked.add(index)
+    return sorted(picked)
+
+
 def remove_download_staging(staging_dir: str, download) -> None:
     """Delete a download's isolated staging folder, and only that folder.
 
@@ -160,6 +182,59 @@ class Toolbox:
     def smart_model(self) -> str:
         return (os.getenv("SPARROW_SMART_MODEL") or self.cfg().smart_model
                 or "claude-sonnet-5")
+
+    async def apply_file_selection(self, download) -> Optional[dict]:
+        """Download only the files the agent chose from a pack.
+
+        Runs once the torrent's file list is known (magnets fetch it first);
+        returns the recorded selection, or None while still waiting. When none
+        of the chosen files exist the transfer is stopped and the request woken.
+        """
+        wanted = download.metadata.get("wanted_files") or []
+        if not wanted or download.metadata.get("selection"):
+            return download.metadata.get("selection")
+        manager = self.torrents()
+        files = await manager.get_files(download.torrent_hash)
+        if not files:
+            return None
+        chosen = match_files(files, wanted)
+        values = {}
+        if chosen:
+            skipped = [i for i in range(len(files)) if i not in chosen]
+            if not await manager.skip_files(download.torrent_hash, skipped):
+                return None
+            selection = {"files": [files[i]["name"] for i in chosen], "skipped": len(skipped),
+                         "bytes": sum(int(files[i].get("size") or 0) for i in chosen)}
+        else:
+            await manager.stop_torrent(download.torrent_hash)
+            selection = {"error": "none of the chosen files are in this torrent", "wanted": wanted[:10],
+                         "available": [f["name"] for f in files[:40]]}
+            values = {"status": DownloadStatus.ERROR,
+                      "error_message": "None of the chosen files are in this torrent; nothing was downloaded."}
+        current = self.storage.get_download(download.id) or download
+        await self.storage.update_download(download.id, metadata={**current.metadata, "selection": selection}, **values)
+        if not chosen:
+            await self.emit(Event(
+                kind="download_stalled", job_id=download.metadata.get("job_id", ""), download_id=download.id,
+                payload={"description": f'None of the files you chose are in "{download.name}", so it was stopped. '
+                                        f'Its files include: {", ".join(f["name"] for f in files[:12])}. '
+                                        "Remove it and choose again.", "download_id": download.id}))
+        return selection
+
+    async def select_soon(self, download_id: str, seconds: float = 120.0) -> None:
+        """Apply a pack selection as soon as the file list arrives; the poller
+        finishes the job if it takes longer or the server restarts."""
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            download = self.storage.get_download(download_id)
+            if not download or download.metadata.get("selection"):
+                return
+            try:
+                if await self.apply_file_selection(download):
+                    return
+            except Exception:
+                logger.debug("pack selection not applied yet", exc_info=True)
+            await asyncio.sleep(2)
 
     async def connect_torrents(self) -> tuple[TorrentManager, bool, str]:
         """Connect, starting an installed local client when it is merely inactive."""
@@ -684,11 +759,13 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
             staging = Path(cfg.staging_dir).resolve() / download_id
             staging.mkdir(parents=True, exist_ok=True)
             magnet = build_magnet(info_hash, name)
+            wanted_files = [str(f) for f in (args.get("files") or []) if str(f).strip()][:200]
             dl = Download(id=download_id, name=name, magnet_url=magnet,
                 media_type=MediaType(job.media_type), status=DownloadStatus.QUEUED,
                 torrent_hash=info_hash, staging_path=str(staging), tmdb_id=job.tmdb_id,
                 metadata={"job_id": job.id, "session_id": ctx.session.id,
-                          "job_revision": job.revision, "agent_managed": True})
+                          "job_revision": job.revision, "agent_managed": True,
+                          **({"wanted_files": wanted_files} if wanted_files else {})})
             await tb.storage.add_download(dl)
             try:
                 torrent_hash = await mgr.add_magnet(magnet, str(staging))
@@ -700,8 +777,11 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
             await tb.storage.update_download(dl.id, status=DownloadStatus.DOWNLOADING,
                                              torrent_hash=torrent_hash or info_hash)
             await tb.broadcast({"type": "download_added", "data": dl.to_dict()})
+            if wanted_files:
+                asyncio.create_task(tb.select_soon(dl.id))
             return {"download_id": dl.id, "hash": dl.torrent_hash,
-                    "note": "Added. Progress and completion will wake this request."}
+                    "note": "Added. Progress and completion will wake this request."
+                    + (" Only the chosen files will download once the file list arrives." if wanted_files else "")}
 
     async def status(ctx: ToolCtx, args: dict):
         mgr, connected, recovery = await tb.connect_torrents()
@@ -824,8 +904,11 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
            {"apibay_id": {"type": "string"}}, ["apibay_id"], peek),
         _t("client_add",
            "Add a torrent to the download client (staging folder). Returns a "
-           "download_id. You'll be woken on completion, stall, or error.",
-           {"info_hash": {"type": "string"}, "name": {"type": "string"}},
+           "download_id. You'll be woken on completion, stall, or error. From a "
+           "pack, pass files: the names torrent_peek listed for the wanted "
+           "episodes, and only those download.",
+           {"info_hash": {"type": "string"}, "name": {"type": "string"},
+            "files": {"type": "array", "items": {"type": "string"}}},
            ["info_hash", "name"], add),
         _t("client_status", "Live status of this job's downloads.",
            {"include_done": {"type": "boolean"}}, [], status),
