@@ -222,6 +222,41 @@ caption to match a garbled transcript. Luna made several such regressions and
 Luna high also deleted a correct caption. Film keep checkers now dominate
 ($0.15, mostly the Sol second opinion).
 
+## Field test: 20 anime episodes end to end — 1 October 2026
+
+A separate source instance requested one episode each of 20 popular series
+(1995–2023) and ran on its own: Fetch and Media agents on GPT-6-Sol/Luna
+through the OpenAI loop, Transmission, Whisper turbo on this 16-core CPU, the
+cascade with GPT-6-Sol managing. Bugs were fixed as found; eight episodes that
+ran before their fix were re-run on a fresh instance.
+
+Result: 18 of 20 delivered with English subtitles (Mob Psycho 100: two dead
+torrents; Violet Evergarden: only sub-720p copies, re-search scheduled). Twelve
+kept the release's own professional track, checked and timed (two settled by
+the page checker alone, the rest with Sol changing a median of one line). Six
+were written by Sparrow: two releases carried English only as picture
+subtitles (DVD/Blu-ray), three had no English text track, and one ran before
+the fansub fixes. Delivered episodes cost $0.11–0.48 (median $0.24: $0.15
+finding and filing, $0.10 subtitles); the whole test, including re-runs and
+dead ends, cost $8.73. After the slot fix, request to library took 3–35
+minutes; transcription (5–9 minutes, one title at a time) is the main wait.
+
+Fixed during the test: pack downloads now fetch only the chosen files (on the
+storage node; names match regardless of punctuation); releases' signs, SDH/dub
+caption, mislabelled forced and mislabelled-language tracks are recognised;
+one bad event no longer discards a track; styled ASS tracks are extracted as
+ASS with drawings and effect layers dropped, and page building can no longer
+loop (a fansub track had hung the server at 8.7 GB); speech under a caption is
+never captioned twice; rewriting a professional line needs a second hearing,
+and the prompts protect wordplay and split sentences; requests waiting for a
+download slot are woken when one opens; missing provider keys are reported;
+the OCR fix leaves stutters alone.
+
+Open: picture subtitles need OCR; an online provider key would find English
+text before writing; abandoned transfers leave partial files in staging (about
+3.5 GB here) because removal deliberately keeps files; search-heavy titles cost
+up to $0.96 in agent spend.
+
 ## Limits
 
 Recognition can omit or mishear speech. The detector misses dialogue under
