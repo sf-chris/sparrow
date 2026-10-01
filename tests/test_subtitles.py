@@ -385,6 +385,52 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("c0003", report)
         self.assertIn("different meaning", report)
 
+    def fixture_checker(self, verdict):
+        async def checker(system, prompt, schema):
+            if "translate" in system.split(".")[0]:
+                ids = [line.split()[0] for line in prompt.splitlines()[1:] if line.startswith("u")]
+                return {"lines": [{"id": i, "english": f"line {int(i[1:])}"} for i in ids]}, {"output_tokens": 10}
+            captions = [line.split()[0] for line in prompt.splitlines() if line.startswith("c0")]
+            return {
+                "captions": [{"caption": c, "verdict": verdict, "speech": [f"u{int(c[1:]):05d}"], "note": ""} for c in captions],
+                "missing": [],
+            }, {"output_tokens": 10}
+
+        checker.model = "fixture-checker"
+        return checker
+
+    async def test_checkers_settle_a_clean_trusted_track_without_the_manager(self):
+        from backend.agents import subtitles as module
+
+        await self.manager(review=True)
+        self.subtitles.contract_caller = lambda model: self.fixture_checker("ok")
+        body = self.foreign(verify=True)
+        body["text"] = body["text"].replace("Line 2 of", "l'm line 2 of")
+        with (
+            patch.dict("os.environ", {"SPARROW_SUBTITLE_CONTRACTOR": "fixture-checker"}),
+            patch.object(module, "TRUSTED_SOURCES", ("upload",)),
+            patch.object(module, "AUDIT_SAMPLE", 10**12),
+        ):
+            task = await self.request(body, calls=[])
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertFalse(task["data"].get("review_sessions"))
+        self.assertIn("nothing to correct", task["data"]["review_outcome"]["reason"])
+        track = self.subtitles.tracks(self.owner, self.asset)[0]
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertEqual(served[1]["text"], "I'm line 2 of the dialogue.")
+
+    async def test_checkers_reject_a_mismatched_track_without_the_manager(self):
+        await self.manager(review=True)
+        self.subtitles.contract_caller = lambda model: self.fixture_checker("wrong")
+        with patch.dict("os.environ", {"SPARROW_SUBTITLE_CONTRACTOR": "fixture-checker"}):
+            task = await self.request(self.foreign(verify=True), calls=[])
+        attempts = {a["source_id"]: a for a in task["data"]["attempts"]}
+        self.assertEqual(attempts["upload"]["outcome"], "set_aside")
+        self.assertIn("don't match", attempts["upload"]["reason"])
+        # Every source was rejected by the checker alone, so Sparrow writes them.
+        self.assertTrue(task["data"].get("writing"))
+        self.assertTrue(all(a["outcome"] == "set_aside" for a in task["data"]["attempts"]))
+
     async def test_approval_is_refused_when_captions_do_not_match(self):
         await self.manager(review=True)
         lines, captions = self.checked_review()
@@ -396,9 +442,12 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
             response("verdict", {"approved": False, "reason": "Four captions describe other dialogue."}),
         ]
         task = await self.request(self.foreign(verify=True), calls=calls)
-        self.assertEqual(task["state"], "needs_attention")
-        self.assertIn("Four captions", task["data"]["message"])
-        session = self.service.store.get_session(task["data"]["review_session"])
+        # The rejected upload is set aside and the next source is tried.
+        attempts = {a["source_id"]: a for a in task["data"]["attempts"]}
+        self.assertEqual(attempts["upload"]["outcome"], "set_aside")
+        self.assertIn("Four captions", attempts["upload"]["reason"])
+        self.assertTrue(task["data"]["track_id"] and task["data"]["track_id"] != attempts["upload"]["track_id"])
+        session = self.service.store.get_session(task["data"]["review_sessions"][0])
         refused = [
             block["content"]
             for message in session.messages
@@ -407,9 +456,11 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
             if block.get("is_error")
         ]
         self.assertTrue(any("Approval refused" in text for text in refused))
-        self.assertTrue(
-            all(t["state"] == "rejected" for t in self.subtitles.tracks(self.owner, self.asset))
-        )
+        with self.accounts.connect() as db:
+            upload = [json.loads(r["data"]) | {"state": r["state"]} for r in db.execute("SELECT state,data FROM subtitle_tracks")]
+        upload = [t for t in upload if t.get("source_id") == "upload"]
+        self.assertTrue(upload and all(t["state"] in ("rejected", "superseded") for t in upload))
+        self.assertIn("rejected", {t["state"] for t in upload})
 
     async def test_agent_switches_to_a_better_source_itself(self):
         await self.manager(review=True)
