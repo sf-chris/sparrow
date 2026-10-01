@@ -864,3 +864,8 @@ class TrackKindTests(unittest.TestCase):
         self.assertEqual(track_kind(flagged, 455, 479), "full")  # mislabelled dialogue track
         self.assertEqual(track_kind(flagged, 40, 479), "forced")
         self.assertEqual(track_kind({"title": "Signs & Songs", "forced": False, "hearing_impaired": False}, 455, 479), "forced")
+        from backend.agents.subtitle_node import track_language
+
+        self.assertEqual(track_language({"language": "jpn", "title": "English Subtitles"}), "en")
+        self.assertEqual(track_language({"language": "jpn", "title": "Japanese SDH"}), "ja")
+        self.assertEqual(track_language({"language": "spa", "title": "Latin American"}), "es")
