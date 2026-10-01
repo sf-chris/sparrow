@@ -982,6 +982,12 @@ class AgentService:
             ):
                 continue
             try:
+                if dl.metadata.get("wanted_files") and not dl.metadata.get("selection"):
+                    # A pack choice waits for the torrent's file list.
+                    await self.toolbox.apply_file_selection(dl)
+                    dl = self.storage.get_download(dl.id) or dl
+                    if dl.status == DownloadStatus.ERROR:
+                        continue
                 if dl.metadata.get("node_id"):
                     info = nodes.info(dl.metadata["node_id"])
                     if not info or not info["online"]:
@@ -1007,12 +1013,6 @@ class AgentService:
                         )
                         continue
                 elif manager:
-                    if dl.metadata.get("wanted_files") and not dl.metadata.get("selection"):
-                        # A pack choice waits for the torrent's file list.
-                        await self.toolbox.apply_file_selection(dl)
-                        dl = self.storage.get_download(dl.id) or dl
-                        if dl.status == DownloadStatus.ERROR:
-                            continue
                     st = await manager.get_torrent_status(dl.torrent_hash)
                 else:
                     continue

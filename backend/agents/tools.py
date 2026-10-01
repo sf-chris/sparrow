@@ -22,7 +22,7 @@ import httpx
 
 from ..models import Download, DownloadStatus, MediaType, LibraryItem, quality_rank
 from ..storage import Storage
-from ..services.torrent_client import TorrentManager, build_magnet, start_configured_client
+from ..services.torrent_client import TorrentManager, build_magnet, match_files, select_files, start_configured_client
 from ..services.search_engine import _query as apibay_query
 from ..services.release_parser import parse_release_name
 from .models import (AgentKind, AgentSession, Event, JournalEntry, JobStatus,
@@ -104,25 +104,6 @@ async def _probe_duration_seconds(path: Path) -> float:
     return float((await _probe_media_facts(path))["duration_seconds"])
 
 
-def match_files(files: list[dict], wanted: list[str]) -> list[int]:
-    """Indices of the torrent's files that the agent named from torrent_peek.
-
-    A name matches the whole path, its tail, or the file's own name, ignoring
-    case and folder separators.
-    """
-    picked = set()
-    for want in wanted:
-        want = str(want).replace("\\", "/").strip().lower()
-        if not want:
-            continue
-        base = want.rsplit("/", 1)[-1]
-        for index, file in enumerate(files):
-            name = str(file.get("name", "")).replace("\\", "/").lower()
-            if name == want or name.endswith("/" + want) or name.rsplit("/", 1)[-1] == base:
-                picked.add(index)
-    return sorted(picked)
-
-
 def remove_download_staging(staging_dir: str, download) -> None:
     """Delete a download's isolated staging folder, and only that folder.
 
@@ -186,40 +167,39 @@ class Toolbox:
     async def apply_file_selection(self, download) -> Optional[dict]:
         """Download only the files the agent chose from a pack.
 
-        Runs once the torrent's file list is known (magnets fetch it first);
-        returns the recorded selection, or None while still waiting. When none
-        of the chosen files exist the transfer is stopped and the request woken.
+        Runs on the storage node that holds the transfer once the torrent's
+        file list is known (magnets fetch it first); returns the recorded
+        selection, or None while still waiting. When none of the chosen files
+        exist the transfer is stopped and the request woken.
         """
         wanted = download.metadata.get("wanted_files") or []
         if not wanted or download.metadata.get("selection"):
             return download.metadata.get("selection")
-        manager = self.torrents()
-        files = await manager.get_files(download.torrent_hash)
-        if not files:
-            return None
-        chosen = match_files(files, wanted)
-        values = {}
-        if chosen:
-            skipped = [i for i in range(len(files)) if i not in chosen]
-            if not await manager.skip_files(download.torrent_hash, skipped):
-                return None
-            selection = {"files": [files[i]["name"] for i in chosen], "skipped": len(skipped),
-                         "bytes": sum(int(files[i].get("size") or 0) for i in chosen)}
+        node_id = download.metadata.get("node_id")
+        if node_id:
+            from .node_tools import components
+
+            nodes, _ = components(self)
+            job = self.store.get_job(download.metadata.get("job_id", ""))
+            result = await nodes.execute(node_id, "download_select",
+                                         {"hash": download.torrent_hash, "files": wanted}, job=job, timeout=20)
         else:
-            await manager.stop_torrent(download.torrent_hash)
-            selection = {"error": "none of the chosen files are in this torrent", "wanted": wanted[:10],
-                         "available": [f["name"] for f in files[:40]]}
+            result = await select_files(self.torrents(), download.torrent_hash, wanted)
+        if not result or result.get("pending"):
+            return None
+        values = {}
+        if "error" in result:
             values = {"status": DownloadStatus.ERROR,
                       "error_message": "None of the chosen files are in this torrent; nothing was downloaded."}
         current = self.storage.get_download(download.id) or download
-        await self.storage.update_download(download.id, metadata={**current.metadata, "selection": selection}, **values)
-        if not chosen:
+        await self.storage.update_download(download.id, metadata={**current.metadata, "selection": result}, **values)
+        if "error" in result:
             await self.emit(Event(
                 kind="download_stalled", job_id=download.metadata.get("job_id", ""), download_id=download.id,
                 payload={"description": f'None of the files you chose are in "{download.name}", so it was stopped. '
-                                        f'Its files include: {", ".join(f["name"] for f in files[:12])}. '
+                                        f'Its files include: {", ".join(result.get("available", [])[:12])}. '
                                         "Remove it and choose again.", "download_id": download.id}))
-        return selection
+        return result
 
     async def select_soon(self, download_id: str, seconds: float = 120.0) -> None:
         """Apply a pack selection as soon as the file list arrives; the poller

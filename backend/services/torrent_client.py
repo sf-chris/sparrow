@@ -499,6 +499,45 @@ class TorrentManager:
         return False
 
 
+# ─── Choosing files in a pack ─────────────────────────────────────────────────
+
+def match_files(files: list[dict], wanted: list[str]) -> list[int]:
+    """Indices of the torrent's files that were named from its listing.
+
+    A name matches the whole path, its tail, or the file's own name, ignoring
+    case and folder separators.
+    """
+    picked = set()
+    for want in wanted:
+        want = str(want).replace("\\", "/").strip().lower()
+        if not want:
+            continue
+        base = want.rsplit("/", 1)[-1]
+        for index, file in enumerate(files):
+            name = str(file.get("name", "")).replace("\\", "/").lower()
+            if name == want or name.endswith("/" + want) or name.rsplit("/", 1)[-1] == base:
+                picked.add(index)
+    return sorted(picked)
+
+
+async def select_files(manager: "TorrentManager", torrent_hash: str, wanted: list[str]) -> dict:
+    """Download only the named files: pending until the file list is known;
+    a choice matching nothing stops the transfer instead of taking it all."""
+    files = await manager.get_files(torrent_hash)
+    if not files:
+        return {"pending": True}
+    chosen = match_files(files, wanted)
+    if not chosen:
+        await manager.stop_torrent(torrent_hash)
+        return {"error": "none of the chosen files are in this torrent", "wanted": list(wanted)[:10],
+                "available": [f["name"] for f in files[:40]]}
+    skipped = [i for i in range(len(files)) if i not in chosen]
+    if not await manager.skip_files(torrent_hash, skipped):
+        return {"pending": True}
+    return {"files": [files[i]["name"] for i in chosen], "skipped": len(skipped),
+            "bytes": sum(int(files[i].get("size") or 0) for i in chosen)}
+
+
 # ─── Auto-discovery ───────────────────────────────────────────────────────────
 
 async def discover_torrent_clients() -> list[TorrentClientInfo]:

@@ -281,7 +281,7 @@ class PackSelectionTests(unittest.IsolatedAsyncioTestCase):
         ]
 
     async def test_only_the_chosen_file_downloads(self):
-        from backend.agents.tools import match_files
+        from backend.services.torrent_client import match_files
 
         self.assertEqual(match_files(self.pack(), ["Show - 02 [1080p].mkv"]), [1])
         self.assertEqual(match_files(self.pack(), ["show/show - 01 [1080p].MKV"]), [0])
@@ -310,3 +310,22 @@ class PackSelectionTests(unittest.IsolatedAsyncioTestCase):
         wrong.skip_files.assert_not_awaited()
         self.assertEqual(self.storage.get_download("dl-y").status, DownloadStatus.ERROR)
         self.assertEqual(self.events[-1].kind, "download_stalled")
+
+    async def test_a_storage_node_applies_the_choice_to_its_own_transfer(self):
+        from types import SimpleNamespace
+
+        calls = []
+
+        async def execute(node_id, kind, args, **kw):
+            calls.append((node_id, kind, args))
+            return {"files": ["Show/Show - 02 [1080p].mkv"], "skipped": 2, "bytes": 310}
+
+        self.toolbox.nodes = SimpleNamespace(execute=execute)
+        self.toolbox.catalogue = None
+        download = Download(id="dl-z", name="Show pack", magnet_url="magnet:?", torrent_hash="d" * 40,
+                            metadata={"job_id": self.job.id, "node_id": "local", "wanted_files": ["Show - 02 [1080p].mkv"]})
+        await self.storage.add_download(download)
+        selection = await self.toolbox.apply_file_selection(download)
+        self.assertEqual(calls, [("local", "download_select", {"hash": "d" * 40, "files": ["Show - 02 [1080p].mkv"]})])
+        self.assertEqual(selection["skipped"], 2)
+        self.assertEqual(self.storage.get_download("dl-z").metadata["selection"]["bytes"], 310)
