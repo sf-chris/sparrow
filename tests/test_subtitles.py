@@ -418,6 +418,8 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         track = self.subtitles.tracks(self.owner, self.asset)[0]
         served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
         self.assertEqual(served[1]["text"], "I'm line 2 of the dialogue.")
+        self.assertEqual(review.replace_words("is there a guy you l-like? l do.", "l", "I"), "is there a guy you l-like? I do.")
+        self.assertEqual(review.detect([{"start": 1, "end": 2, "text": "you l-l-like him"}], [])["ocr"], [])
 
     async def test_checkers_reject_a_mismatched_track_without_the_manager(self):
         await self.manager(review=True)
