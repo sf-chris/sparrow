@@ -342,7 +342,7 @@ class AgentRuntime:
 
         try:
             await self._turn(session, spec, events)
-        except Exception:
+        except Exception as exc:
             # A broken turn must never orphan a session: journal-grade
             # legibility happens in the agents; here we just make sure it
             # wakes again soon to retry.
@@ -352,7 +352,11 @@ class AgentRuntime:
             session.status = SessionStatus.HIBERNATING
             session.outcome = CaseState.FAILED
             session.wake_at = time.time() + 300
-            session.wake_reason = "Something went wrong. Trying again in 5 minutes."
+            session.wake_reason = (
+                "The AI provider refused the key, or none is set. Check it, then try again."
+                if getattr(exc, "status_code", None) in (401, 403)
+                else "Something went wrong. Trying again in 5 minutes."
+            )
             self.store.save_session(session)
         await self._notify(session)
 
@@ -757,11 +761,15 @@ class AgentRuntime:
         import httpx
 
         spec = self._specs[session.agent.value]
+        key = self._altprovider_key_getter()
+        if not key:
+            # A missing key is not an outage: say so instead of retrying.
+            raise altprovider_loop.AltProviderStatusError(401, f"{session.model} needs an AltProvider key (ALTPROVIDER_API_KEY).")
         delay = 2.0
         for attempt in range(3):
             try:
                 return await altprovider_loop.create(
-                    self._altprovider_key_getter(),
+                    key,
                     session.model,
                     system,
                     [t.to_api() for t in tools],

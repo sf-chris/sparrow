@@ -56,3 +56,22 @@ class AltProviderLoopTests(unittest.TestCase):
         cost, _ = calculate_usage_cost("smart-model", 1_000_000, 1_000_000, 0, 1_000_000)
         self.assertAlmostEqual(cost, 2.0 + 10.0 + 0.20)
         self.assertEqual(rates_for_model("cheap-model")["cache_read"], 0.01)
+
+
+class MissingKeyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_missing_altprovider_key_is_reported_not_retried(self):
+        import tempfile
+        from unittest.mock import AsyncMock, patch
+        from backend.agents.models import AgentKind, AgentSession
+        from backend.agents.runtime import AgentRuntime, AgentSpec
+        from backend.agents.store import AgentStore
+
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = AgentRuntime(AgentStore(folder), lambda: "")
+            runtime._altprovider_key_getter = lambda: ""
+            runtime.register(AgentSpec(kind=AgentKind.FETCH.value, model=lambda: "smart-model", system=AsyncMock(return_value="orders"), tools=lambda s: []))
+            session = AgentSession(agent=AgentKind.FETCH, model="smart-model")
+            with patch.object(altprovider_loop, "create", AsyncMock()) as create:
+                with self.assertRaisesRegex(altprovider_loop.AltProviderStatusError, "needs an AltProvider key"):
+                    await runtime._call_altprovider(session, "orders", [])
+                create.assert_not_called()
