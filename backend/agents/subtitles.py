@@ -1608,6 +1608,17 @@ class Subtitles:
             task, context = await load(ctx)
             if not context["track"]:
                 raise ToolError("No track is in use; choose a source or write the subtitles.")
+            if context["track"]["data"].get("source_id", "").startswith(TRUSTED_SOURCES):
+                unheard = pages_.unheard_rewrites(context["cues"], context["state"].get("listens", []), args.get("changes", []))
+                if unheard:
+                    spans = ", ".join(
+                        f"{identity} {pages_.ts(max(0, cue['start'] - 2))}–{pages_.ts(cue['end'] + 2)}" for identity, cue in unheard[:6]
+                    )
+                    raise ToolError(
+                        "These lines are from the release's professional track. Listen to each moment first "
+                        f"({spans}) and rewrite a line only if the second hearing clearly says something different; "
+                        "otherwise settle it as it is."
+                    )
             try:
                 cues, touched, renamed = pages_.edit(
                     context["cues"],

@@ -839,6 +839,15 @@ class CoveredSpeechTests(unittest.TestCase):
         self.assertEqual(gaps, [["u00002"]])
 
 
+class ProfessionalRewriteTests(unittest.TestCase):
+    def test_rewriting_a_professional_line_needs_a_second_hearing(self):
+        cues = [{"start": 10.0, "end": 12.0, "text": "Good Joseph!"}, {"start": 20.0, "end": 21.0, "text": "What did l...?"}]
+        rewrite = [{"caption": "c0001", "text": "Good work, Answer!"}]
+        self.assertEqual([i for i, _ in review.unheard_rewrites(cues, [], rewrite)], ["c0001"])
+        self.assertEqual(review.unheard_rewrites(cues, [{"start": 8.0, "end": 14.0}], rewrite), [])
+        self.assertEqual(review.unheard_rewrites(cues, [], [{"caption": "c0002", "text": "What did I...?"}]), [])
+
+
 class TrackKindTests(unittest.TestCase):
     def test_release_titles_mark_signs_and_caption_tracks(self):
         from backend.agents.subtitle_node import track_kind
