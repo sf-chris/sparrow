@@ -498,6 +498,9 @@ class Executor:
                 raise NodeError(
                     "This track needs image-subtitle support or a text alternative."
                 )
+            # Styled tracks stay ASS so drawings and effect layers can be told
+            # from dialogue; WebVTT conversion turns shapes into text.
+            styled = track["codec"] in ("ass", "ssa")
             output = await run_media(
                 "ffmpeg",
                 "-v",
@@ -507,13 +510,14 @@ class Executor:
                 "-map",
                 f"0:{index}",
                 "-f",
-                "webvtt",
+                "ass" if styled else "webvtt",
                 "pipe:1",
                 timeout=60,
             )
-            if len(output) > 2 * 1024 * 1024:
+            if len(output) > 16 * 1024 * 1024:
                 raise NodeError("This subtitle track exceeds the supported size.")
-            return {"vtt": output.decode("utf-8")}
+            text = output.decode("utf-8", errors="replace")
+            return {"text": text, "format": "ass"} if styled else {"vtt": text}
         if kind == "probe":
             if path.suffix.lower() not in VIDEO_EXTENSIONS:
                 raise NodeError("Choose a supported video file.")

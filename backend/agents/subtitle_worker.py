@@ -15,6 +15,22 @@ import sys
 from pathlib import Path
 
 DRAWING = re.compile(r"\{[^}]*\\p[1-9]")
+NUMBER = re.compile(r"-?\d+(\.\d+)?")
+
+
+def shape_text(text):
+    """A vector shape converted to plain text by an older extraction: only
+    drawing commands and coordinates, starting with a move."""
+    tokens = text.split()
+    return (
+        len(tokens) >= 3
+        and tokens[0].lower() == "m"
+        and all(t.lower() in "mnlbspc" or NUMBER.fullmatch(t) for t in tokens)
+    )
+
+
+BRACED = re.compile(r"^\s*\{[^}]*\}\s*$")
+EFFECT_LAYERS = ("fx", "template", "code", "karaoke")
 
 
 def cues_from_text(text, format_name):
@@ -27,15 +43,21 @@ def cues_from_text(text, format_name):
     if len(text.encode("utf8")) > 16 * 1024 * 1024:
         raise ValueError("Subtitle files must be smaller than 16 MB.")
     parsed = pysubs2.SSAFile.from_string(text, format_=format_name)
-    cues, unusable = [], 0
+    cues, unusable, seen = [], 0, set()
     for entry in parsed:
         if DRAWING.search(entry.text):
             continue  # ASS vector shapes are typesetting, not readable text.
+        if str(getattr(entry, "effect", "") or "").strip().lower().startswith(EFFECT_LAYERS):
+            continue  # Generated karaoke and effect layers repeat the real lines.
         clean = entry.plaintext.strip()
         if format_name == "vtt":
-            clean = html.unescape(clean)
-        if entry.is_comment or not clean:
+            clean = html.unescape(re.sub(r"</?[biu]>", "", clean)).strip()
+        if entry.is_comment or not clean or shape_text(clean) or BRACED.match(clean):
             continue
+        layer = (entry.start, entry.end, clean)
+        if layer in seen:
+            continue  # Stacked typesetting layers of one sign.
+        seen.add(layer)
         # Zero-length effect events and oversized typesetting blocks are not
         # captions; one of them must not discard an otherwise good track.
         if entry.start < 0 or entry.end <= entry.start or len(clean) > 2000:

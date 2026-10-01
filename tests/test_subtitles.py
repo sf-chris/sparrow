@@ -848,6 +848,37 @@ class ProfessionalRewriteTests(unittest.TestCase):
         self.assertEqual(review.unheard_rewrites(cues, [], [{"caption": "c0002", "text": "What did I...?"}]), [])
 
 
+class TypesetTrackTests(unittest.TestCase):
+    def test_effect_layers_and_shapes_are_not_captions(self):
+        ass = (
+            "[Script Info]\nScriptType: v4.00+\n\n[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello there.\n"
+            "Dialogue: 0,0:00:03.00,0:00:04.00,Sign,,0,0,0,,CLOSED\n"
+            "Dialogue: 1,0:00:03.00,0:00:04.00,Sign,,0,0,0,,CLOSED\n"
+            "Dialogue: 0,0:00:05.00,0:00:06.00,OP,,0,0,0,fx,{\\k20}sy{\\k20}lla\n"
+            "Dialogue: 0,0:00:07.00,0:00:08.00,Default,,0,0,0,,Goodbye.\n"
+        )
+        self.assertEqual([c["text"] for c in cues_from_text(ass, "ass")], ["Hello there.", "CLOSED", "Goodbye."])
+        vtt = "WEBVTT\n\n00:01.000 --> 00:02.000\n<b>Hello.</b>\n\n00:03.000 --> 00:03.200\nm 0 0 l 100 0 100 2 0 0\n\n00:04.000 --> 00:05.000\n<b>{OP}</b>\n"
+        self.assertEqual([c["text"] for c in cues_from_text(vtt, "vtt")], ["Hello."])
+        import time
+        from backend.agents.subtitle_worker import shape_text
+
+        started = time.time()
+        self.assertFalse(shape_text("m " + "1.75 -1.75 b 3.625 0.75 " * 400 + "word"))
+        self.assertTrue(shape_text("m 0 0 l 100 0 100 2 0 0"))
+        self.assertLess(time.time() - started, 1)
+
+    def test_pages_advance_when_many_lines_share_a_start(self):
+        cues = [{"start": 30.0, "end": 31.0, "text": f"layer {n}"} for n in range(300)] + [
+            {"start": 200.0 + n, "end": 201.0 + n, "text": "line"} for n in range(5)
+        ]
+        pages = review.build_pages([], cues, 400)
+        self.assertTrue(1 <= len(pages) < 20)
+        self.assertEqual(pages[-1]["end"], 401.0)
+
+
 class TrackKindTests(unittest.TestCase):
     def test_release_titles_mark_signs_and_caption_tracks(self):
         from backend.agents.subtitle_node import track_kind
