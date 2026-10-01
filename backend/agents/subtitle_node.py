@@ -257,16 +257,20 @@ SIGNS_TITLE = re.compile(r"\bforced\b|\bsigns?\b|\bs\s*&\s*s\b|\bsongs?\s*(&|and
 CAPTIONS_TITLE = re.compile(r"\bsdh\b|\bcc\b|closed.?caption|hearing|\bhoh\b|\bdub(titles?)?\b", re.I)
 
 
-def track_kind(track):
+def track_kind(track, cues=0, fullest=0):
     """Forced (signs and songs), SDH (captions, often of an English dub) or full.
 
     Release tags are unreliable: "Signs & Songs" and "English [SDH]" tracks
-    often carry no forced or hearing-impaired flag, and a caption track's
-    sound-effect lines make it look the most complete.
+    often carry no forced or hearing-impaired flag, a caption track's
+    sound-effect lines make it look the most complete, and some releases flag
+    their full dialogue track as forced. A flagged track with as many cues as
+    the fullest track in the file is dialogue, not signs.
     """
     title = track.get("title") or ""
     complete = re.search(r"\bfull\b|dialog", title, re.I)
-    if track.get("forced") or (SIGNS_TITLE.search(title) and not complete):
+    if SIGNS_TITLE.search(title) and not complete:
+        return "forced"
+    if track.get("forced") and not (complete or (cues >= 100 and cues >= 0.6 * fullest)):
         return "forced"
     if track.get("hearing_impaired") or CAPTIONS_TITLE.search(title):
         return "sdh"
@@ -284,13 +288,14 @@ async def candidates(executor, path, args):
     # The default track can contain only signs, even without a forced flag.
     # Cue counts steer selection towards full dialogue; they prove nothing.
     counts = await subtitle_counts(path, [t["index"] for t in text])
+    fullest = max(counts.values(), default=0)
     out = [
         {
             "id": "embedded:" + str(track["index"]),
             "source": "embedded",
             "index": track["index"],
             "language": language_code(track["language"]),
-            "kind": track_kind(track),
+            "kind": track_kind(track, counts.get(track["index"], 0), fullest),
             "title": track["title"] or "Included in this copy",
             "cue_count": counts.get(track["index"], 0),
         }
