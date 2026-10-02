@@ -58,6 +58,32 @@ class OpenAILoopTests(unittest.TestCase):
         self.assertEqual(rates_for_model("gpt-6-luna")["cache_read"], 0.01)
 
 
+class HistoryTrimTests(unittest.TestCase):
+    def test_a_trimmed_history_never_keeps_a_result_without_its_call(self):
+        from backend.agents.models import AgentSession
+        from backend.agents.runtime import HISTORY_TRIM_AT, AgentRuntime
+
+        session = AgentSession(messages=[{"role": "user", "content": "[wake] find episode 2"}])
+        for n in range(HISTORY_TRIM_AT):
+            session.messages.append({"role": "assistant", "content": [{"type": "tool_use", "id": f"call_{n}", "name": "wake_me", "input": {}}]})
+            # Wake text is merged into the message holding the tool result.
+            session.messages.append({"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": f"call_{n}", "content": "Hibernating."},
+                {"type": "text", "text": f"[wake] timer {n}"},
+            ]})
+        AgentRuntime._trim_history(None, session)
+        self.assertLess(len(session.messages), HISTORY_TRIM_AT)
+        calls = set()
+        for message in session.messages:
+            for block in message["content"] if isinstance(message["content"], list) else []:
+                if block.get("type") == "tool_use":
+                    calls.add(block["id"])
+                if block.get("type") == "tool_result":
+                    self.assertIn(block["tool_use_id"], calls)
+        self.assertEqual(session.messages[2]["content"], [{"type": "text", "text": f"[wake] timer {HISTORY_TRIM_AT - 40}"}])
+        openai_loop.input_items(session.messages)
+
+
 class MissingKeyTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_missing_openai_key_is_reported_not_retried(self):
         import tempfile
