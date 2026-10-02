@@ -1017,7 +1017,7 @@ class AgentService:
             ):
                 continue
             try:
-                if dl.metadata.get("wanted_files") and not dl.metadata.get("selection"):
+                if not dl.metadata.get("selection") and self.toolbox.selection_for(dl):
                     # A pack choice waits for the torrent's file list.
                     await self.toolbox.apply_file_selection(dl)
                     dl = self.storage.get_download(dl.id) or dl
