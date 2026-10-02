@@ -867,17 +867,18 @@ class AgentRuntime:
         s.dollars = sum(float(entry.get("cost") or 0) for entry in s.entries)
 
     def _trim_history(self, session: AgentSession) -> None:
+        _drop_orphan_results(session)
         msgs = session.messages
         if len(msgs) <= HISTORY_TRIM_AT:
             return
-        # Cut at a clean user-text boundary so tool_use/tool_result pairs
-        # never split. A [wake] message is always such a boundary.
+        # Cut at a user message. Wake text is merged into the message holding
+        # the last tool results, so the cut one's results lose their calls:
+        # they go too (the journal and memory keep what mattered).
         cut = len(msgs) - HISTORY_TRIM_TO
-        while cut < len(msgs) - 1:
-            m = msgs[cut]
-            if m.get("role") == "user" and isinstance(m.get("content"), str):
-                break
+        while cut < len(msgs) - 1 and msgs[cut].get("role") != "user":
             cut += 1
+        if msgs[cut].get("role") != "user":
+            return
         session.messages = [
             {
                 "role": "user",
@@ -886,6 +887,23 @@ class AgentRuntime:
             },
             {"role": "assistant", "content": "Understood."},
         ] + msgs[cut:]
+        _drop_orphan_results(session)
+
+
+def _drop_orphan_results(session: AgentSession) -> None:
+    """Remove tool results whose call is no longer in the history (a trim
+    cut it): every provider rejects a result without its call."""
+    calls = set()
+    for message in session.messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        if message.get("role") == "assistant":
+            calls.update(b.get("id") for b in content if isinstance(b, dict) and b.get("type") == "tool_use")
+            continue
+        kept = [b for b in content if not (isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") not in calls)]
+        if len(kept) != len(content):
+            message["content"] = kept or "(continuing)"
 
 
 def _append_user(session: AgentSession, text: str) -> None:
