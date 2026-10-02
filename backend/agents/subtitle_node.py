@@ -535,23 +535,21 @@ async def listen(executor, path, args):
 # ─── Picture subtitles (Blu-ray, DVD, broadcast) ────────────────────────────
 
 PICTURE_CODECS = ("hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle")
-PICTURE_WIDTH = 1280  # rendering width: legible for OCR, small to stream
+PICTURE_WIDTH, PICTURE_HEIGHT = 1280, 720  # rendering width: legible for OCR, small to stream
 SHEET_ROWS = 20
 MAX_PICTURES = 4000
 
 
 async def picture_sheets(path, index, timeout=900):
-    """Render a picture subtitle track and stack its distinct images on sheets.
+    """Render a picture subtitle track and stack its distinct lines on sheets.
 
-    ffmpeg draws each subtitle change with its own palette; every distinct
-    image becomes one event with the timing the disc gives it. Returns the
+    Every line is one event with the timing the disc gives it. Returns the
     events and base64 PNG sheets of up to SHEET_ROWS numbered rows, for a
     vision model to transcribe. Nothing here reads the text.
     """
     import base64
     import io
 
-    import numpy as np
     from PIL import Image, ImageDraw, ImageFont
 
     tool = executable("ffmpeg")
@@ -561,9 +559,50 @@ async def picture_sheets(path, index, timeout=900):
     track = next((t for t in probe["subtitle_tracks"] if t["index"] == index), None)
     if not track or track["codec"] not in PICTURE_CODECS:
         raise NodeError("This is not a picture subtitle track.")
+    if track["codec"] == "hdmv_pgs_subtitle":
+        events = await _disc_events(tool, path, index, timeout)
+    else:
+        events = await _rendered_events(tool, path, index, timeout)
+
+    font = ImageFont.load_default(size=28)
+    sheets = []
+    for first in range(0, len(events), SHEET_ROWS):
+        rows = []
+        for number, event in enumerate(events[first:first + SHEET_ROWS], first + 1):
+            picture = Image.fromarray(event["crop"], "RGBA")
+            backdrop = Image.new("RGBA", picture.size, (64, 64, 64, 255))
+            backdrop.alpha_composite(picture)
+            rows.append((number, backdrop.convert("RGB")))
+        width = max(r.width for _, r in rows) + 90
+        height = sum(r.height + 8 for _, r in rows)
+        sheet = Image.new("RGB", (width, height), (255, 255, 255))
+        draw, y = ImageDraw.Draw(sheet), 0
+        for number, row in rows:
+            draw.text((8, y + row.height // 2 - 14), str(number), fill=(0, 0, 0), font=font)
+            sheet.paste(row, (90, y))
+            y += row.height + 8
+        buffer = io.BytesIO()
+        sheet.save(buffer, "PNG", optimize=True)
+        sheets.append(base64.b64encode(buffer.getvalue()).decode())
+    return {
+        "events": [{"n": n, "start": e["start"], "end": e["end"]} for n, e in enumerate(events, 1)],
+        "sheets": sheets,
+        "rows_per_sheet": SHEET_ROWS,
+    }
+
+
+async def _rendered_events(tool, path, index, timeout):
+    """DVD and broadcast picture lines, drawn by ffmpeg frame by frame."""
+    import numpy as np
+
     process = await asyncio.create_subprocess_exec(
         tool, "-nostdin", "-hide_banner", "-v", "info", "-i", str(path),
-        "-filter_complex", f"[0:{index}]scale={PICTURE_WIDTH}:-2,showinfo",
+        # A disc's canvas can change size mid-track (a first frame before
+        # its size is declared): every frame is fitted to one size, or the
+        # raw stream would be cut at the wrong places from then on.
+        "-filter_complex",
+        f"[0:{index}]scale={PICTURE_WIDTH}:{PICTURE_HEIGHT}:force_original_aspect_ratio=decrease,format=rgba,"
+        f"pad={PICTURE_WIDTH}:{PICTURE_HEIGHT}:-1:-1:color=0x00000000,showinfo",
         "-fps_mode", "passthrough", "-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
         stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
@@ -581,15 +620,21 @@ async def picture_sheets(path, index, timeout=900):
                 if shape:
                     size.extend((int(shape.group(1)), int(shape.group(2))))
 
-    events, current, crops = [], None, {}
+    events, current = [], None
 
     def close(at):
         nonlocal current
         if current is not None:
             current["end"] = round(at, 3)
             if current["end"] > current["start"]:
+                current.pop("shape")
                 events.append(current)
             current = None
+
+    def same_line(before, now):
+        """Shapes that share nearly all their pixels: one line, faded or recoloured."""
+        union = np.count_nonzero(before | now)
+        return bool(union) and np.count_nonzero(before & now) / union >= 0.9
 
     async def read_frames():
         nonlocal current
@@ -612,21 +657,26 @@ async def picture_sheets(path, index, timeout=900):
             if at is None or at > 10 * 86400:
                 continue  # ffmpeg's closing frame
             image = np.frombuffer(raw, np.uint8).reshape(height, width, 4)
-            ys, xs = np.nonzero(image[:, :, 3])
-            if not len(ys):
+            alpha = image[:, :, 3]
+            if not alpha.any():
                 close(at)
                 continue
+            # A line is its shape: fading in or out (the palette's alpha
+            # ramping frame by frame) or recolouring, it is still one line.
+            shape = alpha >= max(1, int(alpha.max()) // 2)
+            ys, xs = np.nonzero(shape)
             top, bottom = max(0, ys.min() - 6), min(height, ys.max() + 7)
             left, right = max(0, xs.min() - 6), min(width, xs.max() + 7)
             crop = image[top:bottom, left:right]
-            key = hashlib.sha256(crop.tobytes()).hexdigest()
-            if current is not None and current["key"] == key:
+            weight = int(crop[:, :, 3].sum())
+            if current is not None and same_line(current["shape"], shape):
+                if weight > current["weight"]:
+                    current.update(crop=crop.copy(), weight=weight)  # read the clearest frame
                 continue
             close(at)
             if len(events) >= MAX_PICTURES:
                 raise NodeError("This picture subtitle track has too many images.")
-            crops.setdefault(key, crop.copy())
-            current = {"start": round(at, 3), "key": key}
+            current = {"start": round(at, 3), "shape": shape.copy(), "crop": crop.copy(), "weight": weight}
 
     try:
         await asyncio.wait_for(asyncio.gather(read_log(), read_frames()), timeout)
@@ -643,30 +693,188 @@ async def picture_sheets(path, index, timeout=900):
         raise NodeError("ffmpeg could not decode this picture subtitle track: " + "; ".join(dict.fromkeys(problems))[:300])
     if current is not None and times:
         close(max(t for t in times if t < 10 * 86400))
+    return events
 
-    font = ImageFont.load_default(size=28)
-    sheets = []
-    for first in range(0, len(events), SHEET_ROWS):
-        rows = []
-        for number, event in enumerate(events[first:first + SHEET_ROWS], first + 1):
-            crop = crops[event["key"]]
-            picture = Image.fromarray(crop, "RGBA")
-            backdrop = Image.new("RGBA", picture.size, (64, 64, 64, 255))
-            backdrop.alpha_composite(picture)
-            rows.append((number, backdrop.convert("RGB")))
-        width = max(r.width for _, r in rows) + 90
-        height = sum(r.height + 8 for _, r in rows)
-        sheet = Image.new("RGB", (width, height), (255, 255, 255))
-        draw, y = ImageDraw.Draw(sheet), 0
-        for number, row in rows:
-            draw.text((8, y + row.height // 2 - 14), str(number), fill=(0, 0, 0), font=font)
-            sheet.paste(row, (90, y))
-            y += row.height + 8
-        buffer = io.BytesIO()
-        sheet.save(buffer, "PNG", optimize=True)
-        sheets.append(base64.b64encode(buffer.getvalue()).decode())
-    return {
-        "events": [{"n": n, "start": e["start"], "end": e["end"]} for n, e in enumerate(events, 1)],
-        "sheets": sheets,
-        "rows_per_sheet": SHEET_ROWS,
-    }
+
+async def _disc_events(tool, path, index, timeout):
+    """Blu-ray (PGS) lines with the disc's own times. ffmpeg only copies the
+    track out (decompressing it); the display sets are decoded here, so no
+    video filter's sampling, canvas or heartbeat frames can shift a line."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as folder:
+        out = Path(folder) / "track.sup"
+        process = await asyncio.create_subprocess_exec(
+            tool, "-nostdin", "-v", "error", "-i", str(path), "-map", f"0:{index}", "-c", "copy", "-f", "sup", str(out),
+            stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            _, error = await asyncio.wait_for(process.communicate(), timeout)
+        except asyncio.TimeoutError as exc:
+            process.kill()
+            raise NodeError("Reading the picture subtitles timed out.") from exc
+        if process.returncode != 0 or not out.exists():
+            raise NodeError("ffmpeg could not copy this picture subtitle track: " + error.decode("utf-8", "replace")[-300:])
+        data = out.read_bytes()
+    events = decode_pgs(data)
+    if not events and data:
+        raise NodeError("This picture subtitle track has no readable display sets.")
+    return events
+
+
+def _rle(data, width, height):
+    """A PGS object's run-length bitmap as palette indices (height × width)."""
+    import numpy as np
+
+    rows, row, i, n = [], bytearray(), 0, len(data)
+    while i < n:
+        b = data[i]
+        i += 1
+        if b:
+            row.append(b)
+            continue
+        if i >= n:
+            break
+        flags = data[i]
+        i += 1
+        if not flags:
+            rows.append(bytes(row[:width]).ljust(width, b"\0"))
+            row = bytearray()
+            continue
+        length = flags & 0x3F
+        if flags & 0x40:
+            length = (length << 8) | data[i]
+            i += 1
+        color = 0
+        if flags & 0x80:
+            color = data[i]
+            i += 1
+        row.extend(bytes([color]) * length)
+    if row:
+        rows.append(bytes(row[:width]).ljust(width, b"\0"))
+    rows = (rows + [bytes(width)] * height)[:height]
+    return np.frombuffer(b"".join(rows), np.uint8).reshape(height, width)
+
+
+def decode_pgs(data):
+    """Lines from a .sup stream: [{start, end, crop (RGBA array)}].
+
+    A display set that places objects starts a line; one that places none,
+    or other objects, ends it. A palette-only update (a fade) continues the
+    line, keeping its most opaque drawing."""
+    import numpy as np
+    from PIL import Image
+
+    def lut(entries):
+        table = np.zeros((256, 4), np.uint8)
+        for key, (y, cr, cb, a) in entries.items():
+            y, cr, cb = float(y), float(cr) - 128, float(cb) - 128
+            table[key] = (
+                max(0, min(255, round(y + 1.5748 * cr))),
+                max(0, min(255, round(y - 0.1873 * cb - 0.4681 * cr))),
+                max(0, min(255, round(y + 1.8556 * cb))),
+                a,
+            )
+        return table
+
+    def compose(composition):
+        placed = [(objects[oid], x, y, crop) for oid, x, y, crop in composition["objects"] if oid in objects]
+        if not placed:
+            return None
+        boxes = []
+        for (width, height, _, _), x, y, crop in placed:
+            w, h = (crop[2], crop[3]) if crop else (width, height)
+            boxes.append((x, y, x + w, y + h))
+        left, top = min(b[0] for b in boxes), min(b[1] for b in boxes)
+        right, bottom = max(b[2] for b in boxes), max(b[3] for b in boxes)
+        canvas = np.zeros((bottom - top, right - left, 4), np.uint8)
+        table = lut(palettes.get(composition["palette"], {}))
+        for ((width, height, indices, _), x, y, crop), (bx, by, ex, ey) in zip(placed, boxes):
+            if crop:
+                cx, cy, cw, ch = crop
+                indices = indices[cy:cy + ch, cx:cx + cw]
+            pixels = table[indices]
+            region = canvas[by - top:by - top + pixels.shape[0], bx - left:bx - left + pixels.shape[1]]
+            mask = pixels[:, :, 3] > 0
+            region[mask] = pixels[:mask.shape[0], :mask.shape[1]][mask]
+        alpha = canvas[:, :, 3]
+        if not alpha.any():
+            return None
+        ys, xs = np.nonzero(alpha)
+        canvas = canvas[max(0, ys.min() - 4):ys.max() + 5, max(0, xs.min() - 4):xs.max() + 5]
+        scale = PICTURE_WIDTH / max(composition["width"], PICTURE_WIDTH)
+        if scale < 1:
+            picture = Image.fromarray(canvas, "RGBA")
+            picture = picture.resize((max(1, round(picture.width * scale)), max(1, round(picture.height * scale))), Image.LANCZOS)
+            canvas = np.asarray(picture)
+        return canvas
+
+    palettes, objects, pending = {}, {}, {}
+    events, current, composition = [], None, None
+
+    def close(at):
+        nonlocal current
+        if current is not None:
+            current["end"] = round(at, 3)
+            if current["end"] > current["start"]:
+                events.append(current)
+            current = None
+
+    position = 0
+    while position + 13 <= len(data):
+        if data[position:position + 2] != b"PG":
+            raise NodeError("This picture subtitle track is damaged.")
+        at = int.from_bytes(data[position + 2:position + 6], "big") / 90000
+        kind, size = data[position + 10], int.from_bytes(data[position + 11:position + 13], "big")
+        body = data[position + 13:position + 13 + size]
+        position += 13 + size
+        if kind == 0x16 and len(body) >= 11:  # presentation composition
+            if body[7] & 0x80:  # an epoch starts: earlier objects and palettes are gone
+                objects.clear()
+                palettes.clear()
+            placed, offset = [], 11
+            for _ in range(body[10]):
+                oid = int.from_bytes(body[offset:offset + 2], "big")
+                cropped = body[offset + 3] & 0x80
+                x, y = int.from_bytes(body[offset + 4:offset + 6], "big"), int.from_bytes(body[offset + 6:offset + 8], "big")
+                crop = None
+                if cropped:
+                    crop = tuple(int.from_bytes(body[offset + 8 + 2 * k:offset + 10 + 2 * k], "big") for k in range(4))
+                    offset += 8
+                placed.append((oid, x, y, crop))
+                offset += 8
+            composition = {"at": at, "width": int.from_bytes(body[0:2], "big"), "palette": body[9], "objects": placed}
+        elif kind == 0x14 and len(body) >= 2:  # palette definition
+            entries = palettes.setdefault(body[0], {})
+            for offset in range(2, len(body) - 4, 5):
+                entries[body[offset]] = tuple(body[offset + 1:offset + 5])
+        elif kind == 0x15 and len(body) >= 4:  # object definition (possibly split)
+            oid, version, sequence = int.from_bytes(body[0:2], "big"), body[2], body[3]
+            if sequence & 0x80 and len(body) >= 11:
+                pending[oid] = {"width": int.from_bytes(body[7:9], "big"), "height": int.from_bytes(body[9:11], "big"),
+                                "data": bytearray(body[11:]), "version": version}
+            elif oid in pending:
+                pending[oid]["data"] += body[4:]
+            if sequence & 0x40 and oid in pending:
+                item = pending.pop(oid)
+                objects[oid] = (item["width"], item["height"], _rle(item["data"], item["width"], item["height"]), item["version"])
+        elif kind == 0x80 and composition is not None:  # end of a display set: show it
+            shown = tuple((oid, x, y, crop, objects[oid][3]) for oid, x, y, crop in composition["objects"] if oid in objects)
+            if not shown:
+                close(composition["at"])
+            elif current is not None and current["shown"] == shown:
+                drawing = compose(composition)  # the same line, recoloured or fading
+                if drawing is not None and int(drawing[:, :, 3].sum()) > current["weight"]:
+                    current.update(crop=drawing, weight=int(drawing[:, :, 3].sum()))
+            else:
+                close(composition["at"])
+                drawing = compose(composition)
+                if drawing is not None:
+                    if len(events) >= MAX_PICTURES:
+                        raise NodeError("This picture subtitle track has too many images.")
+                    current = {"start": round(composition["at"], 3), "shown": shown, "crop": drawing,
+                               "weight": int(drawing[:, :, 3].sum())}
+            composition = None
+    if current is not None:
+        close(current["start"] + 5.0)  # a last line never cleared: a few seconds
+    return events

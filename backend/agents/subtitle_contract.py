@@ -588,7 +588,13 @@ async def read_pictures(reader, rendered, *, parallel=4):
                     texts[row["n"]] = str(row["text"]).strip().replace(" / ", "\n")[:500]
 
     await asyncio.gather(*(one(i, sheet) for i, sheet in enumerate(rendered["sheets"])))
-    cues = [{"start": e["start"], "end": e["end"], "text": texts[e["n"]]} for e in events if e["n"] in texts]
+    cues = []
+    for event in (e for e in events if e["n"] in texts):
+        text = texts[event["n"]]
+        if cues and cues[-1]["text"] == text and event["start"] - cues[-1]["end"] <= 0.1:
+            cues[-1]["end"] = event["end"]  # one line drawn twice in a row
+            continue
+        cues.append({"start": event["start"], "end": event["end"], "text": text})
     spend["dollars"] = round(spend["dollars"], 5)
     spend["read"], spend["rows"] = len(cues), len(events)
     return (render(cues) if cues else ""), spend

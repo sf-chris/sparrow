@@ -979,6 +979,29 @@ class PictureSubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([c["text"] for c in cues_from_text(text, "srt")], [l[2] for l in lines])
         self.assertEqual((spend["read"], spend["rows"]), (3, 3))
 
+    async def test_a_fading_disc_line_is_one_line(self):
+        import tempfile
+        from pathlib import Path
+        from backend.agents.node_executor import executable
+        from backend.agents.subtitle_node import picture_sheets
+        from pgs_fixture import sup
+
+        ffmpeg = executable("ffmpeg")
+        if not ffmpeg or not executable("ffprobe"):
+            self.skipTest("Packaged media tools required")
+        lines = [(1.0, 2.5, "It seems he's gone after Naruto."), (3.0, 4.2, "This is terrible!")]
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / "subs.sup").write_bytes(sup(lines, fade=4))
+            process = await asyncio.create_subprocess_exec(
+                ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=320x180:d=6", "-i", str(folder / "subs.sup"),
+                "-map", "0", "-map", "1", "-c:v", "libx264", "-preset", "ultrafast", "-c:s", "copy", "-copyts", str(folder / "disc.mkv"),
+            )
+            self.assertEqual(await process.wait(), 0)
+            rendered = await picture_sheets(folder / "disc.mkv", 1)
+        # Five frames of rising opacity each: still two lines, each its full length.
+        self.assertEqual([round(e["end"] - e["start"], 2) for e in rendered["events"]], [1.5, 1.2])
+
 
 class ArchiveTests(unittest.IsolatedAsyncioTestCase):
     async def test_finds_this_episodes_english_dialogue_from_other_releases(self):
