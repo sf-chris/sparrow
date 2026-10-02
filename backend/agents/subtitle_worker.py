@@ -42,7 +42,15 @@ def cues_from_text(text, format_name):
     # separately at the API.
     if len(text.encode("utf8")) > 16 * 1024 * 1024:
         raise ValueError("Subtitle files must be smaller than 16 MB.")
-    parsed = pysubs2.SSAFile.from_string(text, format_=format_name)
+    try:
+        parsed = pysubs2.SSAFile.from_string(text, format_=format_name)
+    except (ValueError, KeyError, IndexError):
+        if format_name not in ("ass", "ssa"):
+            raise
+        # A malformed style (a bad colour, say) must not discard the dialogue;
+        # styles only decorate it.
+        unstyled = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("Style:"))
+        parsed = pysubs2.SSAFile.from_string(unstyled, format_=format_name)
     cues, unusable, seen = [], 0, set()
     for entry in parsed:
         if DRAWING.search(entry.text):
