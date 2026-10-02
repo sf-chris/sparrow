@@ -22,7 +22,8 @@ from .runtime import ToolError
 
 QUALITY_RANK = {"480p": 1, "720p": 2, "1080p": 3, "2160p": 4}
 ROWS = 8
-ENOUGH = 4  # healthy candidates that end the search early
+ENOUGH = 4  # healthy candidates that end the search early…
+WELL_SEEDED = 20  # …once one of them has a swarm like this
 PEEKS = 4
 WAIT = 900  # seconds to queue for a search slot while nothing usable is found yet
 SHORT_WAIT = 60  # and once something usable is
@@ -251,7 +252,15 @@ def score(candidate, job):
     )
 
 
-EXTRAS = re.compile(r"(?i)(?:^|[\s/_.\-\[(])(?:specials?|extras?|bonus|ova|oad|movies?|ncop|nced|creditless|trailers?|pv)(?=$|[\s/_.\-\])])")
+EXTRAS_FOLDER = re.compile(r"(?i)^[\W_]*(?:specials?|extras?|bonus|ova|oad|movies?|films?|ncop|nced|creditless|trailers?|pv|menus?)\b")
+EXTRAS_FILE = re.compile(r"(?i)(?:^|[\W_])(?:ncop|nced|creditless|trailer|preview|menu|pv\d*)(?:[\W_]|$)")
+
+
+def _extras(path):
+    """A folder that holds extras ("Movies/", "Specials/") or an opening,
+    ending or trailer file. A pack named "Show + Movies" is not one."""
+    *folders, base = str(path).split("/")
+    return any(EXTRAS_FOLDER.match(NOISE.sub("", folder)) for folder in folders) or bool(EXTRAS_FILE.search(base))
 
 
 def _other_part(path, titles, season, exclude):
@@ -259,7 +268,7 @@ def _other_part(path, titles, season, exclude):
     named for it ("Tokyo Ghoul Root A/...", "Season 2/...")."""
     if other_season(path, season) and not covers_season(path, season):
         return True
-    if excluded(path, exclude) or EXTRAS.search(path):
+    if excluded(path, exclude) or _extras(path):
         return True
     forms = {compact(form) for title in titles for form in (title, main_part(title)) if form}
     for segment in str(path).split("/"):
@@ -387,8 +396,9 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
             if words:
                 plan.insert(plan.index(query) + 1, " ".join([query, *(f"-{w}" for w in words)]))
         # Searches are rationed across every request: stop once there is a
-        # real choice of healthy copies.
-        if len([c for c in found.values() if c["seeders"] >= 5]) >= ENOUGH:
+        # real choice of healthy copies, one of them well seeded.
+        healthy = [c for c in found.values() if c["seeders"] >= 5]
+        if len(healthy) >= ENOUGH and any(c["seeders"] >= WELL_SEEDED for c in healthy):
             break
     ranked = sorted(found.values(), key=lambda c: -score(c, job))
     # The person's size cap applies to the file that will be kept.
@@ -512,8 +522,11 @@ def table(rows):
         if row.get("unlisted"):
             what = f"pack of {row['files']} files, not listed by the indexer (the wanted episode is picked when it starts)"
         hints = ", ".join(h for h, on in (("original audio named", row["dual"]), ("subtitles likely", row["subs"])) if on)
+        size = f"{row['episode_size'] / 1e9:.2f} GB" if row["coverage"] == "single" else (
+            f"{row['episode_size'] / 1e9:.2f} GB {'an episode, estimated' if row.get('unlisted') else 'chosen'} "
+            f"of a {row['size'] / 1e9:.1f} GB pack")
         lines.append(
-            f"{row['rid']} · {row['episode_size'] / 1e9:.2f} GB · {row['seeders']} seeds · {row['quality']} {row['source']} · "
+            f"{row['rid']} · {size} · {row['seeders']} seeds · {row['quality']} {row['source']} · "
             f"{what}{' · ' + hints if hints else ''} · {row['name'][:90]}"
         )
     return "\n".join(lines)

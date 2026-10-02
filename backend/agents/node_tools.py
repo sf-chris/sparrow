@@ -7,6 +7,7 @@ inventory can acknowledge a file as ready.
 
 import asyncio
 import hashlib
+import re
 import logging
 import time
 from pathlib import Path, PurePosixPath
@@ -96,6 +97,25 @@ def suitable(job, asset):
         <= quality_rank(policy.get("max_quality", "2160p"))
         and (not limit or facts["size_bytes"] <= limit * 1e9)
     )
+
+
+def unsuitable(job, facts):
+    """Which part of the request a measured copy fails, in plain words."""
+    prefs = job.preferences.get("values", {})
+    limit = prefs.get("max_file_size_gb", 0)
+    policy = job.preferences.get("policy", {})
+    reasons = []
+    if not audio_satisfies(facts, job.audio_pref, job.original_language):
+        heard = ", ".join(facts.get("audio_languages") or []) or "untagged"
+        reasons.append(f"its audio is {heard}, and this request wants {job.audio_pref} audio"
+                       + (f" ({job.original_language})" if job.audio_pref == "original" and job.original_language else ""))
+    if quality_rank(facts["quality"]) < quality_rank(job.min_quality):
+        reasons.append(f"its picture is {facts['quality']}, below the {job.min_quality} minimum")
+    if quality_rank(facts["quality"]) > quality_rank(policy.get("max_quality", "2160p")):
+        reasons.append(f"its picture is {facts['quality']}, above the household's {policy.get('max_quality')} limit")
+    if limit and facts["size_bytes"] > limit * 1e9:
+        reasons.append(f"it is {facts['size_bytes'] / 1e9:.1f} GB, over the {limit} GB limit")
+    return reasons
 
 
 def acquisition_tools(tb):
@@ -436,6 +456,9 @@ def acquisition_tools(tb):
         job = tb.require_authority(ctx)
         memo = tb.scouted.get(ctx.session.id) or {}
         pick = str(args.get("release", "")).strip().lower()
+        lead = re.match(r"(r\d+)\b", pick)
+        if lead and lead.group(1) in (memo.get("rows") or {}):
+            pick = lead.group(1)  # "r1 files=…": the row id and a note
         if pick not in (memo.get("rows") or {}):
             # A pick named by its release name rather than its row id.
             named = [rid for rid, row in (memo.get("rows") or {}).items()
@@ -731,9 +754,8 @@ def storage_tools(tb):
             )
         candidate = {"state": "ready", "facts": facts}
         if not suitable(job, candidate):
-            raise ToolError(
-                "The measured audio, picture quality or size does not meet this request."
-            )
+            reasons = unsuitable(job, facts) or ["the measured audio, picture quality or size"]
+            raise ToolError("This copy does not meet the request: " + "; ".join(reasons) + ".")
         tb.require_authority(ctx)
         catalogue.cache_title(job.media_type, job.tmdb_id, details)
         item_id = hashlib.sha256(
