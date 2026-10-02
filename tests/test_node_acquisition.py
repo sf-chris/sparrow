@@ -236,7 +236,8 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
             vetoed = await self.call("propose_release", {"release": "r1", "reason": "single file"})
             self.assertIn("Reviewer suggests r2", vetoed)
             self.assertEqual(self.add_count, 0)
-            approved = await self.call("propose_release", {"release": "r2", "reason": "the reviewer's choice"})
+            # Named by its release name instead of its row id: still that row.
+            approved = await self.call("propose_release", {"release": "Fixture collection", "reason": "the reviewer's choice"})
         self.assertEqual(self.add_count, 1)
         download = self.storage.get_download(approved["download_id"])
         self.assertEqual(download.metadata["wanted_files"], ["Fixture/Fixture.mkv"])

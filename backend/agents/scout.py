@@ -24,7 +24,8 @@ QUALITY_RANK = {"480p": 1, "720p": 2, "1080p": 3, "2160p": 4}
 ROWS = 8
 ENOUGH = 4  # healthy candidates that end the search early
 PEEKS = 4
-WAIT = 900  # seconds to queue for a search slot while nothing is found yet
+WAIT = 900  # seconds to queue for a search slot while nothing usable is found yet
+SHORT_WAIT = 60  # and once something usable is
 DUB_ONLY = re.compile(r"(?i)\b(eng(lish)?[\s._-]?dub(bed)?|dubbed|dub([\s._-]?only)?)\b")
 DUAL = re.compile(r"(?i)\b(dual[\s._-]?audio|multi[\s._-]?audio|jap(anese)?|jpn|original[\s._-]?audio)\b")
 SUBS = re.compile(r"(?i)\b(multi[\s._-]?subs?|e?subs?|eng[\s._-]?subs?|subbed|softsubs?|cr|nf|amzn|dsnp|hidive|web[\s._-]?dl)\b")
@@ -360,9 +361,12 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
     for query in plan:
         if used >= searches:
             break
+        cap = float(((job.preferences or {}).get("values") or {}).get("max_file_size_gb") or 0)
+        usable = [c for c in found.values() if c["seeders"] >= 5 and (c["coverage"] == "pack" or not cap or c["size"] <= cap * 1e9)]
         try:
-            # Queue for a slot while there is nothing to rank yet.
-            raw, cached = await tb.index_search(query, wait=0 if found else WAIT, log=log)
+            # Queue for a slot while there is nothing usable to rank yet;
+            # once there is, wait only briefly (other requests share slots).
+            raw, cached = await tb.index_search(query, wait=SHORT_WAIT if usable else WAIT, log=log)
         except ToolError:
             if searched:
                 break  # searches are rationed: rank what was found
