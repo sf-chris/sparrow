@@ -270,14 +270,33 @@ def acquisition_tools(tb):
                 "Removal is pending storage reconnection. " + str(exc)
             ) from exc
         dl.metadata["desired_control"] = ""
+        with tb.accounts.connect() as db:
+            published = db.execute("SELECT 1 FROM publications WHERE download_id=?", (dl.id,)).fetchone()
+        discarded = False
+        if not published:
+            # Nothing reached the library: its partial files are rubbish.
+            try:
+                result = await nodes.execute(
+                    job.node_id or "local",
+                    "discard_staging",
+                    {"root_id": "staging", "path": dl.id},
+                    job=job,
+                    operation_id=f"discard-{dl.id}-{job.revision}",
+                    timeout=60,
+                )
+                discarded = bool(result.get("removed"))
+            except NodeError as exc:
+                logger.warning("staging for %s not discarded: %s", dl.id, exc)
         await tb.storage.update_download(
             dl.id,
             status=DownloadStatus.ERROR,
             error_message=args.get("reason")
-            or "Removed from download app; files retained.",
+            or ("Removed from download app; its partial files were deleted." if discarded else "Removed from download app; files retained."),
             metadata=dl.metadata,
         )
-        return "Transfer removed. Existing files and staging originals are preserved."
+        if discarded:
+            return "Transfer removed and its unfinished files deleted."
+        return "Transfer removed. Files that reached the library and their staging originals are preserved."
 
     async def close(ctx, args):
         job = tb.require_authority(ctx)
@@ -447,6 +466,18 @@ def storage_tools(tb):
 
     async def delete(ctx, args):
         job, dl, root, path = reference(tb, ctx, args["path"])
+        if root == "library":
+            # Withdraw a copy this request placed that never passed verification.
+            if any(a["path"] == path and a.get("state") == "ready" for a in scoped_assets(tb, job)):
+                raise ToolError("Verified library copies are only replaced through upgrade_swap.")
+            with tb.accounts.connect() as db:
+                placed = db.execute("SELECT 1 FROM publications WHERE job_id=? AND path=?", (job.id, path)).fetchone()
+            if not placed:
+                raise ToolError("Only a copy this request placed in the library can be withdrawn.")
+            result = await operation(ctx, "withdraw", args["path"])
+            with tb.accounts.connect() as db:
+                db.execute("DELETE FROM publications WHERE job_id=? AND path=?", (job.id, path))
+            return result
         with tb.accounts.connect() as db:
             published = db.execute(
                 "SELECT 1 FROM publications WHERE download_id=?", (dl.id,)
@@ -673,6 +704,11 @@ def storage_tools(tb):
             description = "Publish a verified copy from staging/<download_id>/file to library/<relative path>. Retains the source and refuses overwrite."
         if tool.name == "upgrade_swap":
             description = "Publish a measured higher-quality copy alongside the previous copy. Both original files survive."
+        if tool.name == "fs_delete":
+            description = (
+                "Delete junk in this download's staging folder, or withdraw a copy you placed in the library "
+                "that failed verification. Verified library copies cannot be deleted."
+            )
         out.append(
             ToolDef(
                 tool.name, description, schema, handlers.get(tool.name, tool.handler)

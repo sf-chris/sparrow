@@ -371,6 +371,8 @@ class Executor:
                     "download_stop",
                     "download_start",
                     "download_select",
+                    "discard_staging",
+                    "withdraw",
                 ):
                     async with self._mutation_lock:
                         if command.get("expires", 0) < time.time():
@@ -575,6 +577,10 @@ class Executor:
             if incoming.is_symlink():
                 raise NodeError("Unsafe incoming folder.")
             temp = incoming / operation_id
+            for stale in incoming.iterdir():
+                # Copies interrupted a day ago and never resumed are abandoned.
+                if stale != temp and stale.is_file() and not stale.is_symlink() and time.time() - stale.stat().st_mtime > 86400:
+                    stale.unlink(missing_ok=True)
             needed = max(
                 0,
                 expected["size_bytes"] - (temp.stat().st_size if temp.exists() else 0),
@@ -619,6 +625,28 @@ class Executor:
                 "sha256": checksum,
                 "facts": facts,
             }
+        if kind == "discard_staging":
+            # A whole abandoned transfer folder, partial files included; the
+            # coordinator checks nothing was published from it.
+            parts = PurePosixPath(args.get("path", "")).parts
+            if root_id != "staging" or len(parts) != 1 or not parts[0].startswith("dl-"):
+                raise NodeError("Only an isolated transfer folder in staging may be discarded.")
+            if path.is_symlink() or not path.is_dir():
+                return {"removed": False}
+            shutil.rmtree(path)
+            return {"removed": True}
+        if kind == "withdraw":
+            # Only a copy this node itself published, never other media.
+            with self.db() as db:
+                placed = db.execute(
+                    "SELECT 1 FROM operations WHERE json_extract(payload,'$.kind')='publish' "
+                    "AND json_extract(payload,'$.args.destination')=? AND state='done'",
+                    (args.get("path", ""),),
+                ).fetchone()
+            if root_id != "library" or not placed or not path.is_file() or path.is_symlink():
+                raise NodeError("Only a copy Sparrow published here can be withdrawn.")
+            path.unlink()
+            return {"removed": True}
         if kind == "delete_staging":
             if (
                 root_id != "staging"

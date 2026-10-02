@@ -161,8 +161,11 @@ Job contract:
    and episode. Set verified=true only when the probe matches the TMDB runtime;
    the tool independently checks this before recording verification.
 6. If this download replaces a lower-quality copy: probe both, then
-   upgrade_swap — the only library deletion you can ever perform.
-7. fs_delete leftover junk in staging.
+   upgrade_swap — the only way to replace a verified library copy.
+7. Leave nothing unfinished or wrong behind: fs_delete leftover junk in
+   staging, and if a copy you placed in the library fails verification
+   (wrong episode, below the quality window), fs_delete it from the library
+   so only verified copies remain.
 8. report_to_fetch with the honest outcome: what the pack claimed vs. what
    it delivered ("claimed E01–E10, delivered E01–E06 + E08–E10; E07 was a
    corrupt sample — you are not done"). Then session_done.
