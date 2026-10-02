@@ -294,10 +294,11 @@ class Toolbox:
         now = time.time()
         self._search_times = [t for t in self._search_times if now - t < 600]
         if len(self._search_times) >= 30:
+            wait = max(1, round((600 - (now - self._search_times[0])) / 60))
             raise ToolError(
-                "Indexer rate limit: 30 searches per 10 minutes. You have been "
-                "searching heavily — step back, think about what you've learned, "
-                "write it to memory, and hibernate with a wake timer.")
+                "Indexer rate limit: 30 searches per 10 minutes across all requests. "
+                f"The next search frees in about {wait} minute{'s' if wait != 1 else ''}: "
+                f"write what you've learned to memory and wake_me in {wait} minutes.")
         if self._search_times and now - self._search_times[-1] < 1.5:
             await asyncio.sleep(1.5 - (now - self._search_times[-1]))
         self._search_times.append(time.time())
