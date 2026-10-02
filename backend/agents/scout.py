@@ -154,7 +154,12 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
     plan = list(dict.fromkeys([*extra_queries, *queries(titles, targets, job.media_type, job.year)]))[:searches]
     found, searched = {}, []
     for query in plan:
-        await tb.rate_limit_search()
+        try:
+            await tb.rate_limit_search()
+        except Exception:
+            if searched:
+                break  # searches are rationed: rank what was found
+            raise
         try:
             raw = await apibay_query(query, strict=True)
         except Exception:
