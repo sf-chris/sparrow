@@ -915,3 +915,43 @@ class TrackKindTests(unittest.TestCase):
         self.assertEqual(track_language({"language": "jpn", "title": "English Subtitles"}), "en")
         self.assertEqual(track_language({"language": "jpn", "title": "Japanese SDH"}), "ja")
         self.assertEqual(track_language({"language": "spa", "title": "Latin American"}), "es")
+
+
+class PictureSubtitleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_disc_subtitles_are_rendered_read_and_timed_by_the_disc(self):
+        import tempfile
+        from pathlib import Path
+        from backend.agents.node_executor import executable
+        from backend.agents.subtitle_contract import read_pictures
+        from backend.agents.subtitle_node import picture_sheets
+        from pgs_fixture import sup
+
+        ffmpeg = executable("ffmpeg")
+        if not ffmpeg or not executable("ffprobe"):
+            self.skipTest("Packaged media tools required")
+        lines = [(1.0, 2.5, "Rakka, are you up?"), (3.0, 4.2, "We're all in Kuu's room."), (5.0, 7.0, "OK, I'm coming.\nWait for me!")]
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / "subs.sup").write_bytes(sup(lines))
+            process = await asyncio.create_subprocess_exec(
+                ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=320x180:d=8", "-i", str(folder / "subs.sup"),
+                "-map", "0", "-map", "1", "-c:v", "libx264", "-preset", "ultrafast", "-c:s", "copy", "-copyts", str(folder / "disc.mkv"),
+            )
+            self.assertEqual(await process.wait(), 0)
+            rendered = await picture_sheets(folder / "disc.mkv", 1)
+        self.assertEqual(len(rendered["events"]), 3)
+        gaps = [round(e["end"] - e["start"], 2) for e in rendered["events"]]
+        self.assertEqual(gaps, [1.5, 1.2, 2.0])
+        calls = []
+
+        async def reader(image, numbers):
+            calls.append(numbers)
+            # The first answer leaves a row out; the retry fills it.
+            rows = numbers[:-1] if len(calls) == 1 else numbers
+            return {"lines": [{"n": n, "text": lines[n - 1][2].replace("\n", " / ")} for n in rows]}, {"input_tokens": 900, "output_tokens": 90}
+
+        reader.model = "gpt-6-luna"
+        text, spend = await read_pictures(reader, rendered)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([c["text"] for c in cues_from_text(text, "srt")], [l[2] for l in lines])
+        self.assertEqual((spend["read"], spend["rows"]), (3, 3))

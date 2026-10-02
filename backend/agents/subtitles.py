@@ -76,6 +76,12 @@ def verifier_model():
     return configured_model("SPARROW_SUBTITLE_VERIFIER", DEFAULT_VERIFIER)
 
 
+def reader_model():
+    """The vision model that reads picture subtitles; empty without one."""
+    model = contractor_model()
+    return model if openai_loop.is_openai_model(model) else ""
+
+
 def contractor_model():
     """The cheaper page checker the subtitle agent manages.
 
@@ -132,6 +138,8 @@ class Subtitles:
             os.getenv("OPENAI_API_KEY", ""),
             os.getenv("SPARROW_SUBTITLE_CONTRACTOR_EFFORT", ""),
         )
+        # Reads picture subtitles (Blu-ray, DVD) with the cheap vision model.
+        self.picture_reader = lambda model: subtitle_contract.openai_reader(os.getenv("OPENAI_API_KEY", ""), model)
         with accounts.connect() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS subtitle_tasks(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,asset_id TEXT NOT NULL,state TEXT NOT NULL,data TEXT NOT NULL,updated REAL NOT NULL);
@@ -506,10 +514,12 @@ class Subtitles:
             c
             for c in listing["candidates"]
             if c["language"] in (language, "und", "") and c["kind"] == kind
+            and (not c.get("picture") or reader_model())  # pictures need a reader
         ]
-        # Exact language tags before untagged tracks; more cues suggest full
-        # dialogue rather than signs. Order is advice, never proof.
-        local.sort(key=lambda c: (c["language"] != language, -c.get("cue_count", 0)))
+        # Exact language tags before untagged tracks, text before pictures;
+        # more cues suggest full dialogue rather than signs. Order is advice,
+        # never proof.
+        local.sort(key=lambda c: (c["language"] != language, bool(c.get("picture")), -c.get("cue_count", 0)))
         if uploaded:
             # The person's file is tried first; the file's own tracks stay
             # available to the subtitle agent if the upload is wrong.
@@ -532,6 +542,25 @@ class Subtitles:
             if not upload.get("text"):
                 raise ToolError("The uploaded subtitle is no longer available; upload it again.")
             return upload["text"], upload["format"]
+        if candidate["source"] == "embedded" and candidate.get("picture"):
+            # The disc's own translation as pictures: rendered on the node,
+            # read by the cheap vision model, timed by the disc.
+            rendered = await self.nodes.execute(
+                asset["node_id"],
+                "subtitle_pictures",
+                {
+                    "root_id": asset["root_id"],
+                    "path": asset["path"],
+                    "version": task["data"]["version"],
+                    "index": candidate["index"],
+                },
+                timeout=1200,
+            )
+            text, spend = await subtitle_contract.read_pictures(self.picture_reader(reader_model()), rendered)
+            self.charge_reading(task, spend)
+            if not text:
+                raise ToolError("No readable text was found in these picture subtitles.")
+            return text, "srt"
         if candidate["source"] == "embedded":
             result = await self.nodes.execute(
                 asset["node_id"],
@@ -1091,6 +1120,14 @@ class Subtitles:
         self.save_track(track["id"], review=outcome)
         self.update(task, task["state"], task["data"].get("message", ""), review_outcome=outcome)
         return outcome
+
+    def charge_reading(self, task, spend):
+        """Record picture-subtitle reading against this title's allowance."""
+        holder = {"checker_session": (task["data"] or {}).get("reading_session")}
+        self.charge_checkers(task, holder, [spend])
+        if holder.get("checker_session"):
+            current = self.task(task["id"])
+            self.update(current, current["state"], current["data"].get("message", ""), reading_session=holder["checker_session"])
 
     def charge_checkers(self, task, state, spends):
         """Record page-checker spend against this title's allowance.

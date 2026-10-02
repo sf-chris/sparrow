@@ -295,11 +295,14 @@ async def candidates(executor, path, args):
     text = [
         track
         for track in facts["subtitle_tracks"]
-        if track["codec"] in ("subrip", "ass", "ssa", "webvtt", "mov_text", "text")
+        if track["codec"] in ("subrip", "ass", "ssa", "webvtt", "mov_text", "text") + PICTURE_CODECS
     ]
     # The default track can contain only signs, even without a forced flag.
     # Cue counts steer selection towards full dialogue; they prove nothing.
     counts = await subtitle_counts(path, [t["index"] for t in text])
+    for track in text:
+        if track["codec"] == "hdmv_pgs_subtitle" and track["index"] in counts:
+            counts[track["index"]] //= 2  # a Blu-ray caption is a show and a clear packet
     fullest = max(counts.values(), default=0)
     out = [
         {
@@ -308,6 +311,8 @@ async def candidates(executor, path, args):
             "index": track["index"],
             "language": track_language(track),
             "kind": track_kind(track, counts.get(track["index"], 0), fullest),
+            # Picture tracks are read by a vision model, after any text track.
+            "picture": track["codec"] in PICTURE_CODECS,
             "title": track["title"] or "Included in this copy",
             "cue_count": counts.get(track["index"], 0),
         }
@@ -525,3 +530,138 @@ async def listen(executor, path, args):
         result_path.unlink(missing_ok=True)
         raise NodeError(result["error"])
     return result["value"]
+
+
+# ─── Picture subtitles (Blu-ray, DVD, broadcast) ────────────────────────────
+
+PICTURE_CODECS = ("hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle")
+PICTURE_WIDTH = 1280  # rendering width: legible for OCR, small to stream
+SHEET_ROWS = 20
+MAX_PICTURES = 4000
+
+
+async def picture_sheets(path, index, timeout=900):
+    """Render a picture subtitle track and stack its distinct images on sheets.
+
+    ffmpeg draws each subtitle change with its own palette; every distinct
+    image becomes one event with the timing the disc gives it. Returns the
+    events and base64 PNG sheets of up to SHEET_ROWS numbered rows, for a
+    vision model to transcribe. Nothing here reads the text.
+    """
+    import base64
+    import io
+
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+
+    tool = executable("ffmpeg")
+    if not tool:
+        raise NodeError("ffmpeg is missing. Repair the Sparrow media-tools installation.")
+    probe = await probe_file(path)
+    track = next((t for t in probe["subtitle_tracks"] if t["index"] == index), None)
+    if not track or track["codec"] not in PICTURE_CODECS:
+        raise NodeError("This is not a picture subtitle track.")
+    process = await asyncio.create_subprocess_exec(
+        tool, "-nostdin", "-hide_banner", "-v", "info", "-i", str(path),
+        "-filter_complex", f"[0:{index}]scale={PICTURE_WIDTH}:-2,showinfo",
+        "-fps_mode", "passthrough", "-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
+        stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    times, size, log = [], [], []
+
+    async def read_log():
+        async for raw in process.stderr:
+            line = raw.decode("utf-8", "replace")
+            log.append(line)
+            found = re.search(r"pts_time:\s*(-?[0-9.]+)", line)
+            if found:
+                times.append(float(found.group(1)))
+            if not size:
+                shape = re.search(r"Stream #.*rawvideo.*?(\d{2,5})x(\d{2,5})", line)
+                if shape:
+                    size.extend((int(shape.group(1)), int(shape.group(2))))
+
+    events, current, crops = [], None, {}
+
+    def close(at):
+        nonlocal current
+        if current is not None:
+            current["end"] = round(at, 3)
+            if current["end"] > current["start"]:
+                events.append(current)
+            current = None
+
+    async def read_frames():
+        nonlocal current
+        frame = 0
+        while not size:
+            await asyncio.sleep(0.05)
+            if process.stdout.at_eof():
+                return
+        width, height = size
+        length = width * height * 4
+        while True:
+            try:
+                raw = await process.stdout.readexactly(length)
+            except asyncio.IncompleteReadError:
+                break
+            while len(times) <= frame and not process.stderr.at_eof():
+                await asyncio.sleep(0.01)
+            at = times[frame] if frame < len(times) else None
+            frame += 1
+            if at is None or at > 10 * 86400:
+                continue  # ffmpeg's closing frame
+            image = np.frombuffer(raw, np.uint8).reshape(height, width, 4)
+            ys, xs = np.nonzero(image[:, :, 3])
+            if not len(ys):
+                close(at)
+                continue
+            top, bottom = max(0, ys.min() - 6), min(height, ys.max() + 7)
+            left, right = max(0, xs.min() - 6), min(width, xs.max() + 7)
+            crop = image[top:bottom, left:right]
+            key = hashlib.sha256(crop.tobytes()).hexdigest()
+            if current is not None and current["key"] == key:
+                continue
+            close(at)
+            if len(events) >= MAX_PICTURES:
+                raise NodeError("This picture subtitle track has too many images.")
+            crops.setdefault(key, crop.copy())
+            current = {"start": round(at, 3), "key": key}
+
+    try:
+        await asyncio.wait_for(asyncio.gather(read_log(), read_frames()), timeout)
+    except asyncio.TimeoutError as exc:
+        process.kill()
+        raise NodeError("Reading the picture subtitles timed out.") from exc
+    await process.wait()
+    if process.returncode not in (0, None) and not events:
+        raise NodeError("ffmpeg could not render this picture subtitle track: " + "".join(log[-3:])[-300:])
+    if current is not None and times:
+        close(max(t for t in times if t < 10 * 86400))
+
+    font = ImageFont.load_default(size=28)
+    sheets = []
+    for first in range(0, len(events), SHEET_ROWS):
+        rows = []
+        for number, event in enumerate(events[first:first + SHEET_ROWS], first + 1):
+            crop = crops[event["key"]]
+            picture = Image.fromarray(crop, "RGBA")
+            backdrop = Image.new("RGBA", picture.size, (64, 64, 64, 255))
+            backdrop.alpha_composite(picture)
+            rows.append((number, backdrop.convert("RGB")))
+        width = max(r.width for _, r in rows) + 90
+        height = sum(r.height + 8 for _, r in rows)
+        sheet = Image.new("RGB", (width, height), (255, 255, 255))
+        draw, y = ImageDraw.Draw(sheet), 0
+        for number, row in rows:
+            draw.text((8, y + row.height // 2 - 14), str(number), fill=(0, 0, 0), font=font)
+            sheet.paste(row, (90, y))
+            y += row.height + 8
+        buffer = io.BytesIO()
+        sheet.save(buffer, "PNG", optimize=True)
+        sheets.append(base64.b64encode(buffer.getvalue()).decode())
+    return {
+        "events": [{"n": n, "start": e["start"], "end": e["end"]} for n, e in enumerate(events, 1)],
+        "sheets": sheets,
+        "rows_per_sheet": SHEET_ROWS,
+    }

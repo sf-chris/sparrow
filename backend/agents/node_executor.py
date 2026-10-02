@@ -463,6 +463,12 @@ class Executor:
             from .subtitle_node import candidates
 
             return await candidates(self, path, args)
+        if kind == "subtitle_pictures":
+            from .subtitle_node import picture_sheets
+
+            if args.get("version") != file_version(path):
+                raise NodeError("The file changed since track selection.")
+            return await picture_sheets(path, int(args["index"]))
         if kind == "subtitle_prepare":
             from .subtitle_node import prepare
 
