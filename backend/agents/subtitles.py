@@ -16,6 +16,7 @@ import json
 import os
 import re
 import secrets
+import logging
 import time
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import openai_loop, subtitle_contract
+from . import openai_loop, subtitle_archive, subtitle_contract
 from . import subtitle_review as pages_
 from .account_api import administrator
 from .media_state import language_code
@@ -52,7 +53,9 @@ AUDIT_PAGES = 2
 AUDIT_SAMPLE = 10  # One in this many trusted tracks still gets blind audits.
 TRUSTED_SOURCES = ("embedded:", "sidecar:")
 QUEUE_LIMIT = 500
-MAX_CANDIDATES = 4
+logger = logging.getLogger(__name__)
+MAX_CANDIDATES = 6
+MAX_ARCHIVE = 3  # online tracks tried before writing our own
 EVIDENCE_SLICE = 540
 REVIEW_WAKES = 6
 
@@ -542,6 +545,8 @@ class Subtitles:
             if not upload.get("text"):
                 raise ToolError("The uploaded subtitle is no longer available; upload it again.")
             return upload["text"], upload["format"]
+        if candidate["source"] == "archive":
+            return await subtitle_archive.fetch(candidate)
         if candidate["source"] == "embedded" and candidate.get("picture"):
             # The disc's own translation as pictures: rendered on the node,
             # read by the cheap vision model, timed by the disc.
@@ -654,50 +659,93 @@ class Subtitles:
                     candidates=sources,
                     audio_index=audio,
                 )
-            attempts = list(task["data"].get("attempts", []))
-            tried = {a["source_id"] for a in attempts}
-            for candidate in task["data"]["candidates"]:
-                if len(attempts) >= MAX_CANDIDATES:
-                    break
-                if candidate["id"] in tried:
-                    continue
-                self.authority(task)
-                try:
-                    text, format_name = await self.fetch_text(task, asset, candidate)
-                    track = await self.prepare(
-                        task, asset, candidate, text, format_name, task["data"]["audio_index"]
-                    )
-                except (NodeError, ToolError, httpx.HTTPError, ValueError) as exc:
-                    attempts.append(
-                        {"source_id": candidate["id"], "outcome": "failed", "reason": str(exc)[:500]}
-                    )
-                    if candidate["source"] == "upload":
-                        # Say what is wrong with the person's own file rather
-                        # than quietly substituting another track.
-                        self.update(
-                            task,
-                            "finding",
-                            "Your subtitle file could not be used.",
-                            attempts=attempts,
-                            upload_failed=f"Your subtitle file could not be used: {exc}"[:500],
-                        )
-                        return False
-                    self.update(task, "finding", "Trying another subtitle file.", attempts=attempts)
-                    continue
-                attempts.append({"source_id": candidate["id"], "track_id": track, "outcome": "prepared"})
-                self.update(
-                    task,
-                    "finding",
-                    "Subtitles available. Checking them against the dialogue.",
-                    attempts=attempts,
-                    track_id=track,
-                    upload=None,
-                    measured=None,
-                    review=None,
-                    review_outcome=None,
-                )
+            if await self.try_candidates(task, asset):
                 return True
-            return False
+            if task["data"].get("archive_searched") or os.getenv("SPARROW_SUBTITLE_ARCHIVE", "").lower() == "off":
+                return False
+            # Nothing in or beside the file worked: look for this episode's
+            # English track from another release before writing our own.
+            self.update(self.task(task["id"]), "finding", "Looking for these subtitles online.")
+            found = await self.archive_candidates(user, asset, task["data"]["language"], task["data"]["kind"])
+            task = self.task(task["id"])
+            self.update(task, "finding", "Preparing subtitles.", candidates=task["data"]["candidates"] + found, archive_searched=True)
+            return await self.try_candidates(self.task(task["id"]), asset)
+
+    async def archive_candidates(self, user, asset, language, kind):
+        """English tracks of this episode from other releases (TV only)."""
+        if language != "en" or asset.get("season") is None or asset.get("episode") is None:
+            return []
+        item = self.catalogue.item(user, asset["item_id"])
+        if not item or not item.tmdb_id or item.media_type.value != "tv":
+            return []
+        titles, exclude = [item.title], []
+        service = self.get_service()
+        try:
+            alternatives = (await service.toolbox.tmdb_get(f"/tv/{item.tmdb_id}/alternative_titles")).get("results", [])
+        except Exception:
+            alternatives = []
+        for alternative in alternatives:
+            label = str(alternative.get("type") or "").lower()
+            other = re.search(r"season\s*(\d+)", label)
+            if other and int(other.group(1)) != asset["season"]:
+                exclude.append(alternative.get("title", ""))
+            elif alternative.get("iso_3166_1") in ("JP", "US", "GB") and "abbreviation" not in label:
+                titles.append(alternative.get("title", ""))
+        try:
+            found = await subtitle_archive.search(list(dict.fromkeys(titles)), asset["season"], asset["episode"], exclude=exclude)
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("subtitle archive search failed: %s", exc)
+            return []
+        found = [c for c in found if c["kind"] == kind]
+        found.sort(key=lambda c: -c.get("cue_count", 0))
+        return found[:MAX_ARCHIVE]
+
+    async def try_candidates(self, task, asset):
+        """Prepare the first untried listed candidate that works."""
+        attempts = list(task["data"].get("attempts", []))
+        tried = {a["source_id"] for a in attempts}
+        for candidate in task["data"]["candidates"]:
+            if len(attempts) >= MAX_CANDIDATES:
+                break
+            if candidate["id"] in tried:
+                continue
+            self.authority(task)
+            try:
+                text, format_name = await self.fetch_text(task, asset, candidate)
+                track = await self.prepare(
+                    task, asset, candidate, text, format_name, task["data"]["audio_index"]
+                )
+            except (NodeError, ToolError, httpx.HTTPError, ValueError) as exc:
+                attempts.append(
+                    {"source_id": candidate["id"], "outcome": "failed", "reason": str(exc)[:500]}
+                )
+                if candidate["source"] == "upload":
+                    # Say what is wrong with the person's own file rather
+                    # than quietly substituting another track.
+                    self.update(
+                        task,
+                        "finding",
+                        "Your subtitle file could not be used.",
+                        attempts=attempts,
+                        upload_failed=f"Your subtitle file could not be used: {exc}"[:500],
+                    )
+                    return False
+                self.update(task, "finding", "Trying another subtitle file.", attempts=attempts)
+                continue
+            attempts.append({"source_id": candidate["id"], "track_id": track, "outcome": "prepared"})
+            self.update(
+                task,
+                "finding",
+                "Subtitles available. Checking them against the dialogue.",
+                attempts=attempts,
+                track_id=track,
+                upload=None,
+                measured=None,
+                review=None,
+                review_outcome=None,
+            )
+            return True
+        return False
 
     # ─── Measuring and correcting timing ──────────────────────────────────
 

@@ -33,6 +33,7 @@ HERMETIC = {
     "SPARROW_SUBTITLE_CONTRACTOR": "",
     "SPARROW_SUBTITLE_VERIFIER": "",
     "SPARROW_SUBTITLE_BUDGET": "",
+    "SPARROW_SUBTITLE_ARCHIVE": "off",
 }
 
 
@@ -385,6 +386,28 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("c0003", report)
         self.assertIn("different meaning", report)
         self.assertIn("verification", report)
+
+    async def test_an_online_track_is_tried_when_the_file_has_none(self):
+        from backend.agents import subtitle_archive
+
+        await self.manager()
+        searched = []
+
+        async def offer(user, asset, language, kind):
+            searched.append((language, kind))
+            return [{"id": "archive:7", "source": "archive", "attachment": 7, "format": "srt", "language": "fr", "kind": "full", "title": "Other release · French"}]
+
+        async def fetch(candidate, client=None):
+            return srt([t + LATE for t in VOICE]), "srt"
+
+        self.subtitles.archive_candidates = offer
+        body = {"language": "fr", "audio_index": self.facts["audio_tracks"][1]["index"]}
+        with patch.dict("os.environ", {"SPARROW_SUBTITLE_ARCHIVE": ""}), patch.object(subtitle_archive, "fetch", fetch):
+            task = await self.request(body)
+        self.assertEqual(searched, [("fr", "full")])
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertTrue(task["data"]["archive_searched"])
+        self.assertEqual(self.subtitles.track(task["data"]["track_id"])["data"]["source_id"], "archive:7")
 
     def fixture_checker(self, verdict):
         async def checker(system, prompt, schema):
@@ -955,3 +978,43 @@ class PictureSubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual([c["text"] for c in cues_from_text(text, "srt")], [l[2] for l in lines])
         self.assertEqual((spend["read"], spend["rows"]), (3, 3))
+
+
+class ArchiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_finds_this_episodes_english_dialogue_from_other_releases(self):
+        import httpx
+        import lzma
+        from backend.agents import subtitle_archive as archive
+
+        releases = [
+            {"id": 1, "title": "[Group] Show - 02 (1080p)", "status": "complete", "num_files": 1},
+            {"id": 2, "title": "[Group] Show S02 - 02", "status": "complete", "num_files": 1},
+            {"id": 3, "title": "[Group] Show Second Arc Title - 02", "status": "complete", "num_files": 1},
+            {"id": 4, "title": "[Group] Show - 02 [batch]", "status": "skipped", "num_files": 12},
+            {"id": 5, "title": "[Other] Show - 02 (720p)", "status": "complete", "num_files": 1},
+        ]
+        track = lambda id_, name, lang="eng", codec="ASS": {"id": id_, "type": "subtitle", "size": 40000, "info": {"codec": codec, "lang": lang, "name": name, "forced": 0}}
+        files = {
+            1: [{"filename": "[Group] Show - 02 (1080p).mkv", "attachments": [track(11, "Dialogue"), track(12, "Signs & Songs"), track(13, "", "fre"), track(14, "", "eng", "PGS")]}],
+            5: [{"filename": "[Other] Show - 02 (720p).mkv", "attachments": [track(11, "Dialogue")]}],
+        }
+        asked = []
+
+        def handler(request):
+            asked.append(str(request.url))
+            if request.url.host == "storage.animetosho.org":
+                return httpx.Response(200, content=lzma.compress(b"[Script Info]\nScriptType: v4.00+\n"))
+            if request.url.params.get("show") == "torrent":
+                return httpx.Response(200, json={"files": files.get(int(request.url.params["id"]), [])})
+            return httpx.Response(200, json=releases)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            found = await archive.search(["Show"], 1, 2, exclude=["Second Arc Title"], client=client)
+            self.assertEqual([(c["id"], c["kind"]) for c in found], [("archive:11", "full"), ("archive:12", "forced")])
+            text, format_name = await archive.fetch(found[0], client=client)
+        self.assertEqual(format_name, "ass")
+        self.assertIn("Script Info", text)
+        self.assertFalse(any("id=2" in url or "id=3" in url or "id=4" in url for url in asked))
+        self.assertTrue(archive.episode_in("[SubsPlease] Show - 02 (1080p) [ABCD].mkv", 1, 2))
+        self.assertFalse(archive.episode_in("Show - 12.mkv", 1, 2))
+        self.assertFalse(archive.episode_in("Show S02E02.mkv", 1, 2))
