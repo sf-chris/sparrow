@@ -16,6 +16,7 @@ import re
 import httpx
 
 from .release_match import episode_in, other_season
+from .scout import titled
 from .subtitle_node import track_kind
 
 FEED = "https://feed.animetosho.org/json"
@@ -57,6 +58,8 @@ async def search(
                 for row in response.json() or []:
                     if row.get("id") in seen or row.get("status") != "complete" or other_season(row.get("title"), season):
                         continue
+                    if not titled(row.get("title") or "", titles):
+                        continue  # another show that mentions this one ("Boruto - Naruto Next Generations")
                     if any(name in _plain(row.get("title")) for name in excluded):
                         continue
                     seen.add(row["id"])

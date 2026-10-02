@@ -992,6 +992,7 @@ class ArchiveTests(unittest.IsolatedAsyncioTestCase):
             {"id": 3, "title": "[Group] Show Second Arc Title - 02", "status": "complete", "num_files": 1},
             {"id": 4, "title": "[Group] Show - 02 [batch]", "status": "skipped", "num_files": 12},
             {"id": 5, "title": "[Other] Show - 02 (720p)", "status": "complete", "num_files": 1},
+            {"id": 6, "title": "[Group] Boruto - Show Next Generations - 02", "status": "complete", "num_files": 1},
         ]
         track = lambda id_, name, lang="eng", codec="ASS": {"id": id_, "type": "subtitle", "size": 40000, "info": {"codec": codec, "lang": lang, "name": name, "forced": 0}}
         files = {
@@ -1014,7 +1015,7 @@ class ArchiveTests(unittest.IsolatedAsyncioTestCase):
             text, format_name = await archive.fetch(found[0], client=client)
         self.assertEqual(format_name, "ass")
         self.assertIn("Script Info", text)
-        self.assertFalse(any("id=2" in url or "id=3" in url or "id=4" in url for url in asked))
+        self.assertFalse(any("id=2" in url or "id=3" in url or "id=4" in url or "id=6" in url for url in asked))
         self.assertTrue(archive.episode_in("[SubsPlease] Show - 02 (1080p) [ABCD].mkv", 1, 2))
         self.assertFalse(archive.episode_in("Show - 12.mkv", 1, 2))
         self.assertFalse(archive.episode_in("Show S02E02.mkv", 1, 2))
