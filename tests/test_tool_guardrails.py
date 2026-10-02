@@ -93,6 +93,24 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(files), 250)
         self.assertEqual(files[-1]["file"], "S01E250.mkv")
 
+    async def test_searches_queue_for_a_slot_and_repeats_are_free(self):
+        import asyncio
+        import time
+
+        self.toolbox.SEARCH_WINDOW, self.toolbox.SEARCH_LIMIT, self.toolbox.SEARCH_SPACING = 0.4, 2, 0
+        index = AsyncMock(side_effect=lambda query, strict: [{"name": query}])
+        with patch("backend.agents.tools.apibay_query", new=index):
+            await self.toolbox.index_search("one")
+            await self.toolbox.index_search("two")
+            self.assertEqual(await self.toolbox.index_search("ONE "), ([{"name": "one"}], True))
+            with self.assertRaisesRegex(ToolError, "rate limit"):
+                await self.toolbox.index_search("three")  # no waiting asked for
+            started = time.time()
+            rows, cached = await asyncio.wait_for(self.toolbox.index_search("three", wait=5), 3)
+        self.assertGreaterEqual(time.time() - started, 0.3)
+        self.assertEqual((rows, cached), ([{"name": "three"}], False))
+        self.assertEqual(index.await_count, 3)
+
     async def test_mocked_acquisition_marks_download_agent_managed(self) -> None:
         async def connect():
             return _FakeTorrentManager(), True, "ready"
@@ -328,7 +346,7 @@ class PackSelectionTests(unittest.IsolatedAsyncioTestCase):
                             metadata={"job_id": self.job.id, "node_id": "local", "wanted_files": ["Show - 02 [1080p].mkv"]})
         await self.storage.add_download(download)
         selection = await self.toolbox.apply_file_selection(download)
-        self.assertEqual(calls, [("local", "download_select", {"hash": "d" * 40, "files": ["Show - 02 [1080p].mkv"]})])
+        self.assertEqual(calls, [("local", "download_select", {"hash": "d" * 40, "files": ["Show - 02 [1080p].mkv"], "titles": []})])
         self.assertEqual(selection["skipped"], 2)
         self.assertEqual(self.storage.get_download("dl-z").metadata["selection"]["bytes"], 310)
 

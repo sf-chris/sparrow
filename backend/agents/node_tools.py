@@ -177,6 +177,7 @@ def acquisition_tools(tb):
                         "node_id": node_id,
                         "desired_control": "",
                         **({"wanted_files": wanted_files} if wanted_files else {}),
+                        **({"wanted_titles": [str(t) for t in args.get("titles") or []][:3]} if wanted_files else {}),
                     },
                 )
                 await tb.storage.add_download(existing)
@@ -382,21 +383,32 @@ def acquisition_tools(tb):
         if job.media_type == "tv" and not targets:
             return "Every wanted episode already has a suitable copy in the library."
         season = targets[0][0] if targets else 1
-        titles, exclude = await scout.titles_for(tb, job, season)
+        titles, exclude, namesakes = await scout.titles_for(tb, job, season, targets)
         extra = [str(q)[:120] for q in (args.get("queries") or []) if str(q).strip()][:3]
-        rows, searched, dropped = await scout.scout(tb, job, targets, titles, extra, exclude=exclude)
+        rows, searched, dropped, failing = await scout.scout(tb, job, targets, titles, extra, exclude=exclude)
         ctx.session.spend.searches += len(searched)
         memo = tb.scouted.setdefault(ctx.session.id, {"vetoes": 0})
-        memo.update(rows={row["rid"]: row for row in rows}, order=[row["rid"] for row in rows], targets=targets)
-        wanted_text = ", ".join(f"S{s:02d}E{e:02d}" for s, e in targets) or job.title
+        memo.update(rows={row["rid"]: row for row in rows}, order=[row["rid"] for row in rows], targets=targets,
+                    namesakes=namesakes, titles=titles)
+        names = await episode_titles(job, targets) if job.media_type == "tv" else {}
+        wanted_text = ", ".join(
+            f"S{s:02d}E{e:02d}" + (f' "{names[(s, e)]}"' if names.get((s, e)) else "") for s, e in targets
+        ) or f"{job.title} ({job.year})"
+        same = f" Other titles share this name: {namesakes}; make sure a pick is not one of them." if namesakes else ""
+        if failing:
+            return (
+                f"The indexer answered nothing even for the bare title \"{titles[0]}\", so it is failing right now; "
+                "this is not proof that no copy exists. Hibernate with wake_me in 15 minutes and call find_releases again."
+            )
         if not rows:
             return (
-                f"Searched {len(searched)} ways for {wanted_text}; nothing usable ({dropped} results did not fit). "
-                "Try find_releases with other queries (alternative or romanised titles, other numbering), "
-                "or escalate_model for a full search."
+                f"Searched {len(searched)} ways for {wanted_text}: {'; '.join(searched)}. Nothing usable "
+                f"({dropped} results did not fit).{same} Try find_releases with other queries (romanised or "
+                "English titles, other numbering; every word must appear in a release name), or escalate_model "
+                "for a full search."
             )
         return (
-            f"Wanted {wanted_text}. Searched: {'; '.join(searched)}. {dropped} other results did not fit.\n"
+            f"Wanted {wanted_text}. Searched: {'; '.join(searched)}. {dropped} other results did not fit.{same}\n"
             + scout.table(rows)
             + "\nPropose the best row with propose_release (one-line reason); a reviewer approves it before it downloads."
         )
@@ -415,7 +427,7 @@ def acquisition_tools(tb):
         titles = await episode_titles(job, memo.get("targets") or [])
         try:
             decision, dollars, model, usage = await acquisition_review.review(
-                tb, job, memo.get("targets") or [], rows, pick, str(args.get("reason", "")), titles
+                tb, job, memo.get("targets") or [], rows, pick, str(args.get("reason", "")), titles, memo.get("namesakes", "")
             )
         except Exception as exc:
             raise ToolError(f"The reviewer could not be reached ({str(exc)[:120]}); try again shortly.") from exc
@@ -431,7 +443,8 @@ def acquisition_tools(tb):
                 advice += " Reviewer suggests searching: " + "; ".join(queries) + " (find_releases with these queries)."
             return "Vetoed. " + advice
         row = memo["rows"][pick]
-        result = await add(ctx, {"info_hash": row["info_hash"], "name": row["name"][:200], "files": row.get("chosen") or []})
+        result = await add(ctx, {"info_hash": row["info_hash"], "name": row["name"][:200], "files": row.get("chosen") or [],
+                                 "titles": memo.get("titles") or []})
         memo["vetoes"] = 0
         return {"approved": decision.get("reason", ""), **(result if isinstance(result, dict) else {"result": result})}
 

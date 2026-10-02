@@ -131,6 +131,9 @@ class Toolbox:
         self.broadcast = broadcast    # async callable: websocket fanout to the UI
         self.transfer_lock = asyncio.Lock()
         self._search_times: list[float] = []   # indexer rate limiting (global)
+        self._search_turn = asyncio.Lock()      # searches waiting for a slot take turns
+        self._search_waiting = 0
+        self._search_cache: dict[str, tuple[float, list]] = {}
         self.scouted: dict[str, dict] = {}       # each Fetch session's latest short list
 
     # ─── shared helpers ──────────────────────────────────────────────────
@@ -183,9 +186,14 @@ class Toolbox:
             nodes, _ = components(self)
             job = self.store.get_job(download.metadata.get("job_id", ""))
             result = await nodes.execute(node_id, "download_select",
-                                         {"hash": download.torrent_hash, "files": wanted}, job=job, timeout=20)
+                                         {"hash": download.torrent_hash, "files": wanted,
+                                          "titles": download.metadata.get("wanted_titles") or []}, job=job, timeout=20)
         else:
-            result = await select_files(self.torrents(), download.torrent_hash, wanted)
+            from .scout import resolve
+
+            titles = download.metadata.get("wanted_titles") or []
+            result = await select_files(self.torrents(), download.torrent_hash, wanted,
+                                        lambda listing, names: resolve(listing, names, titles))
         if not result or result.get("pending"):
             return None
         values = {}
@@ -289,19 +297,59 @@ class Toolbox:
         except httpx.HTTPError as e:
             raise ToolError(f"TMDB unreachable: {e}")
 
-    async def rate_limit_search(self) -> None:
-        """Never hammer the indexer into rate-limiting the user's IP."""
+    SEARCH_WINDOW, SEARCH_LIMIT, SEARCH_SPACING = 600, 30, 1.5
+
+    async def rate_limit_search(self, wait: float = 0) -> None:
+        """Never hammer the indexer into rate-limiting the user's IP.
+
+        wait: seconds to queue for a free slot (searches take turns) before
+        giving up; waiting costs no model turns, unlike hibernating."""
+        if not wait and (self._search_waiting or self._searches_in_window() >= self.SEARCH_LIMIT):
+            raise ToolError(self._search_limit_text())
+        deadline = time.time() + wait
+        self._search_waiting += 1
+        try:
+            async with self._search_turn:
+                while self._searches_in_window() >= self.SEARCH_LIMIT:
+                    free = self.SEARCH_WINDOW - (time.time() - self._search_times[0]) + 0.1
+                    if time.time() + free > deadline:
+                        raise ToolError(self._search_limit_text())
+                    await asyncio.sleep(free)
+                if self._search_times and time.time() - self._search_times[-1] < self.SEARCH_SPACING:
+                    await asyncio.sleep(self.SEARCH_SPACING - (time.time() - self._search_times[-1]))
+                self._search_times.append(time.time())
+        finally:
+            self._search_waiting -= 1
+
+    def _searches_in_window(self) -> int:
         now = time.time()
-        self._search_times = [t for t in self._search_times if now - t < 600]
-        if len(self._search_times) >= 30:
-            wait = max(1, round((600 - (now - self._search_times[0])) / 60))
-            raise ToolError(
-                "Indexer rate limit: 30 searches per 10 minutes across all requests. "
+        self._search_times = [t for t in self._search_times if now - t < self.SEARCH_WINDOW]
+        return len(self._search_times)
+
+    def _search_limit_text(self) -> str:
+        self._searches_in_window()
+        oldest = self._search_times[0] if self._search_times else time.time()
+        wait = max(1, round((self.SEARCH_WINDOW - (time.time() - oldest)) / 60) + self._search_waiting // 3)
+        return ("Indexer rate limit: 30 searches per 10 minutes across all requests. "
                 f"The next search frees in about {wait} minute{'s' if wait != 1 else ''}: "
                 f"write what you've learned to memory and wake_me in {wait} minutes.")
-        if self._search_times and now - self._search_times[-1] < 1.5:
-            await asyncio.sleep(1.5 - (now - self._search_times[-1]))
-        self._search_times.append(time.time())
+
+    async def index_search(self, query: str, wait: float = 0) -> tuple[list, bool]:
+        """Raw indexer rows for a query and whether they came from the cache.
+
+        Repeating a recent search is free: it uses no slot. Raises ToolError at
+        the rate limit and the source's own error when it is unreachable."""
+        key = " ".join(query.lower().split())
+        cached = self._search_cache.get(key)
+        if cached and time.time() - cached[0] < (1800 if cached[1] else 600):
+            return cached[1], True
+        await self.rate_limit_search(wait)
+        rows = await apibay_query(query, strict=True)
+        self._search_cache[key] = (time.time(), rows)
+        if len(self._search_cache) > 500:
+            for stale in sorted(self._search_cache, key=lambda k: self._search_cache[k][0])[:100]:
+                self._search_cache.pop(stale, None)
+        return rows, False
 
     def library_item_for(self, tmdb_id: int,
                          media_type: str | MediaType | None = None) -> Optional[LibraryItem]:
@@ -695,15 +743,20 @@ def tmdb_tools(tb: Toolbox) -> list[ToolDef]:
 
 # ─── Indexer + torrent client tools (Fetch Agent) ────────────────────────────
 
+SEARCH_QUEUE = 900  # seconds a search may wait its turn for a rate-limit slot
+
 def fetch_tools(tb: Toolbox) -> list[ToolDef]:
     async def search(ctx: ToolCtx, args: dict):
-        await tb.rate_limit_search()
-        ctx.session.spend.searches += 1
         if tb.cfg().preferred_search_engines != ['apibay']:
             raise ToolError('The configured acquisition source is not installed. Choose the built-in source in Server settings.')
-        try:raw = await apibay_query(args["query"],strict=True)
+        try:
+            raw, cached = await tb.index_search(args["query"], wait=SEARCH_QUEUE)
+        except ToolError:
+            raise
         except Exception as exc:
             raise ToolError('The acquisition source is unavailable. This is not an empty search result; wait for the source to recover before trying more queries.') from exc
+        if not cached:
+            ctx.session.spend.searches += 1
         out = []
         for r in raw:
             try:
@@ -921,8 +974,11 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
     return [
         _t("tpb_search",
            "Raw indexer search — unfiltered results, newest metadata the indexer has. "
-           "Searches are literal substring-ish matches: refine with alt titles, "
-           "romanizations, tag variants (S01, Season 1, COMPLETE), per-episode probes.",
+           "Every word must appear in the name (\"Show 02\" misses \"Show S01E02\"), "
+           "punctuation such as colons matches nothing, and -word excludes a word "
+           "(\"Naruto -Shippuden\"): drop title punctuation. Refine with alt titles, "
+           "romanizations, tag variants (S01, Season 1, COMPLETE), per-episode probes. "
+           "Results stop at 100; a repeated search is free.",
            {"query": {"type": "string"}}, ["query"], search),
         _t("torrent_peek",
            "Fetch a torrent's ACTUAL file listing before committing (names lie; file "
@@ -933,7 +989,9 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
            "Add a torrent to the download client (staging folder). Returns a "
            "download_id. You'll be woken on completion, stall, or error. From a "
            "pack, pass files: the names torrent_peek listed for the wanted "
-           "episodes, and only those download.",
+           "episodes, and only those download. When the indexer has no listing, "
+           "pass files: [\"episode:S01E02\"] and that episode is picked once the "
+           "torrent's own file list arrives.",
            {"info_hash": {"type": "string"}, "name": {"type": "string"},
             "files": {"type": "array", "items": {"type": "string"}}},
            ["info_hash", "name"], add),
