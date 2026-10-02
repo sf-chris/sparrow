@@ -363,10 +363,11 @@ class AgentService:
             {
                 "agent": "fetch",
                 "label": "Fetch Agent",
-                "model": self.smart_model(),
+                "model": self.fetch_model(),
                 "context": f"Rendered with the latest job contract: {job.title}",
                 "prompt": prompts.fetch_system(
-                    fetch_session, job, "", cfg=self.storage.get_config()
+                    fetch_session, job, "", cfg=self.storage.get_config(),
+                    scouting=fetch_session.model != self.smart_model(),
                 ),
                 "tools": tools_for("fetch"),
             },
@@ -820,7 +821,7 @@ class AgentService:
             agent=AgentKind.FETCH,
             job_id=job.id,
             user_id=user_id,
-            model=self.smart_model(),
+            model=self.fetch_model(),
         )
         job.session_id = session.id
         self.store.save_session(session)
