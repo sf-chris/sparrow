@@ -68,8 +68,13 @@ async def review(tb, job, wanted, rows, pick, reason, episode_titles=None, names
     return data, subtitle_contract.cost(model, usage), model, usage
 
 
-def charge(session, model, usage, dollars):
-    """Record the review on the Fetch session's own ledger."""
+def charge(session, model, usage, dollars, store=None):
+    """Record the review on the Fetch session's spend and the cost ledger."""
+    if store is not None:
+        from . import ledger
+
+        ledger.record_call(store, session_id=session.id, job_id=session.job_id, user_id=session.user_id,
+                           agent=session.agent.value, phase="pick_review", model=model, usage=usage, cost=dollars)
     spend = session.spend
     spend.input_tokens += usage.get("input_tokens", 0)
     spend.output_tokens += usage.get("output_tokens", 0)

@@ -348,7 +348,7 @@ def choose(entries, targets, media_type, titles=(), exclude=()):
     return chosen
 
 
-async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=()):
+async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=(), log=None):
     """Search, judge, peek and rank; returns (rows, searched, dropped, failing).
 
     failing: the index answered nothing even for the bare title, which means
@@ -362,7 +362,7 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
             break
         try:
             # Queue for a slot while there is nothing to rank yet.
-            raw, cached = await tb.index_search(query, wait=0 if found else WAIT)
+            raw, cached = await tb.index_search(query, wait=0 if found else WAIT, log=log)
         except ToolError:
             if searched:
                 break  # searches are rationed: rank what was found

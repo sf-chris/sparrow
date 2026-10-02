@@ -319,14 +319,15 @@ class Toolbox:
 
     SEARCH_WINDOW, SEARCH_LIMIT, SEARCH_SPACING = 600, 30, 1.5
 
-    async def rate_limit_search(self, wait: float = 0) -> None:
+    async def rate_limit_search(self, wait: float = 0) -> float:
         """Never hammer the indexer into rate-limiting the user's IP.
 
         wait: seconds to queue for a free slot (searches take turns) before
         giving up; waiting costs no model turns, unlike hibernating."""
         if not wait and (self._search_waiting or self._searches_in_window() >= self.SEARCH_LIMIT):
             raise ToolError(self._search_limit_text())
-        deadline = time.time() + wait
+        began = time.time()
+        deadline = began + wait
         self._search_waiting += 1
         try:
             async with self._search_turn:
@@ -340,6 +341,7 @@ class Toolbox:
                 self._search_times.append(time.time())
         finally:
             self._search_waiting -= 1
+        return round(time.time() - began, 1)  # seconds spent waiting for a slot
 
     def _searches_in_window(self) -> int:
         now = time.time()
@@ -354,17 +356,27 @@ class Toolbox:
                 f"The next search frees in about {wait} minute{'s' if wait != 1 else ''}: "
                 f"write what you've learned to memory and wake_me in {wait} minutes.")
 
-    async def index_search(self, query: str, wait: float = 0) -> tuple[list, bool]:
+    async def index_search(self, query: str, wait: float = 0, log: list | None = None) -> tuple[list, bool]:
         """Raw indexer rows for a query and whether they came from the cache.
 
         Repeating a recent search is free: it uses no slot. Raises ToolError at
-        the rate limit and the source's own error when it is unreachable."""
+        the rate limit and the source's own error when it is unreachable.
+        log: the cost ledger's list of searches, appended to."""
         key = " ".join(query.lower().split())
         cached = self._search_cache.get(key)
         if cached and time.time() - cached[0] < (1800 if cached[1] else 600):
+            if log is not None:
+                log.append({"query": query, "cached": True, "waited": 0, "rows": len(cached[1])})
             return cached[1], True
-        await self.rate_limit_search(wait)
-        rows = await apibay_query(query, strict=True)
+        waited = await self.rate_limit_search(wait)
+        try:
+            rows = await apibay_query(query, strict=True)
+        except Exception as exc:
+            if log is not None:
+                log.append({"query": query, "cached": False, "waited": waited, "error": str(exc)[:120]})
+            raise
+        if log is not None:
+            log.append({"query": query, "cached": False, "waited": waited, "rows": len(rows)})
         self._search_cache[key] = (time.time(), rows)
         if len(self._search_cache) > 500:
             for stale in sorted(self._search_cache, key=lambda k: self._search_cache[k][0])[:100]:
@@ -770,7 +782,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
         if tb.cfg().preferred_search_engines != ['apibay']:
             raise ToolError('The configured acquisition source is not installed. Choose the built-in source in Server settings.')
         try:
-            raw, cached = await tb.index_search(args["query"], wait=SEARCH_QUEUE)
+            raw, cached = await tb.index_search(args["query"], wait=SEARCH_QUEUE, log=ctx.facts.setdefault("searches", []))
         except ToolError:
             raise
         except Exception as exc:
@@ -818,6 +830,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
                 size = 0
             if name and name != "Filelist not found":
                 files.append({"file": name, "size_mb": round(size / 1e6, 1)})
+        ctx.facts.update(listed=bool(files), files=len(files))
         if not files:
             return ("No file listing available for this torrent (the indexer doesn't "
                     "have it). If the swarm is healthy you can grab it, inspect what "
