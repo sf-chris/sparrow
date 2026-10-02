@@ -330,6 +330,9 @@ class ScoutJudgementTests(unittest.TestCase):
         for name in ("Cowboy Bebop 2021 S01E05 1080p NF WEB-DL", "Cowboy Bebop S02E05 1080p", "Cowboy Bebop II - 05", "Cowboy Bebop S01E05 English Dubbed 1080p", "Cowboy Bebop S01E05 480p"):
             self.assertIsNone(judge(name), name)
         self.assertIsNone(judge("Cowboy Bebop S01E05 1080p", seeds=0))
+        self.assertIsNone(judge("LEGO Cowboy Bebop S01E05 1080p"))  # another show named after it
+        self.assertEqual(judge("[Group] Cowboy Bebop - 05 [1080p]")["coverage"], "single")
+        self.assertEqual(scout.queries(["Naruto", "NARUTO"], [(1, 2)], "tv"), ["Naruto S01E02", "Naruto 02", "Naruto S01", "Naruto"])
 
     def test_the_standard_cut_is_chosen_from_a_pack(self):
         from backend.agents import scout

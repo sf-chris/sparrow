@@ -34,6 +34,20 @@ def _plain(text):
     return re.sub(r"[^a-z0-9]+", " ", str(text).lower()).strip()
 
 
+NOISE = re.compile(r"^(\s*(\[[^\]]*\]|\([^)]*\)|www\.\S+\s*-|[-_.\s]))+", re.I)
+
+
+def titled(name, titles):
+    """Whether a release name begins with the show's title (after group tags
+    and site prefixes): "LEGO ONE PIECE" is not One Piece."""
+    start = re.sub(r"[^a-z0-9]", "", NOISE.sub("", name).lower())
+    for title in titles:
+        compact = re.sub(r"[^a-z0-9]", "", title.lower())
+        if compact and start.startswith(compact[:10]):
+            return True
+    return not titles
+
+
 def _rank(quality):
     return QUALITY_RANK.get(quality, 0)
 
@@ -42,7 +56,7 @@ def queries(titles, targets, media_type, year=None):
     """The searches a careful person would try first."""
     out = []
     season, episode = targets[0] if targets else (1, 1)
-    for title in titles[:2]:
+    for number, title in enumerate(titles[:2]):
         if media_type == "movie":
             out += [f"{title} {year}" if year else title]
             continue
@@ -52,8 +66,12 @@ def queries(titles, targets, media_type, year=None):
                 if s == 1:
                     out += [f"{title} {e:02d}"]  # anime-style absolute numbering
         out += [f"{title} S{season:02d}"]
-    out += [titles[0]] if titles else []  # packs and complete series often carry only the title
-    return list(dict.fromkeys(q.strip() for q in out if q.strip()))
+        if number == 0:
+            out += [title]  # long series often exist only as title-named packs
+    unique = {}
+    for query in (q.strip() for q in out if q.strip()):
+        unique.setdefault(query.lower(), query)  # the index ignores case
+    return list(unique.values())
 
 
 def judge(row, job, targets, titles=(), exclude=()):
@@ -69,7 +87,7 @@ def judge(row, job, targets, titles=(), exclude=()):
     if seeders < 1:
         return None
     parsed = parse_release_name(name, size)
-    if parsed.risk_flags:
+    if parsed.risk_flags or not titled(name, titles):
         return None
     if _rank(parsed.quality) and _rank(parsed.quality) < _rank(job.min_quality):
         return None
@@ -224,7 +242,10 @@ async def titles_for(tb, job, season):
             exclude.append(name)
         elif alternative.get("iso_3166_1") in ("JP", "US", "GB") and "abbreviation" not in label and name:
             titles.append(name)
-    return list(dict.fromkeys(titles))[:3], exclude
+    unique = {}
+    for title in titles:
+        unique.setdefault(re.sub(r"[^a-z0-9]", "", title.lower()), title)
+    return list(unique.values())[:3], exclude
 
 
 def table(rows):
