@@ -287,6 +287,9 @@ def acquisition_tools(tb):
             raise ToolError("This transfer does not belong to the request.")
         dl.metadata["desired_control"] = "remove"
         await tb.storage.update_download(dl.id, metadata=dl.metadata)
+        # Each re-added attempt is removed by its own operation (a reused id
+        # would answer from the first removal's receipt and do nothing).
+        attempt = f"-{dl.metadata['attempt']}" if dl.metadata.get("attempt") else ""
         ctx.facts.update(download_id=dl.id, name=dl.name[:200], progress=round(float(dl.progress or 0), 3))
         try:
             await nodes.execute(
@@ -294,7 +297,7 @@ def acquisition_tools(tb):
                 "download_remove",
                 {"hash": dl.torrent_hash},
                 job=job,
-                operation_id=f"remove-{dl.id}-{job.revision}",
+                operation_id=f"remove-{dl.id}-{job.revision}{attempt}",
                 timeout=20,
             )
         except NodeError as exc:
@@ -313,7 +316,7 @@ def acquisition_tools(tb):
                     "discard_staging",
                     {"root_id": "staging", "path": dl.id},
                     job=job,
-                    operation_id=f"discard-{dl.id}-{job.revision}",
+                    operation_id=f"discard-{dl.id}-{job.revision}{attempt}",
                     timeout=60,
                 )
                 discarded = bool(result.get("removed"))

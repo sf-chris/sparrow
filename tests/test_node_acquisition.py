@@ -263,6 +263,10 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(again["download_id"], first["download_id"])
         self.assertEqual(self.add_count, 2)
         self.assertIn("a" * 40, self.client_state)
+        # And removing it a second time really removes it.
+        await self.call("client_remove", {"download_id": again["download_id"]})
+        self.assertNotIn("a" * 40, self.client_state)
+        self.assertEqual(len(self.removed), 2)
 
     async def test_a_transfer_the_app_lost_is_added_again(self):
         result = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
