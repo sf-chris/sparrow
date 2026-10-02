@@ -30,6 +30,7 @@ SHORT_WAIT = 60  # and once something usable is
 DUB_ONLY = re.compile(r"(?i)\b(eng(lish)?[\s._-]?dub(bed)?|dubbed|dub([\s._-]?only)?)\b")
 DUAL = re.compile(r"(?i)\b(dual[\s._-]?audio|multi[\s._-]?audio|jap(anese)?|jpn|original[\s._-]?audio)\b")
 SUBS = re.compile(r"(?i)\b(multi[\s._-]?subs?|e?subs?|eng[\s._-]?subs?|subbed|softsubs?|cr|nf|amzn|dsnp|hidive|web[\s._-]?dl)\b")
+RAW = re.compile(r"(?i)(?:\b|_)raws?(?:\b|_)")  # untranslated: no subtitles
 ALTERNATE = re.compile(r"(?i)\b(dc|director'?s[\s._-]?cut|extended|uncut|alt(ernate)?)\b")
 VIDEO = (".mkv", ".mp4", ".avi", ".m4v", ".mov", ".ts", ".webm")
 
@@ -153,6 +154,7 @@ def queries(titles, targets, media_type, year=None):
         if second:
             out += [f"{second} {tag}" for tag in tagged + absolute]
         out += [f"{first} {year}"] if year else []
+        out += [f"{first} complete"]  # series and season packs
         out += [f"{first} {tag}" for tag in absolute] + [f"{first} S{season:02d}"]
         if second:
             out += [second, f"{second} S{season:02d}"]
@@ -211,7 +213,8 @@ def judge(row, job, targets, titles=(), exclude=()):
         "source": parsed.source,
         "coverage": coverage,
         "dual": bool(DUAL.search(name)),
-        "subs": bool(SUBS.search(name)),
+        "subs": bool(SUBS.search(name)) and not RAW.search(name),
+        "raw": bool(RAW.search(name)),
         "complete": bool(parsed.is_complete_series or parsed.is_season_pack),
     }
 
@@ -236,6 +239,10 @@ def spans(candidate, targets):
     return bool(ranges) and all(any(a <= e <= b for a, b in ranges) for s, e in targets if s == 1) and all(s == 1 for s, _ in targets)
 
 
+def _wants_subtitles(job):
+    return "en" in (((job.preferences or {}).get("values") or {}).get("subtitle_languages") or [])
+
+
 def score(candidate, job):
     """Higher is better: fit to the quality window, swarm health, likely
     original audio and English subtitles, and simplicity."""
@@ -249,6 +256,7 @@ def score(candidate, job):
         + (0.5 if candidate["coverage"] == "single" else 0)
         + 2 * (len(candidate.get("covers") or [1]) - 1)  # more wanted episodes in one transfer
         - (1 if candidate.get("unlisted") else 0)  # its files are a promise until it starts
+        - (2 if candidate.get("raw") and _wants_subtitles(job) else 0)
     )
 
 
@@ -260,7 +268,7 @@ def _extras(path):
     """A folder that holds extras ("Movies/", "Specials/") or an opening,
     ending or trailer file. A pack named "Show + Movies" is not one."""
     *folders, base = str(path).split("/")
-    return any(EXTRAS_FOLDER.match(NOISE.sub("", folder)) for folder in folders) or bool(EXTRAS_FILE.search(base))
+    return any(EXTRAS_FOLDER.match(NOISE.sub("", part)) for part in [*folders, base]) or bool(EXTRAS_FILE.search(base))
 
 
 def _other_part(path, titles, season, exclude):
@@ -397,8 +405,11 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
                 plan.insert(plan.index(query) + 1, " ".join([query, *(f"-{w}" for w in words)]))
         # Searches are rationed across every request: stop once there is a
         # real choice of healthy copies, one of them well seeded.
+        # The well-seeded one must name a quality that fits: an unlabelled
+        # pack can turn out 480p, so it is no reason to stop looking.
         healthy = [c for c in found.values() if c["seeders"] >= 5]
-        if len(healthy) >= ENOUGH and any(c["seeders"] >= WELL_SEEDED for c in healthy):
+        promising = [c for c in healthy if c["seeders"] >= WELL_SEEDED and _rank(c["quality"]) >= _rank(job.min_quality)]
+        if len(healthy) >= ENOUGH and promising:
             break
     ranked = sorted(found.values(), key=lambda c: -score(c, job))
     # The person's size cap applies to the file that will be kept.
@@ -429,8 +440,11 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
             if not chosen:
                 continue  # no wanted episode in it, or its listing is unknown
             files = list(chosen.values())
+            raw = candidate["raw"] or any(RAW.search(f["name"]) for f in files)  # "[Group-raws] Show [02].mkv"
             candidate = {
                 **candidate,
+                "raw": raw,
+                "subs": candidate["subs"] and not raw,
                 "chosen": [f["name"] for f in files],
                 "covers": [list(t) for t in chosen if t],
                 "episode_size": max(f["size"] for f in files),
@@ -521,7 +535,8 @@ def table(rows):
         what = "single release" if row["coverage"] == "single" else f"pack of {row['files']} files, {covered} wanted file{'s' if covered != 1 else ''} chosen"
         if row.get("unlisted"):
             what = f"pack of {row['files']} files, not listed by the indexer (the wanted episode is picked when it starts)"
-        hints = ", ".join(h for h, on in (("original audio named", row["dual"]), ("subtitles likely", row["subs"])) if on)
+        hints = ", ".join(h for h, on in (("original audio named", row["dual"]), ("subtitles likely", row["subs"]),
+                                          ("raw: no subtitles", row.get("raw"))) if on)
         size = f"{row['episode_size'] / 1e9:.2f} GB" if row["coverage"] == "single" else (
             f"{row['episode_size'] / 1e9:.2f} GB {'an episode, estimated' if row.get('unlisted') else 'chosen'} "
             f"of a {row['size'] / 1e9:.1f} GB pack")
