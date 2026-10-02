@@ -247,7 +247,7 @@ def summarize(store, since=0.0, job=None) -> dict:
             elif facts.get("approved") is False:
                 title["picks"]["vetoed"] += 1
         if name == "escalate_model" and tool["outcome"] == "ok":
-            title["escalations"].append(facts.get("reason", ""))
+            title["escalations"].append(facts.get("reason") or (facts.get("args") or {}).get("reason", ""))
         if facts.get("download_id") and name in ("client_add", "propose_release") and tool["outcome"] == "ok":
             title["first_download"] = title["first_download"] or tool["ts"]
     for download in downloads:
