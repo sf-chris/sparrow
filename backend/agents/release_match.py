@@ -16,8 +16,15 @@ def episode_in(filename: str, season: int, episode: int) -> bool:
         return (found_season, found_episode) == (season, episode)
     if season != 1:
         return False
-    numbers = re.findall(r"(?:^|[\s_\-.])(\d{1,3})(?:v\d)?(?=[\s_\-.]|$)", name.rsplit(".", 1)[0])
-    return any(int(n) == episode for n in numbers if not 1900 <= int(n) <= 2100)
+    # The episode number is the one marked as such (" - 14", "E14", "Ep 14"),
+    # else the first standalone number: "part 2" or "Season 2" later in a
+    # name is not episode 2.
+    stem = name.rsplit(".", 1)[0]
+    marked = re.findall(r"(?i)(?:[\s_]-[\s_]+|\b(?:ep|episode|e)[\s._]?|#)(\d{1,4})(?:v\d)?(?![\d])", stem)
+    numbers = marked or re.findall(r"(?:^|[\s_\-.])(\d{1,4})(?:v\d)?(?=[\s_\-.]|$)", stem)
+    numbers = numbers or re.findall(r"\[(\d{1,4})(?:v\d)?\]", filename)  # "[Group][Show][02]"
+    numbers = [int(n) for n in numbers if not 1900 <= int(n) <= 2100]
+    return bool(numbers) and numbers[0] == episode
 
 
 SEASON_TAG = re.compile(r"(?i)\bS(\d{1,2})\b(?!\s*E\d)|\bseason\s*(\d{1,2})\b|\b(\d{1,2})(?:st|nd|rd|th)\s+season\b")

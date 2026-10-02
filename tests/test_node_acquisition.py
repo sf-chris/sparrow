@@ -233,10 +233,10 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         ]
         self.service.toolbox.select_soon = AsyncMock()
         with patch.object(acquisition_review, "review", AsyncMock(side_effect=decisions)):
-            vetoed = await self.call("propose_release", {"release": "r1", "reason": "single file"})
+            vetoed = await self.call("propose_release", {"release": "r1 files=Fixture.mkv", "reason": "single file"})
             self.assertIn("Reviewer suggests r2", vetoed)
             self.assertEqual(self.add_count, 0)
-            # Named by its release name instead of its row id: still that row.
+            # Named by its release name, or "r2 files=…", instead of its row id: still that row.
             approved = await self.call("propose_release", {"release": "Fixture collection", "reason": "the reviewer's choice"})
         self.assertEqual(self.add_count, 1)
         download = self.storage.get_download(approved["download_id"])
@@ -399,6 +399,30 @@ class ScoutJudgementTests(unittest.TestCase):
         self.assertTrue(all(" -" not in q and ":" not in q for q in plan))
         rows = [{"name": f"Naruto Shippuden - {n:03d}"} for n in range(5)] + [{"name": "Naruto - 002"}]
         self.assertEqual(scout.blockers(rows, ["Naruto"]), ["shippuden"])
+
+    def test_the_first_5_title_ledger_run_findings(self):
+        from types import SimpleNamespace as NS
+
+        from backend.agents import scout
+        from backend.agents.node_tools import unsuitable
+        from backend.agents.release_match import episode_in
+
+        # "part 2" later in a name is not episode 2; a bracketed number is.
+        self.assertFalse(episode_in("[a-s]_samurai_champloo_-_14_-_misguided_miscreants_part_2__rs2_[1080p].mkv", 1, 2))
+        self.assertTrue(episode_in("[philosophy-raws][Samurai Champloo][02][BDRIP].mkv", 1, 2))
+        self.assertTrue(episode_in("Mob Psycho 100 - 02 [1080p].mkv", 1, 2))
+        # A pack named "+ Movies" is not an extras folder; its Movies/ folder is.
+        self.assertFalse(scout._extras("Naruto Complete Series + Movies Uncut/Naruto - 002 - Konohamaru.mkv"))
+        self.assertTrue(scout._extras("Naruto Complete/Movies/Naruto the Movie 2.mkv"))
+        # Pack sizes say what they measure.
+        row = dict(rid="r1", episode_size=5e8, size=13e9, seeders=64, quality="1080p", source="BLURAY", coverage="pack",
+                   files=26, unlisted=True, dual=False, subs=False, name="[a-S] Show (01-26)", chosen=["episode:S01E02"])
+        self.assertIn("0.50 GB an episode, estimated of a 13.0 GB pack", scout.table([row]))
+        # A rejected copy says why.
+        job = NS(preferences={"values": {"max_file_size_gb": 3}, "policy": {}}, audio_pref="original",
+                 original_language="ja", min_quality="720p")
+        facts = {"audio_languages": ["eng"], "audio_tracks": [{"language": "eng"}], "quality": "720p", "size_bytes": 9e7}
+        self.assertIn("its audio is eng", " ".join(unsuitable(job, facts)))
 
     def test_an_unlisted_pack_picks_its_episode_when_the_list_arrives(self):
         from backend.agents import scout
