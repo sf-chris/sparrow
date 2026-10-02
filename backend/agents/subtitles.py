@@ -2186,9 +2186,13 @@ class Subtitles:
             message = "Subtitles written from the dialogue and checked."
         elif checked:
             message = "Subtitles checked against the dialogue."
-            if data.get("edits"):
+            edits = data.get("edits") or []
+            words = [e for e in edits if e.get("kind") == "edit" and e.get("automatic") != "ocr"]
+            if words:
                 message += " Corrections were made to match it."
-            elif data.get("correction"):
+            elif any(e.get("automatic") == "ocr" for e in edits):
+                message += " Scanning errors were fixed."
+            elif edits or data.get("correction"):
                 message += " Their timing was adjusted to follow the voice."
         elif timing.get("within_tolerance") and data.get("correction"):
             message = "Subtitles ready. Their timing was adjusted to follow the voice."
