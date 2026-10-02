@@ -65,10 +65,14 @@ Everything new lives in `backend/agents/`:
   runs the usual searches, reads names, peeks inside packs for the wanted
   files and ranks a short list; the cheap model proposes one row and the
   smart model reviews that compact decision (`acquisition_review.py`) before
-  anything downloads. Hard searches escalate the session to the smart model
-  with the raw search tools. Handles stalls (removing a transfer deletes its
-  unfinished files) and reconciles inventory. Woken by events; hibernates
-  between.
+  anything downloads. A release must open with the show's title followed
+  only by numbering/year/season/quality tags; searches queue for the shared
+  indexer allowance (no model turns) and repeats come from a cache. A TV
+  transfer downloads only the wanted episodes and their subtitle files, by
+  name once the torrent's list is known. Hard searches escalate the session
+  to the smart model with the raw search tools. Handles stalls (removing a
+  transfer deletes its unfinished files) and reconciles inventory. Woken by
+  events; hibernates between.
 - **Media Agent** (cheap tier, self-escalates, one session per landed
   download): probes every file with ffprobe, matches durations against TMDB
   runtimes, detects samples/fakes, names and places files, updates
