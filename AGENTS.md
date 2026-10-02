@@ -46,6 +46,10 @@ Everything new lives in `backend/agents/`:
   markdown memory is scoped to the requesting person.
 - `evidence.py` — immutable oversized tool observations, atomic with invocation
   receipts; private session retrieval/listing and serialized storage quotas.
+- `ledger.py` — the cost ledger: every model and tool call with its trigger,
+  cost and facts; reports, timelines, exports, backfill and a model audit.
+- `scout.py`, `acquisition_review.py`, `release_match.py` — code search, judging
+  and ranking of releases; the smart model's review of the cheap model's pick.
 - `discovery.py` — persistent, scoped Discovery tool loop with inspected title
   proposals. Fast TMDB suggestions remain alongside it; `resolution.py` retains
   the legacy description route.
@@ -106,12 +110,16 @@ Everything new lives in `backend/agents/`:
 - Current model defaults: Fetch cheap with smart review and escalation
   (`SPARROW_FETCH_SCOUT=off` keeps it smart throughout), Media cheap with self-escalation,
   Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
-  (household switch, needs an Anthropic key) uses Claude Opus 5.5 at medium effort
-  with prompt caching; with `OPENAI_API_KEY` it manages cheap page checkers
-  (GPT-6-Luna, GPT-6-Sol second opinion) and reads only what they flag plus two
-  blind audit pages. It judges, retimes, edits, replaces or writes subtitles
-  through tools that re-measure every change. Checker and Opus spend share one
-  per-title allowance (the household per-case limit unless
+  (household switch) is managed by GPT-6-Sol when `OPENAI_API_KEY` is set, else
+  Claude Opus 5.5 at medium effort with prompt caching. Cheap page checkers
+  (GPT-6-Luna, GPT-6-Sol second opinion when borderline) read every page; the
+  manager reads only what they flag plus audit pages. Sources are tried in order:
+  the release's text tracks, its picture (Blu-ray/DVD) tracks read by the cheap
+  vision model, an archive track for the same episode, then writing. A
+  human-made track is verified, never edited (only OCR and timing fixes): a
+  failing one is set aside for the next source. Sparrow-written tracks are
+  edited through tools that re-measure every change. Checker and manager spend
+  share one per-title allowance (the household per-case limit unless
   `SPARROW_SUBTITLE_BUDGET` is set); the design target is under $1 per title.
   Configure with `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT`,
   `SPARROW_SUBTITLE_CONTRACTOR`, `SPARROW_SUBTITLE_VERIFIER` and
@@ -163,6 +171,12 @@ existing code and does not create an account or rotate it. Return this handoff
 privately to the owner; household invitations are generated separately in People.
 
 ## Issue #3 implementation evidence
+
+Every model and tool call is recorded in the cost ledger
+([issue #15](https://github.com/sf-chris/sparrow/issues/15)):
+`python -m backend.agents.ledger report|timelines|export|audit|backfill --data <state dir>`
+gives cost per title by phase, escalations, searches and waste flags. Judge
+acquisition and subtitle changes by a before/after ledger report on the same titles.
 
 [The implementation ledger](docs/agentic-audit/IMPLEMENTATION.md) records current
 cleanup dispositions, recovery guarantees, evaluations and outstanding work.
