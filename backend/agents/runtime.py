@@ -22,7 +22,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 import anthropic
 
-from . import openai_loop
+from . import ledger, openai_loop
 from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
 
@@ -176,6 +176,8 @@ class ToolCtx:
     hibernate: bool = False
     close: bool = False
     close_reason: str = ""
+    # what the current tool call observed, for the cost ledger
+    facts: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -219,6 +221,8 @@ class AgentRuntime:
             "max_agent_dollars": 3,
         }
         self._budget_locks: dict[str, asyncio.Lock] = {}
+        self._triggers: dict[str, dict] = {}  # session -> what woke this turn (for the ledger)
+        self._current_call: dict[str, str] = {}  # session -> the ledger id of its latest model call
         with self.store._connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS reasoning_reservations(id TEXT PRIMARY KEY,scope TEXT NOT NULL,dollars REAL NOT NULL,created REAL NOT NULL)"
@@ -430,6 +434,7 @@ class AgentRuntime:
     ) -> None:
         ctx = ToolCtx(session=session, runtime=self)
 
+        self._set_trigger(session, events)
         _append_user(session, self._wake_text(session, events))
         self.store.acknowledge_events(session, events)
         steps = 0
@@ -532,6 +537,7 @@ class AgentRuntime:
                 fresh = self.store.pending_events(session.id)
                 if fresh:
                     ctx.hibernate = False
+                    self._set_trigger(session, fresh)
                     _append_user(session, self._wake_text(session, fresh))
                     self.store.acknowledge_events(session, fresh)
                     continue
@@ -583,6 +589,7 @@ class AgentRuntime:
             }
         self.store.start_invocation(ctx.session, tu.id, tu.name, args)
         await self._notify_tool(ctx.session, tu.name, "started", args, "", False)
+        ctx.facts, started = {}, time.time()
         tool = tool_map.get(tu.name)
         if not tool:
             content, is_error = f"Unknown tool: {tu.name}", True
@@ -627,6 +634,11 @@ class AgentRuntime:
         )
         content = result["content"]
         is_error = bool(result.get("is_error"))
+        ledger.record_tool(
+            self.store, session_id=ctx.session.id, tool_id=tu.id, name=tu.name,
+            outcome=ledger.tool_outcome(content, is_error), call_id=self._current_call.get(ctx.session.id, ""),
+            job_id=ctx.session.job_id, ts=started, duration=round(time.time() - started, 3), facts={**({"args": args} if args else {}), **ctx.facts} or None,
+        )
         await self._notify_tool(
             ctx.session,
             tu.name,
@@ -711,9 +723,17 @@ class AgentRuntime:
                     "INSERT INTO reasoning_reservations VALUES(?,?,?,?)",
                     (identity, scope, estimate, time.time()),
                 )
-            response = await self._call_api(session, system, tools)
+            started = time.time()
+            try:
+                response = await self._call_api(session, system, tools)
+            except Exception as exc:
+                self._ledger_call(session, started, error=f"{type(exc).__name__}: {exc}")
+                raise
+            if response is None:
+                self._ledger_call(session, started, error="The AI provider could not be reached after retries.")
             if response is not None:
                 self._track_spend(session, response)
+                self._ledger_call(session, started, response=response)
                 current = self.store.get_session(session.id)
                 if current:
                     current.spend = session.spend
@@ -791,6 +811,24 @@ class AgentRuntime:
         return None
 
     # ─── Bookkeeping ─────────────────────────────────────────────────────
+
+    def _set_trigger(self, session: AgentSession, events: list[Event]) -> None:
+        about = next((e.payload.get("description") for e in events if e.payload.get("description")), "")
+        self._triggers[session.id] = {"kinds": [e.kind for e in events], "about": str(about)[:200], "step": 0}
+
+    def _ledger_call(self, session: AgentSession, started: float, response=None, error: str = "") -> None:
+        """Write one model call to the cost ledger: what woke it, what it cost,
+        what it asked for."""
+        trigger = self._triggers.setdefault(session.id, {"kinds": [], "about": "", "step": 0})
+        entry = session.spend.entries[-1] if response is not None and session.spend.entries else {}
+        tools = [{"id": b.id, "name": b.name} for b in (response.content if response is not None else []) if b.type == "tool_use"]
+        self._current_call[session.id] = ledger.record_call(
+            self.store, session_id=session.id, job_id=session.job_id, user_id=session.user_id,
+            agent=session.agent.value, phase=session.agent.value, model=session.model, usage=entry,
+            cost=float(entry.get("cost") or 0), latency=round(time.time() - started, 3),
+            trigger=dict(trigger), tools=tools, error=error[:500],
+        )
+        trigger["step"] += 1
 
     def _wake_text(self, session: AgentSession, events: list[Event]) -> str:
         lines = [f"[wake] {time.strftime('%A %Y-%m-%d %H:%M %Z', time.localtime())}"]

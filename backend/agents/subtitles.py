@@ -1078,7 +1078,7 @@ class Subtitles:
                 state["pages"], context["cues"], context["utterances"], task["id"], AUDIT_PAGES
             )
         state["audit"] = audit
-        self.charge_checkers(task, state, [found["spend"], verified or {}])
+        self.charge_checkers(task, state, [found["spend"], {**(verified or {}), "phase": "subtitle_second_opinion"}])
         self.review_state(task, state)
 
     @staticmethod
@@ -1172,7 +1172,7 @@ class Subtitles:
     def charge_reading(self, task, spend):
         """Record picture-subtitle reading against this title's allowance."""
         holder = {"checker_session": (task["data"] or {}).get("reading_session")}
-        self.charge_checkers(task, holder, [spend])
+        self.charge_checkers(task, holder, [{**spend, "phase": "picture_read"}])
         if holder.get("checker_session"):
             current = self.task(task["id"])
             self.update(current, current["state"], current["data"].get("message", ""), reading_session=holder["checker_session"])
@@ -1201,11 +1201,19 @@ class Subtitles:
             )
             ledger.status = SessionStatus.CLOSED
             ledger.closed_at = time.time()
+        from . import ledger as cost_ledger
+
         for spend in spends:
             if spend.get("dollars"):
                 ledger.spend.turns += spend.get("calls", 0)
                 ledger.spend.dollars = round(ledger.spend.dollars + spend["dollars"], 6)
                 ledger.spend.entries.append({"model": spend.get("model", ""), "calls": spend.get("calls", 0), "dollars": spend["dollars"]})
+                cost_ledger.record_call(
+                    service.store, session_id=ledger.id, job_id=ledger.job_id, user_id=ledger.user_id, agent="subtitle",
+                    phase=spend.get("phase") or "subtitle_check", model=spend.get("model", ""), cost=spend["dollars"],
+                    trigger={"kinds": ["subtitle_task"], "about": task["id"], "calls": spend.get("calls", 0),
+                             "failures": (spend.get("failures") or [])[:5]},
+                )
         service.store.save_session(ledger)
         state["checker_session"] = ledger.id
 

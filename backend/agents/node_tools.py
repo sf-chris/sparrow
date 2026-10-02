@@ -230,6 +230,8 @@ def acquisition_tools(tb):
             tb.slot_taken(job.id)
             if tb.selection_for(tb.storage.get_download(identity) or existing):
                 asyncio.create_task(tb.select_soon(identity))
+            ctx.facts.update(download_id=identity, name=existing.name[:200], files=len(wanted_files),
+                             attempt=existing.metadata.get("attempt", 0))
             return {
                 "download_id": identity,
                 "staging": f"staging/{identity}",
@@ -265,6 +267,7 @@ def acquisition_tools(tb):
             raise ToolError("This transfer does not belong to the request.")
         dl.metadata["desired_control"] = "remove"
         await tb.storage.update_download(dl.id, metadata=dl.metadata)
+        ctx.facts.update(download_id=dl.id, name=dl.name[:200], progress=round(float(dl.progress or 0), 3))
         try:
             await nodes.execute(
                 job.node_id or "local",
@@ -393,7 +396,13 @@ def acquisition_tools(tb):
         season = targets[0][0] if targets else 1
         titles, exclude, namesakes = await scout.titles_for(tb, job, season, targets)
         extra = [str(q)[:120] for q in (args.get("queries") or []) if str(q).strip()][:3]
-        rows, searched, dropped, failing = await scout.scout(tb, job, targets, titles, extra, exclude=exclude)
+        rows, searched, dropped, failing = await scout.scout(
+            tb, job, targets, titles, extra, exclude=exclude, log=ctx.facts.setdefault("searches", [])
+        )
+        ctx.facts.update(
+            kept=len(rows), dropped=dropped, failing=failing, namesakes=namesakes,
+            rows=[{k: row.get(k) for k in ("rid", "name", "seeders", "quality", "coverage", "episode_size", "unlisted")} for row in rows],
+        )
         ctx.session.spend.searches += len(searched)
         memo = tb.scouted.setdefault(ctx.session.id, {"vetoes": 0})
         memo.update(rows={row["rid"]: row for row in rows}, order=[row["rid"] for row in rows], targets=targets,
@@ -439,7 +448,12 @@ def acquisition_tools(tb):
             )
         except Exception as exc:
             raise ToolError(f"The reviewer could not be reached ({str(exc)[:120]}); try again shortly.") from exc
-        acquisition_review.charge(ctx.session, model, usage, dollars)
+        acquisition_review.charge(ctx.session, model, usage, dollars, tb.store)
+        ctx.facts.update(
+            pick=pick, name=memo["rows"][pick]["name"], approved=bool(decision.get("approve")),
+            reason=decision.get("reason", ""), instead=decision.get("instead", ""), queries=decision.get("queries") or [],
+            reviewer=model, review_cost=dollars, vetoes_before=memo.get("vetoes", 0),
+        )
         if not decision.get("approve"):
             memo["vetoes"] = memo.get("vetoes", 0) + 1
             advice = decision.get("reason") or "The reviewer vetoed this pick."
@@ -451,6 +465,7 @@ def acquisition_tools(tb):
                 advice += " Reviewer suggests searching: " + "; ".join(queries) + " (find_releases with these queries)."
             return "Vetoed. " + advice
         row = memo["rows"][pick]
+        ctx.facts["approved"] = True
         result = await add(ctx, {"info_hash": row["info_hash"], "name": row["name"][:200], "files": row.get("chosen") or [],
                                  "titles": memo.get("titles") or []})
         memo["vetoes"] = 0
