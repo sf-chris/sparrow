@@ -53,6 +53,7 @@ DEFAULT_CHEAP_MODEL = "claude-haiku-4-5"
 
 POLL_INTERVAL = 15.0  # plumbing poll cadence (seconds)
 STALL_AFTER = 15 * 60  # no progress for this long = stalled
+CRAWL_AFTER = 4 * 3600  # projected time to finish that counts as crawling
 TIMER_INTERVAL = 20.0  # wake-timer scan cadence
 CLIENT_RECOVERY_COOLDOWN = 5 * 60
 
@@ -133,6 +134,8 @@ class AgentService:
             str, tuple[float, float]
         ] = {}  # dl_id -> (progress, ts)
         self._stall_flagged: set[str] = set()
+        self._pace_seen: dict[str, tuple[float, float]] = {}  # dl_id -> window start (progress, ts)
+        self._crawl_flagged: set[str] = set()
         self._client_up: Optional[bool] = None
         self._client_recovery_after = 0.0
         recent_recovery = next(
@@ -1112,6 +1115,7 @@ class AgentService:
                 )
 
                 self._detect_stall(dl, progress)
+                self._detect_crawl(dl, progress)
             except (NodeError, OSError):
                 # Preserve the request and its last verified facts while a node is away.
                 continue
@@ -1148,6 +1152,40 @@ class AgentService:
                     )
                 )
             )
+
+    def _detect_crawl(self, dl, progress: float) -> None:
+        """A transfer that moves, but so slowly it would take hours: the
+        stall check never fires for a trickle, so say it once per slow spell."""
+        now = time.time()
+        start_progress, start = self._pace_seen.setdefault(dl.id, (progress, now))
+        if now - start < STALL_AFTER:
+            return
+        self._pace_seen[dl.id] = (progress, now)
+        gained = progress - start_progress
+        if gained <= 1e-4:
+            return  # no progress at all is the stall check's case
+        remaining = (1 - progress) / gained * (now - start)
+        if remaining < CRAWL_AFTER:
+            self._crawl_flagged.discard(dl.id)
+            return
+        if dl.id in self._crawl_flagged:
+            return
+        self._crawl_flagged.add(dl.id)
+        asyncio.create_task(
+            self.emit(
+                Event(
+                    kind="download_stalled",
+                    job_id=dl.metadata.get("job_id", ""),
+                    download_id=dl.id,
+                    payload={
+                        "description": f'"{dl.name}" is crawling: {gained * 100:.1f}% in the last '
+                        f"{int((now - start) / 60)} minutes, about {remaining / 3600:.0f} hours to finish "
+                        f"(at {progress * 100:.0f}%). Your call: wait, or replace it with a faster copy.",
+                        "download_id": dl.id,
+                    },
+                )
+            )
+        )
 
     async def _recover_client(self, config, manager: TorrentManager) -> bool:
         """Start a configured local app at most once per cooldown window."""

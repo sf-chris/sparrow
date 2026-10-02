@@ -93,6 +93,36 @@ class AgentPersistenceTests(unittest.IsolatedAsyncioTestCase):
             await __import__("asyncio").sleep(0)
             service.emit.assert_called_once()  # Logging recovery adds no model wake.
 
+    async def test_a_crawling_download_is_reported_once(self) -> None:
+        from backend.agents.service import CRAWL_AFTER
+
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = Storage(tmp)
+            await storage.load_all()
+            service = AgentService(storage, tmp, _broadcast)
+            service.emit = AsyncMock()
+            download = Download(
+                id="dl-slow", name="Fixture", magnet_url="magnet:?xt=fixture",
+                media_type=MediaType.TV, metadata={"job_id": "job-1"},
+            )
+            # 1% in 15 minutes: about a day to finish.
+            service._pace_seen[download.id] = (0.10, time.time() - STALL_AFTER - 1)
+            service._detect_crawl(download, 0.11)
+            await __import__("asyncio").sleep(0)
+            service.emit.assert_called_once()
+            self.assertIn("crawling", service.emit.call_args.args[0].payload["description"])
+            service._pace_seen[download.id] = (0.11, time.time() - STALL_AFTER - 1)
+            service._detect_crawl(download, 0.12)
+            await __import__("asyncio").sleep(0)
+            service.emit.assert_called_once()  # once per slow spell
+            # A healthy pace (60% in 15 minutes) clears it; no event.
+            service._pace_seen[download.id] = (0.12, time.time() - STALL_AFTER - 1)
+            service._detect_crawl(download, 0.72)
+            await __import__("asyncio").sleep(0)
+            service.emit.assert_called_once()
+            self.assertNotIn(download.id, service._crawl_flagged)
+            self.assertGreater(CRAWL_AFTER, STALL_AFTER)
+
     async def test_closed_sessions_do_not_keep_stale_wake_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             storage = Storage(tmp)
