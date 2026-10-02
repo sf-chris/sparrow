@@ -177,7 +177,7 @@ def acquisition_tools(tb):
                         "node_id": node_id,
                         "desired_control": "",
                         **({"wanted_files": wanted_files} if wanted_files else {}),
-                        **({"wanted_titles": [str(t) for t in args.get("titles") or []][:3]} if wanted_files else {}),
+                        **({"wanted_titles": [str(t) for t in args.get("titles") or [job.title]][:3]}),
                     },
                 )
                 await tb.storage.add_download(existing)
@@ -220,7 +220,7 @@ def acquisition_tools(tb):
                 }
             )
             tb.slot_taken(job.id)
-            if wanted_files:
+            if tb.selection_for(tb.storage.get_download(identity) or existing):
                 asyncio.create_task(tb.select_soon(identity))
             return {
                 "download_id": identity,

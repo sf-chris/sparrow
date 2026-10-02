@@ -395,6 +395,12 @@ class ScoutJudgementTests(unittest.TestCase):
         self.assertEqual(scout.resolve(files, ["episode:S01E02"], ["Show"]), ["Show/Show - 02.mkv"])
         self.assertEqual(scout.resolve(files, ["episode:S01E07"], ["Show"]), ["episode:S01E07"])
         self.assertEqual(scout.resolve(files, ["Show/Show - 01.mkv"]), ["Show/Show - 01.mkv"])
+        # An oddly named single release keeps its video; subtitle files come along.
+        single = [{"name": "abc123/xyz.mkv", "size": 900}, {"name": "abc123/xyz.nfo", "size": 1}]
+        self.assertEqual(scout.resolve(single, ["episode:S01E02"]), ["abc123/xyz.mkv"])
+        with_subs = files + [{"name": "Show/Subs/Show - 02.eng.srt", "size": 3}, {"name": "Show/Subs/Show - 01.eng.srt", "size": 3}]
+        self.assertEqual(scout.resolve(with_subs, ["episode:S01E02"], ["Show"]), ["Show/Show - 02.mkv", "Show/Subs/Show - 02.eng.srt"])
+        self.assertEqual(scout.resolve(with_subs, ["Show/Show - 01.mkv"]), ["Show/Show - 01.mkv", "Show/Subs/Show - 01.eng.srt"])
         self.assertTrue(scout.spans({"name": "[a-S] Samurai Champloo (01-26) (1080p)"}, [(1, 2)]))
         self.assertFalse(scout.spans({"name": "Show (01-12)"}, [(1, 20)]))
 

@@ -176,7 +176,7 @@ class Toolbox:
         selection, or None while still waiting. When none of the chosen files
         exist the transfer is stopped and the request woken.
         """
-        wanted = download.metadata.get("wanted_files") or []
+        wanted = self.selection_for(download)
         if not wanted or download.metadata.get("selection"):
             return download.metadata.get("selection")
         node_id = download.metadata.get("node_id")
@@ -203,12 +203,32 @@ class Toolbox:
         current = self.storage.get_download(download.id) or download
         await self.storage.update_download(download.id, metadata={**current.metadata, "selection": result}, **values)
         if "error" in result:
+            chose = "None of the files you chose are" if download.metadata.get("wanted_files") else (
+                "Only the wanted episodes download, and none of the files is named as one")
             await self.emit(Event(
                 kind="download_stalled", job_id=download.metadata.get("job_id", ""), download_id=download.id,
-                payload={"description": f'None of the files you chose are in "{download.name}", so it was stopped. '
+                payload={"description": f'{chose} in "{download.name}", so it was stopped. '
                                         f'Its files include: {", ".join(result.get("available", [])[:12])}. '
-                                        "Remove it and choose again.", "download_id": download.id}))
+                                        "Remove it and choose again, naming the files with files=.",
+                         "download_id": download.id}))
         return result
+
+    def selection_for(self, download) -> list[str]:
+        """What a transfer may download: the files its agent chose or, for a
+        TV request, its wanted episodes, found by name once the torrent's
+        list is known. A whole pack never downloads for one episode."""
+        if download.metadata.get("wanted_files"):
+            return download.metadata["wanted_files"]
+        if not download.metadata.get("agent_managed"):
+            return []
+        job = self.store.get_job(download.metadata.get("job_id", ""))
+        if not job or getattr(job.media_type, "value", job.media_type) != "tv":
+            return []
+        return [
+            f"episode:S{int(season):02d}E{int(episode):02d}"
+            for season, episodes in sorted(job.wanted_episodes.items(), key=lambda kv: int(kv[0]))
+            for episode in sorted(episodes)
+        ][:200]
 
     # ─── Waiting for a transfer slot ────────────────────────────────────
 

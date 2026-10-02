@@ -288,20 +288,42 @@ async def peek(apibay_id, targets, media_type, titles=(), exclude=()):
 UNLISTED = "episode:"  # a pack file chosen by episode once the real list is known
 
 
+SUBTITLE_FILES = (".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx", ".sup")
+
+
 def resolve(files, wanted, titles=()):
-    """Names for "episode:S01E02" placeholders from a torrent's real file
-    list; a placeholder with no match stays, so the selection fails."""
+    """The files to download, from a torrent's real list: names for
+    "episode:S01E02" placeholders (a lone video stands in for an oddly named
+    single release; a placeholder with no match stays, so the selection
+    fails), plus the subtitle files that go with what was chosen."""
     targets = []
     for want in wanted:
         tag = re.fullmatch(r"episode:S(\d{1,2})E(\d{1,4})", str(want))
         if tag:
             targets.append((int(tag.group(1)), int(tag.group(2))))
-    if not targets:
-        return wanted
-    chosen = choose([(f.get("name", ""), int(f.get("size") or 0)) for f in files], targets, "tv", titles)
-    named = [f["name"] for f in chosen.values()]
-    missing = [f"{UNLISTED}S{s:02d}E{e:02d}" for s, e in targets if (s, e) not in chosen]
-    return [w for w in wanted if not str(w).startswith(UNLISTED)] + named + missing
+    entries = [(str(f.get("name", "")), int(f.get("size") or 0)) for f in files]
+    names = [w for w in wanted if not str(w).startswith(UNLISTED)]
+    if targets:
+        chosen = choose(entries, targets, "tv", titles)
+        names += [f["name"] for f in chosen.values()]
+        videos = [n for n, _ in entries if n.lower().endswith(VIDEO) and "sample" not in n.lower()]
+        missing = [(s, e) for s, e in targets if (s, e) not in chosen]
+        if missing and not chosen and not names and len(videos) == 1:
+            names, missing = videos, []
+        names += [f"{UNLISTED}S{s:02d}E{e:02d}" for s, e in missing]
+    # Subtitle files beside the chosen videos are often the best English track.
+    season = targets[0][0] if targets else 1
+    stems = {_plain(n.rsplit("/", 1)[-1].rsplit(".", 1)[0]) for n in names if not n.startswith(UNLISTED)}
+    for name, _ in entries:
+        base = name.rsplit("/", 1)[-1]
+        if not base.lower().endswith(SUBTITLE_FILES) or name in names:
+            continue
+        stem = _plain(base.rsplit(".", 1)[0])
+        if any(s and stem.startswith(s) for s in stems) or (
+            any(episode_in(base, *t) for t in targets) and not _other_part(name, titles, season, ())
+        ):
+            names.append(name)
+    return names
 
 
 def choose(entries, targets, media_type, titles=(), exclude=()):
