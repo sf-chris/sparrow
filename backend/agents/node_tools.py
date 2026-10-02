@@ -431,11 +431,16 @@ def acquisition_tools(tb):
         )
 
     async def propose_release(ctx, args):
-        from . import acquisition_review
+        from . import acquisition_review, scout
 
         job = tb.require_authority(ctx)
         memo = tb.scouted.get(ctx.session.id) or {}
         pick = str(args.get("release", "")).strip().lower()
+        if pick not in (memo.get("rows") or {}):
+            # A pick named by its release name rather than its row id.
+            named = [rid for rid, row in (memo.get("rows") or {}).items()
+                     if pick and scout.compact(row["name"]).startswith(scout.compact(pick)[:60])]
+            pick = named[0] if len(named) == 1 else pick
         if pick not in (memo.get("rows") or {}):
             raise ToolError("Propose a row id from your latest find_releases list, such as r1.")
         if memo.get("vetoes", 0) >= 2:
