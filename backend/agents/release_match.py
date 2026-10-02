@@ -29,6 +29,19 @@ def other_season(title: str, season: int) -> bool:
     return any(int(next(g for g in m.groups() if g)) != season for m in SEASON_TAG.finditer(title or ""))
 
 
+SEASON_RANGE = re.compile(r"(?i)\bS(\d{1,2})\s*[-~]\s*S?(\d{1,2})\b|\bseasons?\s*(\d{1,2})\s*(?:-|~|to|&|and)\s*(\d{1,2})\b")
+
+
+def covers_season(title: str, season: int) -> bool:
+    """A multi-season release that includes this season ("S01-S05",
+    "Seasons 1 to 6", or a season tag naming it alongside others)."""
+    for m in SEASON_RANGE.finditer(title or ""):
+        low, high = (int(g) for g in (m.group(1, 2) if m.group(1) else m.group(3, 4)))
+        if low <= season <= high:
+            return True
+    return any(int(next(g for g in m.groups() if g)) == season for m in SEASON_TAG.finditer(title or ""))
+
+
 ROMAN = {"ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6}
 
 
@@ -38,13 +51,13 @@ def _plain(text):
 
 def sequel_of(name: str, titles, season: int) -> bool:
     """A release of a sequel season named after the title ("Show III - 02",
-    "Show 2 - 05", "Show Second Season") when another season is wanted."""
-    plain = _plain(name)
+    "Show 2 - 05", "Show Second Season") when another season is wanted.
+    Punctuation and spacing are ignored ("Tensai-tachi" is "Tensaitachi")."""
     for title in titles:
-        base = _plain(title)
-        if not base or base not in plain:
+        rest = _following(name, re.sub(r"[^a-z0-9]", "", str(title).lower()))
+        if rest is None:
             continue
-        rest = plain.split(base, 1)[1].split()
+        rest = _plain(rest).split()
         if not rest:
             continue
         marker = rest[0]
@@ -54,3 +67,16 @@ def sequel_of(name: str, titles, season: int) -> bool:
         if number is not None and number != season:
             return True
     return False
+
+
+def _following(name: str, compact: str):
+    """The text after a title found anywhere in a name, letters and digits
+    compared; None when the name doesn't contain it."""
+    if not compact:
+        return None
+    chars = [(i, c.lower()) for i, c in enumerate(str(name)) if c.isascii() and c.isalnum()]
+    letters = "".join(c for _, c in chars)
+    at = letters.find(compact)
+    if at < 0:
+        return None
+    return str(name)[chars[at + len(compact) - 1][0] + 1:]

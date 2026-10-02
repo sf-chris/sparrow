@@ -33,7 +33,7 @@ REVIEW_SCHEMA = {
 }
 
 
-def record(job, wanted, rows, pick, reason, episode_titles=None):
+def record(job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
     """The decision in a few hundred tokens."""
     values = (job.preferences or {}).get("values") or {}
     if job.media_type == "movie":
@@ -48,13 +48,14 @@ def record(job, wanted, rows, pick, reason, episode_titles=None):
         f"{', at most ' + str(values['max_file_size_gb']) + ' GB a file' if values.get('max_file_size_gb') else ''}; "
         f"audio: {job.audio_pref}; English subtitles: {'wanted' if 'en' in (values.get('subtitle_languages') or []) else 'not needed'}; "
         f"urgency: {getattr(job.urgency, 'value', job.urgency)}."
+        + (f" Other titles share this name: {namesakes}." if namesakes else "")
     )
     chosen = next(row for row in rows if row["rid"] == pick)
-    files = "\n".join(f"  chosen file: {name}" for name in (chosen.get("chosen") or []))
+    files = "\n".join(f"  chosen file: {name}" for name in (chosen.get("chosen") or []) if not name.startswith("episode:"))
     return f"{wants}\nRows:\n{table(rows)}\nPicked {pick}: {reason[:300]}" + (f"\n{files}" if files else "")
 
 
-async def review(tb, job, wanted, rows, pick, reason, episode_titles=None):
+async def review(tb, job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
     """The smart model's decision and what it cost: (decision, dollars, model)."""
     from . import subtitle_contract
     import os
@@ -63,7 +64,7 @@ async def review(tb, job, wanted, rows, pick, reason, episode_titles=None):
     caller = subtitle_contract.caller_for(
         model, effective_anthropic_key(tb.cfg()), os.getenv("OPENAI_API_KEY", ""), "low"
     )
-    data, usage = await caller(REVIEW_SYSTEM, record(job, wanted, rows, pick, reason, episode_titles), REVIEW_SCHEMA)
+    data, usage = await caller(REVIEW_SYSTEM, record(job, wanted, rows, pick, reason, episode_titles, namesakes), REVIEW_SCHEMA)
     return data, subtitle_contract.cost(model, usage), model, usage
 
 

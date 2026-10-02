@@ -85,8 +85,13 @@ SCOUT_WORKFLOW = """## How you work (code does the searching; you decide)
    the pick: approved picks start downloading (only the chosen files); a veto
    says why and may name a better row or better searches — follow it.
 4. Nothing fits? find_releases again with up to three queries of your own
-   (romanised or alternative titles, other numbering). Still nothing, or two
-   picks vetoed: escalate_model and search by hand.
+   (romanised or alternative titles, other numbering; every word must appear
+   in a release name, so keep queries short). Repeated searches are free and
+   searches wait their turn for the indexer's allowance by themselves. If it
+   says the indexer is failing, wait as told: that is not an empty result.
+   Still nothing, or two picks vetoed: escalate_model and search by hand.
+   A pack the indexer cannot list is fine to propose: its episode is picked
+   when the download starts, and a pack without it stops and wakes you.
 5. After a download starts you'll be WOKEN on completion, stall, or error —
    don't poll. On a stall, client_remove it (its unfinished files are
    deleted) and propose the runner-up.

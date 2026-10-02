@@ -526,12 +526,17 @@ def match_files(files: list[dict], wanted: list[str]) -> list[int]:
     return sorted(picked)
 
 
-async def select_files(manager: "TorrentManager", torrent_hash: str, wanted: list[str]) -> dict:
+async def select_files(manager: "TorrentManager", torrent_hash: str, wanted: list[str], resolve=None) -> dict:
     """Download only the named files: pending until the file list is known;
-    a choice matching nothing stops the transfer instead of taking it all."""
+    a choice matching nothing stops the transfer instead of taking it all.
+
+    resolve(files, wanted) may name files from the real list (a pack the
+    indexer could not list is chosen by episode once it is known)."""
     files = await manager.get_files(torrent_hash)
     if not files:
         return {"pending": True}
+    if resolve:
+        wanted = resolve(files, wanted)
     chosen = match_files(files, wanted)
     if not chosen:
         await manager.stop_torrent(torrent_hash)

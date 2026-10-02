@@ -221,8 +221,8 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
             {**row, "rid": "r1", "info_hash": "a" * 40, "name": "Fixture 2020 1080p", "coverage": "single"},
             {**row, "rid": "r2", "info_hash": "b" * 40, "name": "Fixture collection", "coverage": "pack", "files": 5, "chosen": ["Fixture/Fixture.mkv"]},
         ]
-        with patch.object(scout, "scout", AsyncMock(return_value=(rows, ["Fixture 2020"], 3))), patch.object(
-            scout, "titles_for", AsyncMock(return_value=(["Fixture"], []))
+        with patch.object(scout, "scout", AsyncMock(return_value=(rows, ["Fixture 2020"], 3, False))), patch.object(
+            scout, "titles_for", AsyncMock(return_value=(["Fixture"], [], ""))
         ):
             listing = await self.call("find_releases", {})
         self.assertIn("r1 · 1.00 GB · 9 seeds", listing)
@@ -332,7 +332,71 @@ class ScoutJudgementTests(unittest.TestCase):
         self.assertIsNone(judge("Cowboy Bebop S01E05 1080p", seeds=0))
         self.assertIsNone(judge("LEGO Cowboy Bebop S01E05 1080p"))  # another show named after it
         self.assertEqual(judge("[Group] Cowboy Bebop - 05 [1080p]")["coverage"], "single")
-        self.assertEqual(scout.queries(["Naruto", "NARUTO"], [(1, 2)], "tv"), ["Naruto S01E02", "Naruto 02", "Naruto S01", "Naruto"])
+        self.assertEqual(scout.queries(["Naruto", "NARUTO"], [(1, 2)], "tv"), ["Naruto S01E02", "Naruto", "NARUTO 02", "Naruto S01"])
+
+    def test_names_must_be_the_show_and_this_season(self):
+        from backend.agents import scout
+
+        def judge(name, titles, year=2014, wanted=(1, 2), files=1, exclude=()):
+            job = SimpleNamespace(media_type="tv", year=year, min_quality="720p", preferred_quality="1080p", audio_pref="original")
+            row = {"id": 1, "name": name, "info_hash": "c" * 40, "seeders": 5, "size": 10**9, "num_files": files}
+            return scout.judge(row, job, [wanted], titles, exclude)
+
+        # Other shows and parts named after this one.
+        for name, titles in (
+            ("Naruto Shippuden (001-500) Complete", ["Naruto"]),
+            ("Tokyo Ghoul Root A - 02 [1080p]", ["Tokyo Ghoul"]),
+            ("Monster The Ed Gein Story S01E02 1080p", ["Monster"]),
+            ("Dragon.Ball.DAIMA.S01E02.1080p.WEB-DL", ["Dragon Ball Z"]),
+            ("Samurai Champloo Music Record Disc 2", ["Samurai Champloo"]),
+            ("Kaguya-sama wa Kokurasetai! Tensai-tachi no Renai Zunousen 2 - 12", ["Kaguya-sama wa Kokurasetai: Tensaitachi no Renai Zunousen"]),
+        ):
+            self.assertIsNone(judge(name, titles, files=30), name)
+        # Another season's single episode or pack is not a pack to peek.
+        self.assertIsNone(judge("Re ZERO Starting Life in Another World S04E16 1080p", ["Re:ZERO -Starting Life in Another World-"], 2016, files=4))
+        self.assertIsNone(judge("Tokyo Ghoul 2014 Season 2 Complete 1080p WEB", ["Tokyo Ghoul"], files=12))
+        self.assertEqual(judge("My Hero Academia Seasons 1 to 6 +Movies", ["My Hero Academia"], 2016, files=140)["coverage"], "pack")
+        # A same-named live-action series: another year, or its episode's title.
+        self.assertIsNone(judge("ERASED 2017 S01E02 1080p NF WEB-DL", ["ERASED"], 2016))
+        self.assertIsNone(judge("ONE PIECE S01E02 THE MAN IN THE STRAW HAT 1080p", ["One Piece"], 1999, exclude=["THE MAN IN THE STRAW HAT"]))
+        # Titles with punctuation, subtitles and alternatives still match.
+        for name, titles in (
+            ("Re ZERO Starting Life in Another World S01E02 1080p", ["Re:ZERO -Starting Life in Another World-"]),
+            ("[HorribleSubs] Parasyte - the maxim - 02 [1080p]", ["Parasyte -the maxim-"]),
+            ("Oshi no Ko S01E02 Third Option 1080p", ["【OSHI NO KO】"]),
+            ("Dr STONE S01E02 2019 1080p NF WEB-DL", ["Dr. STONE"]),
+            ("Kaguya-sama wa Kokurasetai - 02 (720p)", ["Kaguya-sama: Love Is War", "Kaguya-sama wa Kokurasetai: Tensaitachi no Renai Zunousen"]),
+        ):
+            self.assertIsNotNone(judge(name, titles, year=2019), name)
+        # Non-Latin exclusions reduce to digits and must not exclude everything.
+        self.assertIsNotNone(judge("Solo Leveling S01E02 2024 1080p", ["Solo Leveling"], 2024, exclude=["Тільки я візьму Сезон 2"]))
+
+    def test_queries_are_written_for_the_index(self):
+        from backend.agents import scout
+
+        plan = scout.queries(["Re:ZERO -Starting Life in Another World-", "Re:Zero kara Hajimeru Isekai Seikatsu"], [(1, 2)], "tv", 2016)
+        self.assertEqual(plan[:4], [
+            "Re ZERO Starting Life in Another World S01E02", "Re ZERO Starting Life in Another World",
+            "Re Zero kara Hajimeru Isekai Seikatsu S01E02", "Re Zero kara Hajimeru Isekai Seikatsu 02",
+        ])
+        self.assertTrue(all(" -" not in q and ":" not in q for q in plan))
+        rows = [{"name": f"Naruto Shippuden - {n:03d}"} for n in range(5)] + [{"name": "Naruto - 002"}]
+        self.assertEqual(scout.blockers(rows, ["Naruto"]), ["shippuden"])
+
+    def test_an_unlisted_pack_picks_its_episode_when_the_list_arrives(self):
+        from backend.agents import scout
+
+        files = [
+            {"name": "Show/Extras/Show - 02 NCOP.mkv", "size": 50},
+            {"name": "Show/Show - 01.mkv", "size": 400},
+            {"name": "Show/Show - 02.mkv", "size": 410},
+            {"name": "Show Season 2/Show - 02.mkv", "size": 420},
+        ]
+        self.assertEqual(scout.resolve(files, ["episode:S01E02"], ["Show"]), ["Show/Show - 02.mkv"])
+        self.assertEqual(scout.resolve(files, ["episode:S01E07"], ["Show"]), ["episode:S01E07"])
+        self.assertEqual(scout.resolve(files, ["Show/Show - 01.mkv"]), ["Show/Show - 01.mkv"])
+        self.assertTrue(scout.spans({"name": "[a-S] Samurai Champloo (01-26) (1080p)"}, [(1, 2)]))
+        self.assertFalse(scout.spans({"name": "Show (01-12)"}, [(1, 20)]))
 
     def test_the_standard_cut_is_chosen_from_a_pack(self):
         from backend.agents import scout

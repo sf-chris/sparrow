@@ -748,8 +748,11 @@ class Executor:
                 return {"pending": True}
             from ..services.torrent_client import select_files
 
+            from .scout import resolve
+
             files = [str(f) for f in (args.get("files") or [])][:200]
-            return await select_files(manager, info_hash, files)
+            titles = [str(t) for t in (args.get("titles") or [])][:3]
+            return await select_files(manager, info_hash, files, lambda listing, wanted: resolve(listing, wanted, titles))
         elif kind == "download_remove":
             # Downloader never deletes files; folder jail owns any later cleanup.
             result = await manager.delete_torrent(info_hash, delete_files=False)
