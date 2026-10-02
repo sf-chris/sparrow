@@ -99,6 +99,17 @@ def suitable(job, asset):
     )
 
 
+def runtime_matches(duration, minutes, approximate=False):
+    """Whether a measured duration is the catalogue's runtime: within two
+    minutes (10% for short items), or a quarter either way when the figure
+    is a season-wide placeholder. Samples and double-length cuts never pass."""
+    seconds = float(minutes or 0) * 60
+    tolerance = min(120, max(5, seconds * 0.1))
+    if approximate:
+        tolerance = max(tolerance, seconds * 0.25)
+    return bool(seconds) and abs(float(duration) - seconds) <= tolerance
+
+
 def unsuitable(job, facts):
     """Which part of the request a measured copy fails, in plain words."""
     prefs = job.preferences.get("values", {})
@@ -422,6 +433,18 @@ def acquisition_tools(tb):
         rows, searched, dropped, failing = await scout.scout(
             tb, job, targets, titles, extra, exclude=exclude, log=ctx.facts.setdefault("searches", [])
         )
+        # Copies this request already abandoned (stalled, crawling, wrong)
+        # go last and say so: neither picker nor reviewer should choose them again.
+        abandoned = {
+            (d.torrent_hash or "").lower()
+            for d in tb.storage.get_all_downloads()
+            if d.metadata.get("job_id") == job.id and d.status == DownloadStatus.ERROR
+        }
+        for row in rows:
+            row["abandoned"] = row["info_hash"].lower() in abandoned
+        rows.sort(key=lambda row: row["abandoned"])
+        for number, row in enumerate(rows, 1):
+            row["rid"] = f"r{number}"
         ctx.facts.update(
             kept=len(rows), dropped=dropped, failing=failing, namesakes=namesakes,
             rows=[{k: row.get(k) for k in ("rid", "name", "seeders", "quality", "coverage", "episode_size", "unlisted")} for row in rows],
@@ -486,7 +509,7 @@ def acquisition_tools(tb):
             reviewer=model, review_cost=dollars, vetoes_before=memo.get("vetoes", 0),
         )
         instead = str(decision.get("instead") or "").strip().lower()
-        if not decision.get("approve") and instead in memo["rows"] and instead != pick:
+        if not decision.get("approve") and instead in memo["rows"] and instead != pick and not memo["rows"][instead].get("abandoned"):
             # The reviewer named the row it would approve: take it, without a
             # second round in which the picker could misread the advice.
             ctx.facts.update(chosen_by_reviewer=instead)
@@ -741,6 +764,7 @@ def storage_tools(tb):
             raise ToolError("The publication changed before it was recorded.")
         details = await tb.tmdb_get(f"/{job.media_type}/{job.tmdb_id}")
         expected = details.get("runtime", 0)
+        approximate = False
         if job.media_type == "tv":
             data = await tb.tmdb_get(f"/tv/{job.tmdb_id}/season/{season}")
             ep = next(
@@ -754,12 +778,16 @@ def storage_tools(tb):
             expected = ep.get("runtime") or next(
                 iter(details.get("episode_run_time") or []), 0
             )
-        seconds = float(expected or 0) * 60
-        if not seconds or abs(facts["duration"] - seconds) > min(
-            120, max(5, seconds * 0.1)
-        ):
+            # One runtime for a whole season (or the show's default) is a
+            # placeholder, not a measurement: TMDB gives every Psycho-Pass
+            # episode 28 minutes; they run 23.
+            runtimes = [e.get("runtime") for e in data.get("episodes", []) if e.get("runtime")]
+            approximate = not ep.get("runtime") or (len(runtimes) >= 3 and len(set(runtimes)) == 1)
+        if not runtime_matches(facts["duration"], expected, approximate):
             raise ToolError(
-                "Measured duration does not match the catalogue runtime. Resolve the identity before recording this copy."
+                f"Measured duration ({facts['duration'] / 60:.1f} min) does not match the catalogue runtime "
+                f"({float(expected or 0):.0f} min{', a season-wide figure' if approximate else ''}). "
+                "Resolve the identity before recording this copy."
             )
         candidate = {"state": "ready", "facts": facts}
         if not suitable(job, candidate):

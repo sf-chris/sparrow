@@ -247,6 +247,26 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ToolError):
             await self.call("propose_release", {"release": "r9", "reason": "not listed"})
 
+    async def test_a_copy_abandoned_here_is_marked_last_and_never_chosen_again(self):
+        from backend.agents import acquisition_review, scout
+
+        row = dict(seeders=9, size=10**9, files=1, quality="1080p", source="WEB-DL", dual=False, subs=True, episode_size=10**9, coverage="single")
+        rows = [{**row, "rid": "r1", "info_hash": "a" * 40, "name": "Fixture stalled"},
+                {**row, "rid": "r2", "info_hash": "b" * 40, "name": "Fixture other"}]
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture stalled"})
+        await self.call("client_remove", {"download_id": first["download_id"]})
+        with patch.object(scout, "scout", AsyncMock(return_value=(rows, ["Fixture"], 0, False))), patch.object(
+            scout, "titles_for", AsyncMock(return_value=(["Fixture"], [], ""))
+        ):
+            listing = await self.call("find_releases", {})
+        self.assertIn("r2 · 1.00 GB · 9 seeds · 1080p WEB-DL · single release · subtitles likely, ALREADY ABANDONED", listing)
+        self.assertTrue(listing.index("Fixture other") < listing.index("Fixture stalled"))
+        veto = ({"approve": False, "reason": "The other is better.", "instead": "r2", "queries": []}, 0.003, "smart", {})
+        with patch.object(acquisition_review, "review", AsyncMock(return_value=veto)):
+            answer = await self.call("propose_release", {"release": "r1", "reason": "healthy"})
+        self.assertTrue(str(answer).startswith("Vetoed"))
+        self.assertEqual(self.add_count, 1)  # only the first, abandoned add
+
     async def test_only_the_smart_model_searches_and_adds_directly(self):
         cheap = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model=self.service.cheap_model())
         smart = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model=self.service.smart_model())
@@ -433,6 +453,14 @@ class ScoutJudgementTests(unittest.TestCase):
         row = dict(rid="r1", episode_size=5e8, size=13e9, seeders=64, quality="1080p", source="BLURAY", coverage="pack",
                    files=26, unlisted=True, dual=False, subs=False, name="[a-S] Show (01-26)", chosen=["episode:S01E02"])
         self.assertIn("0.50 GB an episode, estimated of a 13.0 GB pack", scout.table([row]))
+        # A season-wide placeholder runtime (Psycho-Pass: 28 min, really 23) is approximate.
+        from backend.agents.node_tools import runtime_matches
+
+        self.assertFalse(runtime_matches(22.87 * 60, 28))
+        self.assertTrue(runtime_matches(22.87 * 60, 28, approximate=True))
+        self.assertFalse(runtime_matches(120, 28, approximate=True))  # a sample
+        self.assertFalse(runtime_matches(46 * 60, 28, approximate=True))  # a double-length cut
+        self.assertTrue(runtime_matches(23.5 * 60, 24))
         # A rejected copy says why.
         job = NS(preferences={"values": {"max_file_size_gb": 3}, "policy": {}}, audio_pref="original",
                  original_language="ja", min_quality="720p")
