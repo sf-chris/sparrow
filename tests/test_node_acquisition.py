@@ -353,7 +353,7 @@ class ScoutJudgementTests(unittest.TestCase):
         self.assertIsNone(judge("Cowboy Bebop S01E05 1080p", seeds=0))
         self.assertIsNone(judge("LEGO Cowboy Bebop S01E05 1080p"))  # another show named after it
         self.assertEqual(judge("[Group] Cowboy Bebop - 05 [1080p]")["coverage"], "single")
-        self.assertEqual(scout.queries(["Naruto", "NARUTO"], [(1, 2)], "tv"), ["Naruto S01E02", "Naruto", "NARUTO 02", "Naruto S01"])
+        self.assertEqual(scout.queries(["Naruto", "NARUTO"], [(1, 2)], "tv"), ["Naruto S01E02", "Naruto", "NARUTO 02", "Naruto complete", "Naruto S01"])
 
     def test_names_must_be_the_show_and_this_season(self):
         from backend.agents import scout
@@ -418,6 +418,15 @@ class ScoutJudgementTests(unittest.TestCase):
         # A pack named "+ Movies" is not an extras folder; its Movies/ folder is.
         self.assertFalse(scout._extras("Naruto Complete Series + Movies Uncut/Naruto - 002 - Konohamaru.mkv"))
         self.assertTrue(scout._extras("Naruto Complete/Movies/Naruto the Movie 2.mkv"))
+        self.assertTrue(scout._extras("Naruto Ocean Cut/Season 1 - Chunin Exams/Special #2 - Kakashi's Face!-1.m4v"))
+        # Raw releases (no subtitles) say so and rank below subtitled ones when subtitles are wanted.
+        job = NS(media_type="tv", year=2004, min_quality="720p", preferred_quality="1080p", audio_pref="original",
+                 preferences={"values": {"subtitle_languages": ["en"]}})
+        row = lambda name, seeds: scout.judge({"id": 1, "name": name, "info_hash": "e" * 40, "seeders": seeds, "size": 13e9, "num_files": 26},
+                                              job, [(1, 2)], ["Samurai Champloo"])
+        raw, subbed = row("Samurai Champloo (01-26) 1080p RAW", 64), row("[a-S] Samurai Champloo (01-26) (1080p)", 64)
+        self.assertTrue(raw["raw"] and not raw["subs"])
+        self.assertLess(scout.score(raw, job), scout.score(subbed, job))
         # Pack sizes say what they measure.
         row = dict(rid="r1", episode_size=5e8, size=13e9, seeders=64, quality="1080p", source="BLURAY", coverage="pack",
                    files=26, unlisted=True, dual=False, subs=False, name="[a-S] Show (01-26)", chosen=["episode:S01E02"])
