@@ -44,20 +44,33 @@ def render(text, size=(1920, 1080)):
     return image
 
 
-def sup(events, size=(1920, 1080)):
-    """PGS bytes for [(start, end, text)]."""
+def _palette(version, alpha):
+    return struct.pack(">BB", 0, version) + bytes([0, 16, 128, 128, 0, 1, 235, 128, 128, alpha])
+
+
+def sup(events, size=(1920, 1080), fade=0):
+    """PGS bytes for [(start, end, text)]. fade: palette-only updates that
+    ramp each line's opacity up over its first frames, as many discs do."""
     out = bytearray()
-    for number, (start, end, text) in enumerate(events):
+    composition = 0
+    for start, end, text in events:
         image = render(text, size)
         width, height = image.size
         x, y = (size[0] - width) // 2, size[1] - height - 60
-        pcs = struct.pack(">HHBHBBBB", size[0], size[1], 0x10, number * 2, 0x80, 0, 0, 1) + struct.pack(">HBBHH", 0, 0, 0, x, y)
+        pcs = struct.pack(">HHBHBBBB", size[0], size[1], 0x10, composition, 0x80, 0, 0, 1) + struct.pack(">HBBHH", 0, 0, 0, x, y)
         wds = struct.pack(">BBHHHH", 1, 0, x, y, width, height)
-        pds = struct.pack(">BB", 0, 0) + bytes([0, 16, 128, 128, 0, 1, 235, 128, 128, 255])
+        pds = _palette(0, 255 // (fade + 1) if fade else 255)
         data = struct.pack(">HH", width, height) + _rle(list(image.getdata()), width, height)
         ods = struct.pack(">HBB", 0, 0, 0xC0) + len(data).to_bytes(3, "big") + data
         out += _segment(0x16, start, pcs) + _segment(0x17, start, wds) + _segment(0x14, start, pds)
         out += _segment(0x15, start, ods) + _segment(0x80, start, b"")
-        clear = struct.pack(">HHBHBBBB", size[0], size[1], 0x10, number * 2 + 1, 0x00, 0, 0, 0)
+        for step in range(1, fade + 1):
+            at = start + 0.04 * step
+            composition += 1
+            update = struct.pack(">HHBHBBBB", size[0], size[1], 0x10, composition, 0x00, 0x80, 0, 1) + struct.pack(">HBBHH", 0, 0, 0, x, y)
+            out += _segment(0x16, at, update) + _segment(0x14, at, _palette(step, 255 * (step + 1) // (fade + 1))) + _segment(0x80, at, b"")
+        composition += 1
+        clear = struct.pack(">HHBHBBBB", size[0], size[1], 0x10, composition, 0x00, 0, 0, 0)
         out += _segment(0x16, end, clear) + _segment(0x17, end, wds) + _segment(0x80, end, b"")
+        composition += 1
     return bytes(out)
