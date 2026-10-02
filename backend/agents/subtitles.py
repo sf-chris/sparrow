@@ -955,7 +955,14 @@ class Subtitles:
         state["translations"] = found["translations"]
         verified = None
         wrong = sum(e["verdict"] == "wrong" for page in found["verdicts"].values() for e in page.values())
-        if verifier_model() and wrong <= MISMATCH_SHARE * max(1, len(context["cues"])):
+        judged = sum(e["verdict"] in ("ok", "loose", "wrong") for page in found["verdicts"].values() for e in page.values())
+        match = (judged - wrong) / judged if judged else 1.0
+        # A human-made track is accepted or rejected as a whole: re-checking its
+        # flags matters only when the share of matches is borderline.
+        borderline = pages_.REJECT_MATCH <= match < pages_.VERIFY_MATCH
+        if verifier_model() and wrong <= MISMATCH_SHARE * max(1, len(context["cues"])) and (
+            borderline or not self.human_made(context["track"])
+        ):
             verified = await subtitle_contract.verify_flags(
                 self.contract_caller(verifier_model()),
                 state["pages"],
@@ -996,6 +1003,12 @@ class Subtitles:
         state["audit"] = audit
         self.charge_checkers(task, state, [found["spend"], verified or {}])
         self.review_state(task, state)
+
+    @staticmethod
+    def human_made(track):
+        """A track a person translated (anything but Sparrow's own writing):
+        verified, never rewritten."""
+        return bool(track) and (track.get("data") or {}).get("source_id") != "written"
 
     def audit_due(self, task, context):
         """Blind audits keep the page checker honest: always for tracks from
@@ -1041,9 +1054,29 @@ class Subtitles:
         state, track = context["state"], context["track"]
         if not track or not state.get("contract"):
             return None
-        if state["contract"].get("mismatched"):
+        audit_due = bool((state.get("audit") or {}).get("pages"))
+        if self.human_made(track):
+            v = pages_.verification(state, context["cues"], context["utterances"])
+            measured = context["measured"]
+            full = task["data"]["kind"] != "forced"
+            if state["contract"].get("mismatched") or (v["match"] is not None and v["match"] < pages_.REJECT_MATCH):
+                outcome = {"approved": False, "reason": "Most of these subtitles don't match this episode's dialogue."}
+            elif full and v["coverage"] is not None and v["coverage"] < pages_.REJECT_COVERAGE:
+                outcome = {"approved": False, "reason": "These subtitles leave much of the dialogue uncaptioned."}
+            elif measured.get("measurable") and not measured.get("consistent"):
+                outcome = {"approved": False, "reason": "Their timing does not follow this episode's dialogue."}
+            elif (
+                not audit_due
+                and (v["match"] is None or v["match"] >= pages_.VERIFY_MATCH)
+                and (not full or v["coverage"] is None or v["coverage"] >= pages_.VERIFY_COVERAGE)
+                and not pages_.timing_reasons(measured)
+            ):
+                outcome = {"approved": True, "reason": "These subtitles match this episode's dialogue and are in sync."}
+            else:
+                return None
+        elif state["contract"].get("mismatched"):
             outcome = {"approved": False, "reason": "Most of these subtitles don't match the dialogue."}
-        elif not (state.get("audit") or {}).get("pages") and not pages_.manager_gate(
+        elif not audit_due and not pages_.manager_gate(
             state, state["pages"], context["cues"], context["utterances"], task["data"]["kind"], context["measured"]
         ):
             outcome = {"approved": True, "reason": "The page checker found nothing to correct."}
@@ -1240,7 +1273,13 @@ class Subtitles:
             task = self.task(session.download_id)
             return bool(task and ((task["data"].get("review") or {}).get("contract")))
 
+        def verifying(session):
+            task = self.task(session.download_id)
+            return bool(task) and self.human_made(self.track(task["data"].get("track_id")))
+
         async def system(session):
+            if verifying(session):
+                return pages_.VERIFY_SYSTEM
             return pages_.MANAGER_SYSTEM if managing(session) else pages_.SYSTEM
 
         async def load(ctx):
@@ -1747,8 +1786,9 @@ class Subtitles:
         async def report_tool(ctx, args):
             task, context = await load(ctx)
             state = context["state"]
-            data = pages_.report(state, state["pages"], context["cues"], context["utterances"], context["measured"])
-            mark_seen(ctx, state, [row["caption"] for row in data["to_settle"]])
+            verify = self.human_made(context["track"])
+            data = pages_.report(state, state["pages"], context["cues"], context["utterances"], context["measured"], verify=verify)
+            mark_seen(ctx, state, [row["caption"] for row in data["flagged_captions" if verify else "to_settle"]])
             self.review_state(task, state)
             return data
 
@@ -1802,7 +1842,11 @@ class Subtitles:
             if approved:
                 if not context["track"]:
                     raise ToolError("Approval refused: no track is in use.")
-                check = pages_.manager_gate if state.get("contract") else pages_.gate
+                check = (
+                    pages_.verify_gate
+                    if self.human_made(context["track"])
+                    else pages_.manager_gate if state.get("contract") else pages_.gate
+                )
                 reasons = check(
                     state,
                     state["pages"],
@@ -1993,7 +2037,13 @@ class Subtitles:
                 tool.handler = with_ids(tool.handler)
 
         def toolset(session):
-            return manager_tools if managing(session) else tools
+            chosen = manager_tools if managing(session) else tools
+            if verifying(session):
+                # A person's translation is verified as it is, never edited.
+                if not managing(session):
+                    chosen = chosen + [t for t in manager_tools if t.name == "report"]
+                chosen = [t for t in chosen if t.name not in ("edit_captions", "write_page", "use_written")]
+            return chosen
 
         service.runtime.register(
             AgentSpec(

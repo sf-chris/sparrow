@@ -361,7 +361,7 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
             response("page", {"page": 1}),
             response("gloss", {"page": 1, "lines": lines}),
             response("judge", {"page": 1, "captions": captions, "missing": []}),
-            response("edit_captions", {"changes": [{"caption": "c0003", "text": "Line 3, corrected.", "verdict": "ok", "speech": ["u00003"]}]}),
+            response("resolve", {"settle": [{"caption": "c0003", "verdict": "loose", "speech": ["u00003"], "note": "recognition difference"}]}),
             response("verdict", {"approved": True, "reason": "Audited and settled."}),
         ]
         with patch.dict("os.environ", {"SPARROW_SUBTITLE_CONTRACTOR": "fixture-checker"}):
@@ -373,7 +373,7 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["audit"]["done"], [1])
         track = self.subtitles.tracks(self.owner, self.asset)[0]
         served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
-        self.assertEqual(served[2]["text"], "Line 3, corrected.")
+        self.assertEqual(served[2]["text"], "Line 3 of the dialogue.")  # settled, never rewritten
         session = self.service.store.get_session(task["data"]["review_session"])
         report = next(
             block["content"]
@@ -384,6 +384,7 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("c0003", report)
         self.assertIn("different meaning", report)
+        self.assertIn("verification", report)
 
     def fixture_checker(self, verdict):
         async def checker(system, prompt, schema):
@@ -414,7 +415,7 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
             task = await self.request(body, calls=[])
         self.assertEqual(task["state"], "ready", task["data"]["message"])
         self.assertFalse(task["data"].get("review_sessions"))
-        self.assertIn("nothing to correct", task["data"]["review_outcome"]["reason"])
+        self.assertIn("match this episode", task["data"]["review_outcome"]["reason"])
         track = self.subtitles.tracks(self.owner, self.asset)[0]
         served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
         self.assertEqual(served[1]["text"], "I'm line 2 of the dialogue.")
@@ -487,29 +488,24 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         listed = self.subtitles.tracks(self.owner, self.asset)
         self.assertEqual([t["state"] for t in listed if t["source"] == "embedded"], ["rejected"])
 
-    async def test_agent_fixes_a_wrong_caption_and_must_judge_it_again(self):
+    async def test_a_human_made_track_is_verified_never_edited(self):
         await self.manager(review=True)
         lines, captions = self.checked_review()
-        wrong = [{**c, "verdict": "wrong"} if c["caption"] == "c0003" else c for c in captions]
+        flagged = [{**c, "verdict": "wrong"} if c["caption"] == "c0003" else c for c in captions]
         calls = [
+            response("verdict", {"approved": True, "reason": "Looks right."}),
             response("gloss", {"page": 1, "lines": lines}),
-            response("judge", {"page": 1, "captions": wrong, "missing": []}),
-            response("verdict", {"approved": True, "reason": "Close enough."}),
-            response("edit_captions", {"changes": [{"caption": "c0003", "text": "Line 3, corrected.", "align_to": ["u00003"]}]}),
-            response("verdict", {"approved": True, "reason": "Fixed."}),
-            response("page", {"page": 1}),
-            response("judge", {"page": 1, "captions": captions, "missing": []}),
-            response("verdict", {"approved": True, "reason": "Every caption now matches."}),
+            response("judge", {"page": 1, "captions": flagged, "missing": []}),
+            response("edit_captions", {"changes": [{"caption": "c0003", "text": "Line 3, corrected."}]}),
+            response("verdict", {"approved": True, "reason": "Eleven of twelve captions match; the track is right."}),
         ]
         task = await self.request(self.foreign(verify=True), calls=calls)
         self.assertEqual(task["state"], "ready", task["data"]["message"])
         track = self.subtitles.tracks(self.owner, self.asset)[0]
         self.assertTrue(track["sync_checked"])
         served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
-        self.assertEqual(served[2]["text"], "Line 3, corrected.")
-        self.assertAlmostEqual(served[2]["start"], VOICE[2], delta=0.02)
-        original = cues_from_text((await self.client.get(track["original_url"])).text, "vtt")
-        self.assertEqual(original[2]["text"], "Line 3 of the dialogue.")
+        self.assertEqual(served[2]["text"], "Line 3 of the dialogue.")  # the translator's words stay
+        self.assertAlmostEqual(served[2]["start"], VOICE[2], delta=0.02)  # timing is still corrected
         session = self.service.store.get_session(task["data"]["review_session"])
         errors = [
             block["content"]
@@ -518,8 +514,8 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
             for block in message["content"]
             if block.get("is_error")
         ]
-        self.assertIn("Wrong captions remain", errors[0])
-        self.assertIn("Pages not yet judged", errors[1])
+        self.assertIn("Pages not yet judged", errors[0])
+        self.assertIn("Unknown tool: edit_captions", errors[1])
 
     async def test_agent_writes_subtitles_when_none_exist(self):
         await self.manager(review=True)
@@ -879,6 +875,23 @@ class TypesetTrackTests(unittest.TestCase):
         pages = review.build_pages([], cues, 400)
         self.assertTrue(1 <= len(pages) < 20)
         self.assertEqual(pages[-1]["end"], 401.0)
+
+
+class VerificationTests(unittest.TestCase):
+    def test_match_and_coverage_decide_a_human_track(self):
+        utterances = [dict(utterance(n, 4.0 * n), text="はっきり話した") for n in range(1, 11)]
+        cues = [{"start": 4.0 * n, "end": 4.0 * n + 1.5, "text": f"Line {n}"} for n in range(1, 9)]
+        state = {"judgements": {"1": {f"c{n:04d}": {"verdict": "wrong" if n == 1 else "ok", "speech": []} for n in range(1, 9)}}}
+        v = review.verification(state, cues, utterances)
+        self.assertEqual((v["match"], v["coverage"]), (0.875, 0.8))
+        pages = review.build_pages(utterances, cues, 60)
+        measured = {"measurable": True, "consistent": True, "offset": 0.0}
+        state["contract"] = {"model": "fixture"}
+        self.assertEqual(review.verify_gate(state, pages, cues, utterances, "full", measured), [])
+        state["judgements"]["1"]["c0002"]["verdict"] = "wrong"
+        self.assertTrue(any("match the dialogue" in r for r in review.verify_gate(state, pages, cues, utterances, "full", measured)))
+        thin = cues[:5]
+        self.assertTrue(any("have a caption" in r for r in review.verify_gate(state, pages, thin, utterances, "full", measured)))
 
 
 class TrackKindTests(unittest.TestCase):
