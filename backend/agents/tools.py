@@ -131,6 +131,7 @@ class Toolbox:
         self.broadcast = broadcast    # async callable: websocket fanout to the UI
         self.transfer_lock = asyncio.Lock()
         self._search_times: list[float] = []   # indexer rate limiting (global)
+        self.scouted: dict[str, dict] = {}       # each Fetch session's latest short list
 
     # ─── shared helpers ──────────────────────────────────────────────────
 

@@ -360,6 +360,103 @@ def acquisition_tools(tb):
         await tb.broadcast({"type": "job_update", "data": job.to_dict()})
         return job.state_line
 
+    # ─── Scout, pick, review ──────────────────────────────────────────
+
+    def wanted(job):
+        """(season, episode) pairs still missing a suitable copy."""
+        if job.media_type == "movie":
+            return []
+        have = {(a.get("season"), a.get("episode")) for a in scoped_assets(tb, job) if suitable(job, a)}
+        return [
+            (int(season), int(episode))
+            for season, episodes in sorted(job.wanted_episodes.items(), key=lambda kv: int(kv[0]))
+            for episode in sorted(episodes)
+            if (int(season), int(episode)) not in have
+        ]
+
+    async def find_releases(ctx, args):
+        from . import scout
+
+        job = tb.require_authority(ctx)
+        targets = wanted(job)[:12]
+        if job.media_type == "tv" and not targets:
+            return "Every wanted episode already has a suitable copy in the library."
+        season = targets[0][0] if targets else 1
+        titles, exclude = await scout.titles_for(tb, job, season)
+        extra = [str(q)[:120] for q in (args.get("queries") or []) if str(q).strip()][:3]
+        rows, searched, dropped = await scout.scout(tb, job, targets, titles, extra, exclude=exclude)
+        ctx.session.spend.searches += len(searched)
+        memo = tb.scouted.setdefault(ctx.session.id, {"vetoes": 0})
+        memo.update(rows={row["rid"]: row for row in rows}, order=[row["rid"] for row in rows], targets=targets)
+        wanted_text = ", ".join(f"S{s:02d}E{e:02d}" for s, e in targets) or job.title
+        if not rows:
+            return (
+                f"Searched {len(searched)} ways for {wanted_text}; nothing usable ({dropped} results did not fit). "
+                "Try find_releases with other queries (alternative or romanised titles, other numbering), "
+                "or escalate_model for a full search."
+            )
+        return (
+            f"Wanted {wanted_text}. Searched: {'; '.join(searched)}. {dropped} other results did not fit.\n"
+            + scout.table(rows)
+            + "\nPropose the best row with propose_release (one-line reason); a reviewer approves it before it downloads."
+        )
+
+    async def propose_release(ctx, args):
+        from . import acquisition_review
+
+        job = tb.require_authority(ctx)
+        memo = tb.scouted.get(ctx.session.id) or {}
+        pick = str(args.get("release", "")).strip().lower()
+        if pick not in (memo.get("rows") or {}):
+            raise ToolError("Propose a row id from your latest find_releases list, such as r1.")
+        if memo.get("vetoes", 0) >= 2:
+            raise ToolError("Two picks were vetoed. Use escalate_model for a full search.")
+        rows = [memo["rows"][rid] for rid in memo["order"]]
+        titles = await episode_titles(job, memo.get("targets") or [])
+        try:
+            decision, dollars, model, usage = await acquisition_review.review(
+                tb, job, memo.get("targets") or [], rows, pick, str(args.get("reason", "")), titles
+            )
+        except Exception as exc:
+            raise ToolError(f"The reviewer could not be reached ({str(exc)[:120]}); try again shortly.") from exc
+        acquisition_review.charge(ctx.session, model, usage, dollars)
+        if not decision.get("approve"):
+            memo["vetoes"] = memo.get("vetoes", 0) + 1
+            advice = decision.get("reason") or "The reviewer vetoed this pick."
+            instead = str(decision.get("instead") or "").strip().lower()
+            queries = [q for q in decision.get("queries") or [] if str(q).strip()][:3]
+            if instead in memo["rows"]:
+                advice += f" Reviewer suggests {instead}."
+            if queries:
+                advice += " Reviewer suggests searching: " + "; ".join(queries) + " (find_releases with these queries)."
+            return "Vetoed. " + advice
+        row = memo["rows"][pick]
+        result = await add(ctx, {"info_hash": row["info_hash"], "name": row["name"][:200], "files": row.get("chosen") or []})
+        memo["vetoes"] = 0
+        return {"approved": decision.get("reason", ""), **(result if isinstance(result, dict) else {"result": result})}
+
+    async def episode_titles(job, targets):
+        """TMDB names of the wanted episodes, for the reviewer to match."""
+        names = {}
+        for season in sorted({s for s, _ in targets}):
+            try:
+                data = await tb.tmdb_get(f"/tv/{job.tmdb_id}/season/{season}")
+            except Exception:
+                continue
+            for e in data.get("episodes") or []:
+                names[(season, e.get("episode_number"))] = e.get("name") or ""
+        return names
+
+    async def escalate(ctx, args):
+        smart = tb.smart_model()
+        if ctx.session.model == smart:
+            return "Already on the smart tier with the full search tools."
+        ctx.session.model = smart
+        return (
+            f"Escalated to {smart}: you now search with tpb_search, peek with torrent_peek and add "
+            "directly with client_add (files= for packs). Reason noted: " + str(args.get("reason", ""))[:200]
+        )
+
     handlers = {
         "inventory_read": inventory,
         "client_add": add,
@@ -367,9 +464,33 @@ def acquisition_tools(tb):
         "client_remove": remove,
         "job_close": close,
     }
+    text = {"type": "string"}
     return [
         ToolDef(t.name, t.description, t.input_schema, handlers.get(t.name, t.handler))
         for t in fetch_tools(tb)
+    ] + [
+        ToolDef(
+            "find_releases",
+            "Search for the wanted episodes (or film) and get a ranked short list: code runs the usual searches, "
+            "reads names, peeks inside packs for the right files and drops what cannot fit. queries: up to three "
+            "extra searches (alternative titles, other numbering).",
+            {"type": "object", "properties": {"queries": {"type": "array", "items": text}}, "required": []},
+            find_releases,
+        ),
+        ToolDef(
+            "propose_release",
+            "Propose one row from your latest short list with a one-line reason. A reviewer checks the pick; "
+            "if approved it starts downloading (only the chosen files of a pack).",
+            {"type": "object", "properties": {"release": text, "reason": text}, "required": ["release", "reason"]},
+            propose_release,
+        ),
+        ToolDef(
+            "escalate_model",
+            "Hand this search to the smart model with full search tools: when the short lists hold nothing usable "
+            "after other queries, or two picks were vetoed.",
+            {"type": "object", "properties": {"reason": text}, "required": ["reason"]},
+            escalate,
+        ),
     ]
 
 

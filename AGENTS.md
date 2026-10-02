@@ -60,10 +60,15 @@ Everything new lives in `backend/agents/`:
 
 ### The agents
 
-- **Fetch Agent** (smart tier, one session per job): owns a job until the
-  library provably matches the spec. Searches, reads results, refines,
-  peeks inside packs, weighs downloadability vs quality per urgency, grabs,
-  handles stalls, reconciles inventory. Woken by events; hibernates between.
+- **Fetch Agent** (cheap tier with smart review, one session per job): owns a
+  job until the library provably matches the spec. The scout (`scout.py`)
+  runs the usual searches, reads names, peeks inside packs for the wanted
+  files and ranks a short list; the cheap model proposes one row and the
+  smart model reviews that compact decision (`acquisition_review.py`) before
+  anything downloads. Hard searches escalate the session to the smart model
+  with the raw search tools. Handles stalls (removing a transfer deletes its
+  unfinished files) and reconciles inventory. Woken by events; hibernates
+  between.
 - **Media Agent** (cheap tier, self-escalates, one session per landed
   download): probes every file with ffprobe, matches durations against TMDB
   runtimes, detects samples/fakes, names and places files, updates
@@ -94,7 +99,8 @@ Everything new lives in `backend/agents/`:
 - **Resolve preferences centrally.** Admin defaults, personal overrides and
   explicit request choices form a versioned effective contract, within admin
   policy. Pass relevant values to agents and use the same contract in UI/tools.
-- Current model defaults: Fetch smart, Media cheap with self-escalation,
+- Current model defaults: Fetch cheap with smart review and escalation
+  (`SPARROW_FETCH_SCOUT=off` keeps it smart throughout), Media cheap with self-escalation,
   Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
   (household switch, needs an Anthropic key) uses Claude Opus 5.5 at medium effort
   with prompt caching; with `OPENAI_API_KEY` it manages cheap page checkers
