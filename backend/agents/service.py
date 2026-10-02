@@ -155,6 +155,15 @@ class AgentService:
             os.getenv("SPARROW_SMART_MODEL") or cfg.smart_model or DEFAULT_SMART_MODEL
         )
 
+    def fetch_model(self) -> str:
+        """The Fetch Agent starts on the cheap model, working through the scout
+        with its picks reviewed by the smart model, and escalates itself to the
+        smart model for hard searches. SPARROW_FETCH_SCOUT=off restores the
+        smart model throughout."""
+        if os.getenv("SPARROW_FETCH_SCOUT", "").lower() == "off":
+            return self.smart_model()
+        return self.cheap_model()
+
     def cheap_model(self) -> str:
         cfg = self.storage.get_config()
         return (
@@ -167,7 +176,9 @@ class AgentService:
         async def fetch_system(session: AgentSession) -> str:
             job = self.store.get_job(session.job_id)
             return (
-                prompts.fetch_system(session, job, "", cfg=self.storage.get_config())
+                prompts.fetch_system(
+                    session, job, "", cfg=self.storage.get_config(), scouting=session.model != self.smart_model()
+                )
                 + "\nEffective request settings (authoritative):\n"
                 + json.dumps(job.preferences if job else {}, sort_keys=True)
             )
@@ -185,18 +196,29 @@ class AgentService:
                 + json.dumps(job.preferences if job else {}, sort_keys=True)
             )
 
+        def fetch_tools_for(session):
+            tools = [
+                journal_tool(tb, "fetch"),
+                wake_tool(tb),
+                *memory_tools(tb),
+                *tmdb_tools(tb),
+                *acquisition_tools(tb),
+            ]
+            if session.model == self.smart_model():
+                # The smart model searches and adds directly; nothing reviews it.
+                hidden = {"propose_release", "escalate_model"}
+            else:
+                # The cheap model works through the scout, and its picks are
+                # reviewed before anything downloads.
+                hidden = {"tpb_search", "torrent_peek", "client_add", "triage_parse"}
+            return [t for t in tools if t.name not in hidden]
+
         self.runtime.register(
             AgentSpec(
                 kind=AgentKind.FETCH.value,
-                model=self.smart_model,
+                model=self.fetch_model,
                 system=fetch_system,
-                tools=lambda s: [
-                    journal_tool(tb, "fetch"),
-                    wake_tool(tb),
-                    *memory_tools(tb),
-                    *tmdb_tools(tb),
-                    *acquisition_tools(tb),
-                ],
+                tools=fetch_tools_for,
             )
         )
         self.runtime.register(
@@ -320,7 +342,7 @@ class AgentService:
         )
         cfg = self.storage.get_config()
         fetch_session = AgentSession(
-            agent=AgentKind.FETCH, job_id=job.id, model=self.smart_model()
+            agent=AgentKind.FETCH, job_id=job.id, model=self.fetch_model()
         )
         media_session = AgentSession(
             agent=AgentKind.MEDIA, job_id=job.id, model=self.cheap_model()

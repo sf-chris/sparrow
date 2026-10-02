@@ -213,6 +213,47 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
             self.catalogue.asset(self.owner, recorded["asset_id"])["state"], "ready"
         )
 
+    async def test_a_cheap_pick_downloads_only_after_review(self):
+        from backend.agents import acquisition_review, scout
+
+        row = dict(seeders=9, size=10**9, files=1, quality="1080p", source="WEB-DL", dual=False, subs=True, episode_size=10**9)
+        rows = [
+            {**row, "rid": "r1", "info_hash": "a" * 40, "name": "Fixture 2020 1080p", "coverage": "single"},
+            {**row, "rid": "r2", "info_hash": "b" * 40, "name": "Fixture collection", "coverage": "pack", "files": 5, "chosen": ["Fixture/Fixture.mkv"]},
+        ]
+        with patch.object(scout, "scout", AsyncMock(return_value=(rows, ["Fixture 2020"], 3))), patch.object(
+            scout, "titles_for", AsyncMock(return_value=(["Fixture"], []))
+        ):
+            listing = await self.call("find_releases", {})
+        self.assertIn("r1 · 1.00 GB · 9 seeds", listing)
+        usage = {"input_tokens": 500, "output_tokens": 40}
+        decisions = [
+            ({"approve": False, "reason": "The collection has the better copy.", "instead": "r2", "queries": []}, 0.003, "smart", usage),
+            ({"approve": True, "reason": "Right film.", "instead": "", "queries": []}, 0.003, "smart", usage),
+        ]
+        self.service.toolbox.select_soon = AsyncMock()
+        with patch.object(acquisition_review, "review", AsyncMock(side_effect=decisions)):
+            vetoed = await self.call("propose_release", {"release": "r1", "reason": "single file"})
+            self.assertIn("Reviewer suggests r2", vetoed)
+            self.assertEqual(self.add_count, 0)
+            approved = await self.call("propose_release", {"release": "r2", "reason": "the reviewer's choice"})
+        self.assertEqual(self.add_count, 1)
+        download = self.storage.get_download(approved["download_id"])
+        self.assertEqual(download.metadata["wanted_files"], ["Fixture/Fixture.mkv"])
+        self.assertAlmostEqual(self.session.spend.dollars, 0.006)
+        with self.assertRaises(ToolError):
+            await self.call("propose_release", {"release": "r9", "reason": "not listed"})
+
+    async def test_only_the_smart_model_searches_and_adds_directly(self):
+        cheap = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model=self.service.cheap_model())
+        smart = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model=self.service.smart_model())
+        names = lambda session: {t.name for t in self.service.runtime.tools_for(session)}
+        self.assertTrue({"find_releases", "propose_release", "escalate_model"} <= names(cheap))
+        self.assertFalse({"tpb_search", "client_add", "torrent_peek"} & names(cheap))
+        self.assertTrue({"tpb_search", "client_add", "find_releases"} <= names(smart))
+        self.assertFalse({"propose_release"} & names(smart))
+        self.assertEqual(self.service.fetch_model(), self.service.cheap_model())
+
     async def test_durable_runtime_replay_does_not_add_a_second_download(self):
         from backend.agents.runtime import AgentRuntime
         from backend.agents.store import AgentStore
@@ -272,3 +313,43 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(args=args), self.assertRaises(ToolError):
                 await self.call("inventory_write", args, ctx, True)
+
+
+class ScoutJudgementTests(unittest.TestCase):
+    def test_wrong_seasons_remakes_dubs_and_dead_swarms_are_dropped(self):
+        from backend.agents import scout
+
+        job = SimpleNamespace(media_type="tv", year=1998, min_quality="720p", preferred_quality="1080p", audio_pref="original")
+        titles = ["Cowboy Bebop"]
+        judge = lambda name, seeds=5, files=1: scout.judge(
+            {"id": 1, "name": name, "info_hash": "c" * 40, "seeders": seeds, "size": 10**9, "num_files": files}, job, [(1, 5)], titles
+        )
+        self.assertEqual(judge("Cowboy Bebop S01E05 1080p BluRay")["coverage"], "single")
+        self.assertEqual(judge("Cowboy Bebop - 05 (1080p) [Dual Audio]")["coverage"], "single")
+        self.assertEqual(judge("Cowboy Bebop S01 1080p BluRay", files=26)["coverage"], "pack")
+        for name in ("Cowboy Bebop 2021 S01E05 1080p NF WEB-DL", "Cowboy Bebop S02E05 1080p", "Cowboy Bebop II - 05", "Cowboy Bebop S01E05 English Dubbed 1080p", "Cowboy Bebop S01E05 480p"):
+            self.assertIsNone(judge(name), name)
+        self.assertIsNone(judge("Cowboy Bebop S01E05 1080p", seeds=0))
+
+    def test_the_standard_cut_is_chosen_from_a_pack(self):
+        from backend.agents import scout
+
+        listing = [
+            {"name": {"0": "Show - 1x03 DC - Title [1080p].mkv"}, "size": {"0": "333"}},
+            {"name": {"0": "Show - 1x03 - Title [1080p].mkv"}, "size": {"0": "269"}},
+            {"name": {"0": "Show - 1x04 - Next [1080p].mkv"}, "size": {"0": "270"}},
+            {"name": {"0": "Show - 1x03 - Title sample.mkv"}, "size": {"0": "9"}},
+        ]
+        class Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, url):
+                return SimpleNamespace(json=lambda: listing)
+
+        with patch("httpx.AsyncClient", return_value=Client()):
+            chosen = asyncio.run(scout.peek("1", [(1, 3)], "tv"))
+        self.assertEqual(chosen[(1, 3)]["name"], "Show - 1x03 - Title [1080p].mkv")

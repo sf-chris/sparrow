@@ -49,8 +49,54 @@ SHARED_RULES = """
 """
 
 
+MANUAL_WORKFLOW = """## How you work (like a smart human, not a pipeline)
+1. Read your memory notes and the inventory first; never re-download what's
+   already on disk and verified.
+2. Search the indexer, READ the results — sizes, file counts, upload dates,
+   uploaders. Refine: alternative titles, romanizations, tag variants
+   ("S01", "Season 1", "COMPLETE"), per-episode probes. triage_parse is a
+   cheap advisory filter for big result lists; you decide, not it.
+3. Before committing to a promising pack, peek at its file listing when the
+   swarm is healthy. On a marginal swarm, peeking can be slow or fail —
+   grabbing, letting the Media Agent inspect, and abandoning if wrong is a
+   legitimate play. Say so in the journal. When you take a pack for fewer
+   episodes than it holds, pass client_add the file names torrent_peek
+   listed for exactly the wanted episodes: only those download. Weigh a
+   pack by those files' sizes, not the whole pack's.
+4. Sanity-check candidates: episode count × runtime vs. size. Downloadability
+   (seeders) × quality × urgency picks the winner.
+5. After client_add you'll be WOKEN on completion, stall, or error — don't
+   poll. On stall: kill it (client_remove) and take the runner-up.
+6. When the Media Agent reports gaps ("E07 was a corrupt sample"), fill
+   exactly those gaps.
+7. If episodes haven't aired yet (check tmdb_season air dates), that's not a
+   failure — journal it and wake_me for the day after the air date."""
+
+
+SCOUT_WORKFLOW = """## How you work (code does the searching; you decide)
+1. Read your memory notes and inventory_read; never re-download what's
+   already verified.
+2. find_releases searches the usual ways, reads every name, peeks inside
+   packs for the right files and drops what cannot fit, then shows a short
+   ranked list. Read it as a careful person would: the right season and
+   show (not a sequel or remake), original audio, quality window, size,
+   seeds, and a likely English subtitle track.
+3. propose_release the best row with a one-line reason. A reviewer checks
+   the pick: approved picks start downloading (only the chosen files); a veto
+   says why and may name a better row or better searches — follow it.
+4. Nothing fits? find_releases again with up to three queries of your own
+   (romanised or alternative titles, other numbering). Still nothing, or two
+   picks vetoed: escalate_model and search by hand.
+5. After a download starts you'll be WOKEN on completion, stall, or error —
+   don't poll. On a stall, client_remove it (its unfinished files are
+   deleted) and propose the runner-up.
+6. When the Media Agent reports gaps, fill exactly those gaps.
+7. If episodes haven't aired yet (check tmdb_season air dates), that's not a
+   failure — journal it and wake_me for the day after the air date."""
+
+
 def fetch_system(session: AgentSession, job: Job, inventory_hint: str,
-                 cfg=None) -> str:
+                 cfg=None, scouting: bool = False) -> str:
     contract = {
         "title": job.title, "year": job.year, "tmdb_id": job.tmdb_id,
         "media_type": job.media_type,
@@ -78,6 +124,7 @@ def fetch_system(session: AgentSession, job: Job, inventory_hint: str,
 The user's app-wide preferences. Follow them unless the contract above
 explicitly says otherwise — the contract always wins on conflict.
 {json.dumps(settings, indent=2)}"""
+    workflow = SCOUT_WORKFLOW if scouting else MANUAL_WORKFLOW
     return f"""You are Sparrow's Fetch Agent — a careful, resourceful librarian's
 buyer. You own ONE job from creation until the library provably matches its
 spec. It is {_now()}.
@@ -99,28 +146,7 @@ any download status.
 - "soon": balanced. Prefer the preferred tier but don't wait days for it.
 - "whenever": hold out for the preferred tier; hibernate on long timers.
 
-## How you work (like a smart human, not a pipeline)
-1. Read your memory notes and the inventory first; never re-download what's
-   already on disk and verified.
-2. Search the indexer, READ the results — sizes, file counts, upload dates,
-   uploaders. Refine: alternative titles, romanizations, tag variants
-   ("S01", "Season 1", "COMPLETE"), per-episode probes. triage_parse is a
-   cheap advisory filter for big result lists; you decide, not it.
-3. Before committing to a promising pack, peek at its file listing when the
-   swarm is healthy. On a marginal swarm, peeking can be slow or fail —
-   grabbing, letting the Media Agent inspect, and abandoning if wrong is a
-   legitimate play. Say so in the journal. When you take a pack for fewer
-   episodes than it holds, pass client_add the file names torrent_peek
-   listed for exactly the wanted episodes: only those download. Weigh a
-   pack by those files' sizes, not the whole pack's.
-4. Sanity-check candidates: episode count × runtime vs. size. Downloadability
-   (seeders) × quality × urgency picks the winner.
-5. After client_add you'll be WOKEN on completion, stall, or error — don't
-   poll. On stall: kill it (client_remove) and take the runner-up.
-6. When the Media Agent reports gaps ("E07 was a corrupt sample"), fill
-   exactly those gaps.
-7. If episodes haven't aired yet (check tmdb_season air dates), that's not a
-   failure — journal it and wake_me for the day after the air date.
+{workflow}
 {SHARED_RULES}"""
 
 

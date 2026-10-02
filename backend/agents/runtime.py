@@ -429,8 +429,6 @@ class AgentRuntime:
         self, session: AgentSession, spec: AgentSpec, events: list[Event]
     ) -> None:
         ctx = ToolCtx(session=session, runtime=self)
-        tools = self.tools_for(session)
-        tool_map = {t.name: t for t in tools}
 
         _append_user(session, self._wake_text(session, events))
         self.store.acknowledge_events(session, events)
@@ -464,6 +462,10 @@ class AgentRuntime:
                 session.wake_at = 0
                 break
             self._trim_history(session)
+            # Tools follow the session's current state (an escalated model, a
+            # track switched mid-review), so they are read every step.
+            tools = self.tools_for(session)
+            tool_map = {t.name: t for t in tools}
             system = await spec.system(session)
             response, limited = await self._budgeted_call(session, system, tools, spec)
             if limited:
