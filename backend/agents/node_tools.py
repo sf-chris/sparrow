@@ -182,15 +182,22 @@ def acquisition_tools(tb):
                 )
                 await tb.storage.add_download(existing)
             if existing.status == DownloadStatus.ERROR:
+                # Adding a removed transfer again is a new attempt: a new
+                # operation (the old receipt says "added"), a fresh file choice.
                 existing.metadata.update(
                     {
                         "landed_emitted": False,
                         "job_revision": job.revision,
                         "desired_control": "",
+                        "attempt": int(existing.metadata.get("attempt") or 0) + 1,
                     }
                 )
+                existing.metadata.pop("selection", None)
+                if wanted_files:
+                    existing.metadata["wanted_files"] = wanted_files
                 await tb.storage.update_download(
-                    identity, status=DownloadStatus.QUEUED, metadata=existing.metadata
+                    identity, status=DownloadStatus.QUEUED, metadata=existing.metadata,
+                    progress=0.0, error_message="",
                 )
             try:
                 result = await nodes.execute(
@@ -198,7 +205,8 @@ def acquisition_tools(tb):
                     "download_add",
                     {"info_hash": info_hash, "name": existing.name, "path": identity},
                     job=job,
-                    operation_id=f"add-{identity}-{job.revision}",
+                    operation_id=f"add-{identity}-{job.revision}"
+                    + (f"-{existing.metadata['attempt']}" if existing.metadata.get("attempt") else ""),
                     timeout=30,
                 )
             except NodeError as exc:

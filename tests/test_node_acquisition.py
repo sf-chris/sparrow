@@ -254,6 +254,22 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse({"propose_release"} & names(smart))
         self.assertEqual(self.service.fetch_model(), self.service.cheap_model())
 
+    async def test_a_removed_copy_added_again_reaches_the_download_app(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        await self.call("client_remove", {"download_id": first["download_id"]})
+        self.assertNotIn("a" * 40, self.client_state)
+        again = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        self.assertEqual(again["download_id"], first["download_id"])
+        self.assertEqual(self.add_count, 2)
+        self.assertIn("a" * 40, self.client_state)
+
+    async def test_a_transfer_the_app_lost_is_added_again(self):
+        result = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        self.client_state.clear()
+        await self.service.reconcile_transfers()
+        self.assertEqual(self.add_count, 2)
+        self.assertEqual(self.storage.get_download(result["download_id"]).status, DownloadStatus.DOWNLOADING)
+
     async def test_durable_runtime_replay_does_not_add_a_second_download(self):
         from backend.agents.runtime import AgentRuntime
         from backend.agents.store import AgentStore

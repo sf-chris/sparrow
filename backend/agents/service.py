@@ -1033,8 +1033,13 @@ class AgentService:
                         {"hash": dl.torrent_hash},
                         timeout=10,
                     )
-                    if st is None and dl.status == DownloadStatus.QUEUED:
-                        # Idempotent recovery of a reservation accepted before a restart or lost response.
+                    if st is None and dl.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING):
+                        # Idempotent recovery of a reservation accepted before a restart or lost
+                        # response, or of a transfer the download app no longer has: add it again,
+                        # and choose its pack files afresh once its list is known.
+                        if dl.metadata.get("selection"):
+                            dl.metadata.pop("selection")
+                            await self.storage.update_download(dl.id, metadata=dl.metadata)
                         await nodes.execute(
                             dl.metadata["node_id"],
                             "download_add",
