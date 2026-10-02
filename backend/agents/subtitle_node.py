@@ -636,6 +636,11 @@ async def picture_sheets(path, index, timeout=900):
     await process.wait()
     if process.returncode not in (0, None) and not events:
         raise NodeError("ffmpeg could not render this picture subtitle track: " + "".join(log[-3:])[-300:])
+    problems = [line.strip() for line in log if "Unsupported encoding" in line or "rror" in line]
+    if not events and problems:
+        # Nothing drawn because nothing decoded (a compressed track this
+        # ffmpeg cannot open): say so, rather than "no readable text".
+        raise NodeError("ffmpeg could not decode this picture subtitle track: " + "; ".join(dict.fromkeys(problems))[:300])
     if current is not None and times:
         close(max(t for t in times if t < 10 * 86400))
 
