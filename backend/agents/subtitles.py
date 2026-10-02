@@ -1561,8 +1561,9 @@ class Subtitles:
                     (state.get("contract") or {}).get("snapshot", {}).get(key, {}), judged, gaps or []
                 )
                 audit.setdefault("done", []).append(found["number"])
-                if misses:
-                    # The checkers missed something here: audit more pages.
+                if misses and len(audit["pages"]) < AUDIT_PAGES * 3:
+                    # The checkers missed something here: audit more pages
+                    # (twice at most; then the manager decides on what it has).
                     audit.setdefault("misses", []).extend(f"page {key}: {m}" for m in misses)
                     extra = pages_.choose_audits(
                         state["pages"], context["cues"], context["utterances"],

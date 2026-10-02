@@ -971,14 +971,19 @@ def manager_gate(state, pages, cues, utterances, kind, measured):
     return reasons + gate(state, pages, cues, utterances, kind, measured)
 
 
+AUDIT_GAPS = 2  # uncaptioned lines on one page that count as a miss
+
+
 def audit_outcome(contractor, judged, gaps):
-    """Problems the checkers missed on an audited page."""
+    """Problems the checkers missed on an audited page: a caption they passed
+    that is wrong, or several uncaptioned lines. Human tracks often leave a
+    grunt or background line uncaptioned; one such gap is no miss."""
     missed = [
         caption
         for caption, entry in judged.items()
         if entry["verdict"] == "wrong" and contractor.get(caption, {}).get("verdict") in ("ok", "loose", "sign")
     ]
-    return missed + [f"missing {','.join(g['speech'])}" for g in gaps]
+    return missed + ([f"missing {','.join(g['speech'])}" for g in gaps] if len(gaps) >= AUDIT_GAPS else [])
 
 
 VERIFY_SYSTEM = """You verify a human-made English subtitle track for one episode or film: an official translation or a fan translation that came with the release. Its wording belongs to its translator and is never rewritten. Your only question: is this the right track? It must match this episode's dialogue, cover it, and be in sync.

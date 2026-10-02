@@ -940,6 +940,17 @@ class TrackKindTests(unittest.TestCase):
         self.assertEqual(track_language({"language": "spa", "title": "Latin American"}), "es")
 
 
+class AuditTests(unittest.TestCase):
+    def test_one_uncaptioned_line_on_a_human_track_is_not_a_checker_miss(self):
+        from backend.agents.subtitle_review import audit_outcome
+
+        checker = {"c0001": {"verdict": "ok"}, "c0002": {"verdict": "loose"}}
+        fine = {"c0001": {"verdict": "ok"}, "c0002": {"verdict": "ok"}}
+        self.assertEqual(audit_outcome(checker, fine, [{"speech": ["u00007"]}]), [])
+        self.assertEqual(len(audit_outcome(checker, fine, [{"speech": ["u00007"]}, {"speech": ["u00009"]}])), 2)
+        self.assertEqual(audit_outcome(checker, {"c0001": {"verdict": "wrong"}}, []), ["c0001"])
+
+
 class PictureSubtitleTests(unittest.IsolatedAsyncioTestCase):
     async def test_disc_subtitles_are_rendered_read_and_timed_by_the_disc(self):
         import tempfile

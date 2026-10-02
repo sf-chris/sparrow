@@ -536,7 +536,8 @@ def table(rows):
         if row.get("unlisted"):
             what = f"pack of {row['files']} files, not listed by the indexer (the wanted episode is picked when it starts)"
         hints = ", ".join(h for h, on in (("original audio named", row["dual"]), ("subtitles likely", row["subs"]),
-                                          ("raw: no subtitles", row.get("raw"))) if on)
+                                          ("raw: no subtitles", row.get("raw")),
+                                          ("ALREADY ABANDONED for this request (stalled or wrong)", row.get("abandoned"))) if on)
         size = f"{row['episode_size'] / 1e9:.2f} GB" if row["coverage"] == "single" else (
             f"{row['episode_size'] / 1e9:.2f} GB {'an episode, estimated' if row.get('unlisted') else 'chosen'} "
             f"of a {row['size'] / 1e9:.1f} GB pack")
