@@ -485,22 +485,28 @@ def acquisition_tools(tb):
             reason=decision.get("reason", ""), instead=decision.get("instead", ""), queries=decision.get("queries") or [],
             reviewer=model, review_cost=dollars, vetoes_before=memo.get("vetoes", 0),
         )
-        if not decision.get("approve"):
+        instead = str(decision.get("instead") or "").strip().lower()
+        if not decision.get("approve") and instead in memo["rows"] and instead != pick:
+            # The reviewer named the row it would approve: take it, without a
+            # second round in which the picker could misread the advice.
+            ctx.facts.update(chosen_by_reviewer=instead)
+            pick = instead
+        elif not decision.get("approve"):
             memo["vetoes"] = memo.get("vetoes", 0) + 1
             advice = decision.get("reason") or "The reviewer vetoed this pick."
-            instead = str(decision.get("instead") or "").strip().lower()
             queries = [q for q in decision.get("queries") or [] if str(q).strip()][:3]
-            if instead in memo["rows"]:
-                advice += f" Reviewer suggests {instead}."
             if queries:
                 advice += " Reviewer suggests searching: " + "; ".join(queries) + " (find_releases with these queries)."
             return "Vetoed. " + advice
         row = memo["rows"][pick]
-        ctx.facts["approved"] = True
+        ctx.facts["approved"] = not ctx.facts.get("chosen_by_reviewer")
         result = await add(ctx, {"info_hash": row["info_hash"], "name": row["name"][:200], "files": row.get("chosen") or [],
                                  "titles": memo.get("titles") or []})
         memo["vetoes"] = 0
-        return {"approved": decision.get("reason", ""), **(result if isinstance(result, dict) else {"result": result})}
+        approved = decision.get("reason", "")
+        if ctx.facts.get("chosen_by_reviewer"):
+            approved = f"The reviewer chose {pick} instead, and it is downloading: {approved}"
+        return {"approved": approved, **(result if isinstance(result, dict) else {"result": result})}
 
     async def episode_titles(job, targets):
         """TMDB names of the wanted episodes, for the reviewer to match."""

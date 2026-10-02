@@ -228,16 +228,18 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("r1 · 1.00 GB · 9 seeds", listing)
         usage = {"input_tokens": 500, "output_tokens": 40}
         decisions = [
+            ({"approve": False, "reason": "Neither copy fits.", "instead": "", "queries": ["Fixture 2020 BluRay"]}, 0.003, "smart", usage),
             ({"approve": False, "reason": "The collection has the better copy.", "instead": "r2", "queries": []}, 0.003, "smart", usage),
-            ({"approve": True, "reason": "Right film.", "instead": "", "queries": []}, 0.003, "smart", usage),
         ]
         self.service.toolbox.select_soon = AsyncMock()
         with patch.object(acquisition_review, "review", AsyncMock(side_effect=decisions)):
+            # Named "r1 files=…" instead of its row id: still that row.
             vetoed = await self.call("propose_release", {"release": "r1 files=Fixture.mkv", "reason": "single file"})
-            self.assertIn("Reviewer suggests r2", vetoed)
+            self.assertIn("Reviewer suggests searching: Fixture 2020 BluRay", vetoed)
             self.assertEqual(self.add_count, 0)
-            # Named by its release name, or "r2 files=…", instead of its row id: still that row.
-            approved = await self.call("propose_release", {"release": "Fixture collection", "reason": "the reviewer's choice"})
+            # A veto naming a better row downloads that row (named here by its release name).
+            approved = await self.call("propose_release", {"release": "Fixture 2020 1080p", "reason": "the best seeded"})
+        self.assertIn("The reviewer chose r2 instead", approved["approved"])
         self.assertEqual(self.add_count, 1)
         download = self.storage.get_download(approved["download_id"])
         self.assertEqual(download.metadata["wanted_files"], ["Fixture/Fixture.mkv"])
