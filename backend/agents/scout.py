@@ -21,6 +21,7 @@ from .release_match import episode_in, other_season, sequel_of
 
 QUALITY_RANK = {"480p": 1, "720p": 2, "1080p": 3, "2160p": 4}
 ROWS = 8
+ENOUGH = 4  # healthy candidates that end the search early
 PEEKS = 3
 DUB_ONLY = re.compile(r"(?i)\b(eng(lish)?[\s._-]?dub(bed)?|dubbed|dub[\s._-]?only)\b")
 DUAL = re.compile(r"(?i)\b(dual[\s._-]?audio|multi[\s._-]?audio|jap(anese)?|jpn|original[\s._-]?audio)\b")
@@ -163,6 +164,10 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
             candidate = judge(row, job, targets, titles, exclude)
             if candidate and candidate["info_hash"] and candidate["info_hash"] not in found:
                 found[candidate["info_hash"]] = candidate
+        # Searches are rationed across every request: stop once there is a
+        # real choice of healthy copies.
+        if len([c for c in found.values() if c["seeders"] >= 5]) >= ENOUGH:
+            break
     ranked = sorted(found.values(), key=lambda c: -score(c, job))
     # The person's size cap applies to the file that will be kept.
     cap = float(((job.preferences or {}).get("values") or {}).get("max_file_size_gb") or 0)
