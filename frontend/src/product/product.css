@@ -3057,7 +3057,6 @@ button.link:hover {
   align-items: center;
   padding: 1rem 0.2rem;
   border-top: 2px solid var(--ink);
-  border-bottom: 2px solid var(--ink);
 }
 .dl-current .tick {
   width: 1.8rem;

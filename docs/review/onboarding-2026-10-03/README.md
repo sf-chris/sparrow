@@ -29,15 +29,19 @@ Red is only for a real problem. The card shows both folders, and pairing is seco
 | Before | After |
 | --- | --- |
 | ![Storage, before](before/storage.png) | ![Storage, after](after/storage.png) |
+| | ![Docker: /media folders](after/storage-docker.png) |
 | | ![No folders yet](after/storage-empty.png) |
 | | ![A folder the server can't see](after/folders-error.png) |
 
 ## Download app
 
 Sparrow looks for one by itself. In the Docker image it offers **Set up Transmission for
-me**; this fixture has no Transmission installed, so it shows the install command.
+me**. The Docker captures come from the built image; without Transmission installed,
+setup shows the install command instead.
 
 | Before | After |
 | --- | --- |
-| ![Downloads, before](before/downloads.png) | ![Downloads, after](after/downloads.png) |
+| ![Downloads, before](before/downloads.png) | ![Docker: nothing found](after/downloads-docker.png) |
+| | ![Docker: Sparrow's Transmission](after/downloads-connected.png) |
+| | ![Without Transmission installed](after/downloads.png) |
 | | ![Check your setup](after/review.png) |
