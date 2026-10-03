@@ -205,3 +205,19 @@ the frontend build, costs and iteration failures. All originals remain unchanged
 The additional-sampling branch has controlled coverage; the recorded live passes
 used their original sample sets. Installed rollout, live provider acceptance,
 physical mobile/Safari and an independent holdout remain separate gates.
+
+## Subtitle evidence, timing correction and Opus review — 30 September 2026
+
+The owner narrowed the subtitle target to foreign-language audio with English
+captions, reviewed by Opus 5.5 over audio-timed evidence it can extend, with
+caption sync measured to about ±50 ms and corrected automatically. The storage
+node now builds whole-soundtrack, caption-independent speech evidence
+(`subtitle_evidence.py`); `subtitle_sync.py` measures offset, drift and
+consistency and proposes the least invasive correction, applied without a model
+call; `subtitle_review.py` gives the reviewer paged speech (captions revealed only
+after its own gloss), re-listening and a tool-enforced approval gate. Rejected or
+inconsistent tracks are set aside for the next candidate. The five-sample checker,
+FFsubsync path and old benchmark were retired. The
+[evidence record](SUBTITLE_EVIDENCE.md) reports the 91 ms detector onset lag,
+three professional-track baselines (one consistently 220 ms late), model
+comparison, heuristics, tests and the end-to-end Haibane run.

@@ -1,21 +1,49 @@
 import asyncio
-import base64
 import json
 import unittest
 from unittest.mock import AsyncMock, patch
-from backend.agents.subtitles import install_subtitles
-from backend.agents.subtitle_worker import cues_from_text, render, inspect_evidence
-from backend.agents.subtitle_provider import SubtitleProvider
+
 from backend.agents.media_state import file_version
+from backend.agents.models import SessionStatus
 from backend.agents.service import AgentService
-from backend.agents.node_executor import canonical
-from backend.agents.runtime import ToolError
+from backend.agents.subtitle_sync import ONSET_BIAS
+from backend.agents.subtitle_worker import cues_from_text, render
+from backend.agents.subtitles import DEFAULT_REVIEW_MODEL, install_subtitles
+from backend.agents import subtitle_review as review
 import test_playback
 from test_discovery import response
 
+# Irregular dialogue across the 24-second fixture; captions sit 0.3 s late.
+VOICE = [0.8, 2.9, 4.4, 6.9, 8.1, 10.6, 12.2, 14.9, 16.3, 18.8, 20.1, 22.3]
+LATE = 0.3
+
+
+def srt(starts):
+    return "".join(
+        f"{n}\n00:00:{int(s):02d},{round(s % 1 * 1000):03d} --> 00:00:{int(s + 1):02d},{round((s + 1) % 1 * 1000):03d}\nLine {n} of the dialogue.\n\n"
+        for n, s in enumerate(starts, 1)
+    )
+
+
+# backend.main loads the developer's .env on import; subtitle tests must not
+# pick up real provider keys or model overrides from it (or spend with them).
+HERMETIC = {
+    "OPENAI_API_KEY": "",
+    "SPARROW_SUBTITLE_MODEL": "",
+    "SPARROW_SUBTITLE_CONTRACTOR": "",
+    "SPARROW_SUBTITLE_VERIFIER": "",
+    "SPARROW_SUBTITLE_BUDGET": "",
+    "SPARROW_SUBTITLE_ARCHIVE": "off",
+}
+
 
 class SubtitleTests(unittest.IsolatedAsyncioTestCase):
-    asyncSetUp = test_playback.PlaybackTests.asyncSetUp
+    async def asyncSetUp(self):
+        environment = patch.dict("os.environ", HERMETIC)
+        environment.start()
+        self.addCleanup(environment.stop)
+        await test_playback.PlaybackTests.asyncSetUp(self)
+
     asyncTearDown = test_playback.PlaybackTests.asyncTearDown
     browser = test_playback.PlaybackTests.browser
     start = test_playback.PlaybackTests.start
@@ -78,71 +106,92 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.subtitles.attach(self.service)
         return self.subtitles
 
-    def evidence(self):
-        folder = self.nodes.local().cache_root / "subtitles" / "fixture"
+    def speech(self, voice=VOICE, language="es"):
+        """Scripted dialogue evidence as the storage node would save it."""
+        folder = self.nodes.local().cache_root / "subtitle-evidence" / ("a" * 32)
         folder.mkdir(parents=True, exist_ok=True)
-        prepared = folder / "prepared.vtt"
-        prepared.write_text(
-            "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nHello &amp; welcome.\n"
-        )
+        utterances = [
+            {
+                "id": f"u{n:05d}",
+                "start": round(t - 0.1, 3),
+                "end": round(t + 0.9, 3),
+                "onset": round(t + ONSET_BIAS, 3),
+                "onset_source": "speech_detector",
+                "clean_onset": True,
+                "language": language,
+                "text": f"línea {n}",
+                "confidence": 0.9,
+                "speech_support": 1.0,
+                "flags": [],
+                "chunk": 0,
+                "words": [],
+            }
+            for n, t in enumerate(voice, 1)
+        ]
+        evidence = {
+            "schema": "sparrow-speech-evidence-1",
+            "source": {"audio_seconds": 24.0},
+            "coverage": {"languages": {language: len(utterances)}},
+            "utterances": utterances,
+            "verified": False,
+        }
+        path = folder / "evidence.json"
+        path.write_text(json.dumps(evidence))
         return {
-            "quality": {
-                "passed": True,
-                "reasons": [],
-                "median_timing_error": 0.1,
-                "max_timing_error": 0.2,
-            },
-            "samples": [
-                {
-                    "transcript": "Hello and welcome",
-                    "subtitle": {"text": "Hello and welcome"},
-                }
-            ],
-            "path": "subtitles/fixture/prepared.vtt",
-            "version": file_version(prepared),
-            "original_path": "subtitles/fixture/prepared.vtt",
-            "original_version": file_version(prepared),
+            "state": "complete",
+            "progress": 1,
+            "path": f"subtitle-evidence/{'a' * 32}/evidence.json",
+            "version": file_version(path),
+            "model": "fixture",
+            "coverage": evidence["coverage"],
         }
 
-    async def prepared(self, review=False, verify=True):
-        manager = await self.manager(review)
-        evidence = self.evidence()
+    async def request(self, body, *, calls=None, evidence=None, prepare=None):
+        manager = self.subtitles
         real = self.nodes.execute
+        seen = []
 
         async def execute(node, kind, args, **kw):
-            if kind == "subtitle_prepare":
-                return evidence
+            seen.append(kind)
+            if kind == "subtitle_evidence":
+                return evidence or self.speech()
+            if kind == "subtitle_prepare" and prepare:
+                return await prepare(node, kind, args, **kw)
             return await real(node, kind, args, **kw)
 
-        if review:
-            self.service.runtime._call_api = AsyncMock(
-                side_effect=[
-                    response("evidence", {}),
-                    response(
-                        "verdict",
-                        {
-                            "approved": True,
-                            "reason": "The sampled spoken dialogue agrees and the measured timings pass.",
-                        },
-                    ),
-                ]
-            )
+        if calls is not None:
+            self.service.runtime._call_api = AsyncMock(side_effect=calls)
         with patch.object(self.nodes, "execute", side_effect=execute):
             result = await self.client.post(
-                f"/api/v1/assets/{self.asset}/subtitles/repair",
-                json={
-                    "text": "1\n00:00:01,000 --> 00:00:03,000\nHello and welcome.\n",
-                    **({"verify": verify} if verify is not None else {}),
-                },
+                f"/api/v1/assets/{self.asset}/subtitles/repair", json=body
             )
             self.assertEqual(result.status_code, 200, result.text)
             await asyncio.gather(*list(manager.tasks.values()))
+        self.kinds = seen
         return manager.task(result.json()["id"])
 
-    async def test_default_preparation_is_playable_without_paid_review(self):
-        task = await self.prepared(verify=None)
+    def foreign(self, **values):
+        # The fixture's second audio stream is labelled Spanish.
+        return {
+            "text": srt([t + LATE for t in VOICE]),
+            "audio_index": self.facts["audio_tracks"][1]["index"],
+            **values,
+        }
+
+    def checked_review(self):
+        lines = [{"speech": f"u{n:05d}", "english": f"line {n}"} for n in range(1, 13)]
+        captions = [
+            {"caption": f"c{n:04d}", "verdict": "ok", "speech": [f"u{n:05d}"]}
+            for n in range(1, 13)
+        ]
+        return lines, captions
+
+    async def test_same_language_track_is_playable_without_analysis_or_ai(self):
+        await self.manager()
+        task = await self.request({"text": srt(VOICE)})
         self.assertEqual(task["state"], "ready")
         self.assertFalse(task["data"]["verify"])
+        self.assertNotIn("subtitle_evidence", self.kinds)
         self.assertFalse(self.service.store.get_sessions())
         track = self.subtitles.tracks(self.owner, self.asset)[0]
         self.assertFalse(track["sync_checked"])
@@ -160,176 +209,417 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         legacy = {k: v for k, v in prefs.items() if k != "verify_subtitles"}
         self.assertFalse(self.subtitles.satisfies(self.owner, self.asset, legacy))
 
-    async def test_translated_review_requires_measured_correspondences(self):
-        from test_subtitle_quality import evidence
-
-        observed = {**self.evidence(), **evidence()}
-        observed["quality"]["reviewable"] = True
-        observed["quality"]["reasons"] = ["Translated dialogue needs semantic review."]
-        for sample in observed["samples"]:
-            sample["language"] = "ja"
-        with patch.object(self, "evidence", return_value=observed):
-            task = await self.prepared()
-        self.assertEqual(task["state"], "review_pending")
-        self.service.runtime._api_key_getter = lambda: "fixture-key"
-        self.service.runtime._call_api = AsyncMock(
-            side_effect=[
-                response("evidence", {}),
-                response("verdict", {"approved": True, "reason": "Premature approval"}),
-                response(
-                    "verdict",
-                    {"approved": False, "reason": "Uncertain translation match"},
-                ),
-                response(
-                    "correspondences",
-                    {
-                        "matches": [
-                            {
-                                "sample": i,
-                                "source_text": "家に帰ろう",
-                                "explanation": "Go home.",
-                            }
-                            for i in (0, 2, 4)
-                        ]
-                    },
-                ),
-                response(
-                    "verdict",
-                    {
-                        "approved": True,
-                        "reason": "Distributed source phrases match and their timing passes.",
-                    },
-                ),
-            ]
+    async def test_foreign_dialogue_is_measured_and_retimed_without_ai(self):
+        await self.manager()
+        task = await self.request(self.foreign())
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertIn("adjusted", task["data"]["message"])
+        self.assertFalse(self.service.store.get_sessions())
+        tracks = self.subtitles.tracks(self.owner, self.asset)
+        self.assertEqual(len(tracks), 1, "the uncorrected copy is superseded")
+        track = tracks[0]
+        self.assertTrue(track["timing_adjusted"])
+        self.assertAlmostEqual(track["timing"]["before"]["offset"], LATE, delta=0.02)
+        self.assertAlmostEqual(track["timing"]["offset"], 0, delta=0.02)
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        original = cues_from_text(
+            (await self.client.get(track["original_url"])).text, "vtt"
         )
-        await self.subtitles.review(task)
-        task = self.subtitles.task(task["id"])
-        self.assertEqual(task["state"], "ready")
+        self.assertAlmostEqual(served[3]["start"], VOICE[3], delta=0.02)
+        self.assertAlmostEqual(original[3]["start"], VOICE[3] + LATE, delta=0.02)
+        logged = self.storage.operations.page(self.owner, category="subtitle")
+        self.assertEqual(logged["entries"][0]["summary"], "Subtitles ready.")
+        # A personal delay applies on top of the shared corrected copy.
+        await self.client.patch(
+            f'/api/v1/subtitles/tracks/{track["id"]}/offset', json={"seconds": 2}
+        )
+        delayed = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertAlmostEqual(delayed[3]["start"], VOICE[3] + 2, delta=0.02)
+
+    async def test_checked_review_reads_speech_before_captions_and_gate_holds(self):
+        await self.manager(review=True)
+        lines, captions = self.checked_review()
+        calls = [
+            response("overview", {}),
+            response("page", {"page": 1}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("gloss", {"page": 1, "lines": lines[:3]}),
+            response("gloss", {"page": 1, "lines": lines}),
+            response("judge", {"page": 1, "captions": captions[:5], "missing": []}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("verdict", {"approved": True, "reason": "Every line matches its dialogue."}),
+        ]
+        task = await self.request(self.foreign(verify=True), calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
         track = self.subtitles.tracks(self.owner, self.asset)[0]
         self.assertTrue(track["sync_checked"])
-        self.assertEqual(track["quality"]["matched_samples"], 3)
-        self.assertEqual(self.service.runtime._call_api.await_count, 5)
+        self.assertTrue(track["timing_adjusted"])
+        logged = self.storage.operations.page(self.owner, category="subtitle")
+        self.assertEqual(
+            logged["entries"][0]["summary"], "Subtitles checked against the dialogue."
+        )
         session = self.service.store.get_session(task["data"]["review_session"])
-        self.assertEqual(session.model, self.service.smart_model())
+        self.assertEqual(session.model, DEFAULT_REVIEW_MODEL)
+        self.assertEqual(session.status, SessionStatus.CLOSED)
+        spec = self.service.runtime._specs["subtitle"]
+        self.assertTrue(spec.cache)
+        self.assertGreaterEqual(spec.max_tokens, 16000)
+        results = [
+            block
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("type") == "tool_result"
+        ]
+        page_view, early_judge, short_gloss, revealed = (r["content"] for r in results[1:5])
+        self.assertIn("línea 1", page_view)
+        self.assertNotIn("Line 1 of the dialogue", page_view)
+        self.assertIn("Gloss this page", early_judge)
+        self.assertIn("missing", short_gloss)
+        self.assertIn("Line 1 of the dialogue", revealed)
+        self.assertIn("→ line 1", revealed)
+        self.assertIn("Judge every caption", results[5]["content"])
 
-    async def test_additional_speech_samples_are_bounded_and_preserve_the_track(self):
-        from test_subtitle_quality import evidence
-        import copy
+    async def test_judging_in_the_same_step_as_the_gloss_is_refused(self):
+        from types import SimpleNamespace
+        from test_discovery import Block
 
-        observed = {**self.evidence(), **evidence()}
-        observed["quality"].update(reviewable=True, reasons=["Needs semantic review"])
-        extra = copy.deepcopy(observed)
-        for sample in extra["samples"]:
-            sample["cue_index"] += 5
-            sample["start"] += 1000
-            sample["end"] += 1000
-            for entry in [sample["subtitle"], *sample["words"]]:
-                entry["start"] += 1000
-                entry["end"] += 1000
-        with patch.object(self, "evidence", return_value=observed):
-            task = await self.prepared()
-        self.service.runtime._api_key_getter = lambda: "fixture-key"
-        self.service.runtime._call_api = AsyncMock(
-            side_effect=[
-                response("evidence", {}),
-                response("more_evidence", {}),
-                response("more_evidence", {}),
-                response(
-                    "correspondences",
-                    {
-                        "matches": [
-                            {
-                                "sample": i,
-                                "source_text": "家に帰ろう",
-                                "explanation": "Go home.",
-                            }
-                            for i in (0, 5, 9)
-                        ]
-                    },
-                ),
-                response(
-                    "verdict",
-                    {
-                        "approved": True,
-                        "reason": "Expanded speech evidence confirms timing.",
-                    },
-                ),
+        await self.manager(review=True)
+        lines, captions = self.checked_review()
+        batch = SimpleNamespace(
+            content=[
+                Block("gloss", {"page": 1, "lines": lines}),
+                Block("judge", {"page": 1, "captions": captions, "missing": []}),
             ]
         )
-        real = self.nodes.execute
-        requests = []
+        calls = [
+            batch,
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("verdict", {"approved": True, "reason": "Matches."}),
+        ]
+        task = await self.request(self.foreign(verify=True), calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        session = self.service.store.get_session(task["data"]["review_session"])
+        errors = [
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("is_error")
+        ]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("Read this page's captions", errors[0])
 
-        async def execute(node, kind, args, **kw):
-            if kind == "subtitle_prepare":
-                requests.append((args, kw))
-                return extra
-            return await real(node, kind, args, **kw)
+    async def test_a_retime_keeps_a_read_page_read(self):
+        await self.manager(review=True)
+        lines, captions = self.checked_review()
+        calls = [
+            response("gloss", {"page": 1, "lines": lines}),
+            response("retime", {"mode": "shift", "seconds": -0.04}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("verdict", {"approved": True, "reason": "Matches."}),
+        ]
+        task = await self.request(self.foreign(verify=True), calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        session = self.service.store.get_session(task["data"]["review_session"])
+        errors = [
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("is_error")
+        ]
+        self.assertEqual(errors, [])
 
-        with patch.object(self.nodes, "execute", side_effect=execute):
-            await self.subtitles.review(task)
-        task = self.subtitles.task(task["id"])
-        self.assertEqual(task["state"], "ready")
-        self.assertEqual(len(requests), 1)
-        self.assertEqual(requests[0][0]["sample_phase"], 0.25)
-        self.assertFalse(requests[0][0]["repair"])
-        self.assertTrue(requests[0][1]["operation_id"].startswith("subs-"))
-        self.assertEqual(task["data"]["evidence"]["quality"]["sample_count"], 10)
-        self.assertEqual(task["data"]["evidence"]["path"], observed["path"])
+    async def test_manager_settles_what_cheap_page_checks_flag(self):
+        from types import SimpleNamespace
+        from test_discovery import Block
+        from backend.agents import subtitles as module
 
-    async def test_measured_track_waits_for_review_then_becomes_playable_with_personal_offset(
-        self,
-    ):
-        task = await self.prepared(review=True)
-        self.assertEqual(task["state"], "ready")
-        logged = self.storage.operations.page(self.owner, category="subtitle")
-        self.assertEqual(logged["entries"][0]["severity"], "success")
-        tracks = (
-            await self.client.get(f"/api/v1/assets/{self.asset}/subtitles")
-        ).json()["tracks"]
-        self.assertTrue(tracks[0]["review"]["approved"])
-        session = await self.start()
-        caption = session["subtitles"][0]
-        self.assertEqual(caption["id"], tracks[0]["id"])
-        changed = await self.client.patch(
-            f'/api/v1/subtitles/tracks/{caption["id"]}/offset', json={"seconds": 2}
+        await self.manager(review=True)
+        calls = {"translate": 0, "compare": 0}
+
+        async def checker(system, prompt, schema):
+            if "translate" in system.split(".")[0]:
+                calls["translate"] += 1
+                ids = [line.split()[0] for line in prompt.splitlines()[1:] if line.startswith("u")]
+                return {"lines": [{"id": i, "english": f"line {int(i[1:])}"} for i in ids]}, {"output_tokens": 10}
+            calls["compare"] += 1
+            captions = [line.split()[0] for line in prompt.splitlines() if line.startswith("c0")]
+            return {
+                "captions": [
+                    {"caption": c, "verdict": "wrong" if c == "c0003" else "ok", "speech": [f"u{int(c[1:]):05d}"], "note": "different meaning" if c == "c0003" else ""}
+                    for c in captions
+                ],
+                "missing": [],
+            }, {"output_tokens": 10}
+
+        checker.model = "fixture-checker"
+        self.subtitles.contract_caller = lambda model: checker
+        lines, captions = self.checked_review()
+        calls_to_opus = [
+            response("report", {}),
+            response("page", {"page": 1}),
+            response("gloss", {"page": 1, "lines": lines}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("resolve", {"settle": [{"caption": "c0003", "verdict": "loose", "speech": ["u00003"], "note": "recognition difference"}]}),
+            response("verdict", {"approved": True, "reason": "Audited and settled."}),
+        ]
+        with patch.dict("os.environ", {"SPARROW_SUBTITLE_CONTRACTOR": "fixture-checker"}):
+            task = await self.request(self.foreign(verify=True), calls=calls_to_opus)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertEqual(calls, {"translate": 1, "compare": 1})
+        state = task["data"]["review"]
+        self.assertEqual(state["contract"]["model"], "fixture-checker")
+        self.assertEqual(state["audit"]["done"], [1])
+        track = self.subtitles.tracks(self.owner, self.asset)[0]
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertEqual(served[2]["text"], "Line 3 of the dialogue.")  # settled, never rewritten
+        session = self.service.store.get_session(task["data"]["review_session"])
+        report = next(
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("type") == "tool_result"
         )
-        self.assertEqual(changed.status_code, 200)
-        text = (await self.client.get(caption["url"])).text
-        self.assertIn("00:00:03.000 --> 00:00:05.000", text)
-        self.assertNotIn("&amp;amp;", text)
-        original = await self.client.get(caption["url"] + "?original=true")
-        self.assertIn("00:00:01.000", original.text)
-        second = await self.start(audio_index=self.facts["audio_tracks"][1]["index"])
-        self.assertFalse(any(t.get("id") == caption["id"] for t in second["subtitles"]))
-        user = self.accounts.create_user(
-            "another",
-            "another-password-123",
-            "Another",
-            invitation=self.accounts.invite("viewer", None),
-        )
-        async with self.browser(user) as browser:
-            self.assertIn("00:00:01.000", (await browser.get(caption["url"])).text)
-        self.assertEqual(self.service.runtime._call_api.call_count, 2)
+        self.assertIn("c0003", report)
+        self.assertIn("different meaning", report)
+        self.assertIn("verification", report)
 
-    async def test_model_outage_keeps_measured_subtitles_pending_without_blocking_video(
-        self,
-    ):
-        task = await self.prepared()
+    async def test_an_online_track_is_tried_when_the_file_has_none(self):
+        from backend.agents import subtitle_archive
+
+        await self.manager()
+        searched = []
+
+        async def offer(user, asset, language, kind):
+            searched.append((language, kind))
+            return [{"id": "archive:7", "source": "archive", "attachment": 7, "format": "srt", "language": "fr", "kind": "full", "title": "Other release · French"}]
+
+        async def fetch(candidate, client=None):
+            return srt([t + LATE for t in VOICE]), "srt"
+
+        self.subtitles.archive_candidates = offer
+        body = {"language": "fr", "audio_index": self.facts["audio_tracks"][1]["index"]}
+        with patch.dict("os.environ", {"SPARROW_SUBTITLE_ARCHIVE": ""}), patch.object(subtitle_archive, "fetch", fetch):
+            task = await self.request(body)
+        self.assertEqual(searched, [("fr", "full")])
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertTrue(task["data"]["archive_searched"])
+        self.assertEqual(self.subtitles.track(task["data"]["track_id"])["data"]["source_id"], "archive:7")
+
+    async def test_picture_tracks_are_read_only_with_the_switch_on_and_within_the_allowance(self):
+        from backend.agents import subtitles as module
+        from backend.agents.models import AgentKind, AgentSession
+        from backend.agents.runtime import ToolError
+
+        manager = await self.manager()
+        listing = {
+            "movie_hash": "",
+            "facts": {"audio_tracks": []},
+            "candidates": [
+                {"id": "embedded:3", "source": "embedded", "index": 3, "language": "en", "kind": "full", "picture": True},
+                {"id": "embedded:2", "source": "embedded", "index": 2, "language": "en", "kind": "full"},
+            ],
+        }
+        asset = {"node_id": "local", "root_id": "library", "path": "movie.mkv", "item_id": "none"}
+        execute = AsyncMock(return_value=listing)
+        with patch.object(manager.nodes, "execute", execute), patch.object(manager, "authority"), \
+                patch.object(manager, "update"), patch.object(module, "reader_model", lambda: "gpt-6-luna"):
+            for verify, offered in ((False, ["embedded:2"]), (True, ["embedded:2", "embedded:3"])):
+                task = {"id": "picture-task", "state": "finding", "data": {
+                    "language": "en", "kind": "full", "upload": None, "audio_index": 1, "verify": verify,
+                }}
+                candidates, _ = await manager.listing(task, self.owner, asset)
+                self.assertEqual([c["id"] for c in candidates], offered)
+
+            spent = AgentSession(agent=AgentKind.SUBTITLE, budget_scope="subtitle:picture-task")
+            spent.spend.dollars = 0.6
+            self.service.store.save_session(spent)
+            execute.reset_mock()
+            with patch.dict("os.environ", {"SPARROW_SUBTITLE_BUDGET": "0.5"}):
+                with self.assertRaisesRegex(ToolError, "allowance is used up"):
+                    await manager.fetch_text(task, asset, listing["candidates"][0])
+                # A candidate stored before the switch was turned off is not read either.
+                off = {**task, "data": {**task["data"], "verify": False}}
+                with self.assertRaisesRegex(ToolError, "switched on"):
+                    await manager.fetch_text(off, asset, listing["candidates"][0])
+            execute.assert_not_awaited()
+
+    def fixture_checker(self, verdict):
+        async def checker(system, prompt, schema):
+            if "translate" in system.split(".")[0]:
+                ids = [line.split()[0] for line in prompt.splitlines()[1:] if line.startswith("u")]
+                return {"lines": [{"id": i, "english": f"line {int(i[1:])}"} for i in ids]}, {"output_tokens": 10}
+            captions = [line.split()[0] for line in prompt.splitlines() if line.startswith("c0")]
+            return {
+                "captions": [{"caption": c, "verdict": verdict, "speech": [f"u{int(c[1:]):05d}"], "note": ""} for c in captions],
+                "missing": [],
+            }, {"output_tokens": 10}
+
+        checker.model = "fixture-checker"
+        return checker
+
+    async def test_checkers_settle_a_clean_trusted_track_without_the_manager(self):
+        from backend.agents import subtitles as module
+
+        await self.manager(review=True)
+        self.subtitles.contract_caller = lambda model: self.fixture_checker("ok")
+        body = self.foreign(verify=True)
+        body["text"] = body["text"].replace("Line 2 of", "l'm line 2 of")
+        with (
+            patch.dict("os.environ", {"SPARROW_SUBTITLE_CONTRACTOR": "fixture-checker"}),
+            patch.object(module, "TRUSTED_SOURCES", ("upload",)),
+            patch.object(module, "AUDIT_SAMPLE", 10**12),
+        ):
+            task = await self.request(body, calls=[])
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertFalse(task["data"].get("review_sessions"))
+        self.assertIn("match this episode", task["data"]["review_outcome"]["reason"])
+        track = self.subtitles.tracks(self.owner, self.asset)[0]
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertEqual(served[1]["text"], "I'm line 2 of the dialogue.")
+        self.assertEqual(review.replace_words("is there a guy you l-like? l do.", "l", "I"), "is there a guy you l-like? I do.")
+        self.assertEqual(review.detect([{"start": 1, "end": 2, "text": "you l-l-like him"}], [])["ocr"], [])
+
+    async def test_checkers_reject_a_mismatched_track_without_the_manager(self):
+        await self.manager(review=True)
+        self.subtitles.contract_caller = lambda model: self.fixture_checker("wrong")
+        with patch.dict("os.environ", {"SPARROW_SUBTITLE_CONTRACTOR": "fixture-checker"}):
+            task = await self.request(self.foreign(verify=True), calls=[])
+        attempts = {a["source_id"]: a for a in task["data"]["attempts"]}
+        self.assertEqual(attempts["upload"]["outcome"], "set_aside")
+        self.assertIn("don't match", attempts["upload"]["reason"])
+        # Every source was rejected by the checker alone, so Sparrow writes them.
+        self.assertTrue(task["data"].get("writing"))
+        self.assertTrue(all(a["outcome"] == "set_aside" for a in task["data"]["attempts"]))
+
+    async def test_approval_is_refused_when_captions_do_not_match(self):
+        await self.manager(review=True)
+        lines, captions = self.checked_review()
+        wrong = [{**c, "verdict": "wrong"} if n < 4 else c for n, c in enumerate(captions)]
+        calls = [
+            response("gloss", {"page": 1, "lines": lines}),
+            response("judge", {"page": 1, "captions": wrong, "missing": []}),
+            response("verdict", {"approved": True, "reason": "Looks fine."}),
+            response("verdict", {"approved": False, "reason": "Four captions describe other dialogue."}),
+        ]
+        task = await self.request(self.foreign(verify=True), calls=calls)
+        # The rejected upload is set aside and the next source is tried.
+        attempts = {a["source_id"]: a for a in task["data"]["attempts"]}
+        self.assertEqual(attempts["upload"]["outcome"], "set_aside")
+        self.assertIn("Four captions", attempts["upload"]["reason"])
+        self.assertTrue(task["data"]["track_id"] and task["data"]["track_id"] != attempts["upload"]["track_id"])
+        session = self.service.store.get_session(task["data"]["review_sessions"][0])
+        refused = [
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("is_error")
+        ]
+        self.assertTrue(any("Approval refused" in text for text in refused))
+        with self.accounts.connect() as db:
+            upload = [json.loads(r["data"]) | {"state": r["state"]} for r in db.execute("SELECT state,data FROM subtitle_tracks")]
+        upload = [t for t in upload if t.get("source_id") == "upload"]
+        self.assertTrue(upload and all(t["state"] in ("rejected", "superseded") for t in upload))
+        self.assertIn("rejected", {t["state"] for t in upload})
+
+    async def test_agent_switches_to_a_better_source_itself(self):
+        await self.manager(review=True)
+        (self.library / "fixture.en.srt").write_text(srt([t + LATE for t in VOICE]))
+        lines, captions = self.checked_review()
+        calls = [
+            response("sources", {}),
+            response("use_source", {"source": "sidecar:fixture.en.srt"}),
+            response("gloss", {"page": 1, "lines": lines}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("verdict", {"approved": True, "reason": "The sidecar matches throughout."}),
+        ]
+        body = {"audio_index": self.facts["audio_tracks"][1]["index"], "verify": True}
+        task = await self.request(body, calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        chosen = self.subtitles.track(task["data"]["track_id"])
+        self.assertEqual(chosen["data"]["source_id"], "sidecar:fixture.en.srt")
+        self.assertTrue(chosen["data"]["review"]["approved"])
+        self.assertAlmostEqual(chosen["data"]["timing"]["offset"], 0, delta=0.02)
+        outcomes = {a["source_id"]: a["outcome"] for a in task["data"]["attempts"]}
+        self.assertEqual(outcomes["embedded:3"], "set_aside")
+        listed = self.subtitles.tracks(self.owner, self.asset)
+        self.assertEqual([t["state"] for t in listed if t["source"] == "embedded"], ["rejected"])
+
+    async def test_a_human_made_track_is_verified_never_edited(self):
+        await self.manager(review=True)
+        lines, captions = self.checked_review()
+        flagged = [{**c, "verdict": "wrong"} if c["caption"] == "c0003" else c for c in captions]
+        calls = [
+            response("verdict", {"approved": True, "reason": "Looks right."}),
+            response("gloss", {"page": 1, "lines": lines}),
+            response("judge", {"page": 1, "captions": flagged, "missing": []}),
+            response("edit_captions", {"changes": [{"caption": "c0003", "text": "Line 3, corrected."}]}),
+            response("verdict", {"approved": True, "reason": "Eleven of twelve captions match; the track is right."}),
+        ]
+        task = await self.request(self.foreign(verify=True), calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        track = self.subtitles.tracks(self.owner, self.asset)[0]
+        self.assertTrue(track["sync_checked"])
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertEqual(served[2]["text"], "Line 3 of the dialogue.")  # the translator's words stay
+        self.assertAlmostEqual(served[2]["start"], VOICE[2], delta=0.02)  # timing is still corrected
+        session = self.service.store.get_session(task["data"]["review_session"])
+        errors = [
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("is_error")
+        ]
+        self.assertIn("Pages not yet judged", errors[0])
+        self.assertIn("Unknown tool: edit_captions", errors[1])
+
+    async def test_agent_writes_subtitles_when_none_exist(self):
+        await self.manager(review=True)
+        written = [
+            {"speech": [f"u{n:05d}"], "text": f"Written line {n}."} for n in range(1, 13)
+        ]
+        calls = [
+            response("overview", {}),
+            response("write_page", {"page": 1, "captions": written}),
+            response("use_written", {}),
+            response("verdict", {"approved": True, "reason": "Written from the dialogue."}),
+        ]
+        body = {"language": "fr", "audio_index": self.facts["audio_tracks"][1]["index"], "verify": True}
+        task = await self.request(body, calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        self.assertEqual(task["data"]["message"], "Subtitles written from the dialogue and checked.")
+        track = self.subtitles.tracks(self.owner, self.asset)[0]
+        self.assertEqual(track["source"], "written")
+        self.assertTrue(track["sync_checked"])
+        served = cues_from_text((await self.client.get(track["url"])).text, "vtt")
+        self.assertEqual(len(served), 12)
+        self.assertAlmostEqual(served[4]["start"], VOICE[4], delta=0.02)
+        self.assertGreaterEqual(served[4]["end"] - served[4]["start"], 1.0)
+        playback = await self.start(audio_index=self.facts["audio_tracks"][1]["index"])
+        self.assertTrue(any("written by Sparrow" in t["title"] for t in playback["subtitles"]))
+
+    async def test_missing_key_leaves_subtitles_playable_and_pending(self):
+        await self.manager()
+        task = await self.request(self.foreign(verify=True))
         self.assertEqual(task["state"], "review_pending")
         logged = self.storage.operations.page(self.owner, category="subtitle")
         self.assertEqual(logged["entries"][0]["severity"], "warning")
-        self.assertIn("try again", logged["entries"][0]["summary"].lower())
         track = self.subtitles.tracks(self.owner, self.asset)[0]
-        self.assertEqual((await self.client.get(track["url"])).status_code, 404)
-        session = await self.start()
-        self.assertEqual(
-            (
-                await self.client.get(session["url"], headers={"Range": "bytes=0-31"})
-            ).status_code,
-            206,
+        self.assertEqual((await self.client.get(track["url"])).status_code, 200)
+        self.assertFalse(track["sync_checked"])
+        prefs = self.accounts.resolve(self.owner["id"])["values"]
+        self.assertFalse(
+            self.subtitles.satisfies(
+                self.owner, self.asset, {**prefs, "verify_subtitles": True}
+            )
         )
 
-    async def test_cancel_during_preparation_discards_late_track_and_review(self):
+    async def test_cancel_during_preparation_discards_the_late_track(self):
         manager = await self.manager(True)
         entered = asyncio.Event()
         release = asyncio.Event()
@@ -339,44 +629,506 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
             if kind == "subtitle_prepare":
                 entered.set()
                 await release.wait()
-                return self.evidence()
             return await real(node, kind, args, **kw)
 
         with patch.object(self.nodes, "execute", side_effect=execute):
             result = await self.client.post(
                 f"/api/v1/assets/{self.asset}/subtitles/repair",
-                json={"text": "1\n00:00:01,000 --> 00:00:03,000\nHello and welcome.\n"},
+                json={"text": srt(VOICE)},
             )
             await asyncio.wait_for(entered.wait(), 10)
             await self.client.delete("/api/v1/subtitles/tasks/" + result.json()["id"])
             release.set()
-            await asyncio.gather(*list(manager.tasks.values()))
+            await asyncio.gather(*list(manager.tasks.values()), return_exceptions=True)
         self.assertEqual(manager.task(result.json()["id"])["state"], "cancelled")
         self.assertEqual(manager.tracks(self.owner, self.asset), [])
 
 
-class SubtitleEvidenceTests(unittest.TestCase):
+class CaptionTextTests(unittest.TestCase):
     def test_plain_caption_sanitization_and_invalid_timing(self):
         text = "1\n00:00:01,000 --> 00:00:02,000\n<script>attack()</script> & text\n"
         result = render(cues_from_text(text, "srt"), vtt=True)
         self.assertNotIn("<script>", result)
         with self.assertRaises(ValueError):
             cues_from_text("1\n00:00:03,000 --> 00:00:02,000\nbad\n", "srt")
+        # One effect or typesetting event does not discard a good track.
+        good = "".join(f"{n}\n00:00:{n:02d},000 --> 00:00:{n:02d},900\nLine {n}\n\n" for n in range(1, 6))
+        noisy = good + "6\n00:00:07,000 --> 00:00:07,000\neffect\n\n7\n00:00:08,000 --> 00:00:09,000\n" + "x" * 2500 + "\n"
+        self.assertEqual([c["text"] for c in cues_from_text(noisy, "srt")], [f"Line {n}" for n in range(1, 6)])
 
-    def test_wrong_text_and_missing_dialogue_are_never_quality_passes(self):
-        cues = [{"start": 1, "end": 2, "text": "This is the expected dialogue"}]
-        sample = {
-            "cue_index": 0,
-            "subtitle": cues[0],
-            "language": "en",
-            "words": [
-                {
-                    "text": "Completely different words",
-                    "start": 1,
-                    "end": 2,
-                    "probability": 1,
-                }
+    def test_styled_files_play_in_time_order_without_vector_shapes(self):
+        ass = (
+            "[Script Info]\nScriptType: v4.00+\n\n[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            "Dialogue: 0,0:00:05.00,0:00:07.00,Default,,0,0,0,,Hello there\n"
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Sign,,0,0,0,,{\\p1}m 0 0 l 100 0 100 100{\\p0}\n"
+            "Dialogue: 0,0:00:02.00,0:00:03.00,Sign,,0,0,0,,{\\pos(10,10)}A sign\n"
+        )
+        cues = cues_from_text(ass, "ass")
+        self.assertEqual([c["text"] for c in cues], ["A sign", "Hello there"])
+
+
+def utterance(n, t, text="発話"):
+    return {
+        "id": f"u{n:05d}",
+        "start": t,
+        "end": t + 1,
+        "onset": t + ONSET_BIAS,
+        "onset_source": "speech_detector",
+        "clean_onset": True,
+        "text": text,
+        "flags": [],
+    }
+
+
+class RetimeTests(unittest.TestCase):
+    def test_sections_follow_their_measured_offsets(self):
+        cues = [{"start": float(t), "end": t + 1.0, "text": "x"} for t in range(0, 600, 10)]
+        measured = {
+            "measurable": True,
+            "consistent": True,
+            "offset": 0.1,
+            "sections": [
+                {"start": 0, "end": 180, "pairs": 10, "offset": 0.0},
+                {"start": 180, "end": 360, "pairs": 10, "offset": 0.4},
+                {"start": 360, "end": 540, "pairs": 2, "offset": 3.0},
             ],
         }
-        self.assertFalse(inspect_evidence(cues, [sample], 24, "en")["passed"])
-        self.assertFalse(inspect_evidence(cues, [], 24, "en")["passed"])
+        moved, _ = review.retime(cues, measured, "sections")
+        self.assertEqual(moved[1]["start"], 10.0)
+        self.assertAlmostEqual(moved[20]["start"], 199.6)
+        # A section with too few measurements follows its nearest measured one.
+        self.assertAlmostEqual(moved[40]["start"], 399.6)
+        shifted, _ = review.retime(cues, measured, "shift")
+        self.assertAlmostEqual(shifted[1]["start"], 9.9)
+        with self.assertRaises(ValueError):
+            review.retime(cues, {"measurable": False}, "sections")
+
+
+class EditCarryTests(unittest.TestCase):
+    def test_replace_fixes_systematic_errors_and_keeps_verdicts(self):
+        utterances = [utterance(n, 10.0 * n) for n in range(1, 4)]
+        cues = [
+            {"start": 10.0, "end": 12.0, "text": "l'm fine."},
+            {"start": 20.0, "end": 22.0, "text": "Hello, Isla."},
+            {"start": 30.0, "end": 32.0, "text": "lt's late."},
+        ]
+        pages = review.build_pages(utterances, cues, 40)
+        state = {
+            "judgements": {"1": {review.caption_id(i): {"verdict": "ok", "speech": [f"u{i + 1:05d}"], "note": ""} for i in range(3)}},
+            "missing": {"1": []},
+        }
+        new, _, renamed = review.edit(
+            cues, utterances, [], [], [], [{"find": "l'm", "with": "I'm"}, {"find": "lt's", "with": "It's"}]
+        )
+        self.assertEqual([c["text"] for c in new], ["I'm fine.", "Hello, Isla.", "It's late."])
+        judgements, _, reopen = review.carry(pages, cues, pages, new, state, renamed)
+        self.assertEqual(reopen, [])
+        self.assertEqual(len(judgements["1"]), 3)
+        # A reworded caption needs a new verdict; the others keep theirs.
+        reworded, _, _ = review.edit(cues, utterances, [], [{"caption": "c0002", "text": "Hi."}], [])
+        judgements, _, reopen = review.carry(pages, cues, pages, reworded, state, {})
+        self.assertEqual(reopen, [1])
+        self.assertEqual(review.unjudged(pages[0], reworded, judgements), ["c0002"])
+
+    def test_signs_need_no_speech_and_are_not_held_to_it(self):
+        utterances = [utterance(1, 50.0)]
+        cues = [{"start": 5.0, "end": 8.0, "text": "The Bird"}, {"start": 50.0, "end": 52.0, "text": "Hello."}]
+        pages = review.build_pages(utterances, cues, 60)
+        judged, _ = review.check_judgement(
+            pages[0], utterances, cues, [],
+            [{"caption": "c0001", "verdict": "sign", "speech": []}, {"caption": "c0002", "verdict": "ok", "speech": ["u00001"]}],
+            [],
+        )
+        state = {"judgements": {"1": judged}, "missing": {"1": []}, "listens": []}
+        measured = {"measurable": False}
+        self.assertEqual(review.gate(state, pages, cues, utterances, "full", measured), [])
+
+
+class ReviewPageTests(unittest.TestCase):
+    def setUp(self):
+        self.utterances = [utterance(n, 4.0 * n) for n in range(1, 200)]
+        self.cues = [{"start": 4.0 * n, "end": 4.0 * n + 2, "text": f"Caption {n}"} for n in range(1, 200)]
+        self.pages = review.build_pages(self.utterances, self.cues, 800)
+
+    def test_pages_cover_every_line_once_and_fit_inline(self):
+        seen = [u["id"] for p in self.pages for u in review.page_utterances(p, self.utterances)]
+        self.assertEqual(sorted(seen), sorted(u["id"] for u in self.utterances))
+        for page in self.pages:
+            glosses = {u["id"]: "an English reading of this line" for u in self.utterances}
+            view = review.revealed_view(page, len(self.pages), self.utterances, self.cues, glosses, {}, [])
+            self.assertLess(len(view), 6000)
+
+    def test_gloss_and_judgement_must_cover_the_page(self):
+        page = self.pages[0]
+        on_page = review.page_utterances(page, self.utterances)
+        partial = review.check_gloss(page, self.utterances, [{"speech": on_page[0]["id"], "english": "x"}])
+        self.assertFalse(review.glossed(page, self.utterances, partial))
+        everything = {u["id"]: "x" for u in on_page}
+        self.assertTrue(review.glossed(page, self.utterances, everything))
+        with self.assertRaisesRegex(ValueError, "not a speech line ID"):
+            review.check_gloss(page, self.utterances, [{"speech": "u09999", "english": "x"}])
+        quoted = [dict(u, text=f"台詞{n}") for n, u in enumerate(self.utterances)]
+        args = {"lines": [{"speech": "台詞 3", "english": "x"}], "captions": [{"caption": "Caption 7", "speech": ["台詞4", "u00009"]}]}
+        fixed = review.normalise_ids(args, quoted, self.cues, [])
+        self.assertEqual(fixed["lines"][0]["speech"], quoted[3]["id"])
+        self.assertEqual(fixed["captions"][0], {"caption": review.caption_id(6), "speech": [quoted[4]["id"], "u00009"]})
+        self.assertEqual(review.normalise_ids({"speech": ["発話"]}, self.utterances, self.cues, [])["speech"], ["発話"])
+        captions = review.page_captions(page, self.cues)
+        entries = [
+            {"caption": review.caption_id(i), "verdict": "ok", "speech": [on_page[k]["id"]]}
+            for k, (i, _) in enumerate(captions)
+        ]
+        judged, gaps = review.check_judgement(page, self.utterances, self.cues, [], entries, [])
+        self.assertEqual(len(judged), len(captions))
+        with self.assertRaisesRegex(ValueError, "Cite the speech"):
+            review.check_judgement(
+                page, self.utterances, self.cues, [], [{**entries[0], "speech": []}] + entries[1:], []
+            )
+
+    def test_gate_refuses_mismatched_sections_gaps_and_far_matches(self):
+        state = {"judgements": {}, "missing": {}, "listens": []}
+        for page in self.pages:
+            state["judgements"][str(page["number"])] = {
+                review.caption_id(i): {"verdict": "ok", "speech": [f"u{i + 1:05d}"], "note": ""}
+                for i, _ in review.page_captions(page, self.cues)
+            }
+        measured = {"measurable": True, "consistent": True, "offset": 0.0}
+        self.assertEqual(review.gate(state, self.pages, self.cues, self.utterances, "full", measured), [])
+        first = state["judgements"]["1"]
+        key = next(iter(first))
+        first[key] = {**first[key], "verdict": "wrong"}
+        reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
+        self.assertTrue(any("Wrong captions remain" in r for r in reasons))
+        first[key] = {**first[key], "verdict": "ok", "speech": ["u00150"]}
+        reasons = review.gate(state, self.pages, self.cues, self.utterances, "full", measured)
+        self.assertTrue(any("nowhere near" in r for r in reasons))
+        first[key] = {**first[key], "speech": [f"u{review.caption_index(key) + 1:05d}"]}
+        state["missing"]["2"] = [{"speech": ["u00050"], "note": "a caption is on screen"}]
+        self.assertFalse(any("no caption" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "full", measured)))
+        uncaptioned = self.utterances + [utterance(500, 802.5)]
+        state["missing"]["2"] = [{"speech": ["u00500"], "note": "uncaptioned"}]
+        reasons = review.gate(state, self.pages, self.cues, uncaptioned, "full", measured)
+        self.assertTrue(any("no caption" in r for r in reasons))
+        self.assertFalse(any("no caption" in r for r in review.gate(state, self.pages, self.cues, uncaptioned, "forced", measured)))
+        state["missing"]["2"] = []
+        late = {"measurable": True, "consistent": True, "offset": 0.4, "sections": []}
+        self.assertTrue(any("overall" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "full", late)))
+        uneven = {**measured, "sections": [{"start": 0, "end": 180, "pairs": 8, "offset": 0.3}]}
+        self.assertTrue(any("Section" in r for r in review.gate(state, self.pages, self.cues, self.utterances, "full", uneven)))
+
+
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class PageCheckerTests(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict("os.environ", HERMETIC)
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.utterances = [utterance(n, 4.0 * n, f"発話{n}") for n in range(1, 40)]
+        self.pages = review.build_pages(self.utterances, [], 170)
+
+    def test_blank_overrides_use_the_defaults_and_off_disables(self):
+        from backend.agents import subtitles as module
+
+        blank = {"OPENAI_API_KEY": "key", "SPARROW_SUBTITLE_CONTRACTOR": "", "SPARROW_SUBTITLE_VERIFIER": " "}
+        with patch.dict("os.environ", blank):
+            self.assertEqual((module.contractor_model(), module.verifier_model()), (module.DEFAULT_CONTRACTOR, module.DEFAULT_VERIFIER))
+        with patch.dict("os.environ", {**blank, "SPARROW_SUBTITLE_VERIFIER": "off"}):
+            self.assertEqual(module.verifier_model(), "")
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "", "SPARROW_SUBTITLE_CONTRACTOR": ""}):
+            self.assertEqual(module.contractor_model(), "")
+
+    def test_quoted_text_and_order_recover_lines_and_retries_are_bounded(self):
+        from backend.agents import subtitle_contract
+
+        page = self.pages[0]
+        on_page = review.page_utterances(page, self.utterances)
+        answers = [
+            {"lines": [{"id": u["text"], "english": "quoted"} for u in on_page[:-2]]},
+            {"lines": [{"id": "", "english": "by order"} for _ in on_page]},
+        ]
+        calls = []
+
+        async def checker(system, prompt, schema):
+            calls.append(prompt)
+            return answers[len(calls) - 1], {"output_tokens": 1}
+
+        found = asyncio.run(
+            subtitle_contract.check_pages(checker, [page], self.utterances, [], {}, "ja", compare=False)
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual({found["translations"][u["id"]] for u in on_page[:-2]}, {"quoted"})
+        self.assertEqual({found["translations"][u["id"]] for u in on_page[-2:]}, {"by order"})
+        self.assertEqual(found["spend"]["failures"], [])
+
+        async def refuses(system, prompt, schema):
+            return {"lines": []}, {}
+
+        silent = asyncio.run(subtitle_contract.check_pages(refuses, [page], self.utterances, [], {}, "ja", compare=False))
+        gaps = subtitle_contract.untranslated([page], self.utterances, silent["translations"])
+        self.assertEqual([g["speech"] for g in gaps[str(page["number"])]], [[u["id"] for u in on_page]])
+        self.assertTrue(silent["spend"]["failures"])
+
+
+class CoveredSpeechTests(unittest.TestCase):
+    def test_speech_under_a_caption_is_neither_missing_nor_captioned_twice(self):
+        from backend.agents import subtitle_contract
+
+        utterances = [utterance(1, 10.0), utterance(2, 20.0)]
+        cues = [{"start": 10.0, "end": 12.0, "text": "I'll meet you at the inn later."}]
+        self.assertEqual(review.covering_caption(utterances[0], cues), 0)
+        self.assertIsNone(review.covering_caption(utterances[1], cues))
+        with self.assertRaisesRegex(ValueError, "already on screen"):
+            review.edit(cues, utterances, [], [], [{"text": "See you at the inn later.", "speech": ["u00001"]}], [])
+        cues, _, _ = review.edit(cues, utterances, [], [], [{"text": "Wait for me.", "speech": ["u00002"]}], [])
+        self.assertEqual(len(cues), 2)
+
+        async def checker(system, prompt, schema):
+            return {"captions": [], "missing": [{"speech": ["u00001"], "note": ""}, {"speech": ["u00002"], "note": ""}]}, {}
+
+        checker.model = "fixture"
+        pages = review.build_pages(utterances, cues[:1], 40)
+        found = asyncio.run(subtitle_contract.check_pages(checker, pages, utterances, cues[:1], {}, "ja", {"u00001": "a", "u00002": "b"}))
+        gaps = [g["speech"] for items in found["missing"].values() for g in items]
+        self.assertEqual(gaps, [["u00002"]])
+
+
+class ProfessionalRewriteTests(unittest.TestCase):
+    def test_rewriting_a_professional_line_needs_a_second_hearing(self):
+        cues = [{"start": 10.0, "end": 12.0, "text": "Good Joseph!"}, {"start": 20.0, "end": 21.0, "text": "What did l...?"}]
+        rewrite = [{"caption": "c0001", "text": "Good work, Answer!"}]
+        self.assertEqual([i for i, _ in review.unheard_rewrites(cues, [], rewrite)], ["c0001"])
+        self.assertEqual(review.unheard_rewrites(cues, [{"start": 8.0, "end": 14.0}], rewrite), [])
+        self.assertEqual(review.unheard_rewrites(cues, [], [{"caption": "c0002", "text": "What did I...?"}]), [])
+
+
+class TypesetTrackTests(unittest.TestCase):
+    def test_effect_layers_and_shapes_are_not_captions(self):
+        ass = (
+            "[Script Info]\nScriptType: v4.00+\n\n[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello there.\n"
+            "Dialogue: 0,0:00:03.00,0:00:04.00,Sign,,0,0,0,,CLOSED\n"
+            "Dialogue: 1,0:00:03.00,0:00:04.00,Sign,,0,0,0,,CLOSED\n"
+            "Dialogue: 0,0:00:05.00,0:00:06.00,OP,,0,0,0,fx,{\\k20}sy{\\k20}lla\n"
+            "Dialogue: 0,0:00:07.00,0:00:08.00,Default,,0,0,0,,Goodbye.\n"
+        )
+        self.assertEqual([c["text"] for c in cues_from_text(ass, "ass")], ["Hello there.", "CLOSED", "Goodbye."])
+        vtt = "WEBVTT\n\n00:01.000 --> 00:02.000\n<b>Hello.</b>\n\n00:03.000 --> 00:03.200\nm 0 0 l 100 0 100 2 0 0\n\n00:04.000 --> 00:05.000\n<b>{OP}</b>\n"
+        self.assertEqual([c["text"] for c in cues_from_text(vtt, "vtt")], ["Hello."])
+        import time
+        from backend.agents.subtitle_worker import shape_text
+
+        started = time.time()
+        self.assertFalse(shape_text("m " + "1.75 -1.75 b 3.625 0.75 " * 400 + "word"))
+        self.assertTrue(shape_text("m 0 0 l 100 0 100 2 0 0"))
+        self.assertLess(time.time() - started, 1)
+
+    def test_pages_advance_when_many_lines_share_a_start(self):
+        cues = [{"start": 30.0, "end": 31.0, "text": f"layer {n}"} for n in range(300)] + [
+            {"start": 200.0 + n, "end": 201.0 + n, "text": "line"} for n in range(5)
+        ]
+        pages = review.build_pages([], cues, 400)
+        self.assertTrue(1 <= len(pages) < 20)
+        self.assertEqual(pages[-1]["end"], 401.0)
+
+
+class VerificationTests(unittest.TestCase):
+    def test_match_and_coverage_decide_a_human_track(self):
+        utterances = [dict(utterance(n, 4.0 * n), text="はっきり話した") for n in range(1, 11)]
+        cues = [{"start": 4.0 * n, "end": 4.0 * n + 1.5, "text": f"Line {n}"} for n in range(1, 9)]
+        state = {"judgements": {"1": {f"c{n:04d}": {"verdict": "wrong" if n == 1 else "ok", "speech": []} for n in range(1, 9)}}}
+        v = review.verification(state, cues, utterances)
+        self.assertEqual((v["match"], v["coverage"]), (0.875, 0.8))
+        pages = review.build_pages(utterances, cues, 60)
+        measured = {"measurable": True, "consistent": True, "offset": 0.0}
+        state["contract"] = {"model": "fixture"}
+        self.assertEqual(review.verify_gate(state, pages, cues, utterances, "full", measured), [])
+        state["judgements"]["1"]["c0002"]["verdict"] = "wrong"
+        self.assertTrue(any("match the dialogue" in r for r in review.verify_gate(state, pages, cues, utterances, "full", measured)))
+        thin = cues[:5]
+        self.assertTrue(any("have a caption" in r for r in review.verify_gate(state, pages, thin, utterances, "full", measured)))
+
+
+class TrackKindTests(unittest.TestCase):
+    def test_release_titles_mark_signs_and_caption_tracks(self):
+        from backend.agents.subtitle_node import track_kind
+
+        kinds = {
+            title: track_kind({"title": title, "forced": False, "hearing_impaired": False})
+            for title in ("", "SDH", "English [CC]", "Dub (SDH)", "Signs & Songs@Official (PGS)", "S&S@Tenrai-Sensei",
+                          "Songs & Signs", "Dialogues@Tenrai-Sensei [Non-Honorific]", "English (Full + Signs)", "Latin American")
+        }
+        self.assertEqual({t for t, k in kinds.items() if k == "sdh"}, {"SDH", "English [CC]", "Dub (SDH)"})
+        self.assertEqual({t for t, k in kinds.items() if k == "forced"}, {"Signs & Songs@Official (PGS)", "S&S@Tenrai-Sensei", "Songs & Signs"})
+        self.assertEqual(track_kind({"title": "", "forced": True, "hearing_impaired": False}), "forced")
+        flagged = {"title": "English", "forced": True, "hearing_impaired": False}
+        self.assertEqual(track_kind(flagged, 455, 479), "full")  # mislabelled dialogue track
+        self.assertEqual(track_kind(flagged, 40, 479), "forced")
+        self.assertEqual(track_kind({"title": "Signs & Songs", "forced": False, "hearing_impaired": False}, 455, 479), "forced")
+        from backend.agents.subtitle_node import track_language
+
+        self.assertEqual(track_language({"language": "jpn", "title": "English Subtitles"}), "en")
+        self.assertEqual(track_language({"language": "jpn", "title": "Japanese SDH"}), "ja")
+        self.assertEqual(track_language({"language": "spa", "title": "Latin American"}), "es")
+
+
+class AuditTests(unittest.TestCase):
+    def test_one_uncaptioned_line_on_a_human_track_is_not_a_checker_miss(self):
+        from backend.agents.subtitle_review import audit_outcome
+
+        checker = {"c0001": {"verdict": "ok"}, "c0002": {"verdict": "loose"}}
+        fine = {"c0001": {"verdict": "ok"}, "c0002": {"verdict": "ok"}}
+        self.assertEqual(audit_outcome(checker, fine, [{"speech": ["u00007"]}]), [])
+        self.assertEqual(len(audit_outcome(checker, fine, [{"speech": ["u00007"]}, {"speech": ["u00009"]}])), 2)
+        self.assertEqual(audit_outcome(checker, {"c0001": {"verdict": "wrong"}}, []), ["c0001"])
+
+
+class PictureSubtitleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_disc_subtitles_are_rendered_read_and_timed_by_the_disc(self):
+        import tempfile
+        from pathlib import Path
+        from backend.agents.node_executor import executable
+        from backend.agents.subtitle_contract import read_pictures
+        from backend.agents.subtitle_node import picture_sheets
+        from pgs_fixture import sup
+
+        ffmpeg = executable("ffmpeg")
+        if not ffmpeg or not executable("ffprobe"):
+            self.skipTest("Packaged media tools required")
+        lines = [(1.0, 2.5, "Rakka, are you up?"), (3.0, 4.2, "We're all in Kuu's room."), (5.0, 7.0, "OK, I'm coming.\nWait for me!")]
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / "subs.sup").write_bytes(sup(lines))
+            process = await asyncio.create_subprocess_exec(
+                ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=320x180:d=8", "-i", str(folder / "subs.sup"),
+                "-map", "0", "-map", "1", "-c:v", "libx264", "-preset", "ultrafast", "-c:s", "copy", "-copyts", str(folder / "disc.mkv"),
+            )
+            self.assertEqual(await process.wait(), 0)
+            rendered = await picture_sheets(folder / "disc.mkv", 1)
+        self.assertEqual(len(rendered["events"]), 3)
+        gaps = [round(e["end"] - e["start"], 2) for e in rendered["events"]]
+        self.assertEqual(gaps, [1.5, 1.2, 2.0])
+        calls = []
+
+        async def reader(image, numbers):
+            calls.append(numbers)
+            # The first answer leaves a row out; the retry fills it.
+            rows = numbers[:-1] if len(calls) == 1 else numbers
+            return {"lines": [{"n": n, "text": lines[n - 1][2].replace("\n", " / ")} for n in rows]}, {"input_tokens": 900, "output_tokens": 90}
+
+        reader.model = "gpt-6-luna"
+        text, spend = await read_pictures(reader, rendered)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([c["text"] for c in cues_from_text(text, "srt")], [l[2] for l in lines])
+        self.assertEqual((spend["read"], spend["rows"]), (3, 3))
+
+    async def test_reading_stops_once_the_allowance_is_spent(self):
+        from backend.agents.subtitle_contract import read_pictures
+
+        calls = []
+
+        async def reader(image, numbers):
+            calls.append(numbers)
+            return {"lines": [{"n": n, "text": f"line {n}"} for n in numbers]}, {"input_tokens": 900, "output_tokens": 90}
+
+        reader.model = "gpt-6-luna"
+        rendered = {"events": [{"n": n, "start": n, "end": n + 0.5} for n in (1, 2, 3)], "rows_per_sheet": 1, "sheets": ["a", "b", "c"]}
+        text, spend = await read_pictures(reader, rendered, parallel=1, max_dollars=0.0001)
+        self.assertEqual(calls, [[1]])
+        self.assertEqual(spend["read"], 1)
+        self.assertTrue(all("allowance" in f for f in spend["failures"]))
+
+    async def test_a_fading_disc_line_is_one_line(self):
+        import tempfile
+        from pathlib import Path
+        from backend.agents.node_executor import executable
+        from backend.agents.subtitle_node import picture_sheets
+        from pgs_fixture import sup
+
+        ffmpeg = executable("ffmpeg")
+        if not ffmpeg or not executable("ffprobe"):
+            self.skipTest("Packaged media tools required")
+        lines = [(1.0, 2.5, "It seems he's gone after Naruto."), (3.0, 4.2, "This is terrible!")]
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / "subs.sup").write_bytes(sup(lines, fade=4))
+            process = await asyncio.create_subprocess_exec(
+                ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=320x180:d=6", "-i", str(folder / "subs.sup"),
+                "-map", "0", "-map", "1", "-c:v", "libx264", "-preset", "ultrafast", "-c:s", "copy", "-copyts", str(folder / "disc.mkv"),
+            )
+            self.assertEqual(await process.wait(), 0)
+            rendered = await picture_sheets(folder / "disc.mkv", 1)
+        # Five frames of rising opacity each: still two lines, each its full length.
+        self.assertEqual([round(e["end"] - e["start"], 2) for e in rendered["events"]], [1.5, 1.2])
+
+
+class ArchiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_finds_this_episodes_english_dialogue_from_other_releases(self):
+        import httpx
+        import lzma
+        from backend.agents import subtitle_archive as archive
+
+        releases = [
+            {"id": 1, "title": "[Group] Show - 02 (1080p)", "status": "complete", "num_files": 1},
+            {"id": 2, "title": "[Group] Show S02 - 02", "status": "complete", "num_files": 1},
+            {"id": 3, "title": "[Group] Show Second Arc Title - 02", "status": "complete", "num_files": 1},
+            {"id": 4, "title": "[Group] Show - 02 [batch]", "status": "skipped", "num_files": 12},
+            {"id": 5, "title": "[Other] Show - 02 (720p)", "status": "complete", "num_files": 1},
+            {"id": 6, "title": "[Group] Boruto - Show Next Generations - 02", "status": "complete", "num_files": 1},
+        ]
+        track = lambda id_, name, lang="eng", codec="ASS": {"id": id_, "type": "subtitle", "size": 40000, "info": {"codec": codec, "lang": lang, "name": name, "forced": 0}}
+        files = {
+            1: [{"filename": "[Group] Show - 02 (1080p).mkv", "attachments": [track(11, "Dialogue"), track(12, "Signs & Songs"), track(13, "", "fre"), track(14, "", "eng", "PGS")]}],
+            5: [{"filename": "[Other] Show - 02 (720p).mkv", "attachments": [track(11, "Dialogue")]}],
+        }
+        asked = []
+
+        def handler(request):
+            asked.append(str(request.url))
+            if request.url.host == "storage.animetosho.org":
+                return httpx.Response(200, content=lzma.compress(b"[Script Info]\nScriptType: v4.00+\n"))
+            if request.url.params.get("show") == "torrent":
+                return httpx.Response(200, json={"files": files.get(int(request.url.params["id"]), [])})
+            return httpx.Response(200, json=releases)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            found = await archive.search(["Show"], 1, 2, exclude=["Second Arc Title"], client=client)
+            self.assertEqual([(c["id"], c["kind"]) for c in found], [("archive:11", "full"), ("archive:12", "forced")])
+            text, format_name = await archive.fetch(found[0], client=client)
+        self.assertEqual(format_name, "ass")
+        self.assertIn("Script Info", text)
+        self.assertFalse(any("id=2" in url or "id=3" in url or "id=4" in url or "id=6" in url for url in asked))
+        self.assertTrue(archive.episode_in("[SubsPlease] Show - 02 (1080p) [ABCD].mkv", 1, 2))
+        self.assertTrue(archive.episode_in("[SubsPlease] Show S2 - 02 (1080p).mkv", 2, 2))
+        self.assertFalse(archive.episode_in("[SubsPlease] Show S2 - 02 (1080p).mkv", 1, 2))
+        self.assertFalse(archive.episode_in("Show - 12.mkv", 1, 2))
+        self.assertFalse(archive.episode_in("Show S02E02.mkv", 1, 2))
+
+
+class ArchiveLimitTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_huge_or_damaged_archive_is_a_failed_source(self):
+        import httpx
+        import lzma
+        from backend.agents import subtitle_archive as archive
+
+        candidate = {"attachment": 7, "format": "srt"}
+        whole = lzma.compress(b"1\n00:00:01,000 --> 00:00:02,000\nHello\n")
+        bodies = {
+            "too large": lzma.compress(b"\0" * (archive.MAX_BYTES + 1024), preset=1),
+            "could not be unpacked": b"not an archive",
+            "incomplete": whole[:-12],
+        }
+        for reason, body in bodies.items():
+            transport = httpx.MockTransport(lambda request, body=body: httpx.Response(200, content=body))
+            async with httpx.AsyncClient(transport=transport) as client:
+                with self.assertRaisesRegex(ValueError, reason):
+                    await archive.fetch(candidate, client=client)
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, content=whole))
+        async with httpx.AsyncClient(transport=transport) as client:
+            self.assertEqual(await archive.fetch(candidate, client=client), ("1\n00:00:01,000 --> 00:00:02,000\nHello\n", "srt"))

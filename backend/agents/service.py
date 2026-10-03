@@ -53,6 +53,7 @@ DEFAULT_CHEAP_MODEL = "claude-haiku-4-5"
 
 POLL_INTERVAL = 15.0  # plumbing poll cadence (seconds)
 STALL_AFTER = 15 * 60  # no progress for this long = stalled
+CRAWL_AFTER = 4 * 3600  # projected time to finish that counts as crawling
 TIMER_INTERVAL = 20.0  # wake-timer scan cadence
 CLIENT_RECOVERY_COOLDOWN = 5 * 60
 
@@ -133,6 +134,8 @@ class AgentService:
             str, tuple[float, float]
         ] = {}  # dl_id -> (progress, ts)
         self._stall_flagged: set[str] = set()
+        self._pace_seen: dict[str, tuple[float, float]] = {}  # dl_id -> window start (progress, ts)
+        self._crawl_flagged: set[str] = set()
         self._client_up: Optional[bool] = None
         self._client_recovery_after = 0.0
         recent_recovery = next(
@@ -155,6 +158,15 @@ class AgentService:
             os.getenv("SPARROW_SMART_MODEL") or cfg.smart_model or DEFAULT_SMART_MODEL
         )
 
+    def fetch_model(self) -> str:
+        """The Fetch Agent starts on the cheap model, working through the scout
+        with its picks reviewed by the smart model, and escalates itself to the
+        smart model for hard searches. SPARROW_FETCH_SCOUT=off restores the
+        smart model throughout."""
+        if os.getenv("SPARROW_FETCH_SCOUT", "").lower() == "off":
+            return self.smart_model()
+        return self.cheap_model()
+
     def cheap_model(self) -> str:
         cfg = self.storage.get_config()
         return (
@@ -167,7 +179,9 @@ class AgentService:
         async def fetch_system(session: AgentSession) -> str:
             job = self.store.get_job(session.job_id)
             return (
-                prompts.fetch_system(session, job, "", cfg=self.storage.get_config())
+                prompts.fetch_system(
+                    session, job, "", cfg=self.storage.get_config(), scouting=session.model != self.smart_model()
+                )
                 + "\nEffective request settings (authoritative):\n"
                 + json.dumps(job.preferences if job else {}, sort_keys=True)
             )
@@ -185,18 +199,29 @@ class AgentService:
                 + json.dumps(job.preferences if job else {}, sort_keys=True)
             )
 
+        def fetch_tools_for(session):
+            tools = [
+                journal_tool(tb, "fetch"),
+                wake_tool(tb),
+                *memory_tools(tb),
+                *tmdb_tools(tb),
+                *acquisition_tools(tb),
+            ]
+            if session.model == self.smart_model():
+                # The smart model searches and adds directly; nothing reviews it.
+                hidden = {"propose_release", "escalate_model"}
+            else:
+                # The cheap model works through the scout, and its picks are
+                # reviewed before anything downloads.
+                hidden = {"tpb_search", "torrent_peek", "client_add", "triage_parse"}
+            return [t for t in tools if t.name not in hidden]
+
         self.runtime.register(
             AgentSpec(
                 kind=AgentKind.FETCH.value,
-                model=self.smart_model,
+                model=self.fetch_model,
                 system=fetch_system,
-                tools=lambda s: [
-                    journal_tool(tb, "fetch"),
-                    wake_tool(tb),
-                    *memory_tools(tb),
-                    *tmdb_tools(tb),
-                    *acquisition_tools(tb),
-                ],
+                tools=fetch_tools_for,
             )
         )
         self.runtime.register(
@@ -320,7 +345,7 @@ class AgentService:
         )
         cfg = self.storage.get_config()
         fetch_session = AgentSession(
-            agent=AgentKind.FETCH, job_id=job.id, model=self.smart_model()
+            agent=AgentKind.FETCH, job_id=job.id, model=self.fetch_model()
         )
         media_session = AgentSession(
             agent=AgentKind.MEDIA, job_id=job.id, model=self.cheap_model()
@@ -341,10 +366,11 @@ class AgentService:
             {
                 "agent": "fetch",
                 "label": "Fetch Agent",
-                "model": self.smart_model(),
+                "model": self.fetch_model(),
                 "context": f"Rendered with the latest job contract: {job.title}",
                 "prompt": prompts.fetch_system(
-                    fetch_session, job, "", cfg=self.storage.get_config()
+                    fetch_session, job, "", cfg=self.storage.get_config(),
+                    scouting=fetch_session.model != self.smart_model(),
                 ),
                 "tools": tools_for("fetch"),
             },
@@ -798,7 +824,7 @@ class AgentService:
             agent=AgentKind.FETCH,
             job_id=job.id,
             user_id=user_id,
-            model=self.smart_model(),
+            model=self.fetch_model(),
         )
         job.session_id = session.id
         self.store.save_session(session)
@@ -893,10 +919,22 @@ class AgentService:
             try:
                 await asyncio.sleep(POLL_INTERVAL)
                 await self.reconcile_transfers()
+                await self.offer_transfer_slots()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("plumbing loop error")
+
+    async def offer_transfer_slots(self) -> None:
+        """Wake the longest-waiting requests when transfer slots free up."""
+        for job_id in self.toolbox.slots_to_offer():
+            job = self.store.get_job(job_id)
+            if not job or job.status != JobStatus.ACTIVE:
+                self.toolbox.slot_taken(job_id)
+                continue
+            await self.emit(Event(
+                kind="transfer_slot_open", job_id=job_id,
+                payload={"description": "A download slot is free. Add your chosen copy now."}))
 
     async def reconcile_transfers(self):
         from .transfer_control import apply_control
@@ -981,19 +1019,33 @@ class AgentService:
                 DownloadStatus.PAUSED,
             ):
                 continue
+            if dl.metadata.get("node_id"):
+                # An offline node answers nothing: asking it would hold up
+                # every other transfer's poll until each request times out.
+                info = nodes.info(dl.metadata["node_id"])
+                if not info or not info["online"]:
+                    continue
             try:
-                if dl.metadata.get("node_id"):
-                    info = nodes.info(dl.metadata["node_id"])
-                    if not info or not info["online"]:
+                if not dl.metadata.get("selection") and self.toolbox.selection_for(dl):
+                    # A pack choice waits for the torrent's file list.
+                    await self.toolbox.apply_file_selection(dl)
+                    dl = self.storage.get_download(dl.id) or dl
+                    if dl.status == DownloadStatus.ERROR:
                         continue
+                if dl.metadata.get("node_id"):
                     st = await nodes.execute(
                         dl.metadata["node_id"],
                         "download_status",
                         {"hash": dl.torrent_hash},
                         timeout=10,
                     )
-                    if st is None and dl.status == DownloadStatus.QUEUED:
-                        # Idempotent recovery of a reservation accepted before a restart or lost response.
+                    if st is None and dl.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING):
+                        # Idempotent recovery of a reservation accepted before a restart or lost
+                        # response, or of a transfer the download app no longer has: add it again,
+                        # and choose its pack files afresh once its list is known.
+                        if dl.metadata.get("selection"):
+                            dl.metadata.pop("selection")
+                            await self.storage.update_download(dl.id, metadata=dl.metadata)
                         await nodes.execute(
                             dl.metadata["node_id"],
                             "download_add",
@@ -1066,6 +1118,7 @@ class AgentService:
                 )
 
                 self._detect_stall(dl, progress)
+                self._detect_crawl(dl, progress)
             except (NodeError, OSError):
                 # Preserve the request and its last verified facts while a node is away.
                 continue
@@ -1102,6 +1155,40 @@ class AgentService:
                     )
                 )
             )
+
+    def _detect_crawl(self, dl, progress: float) -> None:
+        """A transfer that moves, but so slowly it would take hours: the
+        stall check never fires for a trickle, so say it once per slow spell."""
+        now = time.time()
+        start_progress, start = self._pace_seen.setdefault(dl.id, (progress, now))
+        if now - start < STALL_AFTER:
+            return
+        self._pace_seen[dl.id] = (progress, now)
+        gained = progress - start_progress
+        if gained <= 1e-4:
+            return  # no progress at all is the stall check's case
+        remaining = (1 - progress) / gained * (now - start)
+        if remaining < CRAWL_AFTER:
+            self._crawl_flagged.discard(dl.id)
+            return
+        if dl.id in self._crawl_flagged:
+            return
+        self._crawl_flagged.add(dl.id)
+        asyncio.create_task(
+            self.emit(
+                Event(
+                    kind="download_stalled",
+                    job_id=dl.metadata.get("job_id", ""),
+                    download_id=dl.id,
+                    payload={
+                        "description": f'"{dl.name}" is crawling: {gained * 100:.1f}% in the last '
+                        f"{int((now - start) / 60)} minutes, about {remaining / 3600:.0f} hours to finish "
+                        f"(at {progress * 100:.0f}%). Your call: wait, or replace it with a faster copy.",
+                        "download_id": dl.id,
+                    },
+                )
+            )
+        )
 
     async def _recover_client(self, config, manager: TorrentManager) -> bool:
         """Start a configured local app at most once per cooldown window."""

@@ -9,6 +9,7 @@ an agent's good judgment is not a substitute for a seatbelt on rm.
 from __future__ import annotations
 import asyncio
 import json
+import logging
 import os
 import shutil
 import time
@@ -21,7 +22,7 @@ import httpx
 
 from ..models import Download, DownloadStatus, MediaType, LibraryItem, quality_rank
 from ..storage import Storage
-from ..services.torrent_client import TorrentManager, build_magnet, start_configured_client
+from ..services.torrent_client import TorrentManager, build_magnet, match_files, select_files, start_configured_client
 from ..services.search_engine import _query as apibay_query
 from ..services.release_parser import parse_release_name
 from .models import (AgentKind, AgentSession, Event, JournalEntry, JobStatus,
@@ -29,6 +30,8 @@ from .models import (AgentKind, AgentSession, Event, JournalEntry, JobStatus,
 from .runtime import ToolCtx, ToolDef, ToolError
 from .store import AgentStore
 from .accounts import Accounts
+
+logger = logging.getLogger("sparrow.agents")
 from .media_state import media_state, file_version, audio_satisfies
 
 TMDB = "https://api.themoviedb.org/3"
@@ -128,6 +131,10 @@ class Toolbox:
         self.broadcast = broadcast    # async callable: websocket fanout to the UI
         self.transfer_lock = asyncio.Lock()
         self._search_times: list[float] = []   # indexer rate limiting (global)
+        self._search_turn = asyncio.Lock()      # searches waiting for a slot take turns
+        self._search_waiting = 0
+        self._search_cache: dict[str, tuple[float, list]] = {}
+        self.scouted: dict[str, dict] = {}       # each Fetch session's latest short list
 
     # ─── shared helpers ──────────────────────────────────────────────────
 
@@ -161,6 +168,130 @@ class Toolbox:
         return (os.getenv("SPARROW_SMART_MODEL") or self.cfg().smart_model
                 or "claude-sonnet-5")
 
+    async def apply_file_selection(self, download) -> Optional[dict]:
+        """Download only the files the agent chose from a pack.
+
+        Runs on the storage node that holds the transfer once the torrent's
+        file list is known (magnets fetch it first); returns the recorded
+        selection, or None while still waiting. When none of the chosen files
+        exist the transfer is stopped and the request woken.
+        """
+        wanted = self.selection_for(download)
+        if not wanted or download.metadata.get("selection"):
+            return download.metadata.get("selection")
+        node_id = download.metadata.get("node_id")
+        if node_id:
+            from .node_tools import components
+
+            nodes, _ = components(self)
+            job = self.store.get_job(download.metadata.get("job_id", ""))
+            result = await nodes.execute(node_id, "download_select",
+                                         {"hash": download.torrent_hash, "files": wanted,
+                                          "titles": download.metadata.get("wanted_titles") or []}, job=job, timeout=20)
+        else:
+            from .scout import resolve
+
+            titles = download.metadata.get("wanted_titles") or []
+            result = await select_files(self.torrents(), download.torrent_hash, wanted,
+                                        lambda listing, names: resolve(listing, names, titles))
+        if not result or result.get("pending"):
+            return None
+        values = {}
+        if "error" in result:
+            values = {"status": DownloadStatus.ERROR,
+                      "error_message": "None of the chosen files are in this torrent; nothing was downloaded."}
+        current = self.storage.get_download(download.id) or download
+        await self.storage.update_download(download.id, metadata={**current.metadata, "selection": result}, **values)
+        if "error" in result:
+            chose = "None of the files you chose are" if download.metadata.get("wanted_files") else (
+                "Only the wanted episodes download, and none of the files is named as one")
+            await self.emit(Event(
+                kind="download_stalled", job_id=download.metadata.get("job_id", ""), download_id=download.id,
+                payload={"description": f'{chose} in "{download.name}", so it was stopped. '
+                                        f'Its files include: {", ".join(result.get("available", [])[:12])}. '
+                                        "Remove it and choose again, naming the files with files=.",
+                         "download_id": download.id}))
+        return result
+
+    def selection_for(self, download) -> list[str]:
+        """What a transfer may download: the files its agent chose or, for a
+        TV request, its wanted episodes, found by name once the torrent's
+        list is known. A whole pack never downloads for one episode."""
+        if download.metadata.get("wanted_files"):
+            return download.metadata["wanted_files"]
+        if not download.metadata.get("agent_managed"):
+            return []
+        job = self.store.get_job(download.metadata.get("job_id", ""))
+        if not job or getattr(job.media_type, "value", job.media_type) != "tv":
+            return []
+        from .node_tools import missing_episodes
+
+        # Episodes the library already has suitably are not downloaded again;
+        # if it has them all, the contract's episodes still bound the pack.
+        episodes = missing_episodes(self, job) or [
+            (int(season), int(episode))
+            for season, numbers in sorted(job.wanted_episodes.items(), key=lambda kv: int(kv[0]))
+            for episode in sorted(numbers)
+        ]
+        return [f"episode:S{season:02d}E{episode:02d}" for season, episode in episodes]
+
+    # ─── Waiting for a transfer slot ────────────────────────────────────
+
+    SLOT_PROMISE = 180.0  # seconds a woken request has to take its slot
+
+    def _waiters(self, db):
+        db.execute("CREATE TABLE IF NOT EXISTS transfer_waiters("
+                   "job_id TEXT PRIMARY KEY, since REAL NOT NULL, woken REAL NOT NULL DEFAULT 0)")
+
+    def wait_for_slot(self, job_id: str) -> None:
+        """Queue a request that hit the transfer limit; it keeps its place."""
+        with self.store._connect() as db:
+            self._waiters(db)
+            db.execute("INSERT INTO transfer_waiters VALUES (?, ?, 0) "
+                       "ON CONFLICT(job_id) DO UPDATE SET woken=0", (job_id, time.time()))
+
+    def slot_taken(self, job_id: str) -> None:
+        with self.store._connect() as db:
+            self._waiters(db)
+            db.execute("DELETE FROM transfer_waiters WHERE job_id=?", (job_id,))
+
+    def slots_to_offer(self) -> list[str]:
+        """The longest-waiting requests to wake for free transfer slots.
+
+        A woken request holds its promise briefly so one slot wakes one
+        request; a request that lets the promise lapse leaves the queue.
+        """
+        limit = max(1, int(self.cfg().max_active_transfers or 1))
+        active = sum(1 for d in self.storage.get_all_downloads()
+                     if d.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED))
+        now = time.time()
+        with self.store._connect() as db:
+            self._waiters(db)
+            db.execute("DELETE FROM transfer_waiters WHERE woken>0 AND woken<?", (now - self.SLOT_PROMISE,))
+            promised = db.execute("SELECT COUNT(*) FROM transfer_waiters WHERE woken>0").fetchone()[0]
+            free = limit - active - promised
+            if free <= 0:
+                return []
+            rows = db.execute("SELECT job_id FROM transfer_waiters WHERE woken=0 ORDER BY since LIMIT ?", (free,)).fetchall()
+            chosen = [r["job_id"] for r in rows]
+            db.executemany("UPDATE transfer_waiters SET woken=? WHERE job_id=?", [(now, j) for j in chosen])
+        return chosen
+
+    async def select_soon(self, download_id: str, seconds: float = 120.0) -> None:
+        """Apply a pack selection as soon as the file list arrives; the poller
+        finishes the job if it takes longer or the server restarts."""
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            download = self.storage.get_download(download_id)
+            if not download or download.metadata.get("selection"):
+                return
+            try:
+                if await self.apply_file_selection(download):
+                    return
+            except Exception:
+                logger.debug("pack selection not applied yet", exc_info=True)
+            await asyncio.sleep(2)
+
     async def connect_torrents(self) -> tuple[TorrentManager, bool, str]:
         """Connect, starting an installed local client when it is merely inactive."""
         config = self.cfg().torrent_client
@@ -191,18 +322,80 @@ class Toolbox:
         except httpx.HTTPError as e:
             raise ToolError(f"TMDB unreachable: {e}")
 
-    async def rate_limit_search(self) -> None:
-        """Never hammer the indexer into rate-limiting the user's IP."""
+    SEARCH_WINDOW, SEARCH_LIMIT, SEARCH_SPACING = 600, 30, 1.5
+
+    async def rate_limit_search(self, wait: float = 0) -> float:
+        """Never hammer the indexer into rate-limiting the user's IP.
+
+        wait: seconds to queue for a free slot (searches take turns) before
+        giving up; waiting costs no model turns, unlike hibernating."""
+        if not wait and (self._search_waiting or self._searches_in_window() >= self.SEARCH_LIMIT):
+            raise ToolError(self._search_limit_text())
+        began = time.time()
+        deadline = began + wait
+        self._search_waiting += 1
+        try:
+            # The wait covers queuing behind other searches too: a caller
+            # willing to wait a minute never waits out another's ten.
+            try:
+                async with asyncio.timeout(max(0.0, deadline - time.time()) if wait else None):
+                    await self._search_turn.acquire()
+            except TimeoutError:
+                raise ToolError(self._search_limit_text()) from None
+            try:
+                while self._searches_in_window() >= self.SEARCH_LIMIT:
+                    free = self.SEARCH_WINDOW - (time.time() - self._search_times[0]) + 0.1
+                    if time.time() + free > deadline:
+                        raise ToolError(self._search_limit_text())
+                    await asyncio.sleep(free)
+                if self._search_times and time.time() - self._search_times[-1] < self.SEARCH_SPACING:
+                    await asyncio.sleep(self.SEARCH_SPACING - (time.time() - self._search_times[-1]))
+                self._search_times.append(time.time())
+            finally:
+                self._search_turn.release()
+        finally:
+            self._search_waiting -= 1
+        return round(time.time() - began, 1)  # seconds spent waiting for a slot
+
+    def _searches_in_window(self) -> int:
         now = time.time()
-        self._search_times = [t for t in self._search_times if now - t < 600]
-        if len(self._search_times) >= 30:
-            raise ToolError(
-                "Indexer rate limit: 30 searches per 10 minutes. You have been "
-                "searching heavily — step back, think about what you've learned, "
-                "write it to memory, and hibernate with a wake timer.")
-        if self._search_times and now - self._search_times[-1] < 1.5:
-            await asyncio.sleep(1.5 - (now - self._search_times[-1]))
-        self._search_times.append(time.time())
+        self._search_times = [t for t in self._search_times if now - t < self.SEARCH_WINDOW]
+        return len(self._search_times)
+
+    def _search_limit_text(self) -> str:
+        self._searches_in_window()
+        oldest = self._search_times[0] if self._search_times else time.time()
+        wait = max(1, round((self.SEARCH_WINDOW - (time.time() - oldest)) / 60) + self._search_waiting // 3)
+        return ("Indexer rate limit: 30 searches per 10 minutes across all requests. "
+                f"The next search frees in about {wait} minute{'s' if wait != 1 else ''}: "
+                f"write what you've learned to memory and wake_me in {wait} minutes.")
+
+    async def index_search(self, query: str, wait: float = 0, log: list | None = None) -> tuple[list, bool]:
+        """Raw indexer rows for a query and whether they came from the cache.
+
+        Repeating a recent search is free: it uses no slot. Raises ToolError at
+        the rate limit and the source's own error when it is unreachable.
+        log: the cost ledger's list of searches, appended to."""
+        key = " ".join(query.lower().split())
+        cached = self._search_cache.get(key)
+        if cached and time.time() - cached[0] < (1800 if cached[1] else 600):
+            if log is not None:
+                log.append({"query": query, "cached": True, "waited": 0, "rows": len(cached[1])})
+            return cached[1], True
+        waited = await self.rate_limit_search(wait)
+        try:
+            rows = await apibay_query(query, strict=True)
+        except Exception as exc:
+            if log is not None:
+                log.append({"query": query, "cached": False, "waited": waited, "error": str(exc)[:120]})
+            raise
+        if log is not None:
+            log.append({"query": query, "cached": False, "waited": waited, "rows": len(rows)})
+        self._search_cache[key] = (time.time(), rows)
+        if len(self._search_cache) > 500:
+            for stale in sorted(self._search_cache, key=lambda k: self._search_cache[k][0])[:100]:
+                self._search_cache.pop(stale, None)
+        return rows, False
 
     def library_item_for(self, tmdb_id: int,
                          media_type: str | MediaType | None = None) -> Optional[LibraryItem]:
@@ -596,15 +789,20 @@ def tmdb_tools(tb: Toolbox) -> list[ToolDef]:
 
 # ─── Indexer + torrent client tools (Fetch Agent) ────────────────────────────
 
+SEARCH_QUEUE = 900  # seconds a search may wait its turn for a rate-limit slot
+
 def fetch_tools(tb: Toolbox) -> list[ToolDef]:
     async def search(ctx: ToolCtx, args: dict):
-        await tb.rate_limit_search()
-        ctx.session.spend.searches += 1
         if tb.cfg().preferred_search_engines != ['apibay']:
             raise ToolError('The configured acquisition source is not installed. Choose the built-in source in Server settings.')
-        try:raw = await apibay_query(args["query"],strict=True)
+        try:
+            raw, cached = await tb.index_search(args["query"], wait=SEARCH_QUEUE, log=ctx.facts.setdefault("searches", []))
+        except ToolError:
+            raise
         except Exception as exc:
             raise ToolError('The acquisition source is unavailable. This is not an empty search result; wait for the source to recover before trying more queries.') from exc
+        if not cached:
+            ctx.session.spend.searches += 1
         out = []
         for r in raw:
             try:
@@ -646,6 +844,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
                 size = 0
             if name and name != "Filelist not found":
                 files.append({"file": name, "size_mb": round(size / 1e6, 1)})
+        ctx.facts.update(listed=bool(files), files=len(files))
         if not files:
             return ("No file listing available for this torrent (the indexer doesn't "
                     "have it). If the swarm is healthy you can grab it, inspect what "
@@ -675,8 +874,10 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
                       if d.metadata.get("agent_managed") and d.status in
                       (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED)]
             if len(active) >= limit:
+                tb.wait_for_slot(job.id)
                 raise ToolError(f"Transfer limit reached: {len(active)} of {limit} slots reserved. "
-                                "Wait for an existing transfer to finish.")
+                                "You're queued and will be woken as soon as a slot opens: "
+                                "hibernate without a timer.")
             mgr, connected, recovery = await tb.connect_torrents()
             tb.require_authority(ctx)
             if not connected:
@@ -684,11 +885,13 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
             staging = Path(cfg.staging_dir).resolve() / download_id
             staging.mkdir(parents=True, exist_ok=True)
             magnet = build_magnet(info_hash, name)
+            wanted_files = [str(f) for f in (args.get("files") or []) if str(f).strip()][:200]
             dl = Download(id=download_id, name=name, magnet_url=magnet,
                 media_type=MediaType(job.media_type), status=DownloadStatus.QUEUED,
                 torrent_hash=info_hash, staging_path=str(staging), tmdb_id=job.tmdb_id,
                 metadata={"job_id": job.id, "session_id": ctx.session.id,
-                          "job_revision": job.revision, "agent_managed": True})
+                          "job_revision": job.revision, "agent_managed": True,
+                          **({"wanted_files": wanted_files} if wanted_files else {})})
             await tb.storage.add_download(dl)
             try:
                 torrent_hash = await mgr.add_magnet(magnet, str(staging))
@@ -700,8 +903,12 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
             await tb.storage.update_download(dl.id, status=DownloadStatus.DOWNLOADING,
                                              torrent_hash=torrent_hash or info_hash)
             await tb.broadcast({"type": "download_added", "data": dl.to_dict()})
+            tb.slot_taken(job.id)
+            if wanted_files:
+                asyncio.create_task(tb.select_soon(dl.id))
             return {"download_id": dl.id, "hash": dl.torrent_hash,
-                    "note": "Added. Progress and completion will wake this request."}
+                    "note": "Added. Progress and completion will wake this request."
+                    + (" Only the chosen files will download once the file list arrives." if wanted_files else "")}
 
     async def status(ctx: ToolCtx, args: dict):
         mgr, connected, recovery = await tb.connect_torrents()
@@ -814,8 +1021,11 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
     return [
         _t("tpb_search",
            "Raw indexer search — unfiltered results, newest metadata the indexer has. "
-           "Searches are literal substring-ish matches: refine with alt titles, "
-           "romanizations, tag variants (S01, Season 1, COMPLETE), per-episode probes.",
+           "Every word must appear in the name (\"Show 02\" misses \"Show S01E02\"), "
+           "punctuation such as colons matches nothing, and -word excludes a word "
+           "(\"Naruto -Shippuden\"): drop title punctuation. Refine with alt titles, "
+           "romanizations, tag variants (S01, Season 1, COMPLETE), per-episode probes. "
+           "Results stop at 100; a repeated search is free.",
            {"query": {"type": "string"}}, ["query"], search),
         _t("torrent_peek",
            "Fetch a torrent's ACTUAL file listing before committing (names lie; file "
@@ -824,8 +1034,13 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
            {"apibay_id": {"type": "string"}}, ["apibay_id"], peek),
         _t("client_add",
            "Add a torrent to the download client (staging folder). Returns a "
-           "download_id. You'll be woken on completion, stall, or error.",
-           {"info_hash": {"type": "string"}, "name": {"type": "string"}},
+           "download_id. You'll be woken on completion, stall, or error. From a "
+           "pack, pass files: the names torrent_peek listed for the wanted "
+           "episodes, and only those download. When the indexer has no listing, "
+           "pass files: [\"episode:S01E02\"] and that episode is picked once the "
+           "torrent's own file list arrives.",
+           {"info_hash": {"type": "string"}, "name": {"type": "string"},
+            "files": {"type": "array", "items": {"type": "string"}}},
            ["info_hash", "name"], add),
         _t("client_status", "Live status of this job's downloads.",
            {"include_done": {"type": "boolean"}}, [], status),

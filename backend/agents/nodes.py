@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .accounts import Accounts, digest
 from .account_api import administrator
-from .node_executor import Executor, NodeError, PROTOCOL, canonical
+from .node_executor import Executor, NodeError, PROTOCOL, TRANSIENT_KINDS, canonical
 
 
 class Nodes:
@@ -197,12 +197,7 @@ class Nodes:
         if node_id == "local" or not node_id:
             result = await self.local().execute(command)
             self.local().delivered(command["id"])
-            if not operation_id and kind in (
-                "read",
-                "stat",
-                "hls_segment",
-                "subtitle_extract",
-            ):
+            if not operation_id and kind in TRANSIENT_KINDS:
                 with self.local().db() as db:
                     db.execute("DELETE FROM operations WHERE id=?", (command["id"],))
         else:
@@ -261,7 +256,7 @@ class Nodes:
             node_id
             and node_id != "local"
             and not operation_id
-            and kind in ("read", "stat", "hls_segment", "subtitle_extract")
+            and kind in TRANSIENT_KINDS
         ):
             with self.accounts.connect() as db:
                 db.execute(

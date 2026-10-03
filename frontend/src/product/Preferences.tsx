@@ -91,16 +91,16 @@ export function PreferenceFields({
           )}
           {field(
             "verify_subtitles",
-            "Check subtitle sync",
+            "Subtitle agent",
             <label className="check">
               <input
                 type="checkbox"
                 checked={values.verify_subtitles ?? false}
                 onChange={(e) => onChange("verify_subtitles", e.target.checked)}
               />
-              Compare captions with the voice
+              Check, fix or write every subtitle with AI
             </label>,
-            "Uses AI within the household spending limit. Minor wording differences are allowed.",
+            "Needs an Anthropic key. Off: timing is still fixed automatically.",
           )}
           {field(
             "audio_pref",

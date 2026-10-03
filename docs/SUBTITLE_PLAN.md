@@ -22,6 +22,14 @@ every experimental Four Lions tool is wired into routine production review.
 The [anime trial record](agentic-audit/ANIME_SUBTITLE_TRIAL.md) reports three real
 episode passes, rejection controls, UI checks and the measured limits.
 
+**Current scope (30 September):** foreign-language audio with English captions.
+The product now builds whole-soundtrack speech evidence, measures and corrects
+caption timing without a model call, and, when checking is on, has Claude Opus 5.5
+review the track page by page, writing its own gloss before each page's captions
+are revealed, with a tool-enforced approval gate. The
+[evidence record](agentic-audit/SUBTITLE_EVIDENCE.md) documents the measurements,
+heuristics and validation boundary. Sections below describe the original plan.
+
 **Latest direction:** use the owner's proposed audio-first approach. Extract the
 actual soundtrack, transcribe speech in its original language with word timings,
 then use the existing Claude agent to match its meaning against subtitle cues.
@@ -342,7 +350,7 @@ These are source findings, not installed-runtime claims.
 | [subtitle_provider.py](../backend/agents/subtitle_provider.py) | Existing OpenSubtitles adapter; capped entry/file/candidate handling without pagination needs explicit bounded search state. |
 | [subtitle_node.py](../backend/agents/subtitle_node.py) | Local processing, version checks and subprocess limits; add durable chunked audio observations and format coverage. |
 | [node_tools.py](../backend/agents/node_tools.py), [playback.py](../backend/agents/playback.py) | Publication trigger and prepared-track playback; extend imports/backfill, selection metadata and copy/audio invalidation. |
-| [subtitle_benchmark.py](../tests/subtitle_benchmark.py) | Five assembled English speech cases; retain them and add real multilingual reference cases. |
+| [subtitle_sync_calibration.py](../tests/subtitle_sync_calibration.py) | Replaces the retired five-case benchmark: known-position English onsets plus professional-track baselines. |
 
 An in-memory planning probe showed the existing measurement accepts five matching
 English samples from a 20-cue candidate without an independent scene inventory,

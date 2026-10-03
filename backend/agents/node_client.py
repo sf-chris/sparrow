@@ -236,4 +236,10 @@ if __name__ == "__main__":
         from .subtitle_worker import main as worker_main
 
         raise SystemExit(worker_main(sys.argv[2]))
+    if len(sys.argv) > 2 and sys.argv[1] == "--subtitle-evidence":
+        from .subtitle_evidence import main as evidence_main
+
+        raise SystemExit(
+            evidence_main(sys.argv[2], float(sys.argv[3]) if len(sys.argv) > 3 else None)
+        )
     main()

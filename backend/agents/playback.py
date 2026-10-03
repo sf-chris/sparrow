@@ -1,5 +1,6 @@
 """Authenticated, version-bound playback and per-user resume ordering."""
 
+import asyncio
 import base64
 import json
 import math
@@ -343,8 +344,10 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                     "id": t["id"],
                     "language": t["language"],
                     "title": t["language"]
-                    + (" · sync checked · " if t["sync_checked"] else " · ")
-                    + t["kind"],
+                    + " · "
+                    + t["kind"]
+                    + (" · written by Sparrow" if t["source"] == "written" else "")
+                    + (" · checked" if t["sync_checked"] else ""),
                     "sync_checked": t["sync_checked"],
                     "url": t["url"],
                     "offset": t["offset"],
@@ -360,6 +363,9 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 }
                 for t in facts["subtitle_tracks"]
                 if t["codec"] in ("subrip", "ass", "ssa", "webvtt", "mov_text", "text")
+                # A prepared copy of this embedded track replaces it in the list.
+                and "embedded:" + str(t["index"])
+                not in {p.get("source_id") for p in prepared_tracks}
             ],
         }
 
@@ -431,11 +437,17 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             report(request, asset, "preparation", True)
             raise HTTPException(503, str(exc)) from exc
 
+    converted = {}  # (node, root, path, version, index) -> WebVTT, newest last
+
     @router.get("/playback/{session_id}/subtitles/{index}.vtt")
     async def subtitles(session_id: str, index: int, request: Request):
         _, data, asset = session(request, session_id)
         if not any(t["index"] == index for t in asset["facts"]["subtitle_tracks"]):
             raise HTTPException(404, "Subtitle track not found.")
+        key = (asset["node_id"], asset["root_id"], asset["path"], canonical(data["version"]), index)
+        if key in converted:
+            converted[key] = converted.pop(key)
+            return Response(converted[key], media_type="text/vtt")
         try:
             result = await nodes.execute(
                 asset["node_id"],
@@ -449,7 +461,23 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 timeout=60,
             )
             report(request, asset, "captions", False)
-            return Response(result["vtt"], media_type="text/vtt")
+            if "vtt" in result:
+                vtt = result["vtt"]
+            else:
+                from .subtitle_worker import cues_from_text, render
+
+                try:
+                    # A large typeset track takes seconds to parse: off the
+                    # event loop, and once per track version.
+                    vtt = await asyncio.to_thread(
+                        lambda: render(cues_from_text(result["text"], result["format"]), vtt=True)
+                    )
+                except ValueError as exc:
+                    raise NodeError(str(exc)) from exc
+            converted[key] = vtt
+            while len(converted) > 16:
+                converted.pop(next(iter(converted)))
+            return Response(vtt, media_type="text/vtt")
         except NodeError as exc:
             report(request, asset, "captions", True)
             raise HTTPException(422, str(exc)) from exc

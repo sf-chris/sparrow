@@ -30,12 +30,15 @@ Everything new lives in `backend/agents/`:
 - `models.py` — `Job` (a contract against TMDB: wanted episodes, quality
   window, audio, urgency), `AgentSession` (a persistent tool-loop with full
   message history), `JournalEntry`, `Event`, `Spend`.
+- `openai_loop.py` — runs a session on an OpenAI model through the same loop
+  (Responses API translation at the call boundary).
 - `runtime.py` — the loop: wake on event → reason across tool calls →
   hibernate with a trigger or close. Handles persistence, crash repair,
   durable event acknowledgements/tool results, spend tracking and API retries.
 - `tools.py` — the tool belt + guardrails. Filesystem jail (staging +
-  library only), library deletion only via verified `upgrade_swap`, indexer
-  rate limits, honest error text the agent can reason about (`ToolError`).
+  library only), library deletion only via verified `upgrade_swap` (or
+  withdrawing an unverified file the same request itself placed, unchanged),
+  indexer rate limits, honest error text the agent can reason about (`ToolError`).
 - `prompts.py` — the agents' standing orders. Philosophy → operating rules.
 - `service.py` — `AgentService`: event routing, the plumbing poller
   (files_landed / download_stalled / client_recovered / timers), job
@@ -44,6 +47,10 @@ Everything new lives in `backend/agents/`:
   markdown memory is scoped to the requesting person.
 - `evidence.py` — immutable oversized tool observations, atomic with invocation
   receipts; private session retrieval/listing and serialized storage quotas.
+- `ledger.py` — the cost ledger: every model and tool call with its trigger,
+  cost and facts; reports, timelines, exports, backfill and a model audit.
+- `scout.py`, `acquisition_review.py`, `release_match.py` — code search, judging
+  and ranking of releases; the smart model's review of the cheap model's pick.
 - `discovery.py` — persistent, scoped Discovery tool loop with inspected title
   proposals. Fast TMDB suggestions remain alongside it; `resolution.py` retains
   the legacy description route.
@@ -51,15 +58,26 @@ Everything new lives in `backend/agents/`:
   checks that wake the Librarian only for eligible work.
 - `accounts.py`, `nodes.py`, `node_executor.py`, `catalogue.py`, `playback.py` —
   household preferences/permissions, durable portable storage and media delivery.
-- `subtitles.py`, `subtitle_worker.py` — built-in preparation and independent
-  speech evidence, followed by the bounded subtitle-review tool loop.
+- `subtitles.py`, `subtitle_worker.py` — built-in preparation of a playable
+  track; `subtitle_evidence.py` (whole-soundtrack speech evidence on the storage
+  node), `subtitle_sync.py` (measured timing and correction) and
+  `subtitle_review.py` (page-by-page reviewer tools and approval gate).
 
 ### The agents
 
-- **Fetch Agent** (smart tier, one session per job): owns a job until the
-  library provably matches the spec. Searches, reads results, refines,
-  peeks inside packs, weighs downloadability vs quality per urgency, grabs,
-  handles stalls, reconciles inventory. Woken by events; hibernates between.
+- **Fetch Agent** (cheap tier with smart review, one session per job): owns a
+  job until the library provably matches the spec. The scout (`scout.py`)
+  runs the usual searches, reads names, peeks inside packs for the wanted
+  files and ranks a short list; the cheap model proposes one row and the
+  smart model reviews that compact decision (`acquisition_review.py`) before
+  anything downloads. A release must open with the show's title followed
+  only by numbering/year/season/quality tags; searches queue for the shared
+  indexer allowance (no model turns) and repeats come from a cache. A TV
+  transfer downloads only the wanted episodes and their subtitle files, by
+  name once the torrent's list is known. Hard searches escalate the session
+  to the smart model with the raw search tools. Handles stalls (removing a
+  transfer deletes its unfinished files) and reconciles inventory. Woken by
+  events; hibernates between.
 - **Media Agent** (cheap tier, self-escalates, one session per landed
   download): probes every file with ffprobe, matches durations against TMDB
   runtimes, detects samples/fakes, names and places files, updates
@@ -90,9 +108,26 @@ Everything new lives in `backend/agents/`:
 - **Resolve preferences centrally.** Admin defaults, personal overrides and
   explicit request choices form a versioned effective contract, within admin
   policy. Pass relevant values to agents and use the same contract in UI/tools.
-- Current model defaults: Fetch smart, Media cheap with self-escalation,
-  Librarian, Discovery and subtitle review cheap with bounded turns and spend.
-  Routine subtitle processing is built in; no setup-agent implementation is planned now.
+- Current model defaults: Fetch cheap with smart review and escalation
+  (`SPARROW_FETCH_SCOUT=off` keeps it smart throughout), Media cheap with self-escalation,
+  Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
+  (household switch) is managed by GPT-6-Sol when `OPENAI_API_KEY` is set, else
+  Claude Opus 5.5 at medium effort with prompt caching. Cheap page checkers
+  (GPT-6-Luna, GPT-6-Sol second opinion when borderline) read every page; the
+  manager reads only what they flag plus audit pages. Sources are tried in order:
+  the release's text tracks, its picture (Blu-ray/DVD) tracks read by the cheap
+  vision model (only with the switch on, within the title's allowance), an
+  archive track for the same episode, then writing. A
+  human-made track is verified, never edited (only OCR and timing fixes): a
+  failing one is set aside for the next source. Sparrow-written tracks are
+  edited through tools that re-measure every change. Checker and manager spend
+  share one per-title allowance (the household per-case limit unless
+  `SPARROW_SUBTITLE_BUDGET` is set); the design target is under $1 per title.
+  Configure with `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT`,
+  `SPARROW_SUBTITLE_CONTRACTOR`, `SPARROW_SUBTITLE_VERIFIER` and
+  `SPARROW_SUBTITLE_BUDGET`. Routine subtitle processing,
+  including timing measurement and correction for foreign dialogue, is built in
+  and makes no model call; no setup-agent implementation is planned now.
   Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
 - Agent-managed downloads carry `metadata.agent_managed` — the legacy
   enrich/auto-organize path must skip them (the Media Agent owns landing).
@@ -138,6 +173,12 @@ existing code and does not create an account or rotate it. Return this handoff
 privately to the owner; household invitations are generated separately in People.
 
 ## Issue #3 implementation evidence
+
+Every model and tool call is recorded in the cost ledger
+([issue #15](https://github.com/sf-chris/sparrow/issues/15)):
+`python -m backend.agents.ledger report|timelines|export|audit|backfill --data <state dir>`
+gives cost per title by phase, escalations, searches and waste flags. Judge
+acquisition and subtitle changes by a before/after ledger report on the same titles.
 
 [The implementation ledger](docs/agentic-audit/IMPLEMENTATION.md) records current
 cleanup dispositions, recovery guarantees, evaluations and outstanding work.

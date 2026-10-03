@@ -68,6 +68,8 @@ class _ColorConsoleFormatter(logging.Formatter):
         }
         extras = {k: v for k, v in record.__dict__.items() if k not in skip and not k.startswith("_")}
         extra_str = "  " + "  ".join(f"{k}={v}" for k, v in extras.items()) if extras else ""
+        if record.exc_info:
+            extra_str += "\n" + self.formatException(record.exc_info)
 
         if not self._use_color:
             return f"{ts}  {level:<8}  {name:<20}  {msg}{extra_str}"

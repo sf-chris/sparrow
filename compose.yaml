@@ -8,6 +8,15 @@ services:
       SPARROW_SMART_MODEL: ${SPARROW_SMART_MODEL:-claude-sonnet-5}
       SPARROW_CHEAP_MODEL: ${SPARROW_CHEAP_MODEL:-claude-haiku-4-5}
       SPARROW_TRANSCRIPTION_MODEL: ${SPARROW_TRANSCRIPTION_MODEL:-/opt/sparrow/models/whisper-base}
+      # Subtitle agent: Opus manages; a cheap page checker (GPT-6-Luna when an
+      # OpenAI key is set) reads every page. Leave unset for the defaults.
+      SPARROW_SUBTITLE_MODEL: ${SPARROW_SUBTITLE_MODEL:-}
+      SPARROW_SUBTITLE_EFFORT: ${SPARROW_SUBTITLE_EFFORT:-medium}
+      SPARROW_SUBTITLE_BUDGET: ${SPARROW_SUBTITLE_BUDGET:-}
+      SPARROW_SUBTITLE_CONTRACTOR: ${SPARROW_SUBTITLE_CONTRACTOR:-}
+      SPARROW_SUBTITLE_VERIFIER: ${SPARROW_SUBTITLE_VERIFIER:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
       - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:${SPARROW_PORT:-8888}:8888"
     volumes:

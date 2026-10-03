@@ -13,6 +13,7 @@ tool belt.
 from __future__ import annotations
 import asyncio
 import logging
+import os
 import json
 import secrets
 import time
@@ -21,6 +22,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 import anthropic
 
+from . import ledger, openai_loop
 from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
 
@@ -33,8 +35,22 @@ PRICING_SOURCE = (
 )
 
 
+# OpenAI list prices per million tokens: input, cached input, output. Cached
+# input needs no write premium; reasoning tokens are billed as output.
+OPENAI_RATES = {
+    "gpt-6-luna": (0.10, 0.01, 0.50),
+    "gpt-6-sol": (2.0, 0.20, 10.0),
+    "gpt-6-astra": (10.0, 1.0, 50.0),
+    "gpt-5.6-luna": (0.20, 0.02, 1.20),
+    "gpt-5.6-terra": (2.0, 0.20, 12.0),
+}
+
+
 def rates_for_model(model: str, at: Optional[float] = None) -> dict[str, float]:
     normalized = (model or "").lower()
+    for name, (base_input, cached, output) in OPENAI_RATES.items():
+        if normalized == name or normalized.startswith(name + "-"):
+            return {"input": base_input, "output": output, "cache_write": base_input, "cache_read": cached}
     cache_read_multiplier = 0.1
     if "sonnet-5" in normalized:
         # The announced September price increase was withdrawn by the provider.
@@ -43,6 +59,9 @@ def rates_for_model(model: str, at: Optional[float] = None) -> dict[str, float]:
         base_input, output = 10.0, 50.0
         if "5-1" in normalized:
             cache_read_multiplier = 0.025
+    elif "opus-5-5" in normalized:
+        base_input, output = 4.0, 20.0
+        cache_read_multiplier = 0.05
     elif any(
         name in normalized
         for name in ("opus-5", "opus-4-8", "opus-4-7", "opus-4-6", "opus-4-5")
@@ -157,6 +176,8 @@ class ToolCtx:
     hibernate: bool = False
     close: bool = False
     close_reason: str = ""
+    # what the current tool call observed, for the cost ledger
+    facts: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -170,6 +191,12 @@ class AgentSpec:
     tools: Callable[[AgentSession], list[ToolDef]]
     max_steps: int = MAX_STEPS_PER_WAKE
     max_tokens: int = MAX_TOKENS
+    # Cache the growing conversation prefix: long single-session loops re-send
+    # their history on every call, so cached reads cut input cost about tenfold.
+    cache: bool = False
+    effort: str = ""  # output_config effort; empty uses the model's default
+    # Allowance per budget scope for this agent kind; 0 uses household policy.
+    max_dollars: float = 0.0
 
 
 class AgentRuntime:
@@ -184,6 +211,7 @@ class AgentRuntime:
     ):
         self.store = store
         self._api_key_getter = api_key_getter
+        self._openai_key_getter: Callable[[], str] = lambda: os.getenv("OPENAI_API_KEY", "")
         self._specs: dict[str, AgentSpec] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._on_session_change = on_session_change
@@ -193,6 +221,8 @@ class AgentRuntime:
             "max_agent_dollars": 3,
         }
         self._budget_locks: dict[str, asyncio.Lock] = {}
+        self._triggers: dict[str, dict] = {}  # session -> what woke this turn (for the ledger)
+        self._current_call: dict[str, str] = {}  # session -> the ledger id of its latest model call
         with self.store._connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS reasoning_reservations(id TEXT PRIMARY KEY,scope TEXT NOT NULL,dollars REAL NOT NULL,created REAL NOT NULL)"
@@ -316,7 +346,7 @@ class AgentRuntime:
 
         try:
             await self._turn(session, spec, events)
-        except Exception:
+        except Exception as exc:
             # A broken turn must never orphan a session: journal-grade
             # legibility happens in the agents; here we just make sure it
             # wakes again soon to retry.
@@ -326,7 +356,11 @@ class AgentRuntime:
             session.status = SessionStatus.HIBERNATING
             session.outcome = CaseState.FAILED
             session.wake_at = time.time() + 300
-            session.wake_reason = "Something went wrong. Trying again in 5 minutes."
+            session.wake_reason = (
+                "The AI provider refused the key, or none is set. Check it, then try again."
+                if getattr(exc, "status_code", None) in (401, 403)
+                else "Something went wrong. Trying again in 5 minutes."
+            )
             self.store.save_session(session)
         await self._notify(session)
 
@@ -399,9 +433,8 @@ class AgentRuntime:
         self, session: AgentSession, spec: AgentSpec, events: list[Event]
     ) -> None:
         ctx = ToolCtx(session=session, runtime=self)
-        tools = self.tools_for(session)
-        tool_map = {t.name: t for t in tools}
 
+        self._set_trigger(session, events)
         _append_user(session, self._wake_text(session, events))
         self.store.acknowledge_events(session, events)
         steps = 0
@@ -410,6 +443,7 @@ class AgentRuntime:
             if not self.authority_valid(session, ctx.job_revision):
                 return
             policy = self.policy_getter()
+            allowance = spec.max_dollars or policy["max_agent_dollars"]
             sessions = self._budget_sessions(session)
             dollars = (
                 sum(s.spend.dollars for s in sessions if s.id != session.id)
@@ -418,21 +452,25 @@ class AgentRuntime:
             if (
                 steps
                 >= min(MAX_STEPS_PER_WAKE, spec.max_steps, policy["max_agent_calls"])
-                or dollars >= policy["max_agent_dollars"]
+                or dollars >= allowance
             ):
                 session.outcome = (
                     CaseState.BUDGET_LIMITED
-                    if dollars >= policy["max_agent_dollars"]
+                    if dollars >= allowance
                     else CaseState.NEEDS_INPUT
                 )
                 session.wake_reason = (
                     "Reached the spending limit. Raise it in Defaults, then try again."
-                    if dollars >= policy["max_agent_dollars"]
+                    if dollars >= allowance
                     else "Reached the agent step limit. Try again to continue."
                 )
                 session.wake_at = 0
                 break
             self._trim_history(session)
+            # Tools follow the session's current state (an escalated model, a
+            # track switched mid-review), so they are read every step.
+            tools = self.tools_for(session)
+            tool_map = {t.name: t for t in tools}
             system = await spec.system(session)
             response, limited = await self._budgeted_call(session, system, tools, spec)
             if limited:
@@ -448,7 +486,7 @@ class AgentRuntime:
                 session.outcome = CaseState.WAITING
                 session.wake_at = time.time() + 600
                 session.wake_reason = (
-                    "Can't reach Anthropic. Trying again in 10 minutes."
+                    "Can't reach the AI provider. Trying again in 10 minutes."
                 )
                 self.store.save_session(session)
                 return
@@ -499,6 +537,7 @@ class AgentRuntime:
                 fresh = self.store.pending_events(session.id)
                 if fresh:
                     ctx.hibernate = False
+                    self._set_trigger(session, fresh)
                     _append_user(session, self._wake_text(session, fresh))
                     self.store.acknowledge_events(session, fresh)
                     continue
@@ -550,6 +589,7 @@ class AgentRuntime:
             }
         self.store.start_invocation(ctx.session, tu.id, tu.name, args)
         await self._notify_tool(ctx.session, tu.name, "started", args, "", False)
+        ctx.facts, started = {}, time.time()
         tool = tool_map.get(tu.name)
         if not tool:
             content, is_error = f"Unknown tool: {tu.name}", True
@@ -594,6 +634,11 @@ class AgentRuntime:
         )
         content = result["content"]
         is_error = bool(result.get("is_error"))
+        ledger.record_tool(
+            self.store, session_id=ctx.session.id, tool_id=tu.id, name=tu.name,
+            outcome=ledger.tool_outcome(content, is_error), call_id=self._current_call.get(ctx.session.id, ""),
+            job_id=ctx.session.job_id, ts=started, duration=round(time.time() - started, 3), facts={**({"args": args} if args else {}), **ctx.facts} or None,
+        )
         await self._notify_tool(
             ctx.session,
             tu.name,
@@ -653,11 +698,14 @@ class AgentRuntime:
                 len(session.messages) + len(tools) + 1
             )
             rates = rates_for_model(session.model)
-            estimate = (
-                3
-                * (tokens * rates["cache_write"] + spec.max_tokens * rates["output"])
-                / 1_000_000
+            # A cached loop re-reads its earlier prefix at the cache-read rate and
+            # writes only the new turn; without caching everything is written.
+            inbound = (
+                tokens * rates["cache_read"] + min(tokens, 40_000) * rates["cache_write"]
+                if spec.cache
+                else tokens * rates["cache_write"]
             )
+            estimate = 3 * (inbound + spec.max_tokens * rates["output"]) / 1_000_000
             identity = secrets.token_hex(16)
             with self.store._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
@@ -668,15 +716,30 @@ class AgentRuntime:
                     + ")",
                     scopes,
                 ).fetchone()[0]
-                if spent + held + estimate > self.policy_getter()["max_agent_dollars"]:
+                allowance = spec.max_dollars or self.policy_getter()["max_agent_dollars"]
+                if spent + held + estimate > allowance:
                     return None, True
                 db.execute(
                     "INSERT INTO reasoning_reservations VALUES(?,?,?,?)",
                     (identity, scope, estimate, time.time()),
                 )
-            response = await self._call_api(session, system, tools)
+            started = time.time()
+            try:
+                response = await self._call_api(session, system, tools)
+            except Exception as exc:
+                self._ledger_call(session, started, error=f"{type(exc).__name__}: {exc}")
+                status = getattr(exc, "status_code", None)
+                if status and 400 <= status < 500:
+                    # Refused outright (no key, a rejected request): nothing
+                    # was billed, so the reservation is released.
+                    with self.store._connect() as db:
+                        db.execute("DELETE FROM reasoning_reservations WHERE id=?", (identity,))
+                raise
+            if response is None:
+                self._ledger_call(session, started, error="The AI provider could not be reached after retries.")
             if response is not None:
                 self._track_spend(session, response)
+                self._ledger_call(session, started, response=response)
                 current = self.store.get_session(session.id)
                 if current:
                     current.spend = session.spend
@@ -688,17 +751,26 @@ class AgentRuntime:
             return response, False
 
     async def _call_api(self, session: AgentSession, system: str, tools: list[ToolDef]):
+        if openai_loop.is_openai_model(session.model):
+            return await self._call_openai(session, system, tools)
         client = self._client()
         try:
             delay = 2.0
+            spec = self._specs[session.agent.value]
+            options = {}
+            if spec.cache:
+                options["cache_control"] = {"type": "ephemeral"}
+            if spec.effort:
+                options["output_config"] = {"effort": spec.effort}
             for attempt in range(3):
                 try:
                     return await client.messages.create(
                         model=session.model,
-                        max_tokens=self._specs[session.agent.value].max_tokens,
+                        max_tokens=spec.max_tokens,
                         system=system,
                         tools=[t.to_api() for t in tools],
-                        messages=session.messages,
+                        messages=openai_loop.anthropic_messages(session.messages),
+                        **options,
                     )
                 except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
                     status = getattr(e, "status_code", None)
@@ -712,7 +784,57 @@ class AgentRuntime:
         finally:
             await client.close()
 
+    async def _call_openai(self, session: AgentSession, system: str, tools: list[ToolDef]):
+        """The same call through the OpenAI Responses API (see openai_loop)."""
+        import httpx
+
+        spec = self._specs[session.agent.value]
+        key = self._openai_key_getter()
+        if not key:
+            # A missing key is not an outage: say so instead of retrying.
+            raise openai_loop.OpenAIStatusError(401, f"{session.model} needs an OpenAI key (OPENAI_API_KEY).")
+        delay = 2.0
+        for attempt in range(3):
+            try:
+                return await openai_loop.create(
+                    key,
+                    session.model,
+                    system,
+                    [t.to_api() for t in tools],
+                    session.messages,
+                    max_tokens=spec.max_tokens,
+                    effort=spec.effort,
+                    cache_key=session.id,
+                )
+            except (openai_loop.OpenAIStatusError, httpx.TransportError) as e:
+                status = getattr(e, "status_code", None)
+                if status and 400 <= status < 500 and status != 429:
+                    raise  # our bug — don't retry blindly
+                logger.warning("OpenAI API error (attempt %d): %s", attempt + 1, e)
+                if attempt < 2:
+                    await asyncio.sleep(delay)
+                delay *= 3
+        return None
+
     # ─── Bookkeeping ─────────────────────────────────────────────────────
+
+    def _set_trigger(self, session: AgentSession, events: list[Event]) -> None:
+        about = next((e.payload.get("description") for e in events if e.payload.get("description")), "")
+        self._triggers[session.id] = {"kinds": [e.kind for e in events], "about": str(about)[:200], "step": 0}
+
+    def _ledger_call(self, session: AgentSession, started: float, response=None, error: str = "") -> None:
+        """Write one model call to the cost ledger: what woke it, what it cost,
+        what it asked for."""
+        trigger = self._triggers.setdefault(session.id, {"kinds": [], "about": "", "step": 0})
+        entry = session.spend.entries[-1] if response is not None and session.spend.entries else {}
+        tools = [{"id": b.id, "name": b.name} for b in (response.content if response is not None else []) if b.type == "tool_use"]
+        self._current_call[session.id] = ledger.record_call(
+            self.store, session_id=session.id, job_id=session.job_id, user_id=session.user_id,
+            agent=session.agent.value, phase=session.agent.value, model=session.model, usage=entry,
+            cost=float(entry.get("cost") or 0), latency=round(time.time() - started, 3),
+            trigger=dict(trigger), tools=tools, error=error[:500],
+        )
+        trigger["step"] += 1
 
     def _wake_text(self, session: AgentSession, events: list[Event]) -> str:
         lines = [f"[wake] {time.strftime('%A %Y-%m-%d %H:%M %Z', time.localtime())}"]
@@ -789,17 +911,18 @@ class AgentRuntime:
         s.dollars = sum(float(entry.get("cost") or 0) for entry in s.entries)
 
     def _trim_history(self, session: AgentSession) -> None:
+        _drop_orphan_results(session)
         msgs = session.messages
         if len(msgs) <= HISTORY_TRIM_AT:
             return
-        # Cut at a clean user-text boundary so tool_use/tool_result pairs
-        # never split. A [wake] message is always such a boundary.
+        # Cut at a user message. Wake text is merged into the message holding
+        # the last tool results, so the cut one's results lose their calls:
+        # they go too (the journal and memory keep what mattered).
         cut = len(msgs) - HISTORY_TRIM_TO
-        while cut < len(msgs) - 1:
-            m = msgs[cut]
-            if m.get("role") == "user" and isinstance(m.get("content"), str):
-                break
+        while cut < len(msgs) - 1 and msgs[cut].get("role") != "user":
             cut += 1
+        if msgs[cut].get("role") != "user":
+            return
         session.messages = [
             {
                 "role": "user",
@@ -808,6 +931,23 @@ class AgentRuntime:
             },
             {"role": "assistant", "content": "Understood."},
         ] + msgs[cut:]
+        _drop_orphan_results(session)
+
+
+def _drop_orphan_results(session: AgentSession) -> None:
+    """Remove tool results whose call is no longer in the history (a trim
+    cut it): every provider rejects a result without its call."""
+    calls = set()
+    for message in session.messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        if message.get("role") == "assistant":
+            calls.update(b.get("id") for b in content if isinstance(b, dict) and b.get("type") == "tool_use")
+            continue
+        kept = [b for b in content if not (isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") not in calls)]
+        if len(kept) != len(content):
+            message["content"] = kept or "(continuing)"
 
 
 def _append_user(session: AgentSession, text: str) -> None:

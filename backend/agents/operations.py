@@ -117,9 +117,14 @@ EVENTS = {
     "subtitle_review_pending": (
         "subtitle",
         "warning",
-        "Subtitle review didn’t finish. Try again from Subtitle help in the player.",
+        "Subtitles are ready but the check didn’t finish. Try again from Subtitle help in the player.",
     ),
-    "subtitle_ready": ("subtitle", "success", "Subtitles fixed and checked."),
+    "subtitle_ready": ("subtitle", "success", "Subtitles ready."),
+    "subtitle_checked": (
+        "subtitle",
+        "success",
+        "Subtitles checked against the dialogue.",
+    ),
 }
 
 
