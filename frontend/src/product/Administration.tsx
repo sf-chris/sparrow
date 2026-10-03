@@ -21,6 +21,8 @@ import {
 import { Tick } from "./Brand";
 import SubtitleProviderSettings from "./SubtitleProviderSettings";
 import { PreferenceFields } from "./Preferences";
+import { KEYS, KeyField } from "./Keys";
+import DownloadApp from "./DownloadApp";
 
 export function Defaults() {
   const resource = useResource(() =>
@@ -162,23 +164,13 @@ export function Defaults() {
   );
 }
 
-export function ServerSettings({
-  setupSection,
-  onSaved,
-}: {
-  setupSection?: "providers" | "downloads";
-  onSaved?: () => void | Promise<void>;
-} = {}) {
+export function ServerSettings() {
   const resource = useResource(() => api<Record<string, any>>("/admin/config"));
   const [draft, setDraft] = useState<Record<string, any>>({});
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const values = { ...resource.data, ...draft };
-  const tc = {
-    ...(resource.data?.torrent_client || {}),
-    ...(draft.torrent_client || {}),
-  };
   const set = (key: string, value: unknown) => {
     setDraft({ ...draft, [key]: value });
     setSaved(false);
@@ -191,7 +183,6 @@ export function ServerSettings({
       setDraft({});
       setSaved(true);
       await resource.refresh();
-      await onSaved?.();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -199,229 +190,99 @@ export function ServerSettings({
     }
   }
   return (
-    <Page
-      embedded={!!setupSection}
-      title={
-        setupSection === "providers"
-          ? "Keys"
-          : setupSection === "downloads"
-            ? "Download app"
-            : "Connections"
-      }
-      lede={
-        setupSection === "providers"
-          ? "Both keys stay on this server."
-          : setupSection === "downloads"
-            ? "Connect Transmission or qBittorrent. Sparrow doesn’t install one."
-            : undefined
-      }
-    >
+    <Page title="Connections">
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {resource.data ? (
         <div className="form">
-          {setupSection !== "downloads" && (
-            <Section title="Services">
-              {setupSection && (
-                <p className="muted section-note">
-                  Get them from{" "}
-                  <a
-                    href="https://www.themoviedb.org/settings/api"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    TMDB
-                  </a>{" "}
-                  and the{" "}
-                  <a
-                    href="https://platform.claude.com/settings/keys"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Claude Console
-                  </a>
-                  .
-                </p>
-              )}
-              <div className="form-grid">
-                <Field
-                  label="TMDB API key"
-                  hint={
-                    values.tmdb_api_key_configured
-                      ? "Saved. Leave blank to keep it."
-                      : "Film, series and episode details."
+          <Section
+            title="Keys"
+            description="Kept on this server and never shown again."
+          >
+            <div className="form-grid keys-grid">
+              {KEYS.map((spec) => (
+                <KeyField
+                  key={spec.name}
+                  spec={spec}
+                  saved={!!resource.data![`${spec.name}_configured`]}
+                  value={draft[spec.name] || ""}
+                  onChange={(value) => set(spec.name, value)}
+                />
+              ))}
+            </div>
+          </Section>
+          <Section title="Models">
+            <div className="form-grid">
+              <Field label="Search source" hint="Only one source is available.">
+                <select
+                  value={values.preferred_search_engines?.[0] || "apibay"}
+                  onChange={(e) =>
+                    set("preferred_search_engines", [e.target.value])
                   }
                 >
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={draft.tmdb_api_key || ""}
-                    onChange={(e) => set("tmdb_api_key", e.target.value)}
-                  />
-                </Field>
-                <Field
-                  label="Anthropic API key"
-                  hint={
-                    values.anthropic_api_key_configured
-                      ? "Saved. Leave blank to keep it."
-                      : "Needed for requests and Ask Sparrow, not for watching. Anthropic bills for use."
+                  <option value="apibay">Built-in source</option>
+                  {values.preferred_search_engines?.[0] &&
+                    values.preferred_search_engines[0] !== "apibay" && (
+                      <option value={values.preferred_search_engines[0]} disabled>
+                        Previous source (unavailable)
+                      </option>
+                    )}
+                </select>
+              </Field>
+              <Field label="Everyday model">
+                <input
+                  value={values.cheap_model || ""}
+                  onChange={(e) => set("cheap_model", e.target.value)}
+                />
+              </Field>
+              <Field label="Hard-case model">
+                <input
+                  value={values.smart_model || ""}
+                  onChange={(e) => set("smart_model", e.target.value)}
+                />
+              </Field>
+            </div>
+          </Section>
+          <SubtitleProviderSettings />
+          <Section
+            title="Download app"
+            description="On this server. A paired Windows machine sets its own in Sparrow Node."
+          >
+            <DownloadApp />
+            <div className="form-grid download-limits">
+              <Field label="Downloads at once">
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={values.max_active_transfers || 1}
+                  onChange={(e) =>
+                    set("max_active_transfers", Number(e.target.value))
                   }
-                >
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={draft.anthropic_api_key || ""}
-                    onChange={(e) => set("anthropic_api_key", e.target.value)}
-                  />
-                </Field>
-                {!setupSection && (
-                  <>
-                    <Field
-                      label="Search source"
-                      hint="Only one source is available."
-                    >
-                      <select
-                        value={values.preferred_search_engines?.[0] || "apibay"}
-                        onChange={(e) =>
-                          set("preferred_search_engines", [e.target.value])
-                        }
-                      >
-                        <option value="apibay">Built-in source</option>
-                        {values.preferred_search_engines?.[0] &&
-                          values.preferred_search_engines[0] !== "apibay" && (
-                            <option
-                              value={values.preferred_search_engines[0]}
-                              disabled
-                            >
-                              Previous source (unavailable)
-                            </option>
-                          )}
-                      </select>
-                    </Field>
-                    <Field label="Everyday model">
-                      <input
-                        value={values.cheap_model || ""}
-                        onChange={(e) => set("cheap_model", e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Hard-case model">
-                      <input
-                        value={values.smart_model || ""}
-                        onChange={(e) => set("smart_model", e.target.value)}
-                      />
-                    </Field>
-                  </>
-                )}
-              </div>
-            </Section>
-          )}
-          {!setupSection && <SubtitleProviderSettings />}
-          {setupSection !== "providers" && (
-            <Section
-              title="Download app"
-              description="On this server. A paired Windows machine sets its own in Sparrow Node."
-            >
-              <div className="form-grid">
-                <Field label="Download app">
-                  <select
-                    value={tc.type || "none"}
-                    onChange={(e) =>
-                      set("torrent_client", {
-                        ...tc,
-                        type: e.target.value,
-                        port: e.target.value === "transmission" ? 9091 : 8080,
-                      })
-                    }
-                  >
-                    <option value="none">None</option>
-                    <option value="transmission">Transmission</option>
-                    <option value="qbittorrent">qBittorrent</option>
-                  </select>
-                </Field>
-                <Field label="Host">
-                  <input
-                    value={tc.host || "localhost"}
-                    onChange={(e) =>
-                      set("torrent_client", { ...tc, host: e.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Port">
-                  <input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={tc.port || 8080}
-                    onChange={(e) =>
-                      set("torrent_client", {
-                        ...tc,
-                        port: Number(e.target.value),
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Username">
-                  <input
-                    autoComplete="off"
-                    value={tc.username || ""}
-                    onChange={(e) =>
-                      set("torrent_client", { ...tc, username: e.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Password" hint="Leave blank to keep it.">
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={draft.torrent_client?.password || ""}
-                    onChange={(e) =>
-                      set("torrent_client", { ...tc, password: e.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Downloads at once">
-                  <input
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={values.max_active_transfers || 1}
-                    onChange={(e) =>
-                      set("max_active_transfers", Number(e.target.value))
-                    }
-                  />
-                </Field>
-                <Field label="Seeding ratio limit" hint="0 means no limit.">
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={values.seeding_ratio_limit ?? 2}
-                    onChange={(e) =>
-                      set("seeding_ratio_limit", Number(e.target.value))
-                    }
-                  />
-                </Field>
-                <Field
-                  label="Seeding time limit (hours)"
-                  hint="0 means no limit."
-                >
-                  <input
-                    type="number"
-                    min={0}
-                    value={values.seeding_time_hours ?? 0}
-                    onChange={(e) =>
-                      set("seeding_time_hours", Number(e.target.value))
-                    }
-                  />
-                </Field>
-              </div>
-            </Section>
-          )}
-          {setupSection === "downloads" && (
-            <p className="muted">
-              In Docker, “localhost” is the Sparrow container. Use the download
-              app’s network address.
-            </p>
-          )}
+                />
+              </Field>
+              <Field label="Seeding ratio limit" hint="0 means no limit.">
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={values.seeding_ratio_limit ?? 2}
+                  onChange={(e) =>
+                    set("seeding_ratio_limit", Number(e.target.value))
+                  }
+                />
+              </Field>
+              <Field label="Seeding time limit (hours)" hint="0 means no limit.">
+                <input
+                  type="number"
+                  min={0}
+                  value={values.seeding_time_hours ?? 0}
+                  onChange={(e) =>
+                    set("seeding_time_hours", Number(e.target.value))
+                  }
+                />
+              </Field>
+            </div>
+          </Section>
           <div className="savebar">
             <span className="done-note" role="status">
               {saved && (
@@ -431,7 +292,7 @@ export function ServerSettings({
               )}
             </span>
             <button className="btn primary" disabled={busy} onClick={save}>
-              {busy ? "Saving…" : setupSection ? "Save and continue" : "Save"}
+              {busy ? "Saving…" : "Save"}
             </button>
           </div>
         </div>

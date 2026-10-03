@@ -17,8 +17,14 @@ The second command prints a link that fills the setup code automatically, and
 the code for manual entry. Open the link and choose **Create administrator account**,
 then choose household defaults. This is a one-time first-account setup, entirely
 on your server. The setup code stops working after the account is made.
-The server setup flow then guides you through TMDB and reasoning credentials,
-local or paired storage, a download app and a setup summary. Choose **Watch my
+The server setup flow then guides you through TMDB, Anthropic and optional OpenAI
+keys, local or paired storage, a download app and a setup summary. Each key field
+says whether the server already has that key; a blank box keeps it. The download
+step looks for Transmission or qBittorrent by itself (this server, and the Docker
+host and Compose services when in a container). If none is found, **Set up
+Transmission for me** runs the Transmission bundled in the image, listening on
+the container's loopback only with a generated password, and restarts it with
+Sparrow. Choose **Watch my
 existing collection** to import and watch without API keys or a download app.
 Settings and the current step survive refresh, sign-out and server restart.
 **Finish later** leaves setup unfinished and provides a **Continue setup** link;
@@ -62,7 +68,8 @@ then medium at `/data/models/whisper-medium`, then the bundled base model, or th
 directory in `SPARROW_EVIDENCE_MODEL`. `python packaging/fetch_model.py DESTINATION
 whisper_evidence` fetches the pinned turbo revision (about 1.6 GB). The optional
 subtitle agent (Preferences → Subtitle agent) needs an Anthropic key in Settings
-and uses Claude Opus 5.5. Add `OPENAI_API_KEY` to `.env` so Opus manages cheap
+and uses Claude Opus 5.5. Add an OpenAI key in **Settings → Connections** (or
+`OPENAI_API_KEY` in `.env`; a saved key wins) so Opus manages cheap
 page checkers (GPT-6-Luna, with GPT-6-Sol re-checking flags) instead of reading
 every page itself; measured costs are under $1 per episode or film.
 `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT`, `SPARROW_SUBTITLE_CONTRACTOR`,
@@ -79,9 +86,16 @@ and node server addresses too.
 Plain HTTP is a local-network option; installing the PWA on a phone requires a
 trusted secure browser context. External access setup is deferred.
 
-For server-local files, add explicit bind mounts for separate library/incoming
-folders and choose their **container paths** in Storage settings. UID 10001 must
-have access. Windows paths belong in Sparrow Node's setup, not Linux settings.
+Compose mounts a media folder at `/media`. Without settings it is a Docker volume
+holding `/media/Library` and `/media/Incoming`. To use a folder on the server, set
+`SPARROW_MEDIA_DIR=/srv/media` in `.env`, and set `SPARROW_MEDIA_GID` to that
+folder's group ID (`stat -c %g /srv/media`) so UID 10001 can write to
+group-writable folders. Then choose `/media/...` paths in Storage; setup suggests
+them and creates a missing last folder. Library and incoming folders on the same
+mount move files without copying. Windows paths belong in Sparrow Node's setup,
+not Linux settings. A download app outside the container must save to the
+incoming folder at the same path Sparrow sees, so Sparrow's own Transmission is
+simpler in Docker.
 
 ## Windows storage
 

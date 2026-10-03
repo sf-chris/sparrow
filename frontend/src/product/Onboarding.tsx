@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, patch, post } from "./api";
 import { ErrorNote, Loading, Page, useResource } from "./ui";
 import { Tick } from "./Brand";
-import { ServerSettings } from "./Administration";
+import { KEYS, KeyField, type KeyName } from "./Keys";
+import DownloadApp from "./DownloadApp";
 import Storage from "./Storage";
 
 type Step = "start" | "providers" | "storage" | "downloads" | "review";
@@ -14,6 +15,7 @@ type Setup = {
   step: Step;
   tmdb_configured: boolean;
   reasoning_configured: boolean;
+  openai_configured: boolean;
   libraries: string[];
   download_destinations: string[];
   can_finish: boolean;
@@ -29,15 +31,12 @@ export default function Onboarding({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const state = resource.data;
+  const library = state?.mode === "library";
   const steps: { id: Step; label: string }[] = [
     { id: "start", label: "Start" },
-    ...(state?.mode === "library"
-      ? []
-      : [{ id: "providers" as Step, label: "Keys" }]),
+    ...(library ? [] : [{ id: "providers" as Step, label: "Keys" }]),
     { id: "storage", label: "Storage" },
-    ...(state?.mode === "library"
-      ? []
-      : [{ id: "downloads" as Step, label: "Downloads" }]),
+    ...(library ? [] : [{ id: "downloads" as Step, label: "Downloads" }]),
     { id: "review", label: "Finish" },
   ];
   async function update(
@@ -53,18 +52,6 @@ export default function Onboarding({
       setBusy(false);
     }
   }
-  async function advance(step: Step) {
-    const current = await api<Setup>("/admin/onboarding");
-    resource.setData(current);
-    if (
-      current.step === "providers" &&
-      (!current.tmdb_configured || !current.reasoning_configured)
-    )
-      throw new Error(
-        "Add both keys, or go back and choose Watch my existing collection.",
-      );
-    await update({ step });
-  }
   async function leave(finish: boolean) {
     setBusy(true);
     setError("");
@@ -72,41 +59,51 @@ export default function Onboarding({
       if (finish) await post("/admin/onboarding/finish");
       else await patch("/admin/onboarding", { deferred: true });
       await onChanged();
-      navigate(
-        finish
-          ? state?.mode === "library"
-            ? "/settings/storage"
-            : "/discover"
-          : "/",
-        { replace: true },
-      );
+      navigate(finish ? (library ? "/settings/storage" : "/discover") : "/", {
+        replace: true,
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
+  /** Every step ends the same way: leave for now on the left, go on at the right. */
+  const bar = (actions: ReactNode) => (
+    <div className="savebar setup-bar">
+      <button
+        className="btn quiet later"
+        type="button"
+        disabled={busy}
+        onClick={() => void leave(false)}
+      >
+        Finish later
+      </button>
+      {actions}
+    </div>
+  );
+  const keyState = (configured: boolean, required: boolean) =>
+    configured ? "On server" : required && !library ? "Missing" : "Optional";
   const checks = state
     ? [
         {
           label: "TMDB key",
           ok: state.tmdb_configured,
-          value: state.tmdb_configured
-            ? "Saved"
-            : state.mode === "library"
-              ? "Optional"
-              : "Missing",
+          value: keyState(state.tmdb_configured, true),
           step: "providers" as Step,
         },
         {
           label: "Anthropic key",
           ok: state.reasoning_configured,
-          value: state.reasoning_configured
-            ? "Saved"
-            : state.mode === "library"
-              ? "Optional"
-              : "Missing",
+          value: keyState(state.reasoning_configured, true),
           step: "providers" as Step,
+        },
+        {
+          label: "OpenAI key",
+          ok: state.openai_configured,
+          value: keyState(state.openai_configured, false),
+          step: "providers" as Step,
+          optional: true,
         },
         {
           label: "Library",
@@ -121,7 +118,7 @@ export default function Onboarding({
           ok: state.download_destinations.length > 0,
           value: state.download_destinations.length
             ? state.download_destinations.join(", ")
-            : state.mode === "library"
+            : library
               ? "Later"
               : "No download app yet",
           step: "downloads" as Step,
@@ -129,12 +126,11 @@ export default function Onboarding({
       ]
     : [];
   return (
-    <Page className="setup-page" title="Setup">
-      <ErrorNote error={error || resource.error} retry={resource.refresh} />
-      {!state ? (
-        <Loading label="Loading setup" />
-      ) : (
-        <>
+    <Page
+      className="setup-page"
+      title="Setup"
+      action={
+        state && (
           <nav className="steps" aria-label="Setup steps">
             <ol>
               {steps.map(({ id, label }, index) => (
@@ -152,8 +148,16 @@ export default function Onboarding({
               ))}
             </ol>
           </nav>
+        )
+      }
+    >
+      <ErrorNote error={error || resource.error} retry={resource.refresh} />
+      {!state ? (
+        <Loading label="Loading setup" />
+      ) : (
+        <>
           {state.step === "start" && (
-            <section className="setup-start" aria-labelledby="start">
+            <section className="setup-step" aria-labelledby="start">
               <h2 id="start" className="setup-heading">
                 How do you want to start?
               </h2>
@@ -194,67 +198,66 @@ export default function Onboarding({
                   </span>
                 </button>
               </div>
+              {bar(null)}
             </section>
           )}
           {state.step === "providers" && (
-            <ServerSettings
-              key="providers"
-              setupSection="providers"
-              onSaved={() => advance("storage")}
+            <KeysStep
+              bar={bar}
+              onDone={async () => {
+                await resource.refresh();
+                await update({ step: "storage" });
+              }}
             />
           )}
           {state.step === "storage" && (
-            <>
+            <section className="setup-step" aria-labelledby="storage-step">
+              <h2 id="storage-step" className="setup-heading">
+                Storage
+              </h2>
+              <p className="setup-lede">
+                {library
+                  ? "The folder where your films and series are."
+                  : "Where films and series go, and a separate folder for downloads in progress."}
+              </p>
               <Storage onboarding onChanged={resource.refresh} />
-              <div className="savebar">
-                <p className="muted">
-                  {state.mode !== "library" &&
-                    "Downloads need a separate incoming folder Sparrow can write to."}
-                </p>
+              {bar(
                 <button
-                  className="btn primary"
+                  className={`btn ${state.libraries.length ? "primary" : ""}`}
                   disabled={busy}
                   onClick={() =>
-                    void update({
-                      step: state.mode === "library" ? "review" : "downloads",
-                    })
+                    void update({ step: library ? "review" : "downloads" })
                   }
                 >
-                  Continue
-                </button>
-              </div>
-            </>
+                  {state.libraries.length ? "Continue" : "Skip for now"}
+                </button>,
+              )}
+            </section>
           )}
           {state.step === "downloads" && (
-            <>
-              {state.download_destinations.length > 0 && (
-                <p className="done-note" role="status">
-                  <Tick /> Downloads set up on{" "}
-                  {state.download_destinations.join(", ")}.
-                </p>
-              )}
-              <ServerSettings
-                key="downloads"
-                setupSection="downloads"
-                onSaved={() => advance("review")}
-              />
-              <div className="row">
-                <p className="muted">
-                  Downloading on a paired Windows computer? Set up its download
-                  app in Sparrow Node.
-                </p>
+            <section className="setup-step" aria-labelledby="downloads-step">
+              <h2 id="downloads-step" className="setup-heading">
+                Download app
+              </h2>
+              <p className="setup-lede">
+                Sparrow hands each download to a torrent app.
+              </p>
+              <DownloadApp onChanged={resource.refresh} />
+              {bar(
                 <button
-                  className="btn"
+                  className={`btn ${state.download_destinations.length ? "primary" : ""}`}
                   disabled={busy}
                   onClick={() => void update({ step: "review" })}
                 >
-                  Skip
-                </button>
-              </div>
-            </>
+                  {state.download_destinations.length
+                    ? "Continue"
+                    : "Skip for now"}
+                </button>,
+              )}
+            </section>
           )}
           {state.step === "review" && (
-            <section aria-labelledby="review">
+            <section className="setup-step" aria-labelledby="review">
               <h2 id="review" className="setup-heading">
                 Check your setup
               </h2>
@@ -262,13 +265,19 @@ export default function Onboarding({
                 {checks.map((check) => (
                   <li className="check-row" key={check.label}>
                     <span className="check-mark" aria-hidden="true">
-                      {check.ok ? <Tick /> : <span className="check-open" />}
+                      {check.ok ? (
+                        <Tick />
+                      ) : (
+                        <span
+                          className={`check-open ${check.optional || (library && check.step !== "storage") ? "optional" : ""}`}
+                        />
+                      )}
                     </span>
                     <div>
                       <h3>{check.label}</h3>
                       <p>{check.value}</p>
                     </div>
-                    {(state.mode !== "library" || check.step === "storage") && (
+                    {(!library || check.step === "storage") && (
                       <button
                         className="btn quiet"
                         disabled={busy}
@@ -290,37 +299,124 @@ export default function Onboarding({
                   Finish the open steps, or come back later.
                 </p>
               )}
-              <div className="savebar">
-                <button
-                  className="btn"
-                  onClick={resource.refresh}
-                  disabled={busy || resource.loading}
-                >
-                  Check again
-                </button>
-                <button
-                  className="btn primary"
-                  disabled={busy || !state.can_finish}
-                  onClick={() => void leave(true)}
-                >
-                  {state.mode === "library"
-                    ? "Finish and import"
-                    : "Finish and find something"}
-                </button>
-              </div>
+              {bar(
+                <>
+                  <button
+                    className="btn"
+                    onClick={resource.refresh}
+                    disabled={busy || resource.loading}
+                  >
+                    Check again
+                  </button>
+                  <button
+                    className="btn primary"
+                    disabled={busy || !state.can_finish}
+                    onClick={() => void leave(true)}
+                  >
+                    {library ? "Finish and import" : "Finish and find something"}
+                  </button>
+                </>,
+              )}
             </section>
           )}
-          <div className="setup-later">
-            <button
-              className="btn quiet"
-              disabled={busy}
-              onClick={() => void leave(false)}
-            >
-              Finish later
-            </button>
-          </div>
         </>
       )}
     </Page>
+  );
+}
+
+/** Keys never come back to the browser; each field says whether the server has one. */
+function KeysStep({
+  bar,
+  onDone,
+}: {
+  bar: (actions: ReactNode) => ReactNode;
+  onDone: () => Promise<void>;
+}) {
+  const config = useResource(() => api<Record<string, unknown>>("/admin/config"));
+  const [draft, setDraft] = useState<Partial<Record<KeyName, string>>>({});
+  const [missing, setMissing] = useState<KeyName[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const typed = Object.fromEntries(
+    Object.entries(draft)
+      .map(([name, value]) => [name, (value || "").trim()])
+      .filter(([, value]) => value),
+  );
+  const changed = Object.keys(typed).length > 0;
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      let saved = config.data!;
+      if (changed) {
+        saved = await patch<Record<string, unknown>>("/admin/config", typed);
+        config.setData(saved);
+        setDraft({});
+      }
+      const absent = KEYS.filter(
+        (key) => key.required && !saved[`${key.name}_configured`],
+      ).map((key) => key.name);
+      setMissing(absent);
+      if (absent.length) {
+        requestAnimationFrame(() =>
+          document
+            .querySelector<HTMLInputElement>(".key-field.invalid input")
+            ?.focus(),
+        );
+        return;
+      }
+      await onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="setup-step" aria-labelledby="keys-step" onSubmit={save}>
+      <h2 id="keys-step" className="setup-heading">
+        Keys
+      </h2>
+      <p className="setup-lede">
+        Kept on this server and never shown again.
+      </p>
+      <ErrorNote error={config.error} retry={config.refresh} />
+      {!config.data ? (
+        config.loading && <Loading label="Loading keys" />
+      ) : (
+        <div className="form-grid keys-grid">
+          {KEYS.map((spec) => (
+            <KeyField
+              key={spec.name}
+              spec={spec}
+              saved={!!config.data![`${spec.name}_configured`]}
+              value={draft[spec.name] || ""}
+              error={
+                missing.includes(spec.name) && !draft[spec.name]?.trim()
+                  ? "Needed to find and download."
+                  : undefined
+              }
+              onChange={(value) => setDraft({ ...draft, [spec.name]: value })}
+            />
+          ))}
+        </div>
+      )}
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+      {bar(
+        <button
+          className="btn primary"
+          type="submit"
+          disabled={busy || !config.data}
+        >
+          {busy ? "Saving…" : changed ? "Save and continue" : "Continue"}
+        </button>,
+      )}
+    </form>
   );
 }

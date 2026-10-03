@@ -111,7 +111,8 @@ Everything new lives in `backend/agents/`:
 - Current model defaults: Fetch cheap with smart review and escalation
   (`SPARROW_FETCH_SCOUT=off` keeps it smart throughout), Media cheap with self-escalation,
   Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
-  (household switch) is managed by GPT-6-Sol when `OPENAI_API_KEY` is set, else
+  (household switch) is managed by GPT-6-Sol when an OpenAI key is set (Settings →
+  Connections, or `OPENAI_API_KEY`), else
   Claude Opus 5.5 at medium effort with prompt caching. Cheap page checkers
   (GPT-6-Luna, GPT-6-Sol second opinion when borderline) read every page; the
   manager reads only what they flag plus audit pages. Sources are tried in order:

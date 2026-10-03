@@ -193,6 +193,7 @@ from .agents import resolution
 from . import __version__
 from .configuration import (
     apply_config_update, effective_anthropic_key, effective_tmdb_key, public_config,
+    track_saved_config,
 )
 from .doctor import build_report as build_doctor_report
 from .runtime_settings import (
@@ -202,6 +203,7 @@ from .runtime_settings import (
 
 DATA_DIR = str(Path(os.getenv("SPARROW_DATA_DIR", "./data")).expanduser().resolve(strict=False))
 storage = Storage(DATA_DIR)
+track_saved_config(storage.get_config)
 curator: Optional[Curator] = None
 agent_service: Optional[AgentService] = None
 
@@ -304,6 +306,9 @@ async def lifespan(app: FastAPI):
     subtitles.attach(agent_service)
     subtitles.recover()
     discovery.register()
+    from .services import managed_transmission
+    # Bring back Sparrow's own Transmission without delaying startup.
+    downloader_task = asyncio.create_task(managed_transmission.start_from_config(storage))
     task1 = asyncio.create_task(download_progress_loop())
     task2 = asyncio.create_task(artwork_enrichment_loop())
     task3 = asyncio.create_task(seeding_enforcer_loop())
@@ -322,6 +327,8 @@ async def lifespan(app: FastAPI):
     curator.stop()
     await agent_service.shutdown()
     await nodes.local().shutdown()
+    downloader_task.cancel()
+    await managed_transmission.shutdown()
     task1.cancel()
     task2.cancel()
     task3.cancel()
@@ -843,6 +850,7 @@ class ConfigUpdate(BaseModel):
     quality_preference: Optional[str] = None
     tmdb_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
     onboarding_complete: Optional[bool] = None
     auto_organize: Optional[bool] = None
     seeding_ratio_limit: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
@@ -856,6 +864,7 @@ class ConfigUpdate(BaseModel):
     cheap_model: Optional[str] = None
     clear_tmdb_api_key: bool = False
     clear_anthropic_api_key: bool = False
+    clear_openai_api_key: bool = False
 
 
 class AddDownloadRequest(BaseModel):

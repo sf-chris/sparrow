@@ -108,13 +108,22 @@ const out =
       .getByRole("button", { name: "Find and download for me", exact: true })
       .click();
     await page.getByLabel("Anthropic API key", { exact: true }).waitFor();
-    await page
-      .getByRole("button", { name: "Save and continue", exact: true })
-      .click();
+    // A key already on the server needs no retyping; a missing one is named at its field.
+    assert.equal(
+      await page.getByLabel("TMDB API key", { exact: true }).getAttribute("placeholder"),
+      "Leave blank to keep it",
+    );
+    await page.getByLabel("OpenAI API key", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
       .getByRole("alert")
-      .filter({ hasText: "Add both keys" })
+      .filter({ hasText: "Needed to find and download." })
       .waitFor();
+    assert.equal((await state()).step, "providers");
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.getAttribute("aria-invalid")),
+      "true",
+    );
     await audit("setup-provider-error");
     await page
       .getByLabel("Anthropic API key", { exact: true })
@@ -131,7 +140,7 @@ const out =
       .waitFor();
     assert.equal((await state()).step, "storage");
     await page
-      .getByRole("button", { name: "Choose folders", exact: true })
+      .getByRole("button", { name: /^(Choose|Change) folders$/ })
       .click();
     await page
       .getByLabel("Library folder", { exact: true })
@@ -152,10 +161,24 @@ const out =
       .click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page.getByLabel("Download app", { exact: true }).waitFor();
-    await audit("setup-downloads");
     await page
-      .getByRole("button", { name: "Save and continue", exact: true })
+      .getByRole("heading", { name: "Download app", exact: true })
+      .waitFor();
+    // Sparrow looks for one by itself; this fixture has none to find.
+    await page
+      .getByText("No download app found on this server.", { exact: true })
+      .waitFor({ timeout: 20000 });
+    await audit("setup-downloads");
+    await page.getByRole("button", { name: "enter its address", exact: true }).click();
+    await page.getByLabel("Address", { exact: true }).fill("127.0.0.1");
+    await page.getByLabel("Port", { exact: true }).fill("9");
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Nothing answered at 127.0.0.1:9." })
+      .waitFor({ timeout: 20000 });
+    await page
+      .getByRole("button", { name: "Skip for now", exact: true })
       .click();
     await page
       .getByRole("heading", { name: "Check your setup", exact: true })

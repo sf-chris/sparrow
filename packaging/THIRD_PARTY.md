@@ -15,6 +15,11 @@ licences and notices continue to apply; Sparrow does not claim ownership of them
   The Windows installer includes the pinned Microsoft installer for the native
   speech-processing runtime. https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist
 - HLS.js: BSD-2-Clause. https://github.com/video-dev/hls.js
+- Transmission 3.00 (container image only): GPL-2.0-or-later or GPL-3.0, the
+  Debian bookworm `transmission-daemon` package, run as a separate program when
+  the owner asks Sparrow to set up downloads. Its copyright notice is at
+  `/usr/share/doc/transmission-daemon/copyright`; Debian publishes the source.
+  https://transmissionbt.com/
 
 Python wheel metadata includes licences for the bundled Python dependencies.
 `collect_licenses.py` copies their notices into each packaged distribution.

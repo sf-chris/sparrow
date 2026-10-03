@@ -256,7 +256,7 @@ fs.mkdirSync(out, { recursive: true });
   await snapshot("storage-pair", true);
   await closeDialog();
   await page
-    .getByRole("button", { name: "Choose folders", exact: true })
+    .getByRole("button", { name: /^(Choose|Change) folders$/ })
     .click();
   await snapshot("storage-folders", true);
   await closeDialog();
