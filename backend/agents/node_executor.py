@@ -26,6 +26,13 @@ PROTOCOL = 1
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".m4v", ".mov", ".avi", ".webm", ".ts", ".wmv"}
 SUBTITLE_EXTENSIONS = {".srt", ".vtt", ".ass", ".ssa", ".sub"}
 READ_CHUNK = 1024 * 1024
+# Operations whose results are read once: delivered results are cleared and
+# their records pruned, so reads, polls and rendered pictures do not pile up.
+TRANSIENT_KINDS = (
+    "read", "stat", "hls_segment", "subtitle_extract", "subtitle_pictures",
+    "download_select", "download_status",
+)
+_TRANSIENT_SQL = ",".join(f"'{kind}'" for kind in TRANSIENT_KINDS)
 RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", re.I)
 
 
@@ -270,7 +277,7 @@ class Executor:
         with self.db() as db:
             if time.time() - self._last_prune > 300:
                 db.execute(
-                    "DELETE FROM operations WHERE delivered=1 AND created<? AND json_extract(payload,'$.kind') IN ('read','stat','hls_segment','subtitle_extract')",
+                    f"DELETE FROM operations WHERE delivered=1 AND created<? AND json_extract(payload,'$.kind') IN ({_TRANSIENT_SQL})",
                     (time.time() - 86400,),
                 )
                 self._last_prune = time.time()
@@ -306,7 +313,7 @@ class Executor:
             # The coordinator acknowledged receipt. Preserve the operation identity,
             # but do not retain entire streamed movies in the node database.
             db.execute(
-                "UPDATE operations SET result=? WHERE id=? AND json_extract(payload,'$.kind') IN ('read','stat','hls_segment','subtitle_extract')",
+                f"UPDATE operations SET result=? WHERE id=? AND json_extract(payload,'$.kind') IN ({_TRANSIENT_SQL})",
                 (
                     canonical(
                         {
@@ -370,6 +377,9 @@ class Executor:
                     "download_remove",
                     "download_stop",
                     "download_start",
+                    "download_select",
+                    "discard_staging",
+                    "withdraw",
                 ):
                     async with self._mutation_lock:
                         if command.get("expires", 0) < time.time():
@@ -460,10 +470,24 @@ class Executor:
             from .subtitle_node import candidates
 
             return await candidates(self, path, args)
+        if kind == "subtitle_pictures":
+            from .subtitle_node import picture_sheets
+
+            if args.get("version") != file_version(path):
+                raise NodeError("The file changed since track selection.")
+            return await picture_sheets(path, int(args["index"]))
         if kind == "subtitle_prepare":
             from .subtitle_node import prepare
 
             return await prepare(self, path, args)
+        if kind == "subtitle_evidence":
+            from .subtitle_node import evidence
+
+            return await evidence(self, path, args)
+        if kind == "subtitle_listen":
+            from .subtitle_node import listen
+
+            return await listen(self, path, args)
         if kind == "hls_segment":
             if self._hls_cache is None:
                 from .hls_cache import HLSCache
@@ -489,6 +513,9 @@ class Executor:
                 raise NodeError(
                     "This track needs image-subtitle support or a text alternative."
                 )
+            # Styled tracks stay ASS so drawings and effect layers can be told
+            # from dialogue; WebVTT conversion turns shapes into text.
+            styled = track["codec"] in ("ass", "ssa")
             output = await run_media(
                 "ffmpeg",
                 "-v",
@@ -498,21 +525,28 @@ class Executor:
                 "-map",
                 f"0:{index}",
                 "-f",
-                "webvtt",
+                "ass" if styled else "webvtt",
                 "pipe:1",
                 timeout=60,
             )
-            if len(output) > 2 * 1024 * 1024:
+            if len(output) > 16 * 1024 * 1024:
                 raise NodeError("This subtitle track exceeds the supported size.")
-            return {"vtt": output.decode("utf-8")}
+            text = output.decode("utf-8", errors="replace")
+            return {"text": text, "format": "ass"} if styled else {"vtt": text}
         if kind == "probe":
             if path.suffix.lower() not in VIDEO_EXTENSIONS:
                 raise NodeError("Choose a supported video file.")
             return await probe_file(path)
         if kind in ("stat", "read"):
-            if (
-                not path.is_file()
-                or path.suffix.lower() not in VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS
+            # Saved dialogue evidence is the one non-media document readable,
+            # and only at its exact cache location.
+            evidence = root_id == "cache" and re.fullmatch(
+                r"subtitle-evidence/[a-f0-9]{32}/evidence\.json",
+                str(args.get("path", "")),
+            )
+            if not path.is_file() or (
+                path.suffix.lower() not in VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS
+                and not evidence
             ):
                 raise NodeError("This is not a supported media file.")
             version = file_version(path)
@@ -556,6 +590,10 @@ class Executor:
             if incoming.is_symlink():
                 raise NodeError("Unsafe incoming folder.")
             temp = incoming / operation_id
+            for stale in incoming.iterdir():
+                # Copies interrupted a day ago and never resumed are abandoned.
+                if stale != temp and stale.is_file() and not stale.is_symlink() and time.time() - stale.stat().st_mtime > 86400:
+                    stale.unlink(missing_ok=True)
             needed = max(
                 0,
                 expected["size_bytes"] - (temp.stat().st_size if temp.exists() else 0),
@@ -581,7 +619,8 @@ class Executor:
                     raise NodeError(
                         "The copied bytes did not match the verified source; the original is safe."
                     )
-                if target.exists():
+                placed = not target.exists()
+                if not placed:
                     if sha256_file(target) != checksum:
                         raise NodeError(
                             "A different file already exists at the destination."
@@ -590,16 +629,48 @@ class Executor:
                     # Atomic no-clobber publication on NTFS and normal local Linux filesystems.
                     os.link(temp, target)
                 temp.unlink(missing_ok=True)
-                return checksum
+                return checksum, placed
 
-            checksum = await asyncio.to_thread(copy)
+            checksum, placed = await asyncio.to_thread(copy)
             facts = await probe_file(target)
             return {
                 "path": args["destination"],
                 "root_id": args.get("destination_root", "library"),
                 "sha256": checksum,
                 "facts": facts,
+                # Whether this publication created the file (an identical
+                # file already there belongs to whoever put it there).
+                "placed": placed,
             }
+        if kind == "discard_staging":
+            # A whole abandoned transfer folder, partial files included; the
+            # coordinator checks nothing was published from it.
+            parts = PurePosixPath(args.get("path", "")).parts
+            if root_id != "staging" or len(parts) != 1 or not parts[0].startswith("dl-"):
+                raise NodeError("Only an isolated transfer folder in staging may be discarded.")
+            if path.is_symlink() or not path.is_dir():
+                return {"removed": False}
+            shutil.rmtree(path)
+            return {"removed": True}
+        if kind == "withdraw":
+            # Only a file this node's own successful publication created, still
+            # holding the bytes it published: never other media.
+            with self.db() as db:
+                rows = db.execute(
+                    "SELECT result FROM operations WHERE json_extract(payload,'$.kind')='publish' "
+                    "AND json_extract(payload,'$.args.destination')=? "
+                    "AND COALESCE(json_extract(payload,'$.args.destination_root'),'library')='library' "
+                    "AND state='done' AND json_extract(result,'$.ok')=1 "
+                    "AND json_extract(result,'$.value.placed')=1",
+                    (args.get("path", ""),),
+                ).fetchall()
+            published = {json.loads(row["result"])["value"]["sha256"] for row in rows}
+            if root_id != "library" or not published or not path.is_file() or path.is_symlink():
+                raise NodeError("Only a copy Sparrow published here can be withdrawn.")
+            if await asyncio.to_thread(sha256_file, path) not in published:
+                raise NodeError("This file changed after Sparrow published it, so it was kept.")
+            path.unlink()
+            return {"removed": True}
         if kind == "delete_staging":
             if (
                 root_id != "staging"
@@ -690,6 +761,16 @@ class Executor:
             result = await manager.stop_torrent(info_hash)
         elif kind == "download_start":
             result = await manager.start_torrent(info_hash)
+        elif kind == "download_select":
+            if not current:
+                return {"pending": True}
+            from ..services.torrent_client import select_files
+
+            from .scout import resolve
+
+            files = [str(f) for f in (args.get("files") or [])][:200]
+            titles = [str(t) for t in (args.get("titles") or [])][:3]
+            return await select_files(manager, info_hash, files, lambda listing, wanted: resolve(listing, wanted, titles))
         elif kind == "download_remove":
             # Downloader never deletes files; folder jail owns any later cleanup.
             result = await manager.delete_torrent(info_hash, delete_files=False)

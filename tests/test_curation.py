@@ -243,6 +243,8 @@ class CurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(again.wanted_episodes, {"1": [1, 2]})
         self.assertGreater(again.revision, first.revision)
         self.assertEqual(len(self.service.store.get_jobs()), 1)
+        # A new request's Fetch Agent works through the scout on the cheap model.
+        self.assertEqual(self.service.store.get_session(first.session_id).model, self.service.cheap_model())
 
     async def test_care_cannot_replace_an_active_requests_preferences(self):
         first = await self.service.create_job(

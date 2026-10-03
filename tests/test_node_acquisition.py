@@ -213,6 +213,108 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
             self.catalogue.asset(self.owner, recorded["asset_id"])["state"], "ready"
         )
 
+    async def test_a_cheap_pick_downloads_only_after_review(self):
+        from backend.agents import acquisition_review, scout
+
+        row = dict(seeders=9, size=10**9, files=1, quality="1080p", source="WEB-DL", dual=False, subs=True, episode_size=10**9)
+        rows = [
+            {**row, "rid": "r1", "info_hash": "a" * 40, "name": "Fixture 2020 1080p", "coverage": "single"},
+            {**row, "rid": "r2", "info_hash": "b" * 40, "name": "Fixture collection", "coverage": "pack", "files": 5, "chosen": ["Fixture/Fixture.mkv"]},
+        ]
+        with patch.object(scout, "scout", AsyncMock(return_value=(rows, ["Fixture 2020"], 3, False))), patch.object(
+            scout, "titles_for", AsyncMock(return_value=(["Fixture"], [], ""))
+        ):
+            listing = await self.call("find_releases", {})
+        self.assertIn("r1 · 1.00 GB · 9 seeds", listing)
+        usage = {"input_tokens": 500, "output_tokens": 40}
+        decisions = [
+            ({"approve": False, "reason": "Neither copy fits.", "instead": "", "queries": ["Fixture 2020 BluRay"]}, 0.003, "smart", usage),
+            ({"approve": False, "reason": "The collection has the better copy.", "instead": "r2", "queries": []}, 0.003, "smart", usage),
+        ]
+        self.service.toolbox.select_soon = AsyncMock()
+        with patch.object(acquisition_review, "review", AsyncMock(side_effect=decisions)):
+            # Named "r1 files=…" instead of its row id: still that row.
+            vetoed = await self.call("propose_release", {"release": "r1 files=Fixture.mkv", "reason": "single file"})
+            self.assertIn("Reviewer suggests searching: Fixture 2020 BluRay", vetoed)
+            self.assertEqual(self.add_count, 0)
+            # A veto naming a better row downloads that row (named here by its release name).
+            approved = await self.call("propose_release", {"release": "Fixture 2020 1080p", "reason": "the best seeded"})
+        self.assertIn("The reviewer chose r2 instead", approved["approved"])
+        self.assertEqual(self.add_count, 1)
+        download = self.storage.get_download(approved["download_id"])
+        self.assertEqual(download.metadata["wanted_files"], ["Fixture/Fixture.mkv"])
+        self.assertAlmostEqual(self.session.spend.dollars, 0.006)
+        with self.assertRaises(ToolError):
+            await self.call("propose_release", {"release": "r9", "reason": "not listed"})
+
+    async def test_a_copy_abandoned_here_is_marked_last_and_never_chosen_again(self):
+        from backend.agents import acquisition_review, scout
+
+        row = dict(seeders=9, size=10**9, files=1, quality="1080p", source="WEB-DL", dual=False, subs=True, episode_size=10**9, coverage="single")
+        rows = [{**row, "rid": "r1", "info_hash": "a" * 40, "name": "Fixture stalled"},
+                {**row, "rid": "r2", "info_hash": "b" * 40, "name": "Fixture other"}]
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture stalled"})
+        await self.call("client_remove", {"download_id": first["download_id"]})
+        with patch.object(scout, "scout", AsyncMock(return_value=(rows, ["Fixture"], 0, False))), patch.object(
+            scout, "titles_for", AsyncMock(return_value=(["Fixture"], [], ""))
+        ):
+            listing = await self.call("find_releases", {})
+        self.assertIn("r2 · 1.00 GB · 9 seeds · 1080p WEB-DL · single release · subtitles likely, ALREADY ABANDONED", listing)
+        self.assertTrue(listing.index("Fixture other") < listing.index("Fixture stalled"))
+        veto = ({"approve": False, "reason": "The other is better.", "instead": "r2", "queries": []}, 0.003, "smart", {})
+        with patch.object(acquisition_review, "review", AsyncMock(return_value=veto)):
+            answer = await self.call("propose_release", {"release": "r1", "reason": "healthy"})
+        self.assertTrue(str(answer).startswith("Vetoed"))
+        self.assertEqual(self.add_count, 1)  # only the first, abandoned add
+
+    async def test_only_the_smart_model_searches_and_adds_directly(self):
+        cheap = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model=self.service.cheap_model())
+        smart = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model=self.service.smart_model())
+        names = lambda session: {t.name for t in self.service.runtime.tools_for(session)}
+        self.assertTrue({"find_releases", "propose_release", "escalate_model"} <= names(cheap))
+        self.assertFalse({"tpb_search", "client_add", "torrent_peek"} & names(cheap))
+        self.assertTrue({"tpb_search", "client_add", "find_releases"} <= names(smart))
+        self.assertFalse({"propose_release"} & names(smart))
+        self.assertEqual(self.service.fetch_model(), self.service.cheap_model())
+
+    async def test_a_removed_copy_added_again_reaches_the_download_app(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        await self.call("client_remove", {"download_id": first["download_id"]})
+        self.assertNotIn("a" * 40, self.client_state)
+        again = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        self.assertEqual(again["download_id"], first["download_id"])
+        self.assertEqual(self.add_count, 2)
+        self.assertIn("a" * 40, self.client_state)
+        # And removing it a second time really removes it.
+        await self.call("client_remove", {"download_id": again["download_id"]})
+        self.assertNotIn("a" * 40, self.client_state)
+        self.assertEqual(len(self.removed), 2)
+
+    async def test_adding_a_removed_copy_again_chooses_its_files_afresh(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture", "files": ["Fixture/part 1.mkv"]})
+        await self.call("client_remove", {"download_id": first["download_id"]})
+        await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        self.assertNotIn("wanted_files", self.storage.get_download(first["download_id"]).metadata)
+
+    async def test_an_offline_node_is_not_asked_to_choose_files(self):
+        result = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture", "files": ["Fixture/part 1.mkv"]})
+        self.worker.cancel()  # the node stops answering
+        await asyncio.gather(self.worker, return_exceptions=True)
+        offline = {**self.nodes.info(self.node_id), "online": False}
+        select = AsyncMock()
+        with patch.object(self.nodes, "info", return_value=offline), \
+                patch.object(self.service.toolbox, "apply_file_selection", select):
+            await asyncio.wait_for(self.service.reconcile_transfers(), 5)
+        select.assert_not_awaited()
+        self.assertNotEqual(self.storage.get_download(result["download_id"]).status, DownloadStatus.ERROR)
+
+    async def test_a_transfer_the_app_lost_is_added_again(self):
+        result = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        self.client_state.clear()
+        await self.service.reconcile_transfers()
+        self.assertEqual(self.add_count, 2)
+        self.assertEqual(self.storage.get_download(result["download_id"]).status, DownloadStatus.DOWNLOADING)
+
     async def test_durable_runtime_replay_does_not_add_a_second_download(self):
         from backend.agents.runtime import AgentRuntime
         from backend.agents.store import AgentStore
@@ -272,3 +374,201 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(args=args), self.assertRaises(ToolError):
                 await self.call("inventory_write", args, ctx, True)
+
+
+class ScoutJudgementTests(unittest.TestCase):
+    def test_wrong_seasons_remakes_dubs_and_dead_swarms_are_dropped(self):
+        from backend.agents import scout
+
+        job = SimpleNamespace(media_type="tv", year=1998, min_quality="720p", preferred_quality="1080p", audio_pref="original")
+        titles = ["Cowboy Bebop"]
+        judge = lambda name, seeds=5, files=1: scout.judge(
+            {"id": 1, "name": name, "info_hash": "c" * 40, "seeders": seeds, "size": 10**9, "num_files": files}, job, [(1, 5)], titles
+        )
+        self.assertEqual(judge("Cowboy Bebop S01E05 1080p BluRay")["coverage"], "single")
+        self.assertEqual(judge("Cowboy Bebop - 05 (1080p) [Dual Audio]")["coverage"], "single")
+        self.assertEqual(judge("Cowboy Bebop S01 1080p BluRay", files=26)["coverage"], "pack")
+        for name in ("Cowboy Bebop 2021 S01E05 1080p NF WEB-DL", "Cowboy Bebop S02E05 1080p", "Cowboy Bebop II - 05", "Cowboy Bebop S01E05 English Dubbed 1080p", "Cowboy Bebop S01E05 480p"):
+            self.assertIsNone(judge(name), name)
+        self.assertIsNone(judge("Cowboy Bebop S01E05 1080p", seeds=0))
+        self.assertIsNone(judge("LEGO Cowboy Bebop S01E05 1080p"))  # another show named after it
+        self.assertEqual(judge("[Group] Cowboy Bebop - 05 [1080p]")["coverage"], "single")
+        self.assertEqual(scout.queries(["Naruto", "NARUTO"], [(1, 2)], "tv"), ["Naruto S01E02", "Naruto", "NARUTO 02", "Naruto complete", "Naruto S01"])
+
+    def test_names_must_be_the_show_and_this_season(self):
+        from backend.agents import scout
+
+        def judge(name, titles, year=2014, wanted=(1, 2), files=1, exclude=()):
+            job = SimpleNamespace(media_type="tv", year=year, min_quality="720p", preferred_quality="1080p", audio_pref="original")
+            row = {"id": 1, "name": name, "info_hash": "c" * 40, "seeders": 5, "size": 10**9, "num_files": files}
+            return scout.judge(row, job, [wanted], titles, exclude)
+
+        # Other shows and parts named after this one.
+        for name, titles in (
+            ("Naruto Shippuden (001-500) Complete", ["Naruto"]),
+            ("Tokyo Ghoul Root A - 02 [1080p]", ["Tokyo Ghoul"]),
+            ("Monster The Ed Gein Story S01E02 1080p", ["Monster"]),
+            ("Dragon.Ball.DAIMA.S01E02.1080p.WEB-DL", ["Dragon Ball Z"]),
+            ("Samurai Champloo Music Record Disc 2", ["Samurai Champloo"]),
+            ("Kaguya-sama wa Kokurasetai! Tensai-tachi no Renai Zunousen 2 - 12", ["Kaguya-sama wa Kokurasetai: Tensaitachi no Renai Zunousen"]),
+        ):
+            self.assertIsNone(judge(name, titles, files=30), name)
+        # Another season's single episode or pack is not a pack to peek.
+        self.assertIsNone(judge("Re ZERO Starting Life in Another World S04E16 1080p", ["Re:ZERO -Starting Life in Another World-"], 2016, files=4))
+        self.assertIsNone(judge("Tokyo Ghoul 2014 Season 2 Complete 1080p WEB", ["Tokyo Ghoul"], files=12))
+        self.assertEqual(judge("My Hero Academia Seasons 1 to 6 +Movies", ["My Hero Academia"], 2016, files=140)["coverage"], "pack")
+        # A same-named live-action series: another year, or its episode's title.
+        self.assertIsNone(judge("ERASED 2017 S01E02 1080p NF WEB-DL", ["ERASED"], 2016))
+        self.assertIsNone(judge("ONE PIECE S01E02 THE MAN IN THE STRAW HAT 1080p", ["One Piece"], 1999, exclude=["THE MAN IN THE STRAW HAT"]))
+        # Titles with punctuation, subtitles and alternatives still match.
+        for name, titles in (
+            ("Re ZERO Starting Life in Another World S01E02 1080p", ["Re:ZERO -Starting Life in Another World-"]),
+            ("[HorribleSubs] Parasyte - the maxim - 02 [1080p]", ["Parasyte -the maxim-"]),
+            ("Oshi no Ko S01E02 Third Option 1080p", ["【OSHI NO KO】"]),
+            ("Dr STONE S01E02 2019 1080p NF WEB-DL", ["Dr. STONE"]),
+            ("Kaguya-sama wa Kokurasetai - 02 (720p)", ["Kaguya-sama: Love Is War", "Kaguya-sama wa Kokurasetai: Tensaitachi no Renai Zunousen"]),
+        ):
+            self.assertIsNotNone(judge(name, titles, year=2019), name)
+        # Non-Latin exclusions reduce to digits and must not exclude everything.
+        self.assertIsNotNone(judge("Solo Leveling S01E02 2024 1080p", ["Solo Leveling"], 2024, exclude=["Тільки я візьму Сезон 2"]))
+
+    def test_queries_are_written_for_the_index(self):
+        from backend.agents import scout
+
+        plan = scout.queries(["Re:ZERO -Starting Life in Another World-", "Re:Zero kara Hajimeru Isekai Seikatsu"], [(1, 2)], "tv", 2016)
+        self.assertEqual(plan[:4], [
+            "Re ZERO Starting Life in Another World S01E02", "Re ZERO Starting Life in Another World",
+            "Re Zero kara Hajimeru Isekai Seikatsu S01E02", "Re Zero kara Hajimeru Isekai Seikatsu 02",
+        ])
+        self.assertTrue(all(" -" not in q and ":" not in q for q in plan))
+        rows = [{"name": f"Naruto Shippuden - {n:03d}"} for n in range(5)] + [{"name": "Naruto - 002"}]
+        self.assertEqual(scout.blockers(rows, ["Naruto"]), ["shippuden"])
+
+    def test_the_first_5_title_ledger_run_findings(self):
+        from types import SimpleNamespace as NS
+
+        from backend.agents import scout
+        from backend.agents.node_tools import unsuitable
+        from backend.agents.release_match import episode_in
+
+        # "part 2" later in a name is not episode 2; a bracketed number is.
+        self.assertFalse(episode_in("[a-s]_samurai_champloo_-_14_-_misguided_miscreants_part_2__rs2_[1080p].mkv", 1, 2))
+        self.assertTrue(episode_in("[philosophy-raws][Samurai Champloo][02][BDRIP].mkv", 1, 2))
+        self.assertTrue(episode_in("Mob Psycho 100 - 02 [1080p].mkv", 1, 2))
+        # A pack named "+ Movies" is not an extras folder; its Movies/ folder is.
+        self.assertFalse(scout._extras("Naruto Complete Series + Movies Uncut/Naruto - 002 - Konohamaru.mkv"))
+        self.assertTrue(scout._extras("Naruto Complete/Movies/Naruto the Movie 2.mkv"))
+        self.assertTrue(scout._extras("Naruto Ocean Cut/Season 1 - Chunin Exams/Special #2 - Kakashi's Face!-1.m4v"))
+        # Raw releases (no subtitles) say so and rank below subtitled ones when subtitles are wanted.
+        job = NS(media_type="tv", year=2004, min_quality="720p", preferred_quality="1080p", audio_pref="original",
+                 preferences={"values": {"subtitle_languages": ["en"]}})
+        row = lambda name, seeds: scout.judge({"id": 1, "name": name, "info_hash": "e" * 40, "seeders": seeds, "size": 13e9, "num_files": 26},
+                                              job, [(1, 2)], ["Samurai Champloo"])
+        raw, subbed = row("Samurai Champloo (01-26) 1080p RAW", 64), row("[a-S] Samurai Champloo (01-26) (1080p)", 64)
+        self.assertTrue(raw["raw"] and not raw["subs"])
+        self.assertLess(scout.score(raw, job), scout.score(subbed, job))
+        # Pack sizes say what they measure.
+        row = dict(rid="r1", episode_size=5e8, size=13e9, seeders=64, quality="1080p", source="BLURAY", coverage="pack",
+                   files=26, unlisted=True, dual=False, subs=False, name="[a-S] Show (01-26)", chosen=["episode:S01E02"])
+        self.assertIn("0.50 GB an episode, estimated of a 13.0 GB pack", scout.table([row]))
+        # A season-wide placeholder runtime (Psycho-Pass: 28 min, really 23) is approximate.
+        from backend.agents.node_tools import runtime_matches
+
+        self.assertFalse(runtime_matches(22.87 * 60, 28))
+        self.assertTrue(runtime_matches(22.87 * 60, 28, approximate=True))
+        self.assertFalse(runtime_matches(120, 28, approximate=True))  # a sample
+        self.assertFalse(runtime_matches(46 * 60, 28, approximate=True))  # a double-length cut
+        self.assertTrue(runtime_matches(23.5 * 60, 24))
+        # A rejected copy says why.
+        job = NS(preferences={"values": {"max_file_size_gb": 3}, "policy": {}}, audio_pref="original",
+                 original_language="ja", min_quality="720p")
+        facts = {"audio_languages": ["eng"], "audio_tracks": [{"language": "eng"}], "quality": "720p", "size_bytes": 9e7}
+        self.assertIn("its audio is eng", " ".join(unsuitable(job, facts)))
+
+    def test_an_unlisted_pack_picks_its_episode_when_the_list_arrives(self):
+        from backend.agents import scout
+
+        files = [
+            {"name": "Show/Extras/Show - 02 NCOP.mkv", "size": 50},
+            {"name": "Show/Show - 01.mkv", "size": 400},
+            {"name": "Show/Show - 02.mkv", "size": 410},
+            {"name": "Show Season 2/Show - 02.mkv", "size": 420},
+        ]
+        self.assertEqual(scout.resolve(files, ["episode:S01E02"], ["Show"]), ["Show/Show - 02.mkv"])
+        self.assertEqual(scout.resolve(files, ["episode:S01E07"], ["Show"]), ["episode:S01E07"])
+        self.assertEqual(scout.resolve(files, ["Show/Show - 01.mkv"]), ["Show/Show - 01.mkv"])
+        # An oddly named single release keeps its video; subtitle files come along.
+        single = [{"name": "abc123/xyz.mkv", "size": 900}, {"name": "abc123/xyz.nfo", "size": 1}]
+        self.assertEqual(scout.resolve(single, ["episode:S01E02"]), ["abc123/xyz.mkv"])
+        with_subs = files + [{"name": "Show/Subs/Show - 02.eng.srt", "size": 3}, {"name": "Show/Subs/Show - 01.eng.srt", "size": 3}]
+        self.assertEqual(scout.resolve(with_subs, ["episode:S01E02"], ["Show"]), ["Show/Show - 02.mkv", "Show/Subs/Show - 02.eng.srt"])
+        self.assertEqual(scout.resolve(with_subs, ["Show/Show - 01.mkv"]), ["Show/Show - 01.mkv", "Show/Subs/Show - 01.eng.srt"])
+        self.assertTrue(scout.spans({"name": "[a-S] Samurai Champloo (01-26) (1080p)"}, [(1, 2)]))
+        self.assertFalse(scout.spans({"name": "Show (01-12)"}, [(1, 20)]))
+
+    def test_later_seasons_and_long_series_pick_their_episodes(self):
+        from backend.agents import scout
+
+        season = [{"name": f"Show S2/[SubsPlease] Show S2 - {n:02d} (1080p).mkv", "size": 400} for n in (4, 5)]
+        self.assertEqual(scout.resolve(season, ["episode:S02E05"], ["Show"]), ["Show S2/[SubsPlease] Show S2 - 05 (1080p).mkv"])
+        self.assertEqual(scout.resolve(season, ["episode:S01E05"], ["Show"]), ["episode:S01E05"])
+        series = [{"name": f"Show/Show - {n:03d}.mkv", "size": 400} for n in range(1, 1001)]
+        started = time.time()
+        chosen = scout.resolve(series, [f"episode:S01E{n:02d}" for n in range(1, 1001)], ["Show"])
+        self.assertEqual(len(chosen), 1000)
+        self.assertLess(time.time() - started, 5)
+
+    def test_a_failing_index_is_told_apart_from_an_empty_one(self):
+        import httpx
+        from backend.agents import scout
+
+        job = SimpleNamespace(media_type="tv", year=2020, min_quality="720p", preferred_quality="1080p",
+                              audio_pref="original", preferences={})
+
+        class Index:
+            def __init__(self, answer):
+                self.answer, self.calls = answer, 0
+
+            async def index_search(self, query, wait=0, log=None):
+                self.calls += 1
+                if isinstance(self.answer, Exception):
+                    raise self.answer
+                return self.answer, False
+
+        down = Index(httpx.ConnectError("unreachable"))
+        rows, searched, _, failing = asyncio.run(scout.scout(down, job, [(1, 2)], ["Show"]))
+        self.assertTrue(failing)
+        self.assertLessEqual(down.calls, 6)  # a failed search still used its slot
+        rows, searched, _, failing = asyncio.run(scout.scout(Index([]), job, [(1, 2)], ["Show"]))
+        self.assertFalse(failing)  # nothing seeded: an answer, not an outage
+        self.assertTrue(searched)
+
+        pack = {"id": "7", "name": "Show (01-12) 1080p BluRay", "info_hash": "d" * 40, "seeders": 50, "size": 60 * 10**9, "num_files": 12}
+        with patch.object(scout, "peek", AsyncMock(return_value=None)):
+            for cap, offered in ((2, 0), (10, 1)):
+                job.preferences = {"values": {"max_file_size_gb": cap}}
+                rows, *_ = asyncio.run(scout.scout(Index([pack]), job, [(1, 2)], ["Show"]))
+                self.assertEqual(len(rows), offered, cap)
+
+    def test_the_standard_cut_is_chosen_from_a_pack(self):
+        from backend.agents import scout
+
+        listing = [
+            {"name": {"0": "Show - 1x03 DC - Title [1080p].mkv"}, "size": {"0": "333"}},
+            {"name": {"0": "Show - 1x03 - Title [1080p].mkv"}, "size": {"0": "269"}},
+            {"name": {"0": "Show - 1x04 - Next [1080p].mkv"}, "size": {"0": "270"}},
+            {"name": {"0": "Show - 1x03 - Title sample.mkv"}, "size": {"0": "9"}},
+        ]
+        class Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, url):
+                return SimpleNamespace(json=lambda: listing)
+
+        with patch("httpx.AsyncClient", return_value=Client()):
+            chosen = asyncio.run(scout.peek("1", [(1, 3)], "tv"))
+        self.assertEqual(chosen[(1, 3)]["name"], "Show - 1x03 - Title [1080p].mkv")

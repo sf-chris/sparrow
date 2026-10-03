@@ -93,6 +93,53 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(files), 250)
         self.assertEqual(files[-1]["file"], "S01E250.mkv")
 
+    async def test_searches_queue_for_a_slot_and_repeats_are_free(self):
+        import asyncio
+        import time
+
+        self.toolbox.SEARCH_WINDOW, self.toolbox.SEARCH_LIMIT, self.toolbox.SEARCH_SPACING = 0.4, 2, 0
+        index = AsyncMock(side_effect=lambda query, strict: [{"name": query}])
+        with patch("backend.agents.tools.apibay_query", new=index):
+            await self.toolbox.index_search("one")
+            await self.toolbox.index_search("two")
+            self.assertEqual(await self.toolbox.index_search("ONE "), ([{"name": "one"}], True))
+            with self.assertRaisesRegex(ToolError, "rate limit"):
+                await self.toolbox.index_search("three")  # no waiting asked for
+            started = time.time()
+            rows, cached = await asyncio.wait_for(self.toolbox.index_search("three", wait=5), 3)
+        self.assertGreaterEqual(time.time() - started, 0.3)
+        self.assertEqual((rows, cached), ([{"name": "three"}], False))
+        self.assertEqual(index.await_count, 3)
+
+    async def test_a_short_wait_is_not_spent_queuing_behind_a_long_one(self):
+        import asyncio
+        import time
+
+        self.toolbox.SEARCH_WINDOW, self.toolbox.SEARCH_LIMIT, self.toolbox.SEARCH_SPACING = 30, 1, 0
+        await self.toolbox.rate_limit_search(wait=1)
+        long_wait = asyncio.create_task(self.toolbox.rate_limit_search(wait=60))  # holds the turn
+        await asyncio.sleep(0.05)
+        started = time.time()
+        with self.assertRaisesRegex(ToolError, "rate limit"):
+            await asyncio.wait_for(self.toolbox.rate_limit_search(wait=0.3), 5)
+        self.assertLess(time.time() - started, 1)
+        long_wait.cancel()
+        await asyncio.gather(long_wait, return_exceptions=True)
+        self.assertFalse(self.toolbox._search_turn.locked())
+
+    async def test_a_pack_downloads_only_the_episodes_still_missing(self):
+        self.job.media_type = "tv"
+        self.job.wanted_episodes = {"1": list(range(1, 251))}
+        self.store.save_job(self.job)
+        download = Download(id="dl-pack", name="Fixture complete", magnet_url="", media_type=MediaType.TV, torrent_hash="b" * 40,
+                            metadata={"agent_managed": True, "job_id": self.job.id})
+        owned = [{"season": 1, "episode": n} for n in range(1, 11)]
+        with patch("backend.agents.node_tools.scoped_assets", return_value=owned), \
+                patch("backend.agents.node_tools.suitable", return_value=True):
+            wanted = self.toolbox.selection_for(download)
+        self.assertEqual(len(wanted), 240)  # every missing episode, none already owned
+        self.assertEqual((wanted[0], wanted[-1]), ("episode:S01E11", "episode:S01E250"))
+
     async def test_mocked_acquisition_marks_download_agent_managed(self) -> None:
         async def connect():
             return _FakeTorrentManager(), True, "ready"
@@ -265,3 +312,88 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(old.exists())
         self.assertFalse(new.exists())
         self.assertEqual((self.library / "episode-new.mkv").read_bytes(), b"replacement")
+
+
+class PackSelectionTests(unittest.IsolatedAsyncioTestCase):
+    """Taking one episode from a pack downloads only that episode's file."""
+
+    asyncSetUp = ToolGuardrailTests.asyncSetUp
+    asyncTearDown = ToolGuardrailTests.asyncTearDown
+
+    def pack(self):
+        return [
+            {"name": "Show/Show - 01 [1080p].mkv", "size": 300},
+            {"name": "Show/Show - 02 [1080p].mkv", "size": 310},
+            {"name": "Show/Extras/Show - NCOP.mkv", "size": 50},
+        ]
+
+    async def test_only_the_chosen_file_downloads(self):
+        from backend.services.torrent_client import match_files
+
+        self.assertEqual(match_files(self.pack(), ["Show - 02 [1080p].mkv"]), [1])
+        self.assertEqual(match_files(self.pack(), ["show/show - 01 [1080p].MKV"]), [0])
+        self.assertEqual(match_files([{"name": "Pack/Show S01E02 DDP2.0 H.264.mkv"}], ["Show S01E02 DDP2 0 H 264.mkv"]), [0])
+        self.assertEqual(match_files(self.pack(), ["Show - 03 [1080p].mkv"]), [])
+        manager = Mock(get_files=AsyncMock(return_value=self.pack()), skip_files=AsyncMock(return_value=True))
+        download = Download(id="dl-x", name="Show pack", magnet_url="magnet:?", torrent_hash="b" * 40,
+                            metadata={"job_id": self.job.id, "wanted_files": ["Show - 02 [1080p].mkv"]})
+        await self.storage.add_download(download)
+        with patch.object(self.toolbox, "torrents", return_value=manager):
+            selection = await self.toolbox.apply_file_selection(download)
+        manager.skip_files.assert_awaited_once_with("b" * 40, [0, 2])
+        self.assertEqual(selection["files"], ["Show/Show - 02 [1080p].mkv"])
+        self.assertEqual(self.storage.get_download("dl-x").metadata["selection"]["bytes"], 310)
+
+    async def test_waits_for_the_file_list_and_stops_when_nothing_matches(self):
+        waiting = Mock(get_files=AsyncMock(return_value=[]), skip_files=AsyncMock())
+        download = Download(id="dl-y", name="Other pack", magnet_url="magnet:?", torrent_hash="c" * 40,
+                            metadata={"job_id": self.job.id, "wanted_files": ["Show - 05.mkv"]})
+        await self.storage.add_download(download)
+        with patch.object(self.toolbox, "torrents", return_value=waiting):
+            self.assertIsNone(await self.toolbox.apply_file_selection(download))
+        wrong = Mock(get_files=AsyncMock(return_value=self.pack()), skip_files=AsyncMock(), stop_torrent=AsyncMock(return_value=True))
+        with patch.object(self.toolbox, "torrents", return_value=wrong):
+            selection = await self.toolbox.apply_file_selection(download)
+        self.assertIn("error", selection)
+        wrong.stop_torrent.assert_awaited_once()
+        wrong.skip_files.assert_not_awaited()
+        self.assertEqual(self.storage.get_download("dl-y").status, DownloadStatus.ERROR)
+        self.assertEqual(self.events[-1].kind, "download_stalled")
+
+    async def test_a_storage_node_applies_the_choice_to_its_own_transfer(self):
+        from types import SimpleNamespace
+
+        calls = []
+
+        async def execute(node_id, kind, args, **kw):
+            calls.append((node_id, kind, args))
+            return {"files": ["Show/Show - 02 [1080p].mkv"], "skipped": 2, "bytes": 310}
+
+        self.toolbox.nodes = SimpleNamespace(execute=execute)
+        self.toolbox.catalogue = None
+        download = Download(id="dl-z", name="Show pack", magnet_url="magnet:?", torrent_hash="d" * 40,
+                            metadata={"job_id": self.job.id, "node_id": "local", "wanted_files": ["Show - 02 [1080p].mkv"]})
+        await self.storage.add_download(download)
+        selection = await self.toolbox.apply_file_selection(download)
+        self.assertEqual(calls, [("local", "download_select", {"hash": "d" * 40, "files": ["Show - 02 [1080p].mkv"], "titles": []})])
+        self.assertEqual(selection["skipped"], 2)
+        self.assertEqual(self.storage.get_download("dl-z").metadata["selection"]["bytes"], 310)
+
+
+class TransferSlotTests(unittest.IsolatedAsyncioTestCase):
+    asyncSetUp = ToolGuardrailTests.asyncSetUp
+    asyncTearDown = ToolGuardrailTests.asyncTearDown
+
+    async def test_free_slots_wake_the_longest_waiting_requests_once(self):
+        config = self.storage.get_config()
+        config.max_active_transfers = 2
+        await self.storage.save_config(config)
+        for job in ("first", "second", "third"):
+            self.toolbox.wait_for_slot(job)
+        self.assertEqual(self.toolbox.slots_to_offer(), ["first", "second"])
+        self.assertEqual(self.toolbox.slots_to_offer(), [])  # promised, not woken again
+        self.toolbox.slot_taken("first")
+        await self.storage.add_download(Download(id="dl-a", name="a", magnet_url="magnet:?", status=DownloadStatus.DOWNLOADING))
+        self.assertEqual(self.toolbox.slots_to_offer(), [])  # one active, one promised
+        self.toolbox.slot_taken("second")
+        self.assertEqual(self.toolbox.slots_to_offer(), ["third"])
