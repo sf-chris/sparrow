@@ -83,6 +83,19 @@ def input_items(messages: list[dict]) -> list[dict]:
     return items
 
 
+def provider_messages(messages: list[dict]) -> list[dict]:
+    """The history for a Assistant call: a session escalated from an AltProvider model
+    keeps its reasoning items, which only AltProvider can read."""
+    out = []
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "altprovider_reasoning" for b in content):
+            kept = [b for b in content if not (isinstance(b, dict) and b.get("type") == "altprovider_reasoning")]
+            message = {**message, "content": kept or "(continuing)"}
+        out.append(message)
+    return out
+
+
 def request_body(model, system, tools, messages, *, max_tokens, effort="", cache_key=""):
     body = {
         "model": model,

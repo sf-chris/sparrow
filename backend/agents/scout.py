@@ -331,6 +331,7 @@ def resolve(files, wanted, titles=()):
         names += [f"{UNLISTED}S{s:02d}E{e:02d}" for s, e in missing]
     # Subtitle files beside the chosen videos are often the best English track.
     season = targets[0][0] if targets else 1
+    by_episode = _by_episode(targets)
     stems = {_plain(n.rsplit("/", 1)[-1].rsplit(".", 1)[0]) for n in names if not n.startswith(UNLISTED)}
     for name, _ in entries:
         base = name.rsplit("/", 1)[-1]
@@ -338,23 +339,38 @@ def resolve(files, wanted, titles=()):
             continue
         stem = _plain(base.rsplit(".", 1)[0])
         if any(s and stem.startswith(s) for s in stems) or (
-            any(episode_in(base, *t) for t in targets) and not _other_part(name, titles, season, ())
+            any(episode_in(base, *t) for t in _possible(base, by_episode)) and not _other_part(name, titles, season, ())
         ):
             names.append(name)
     return names
 
 
+def _by_episode(targets):
+    by_episode = {}
+    for target in targets:
+        by_episode.setdefault(target[1], []).append(target)
+    return by_episode
+
+
+def _possible(base, by_episode):
+    """The targets a file name could be: its episode number is one of the
+    numbers in it, so a long series' pack is not matched name by target."""
+    return [t for n in dict.fromkeys(int(d) for d in re.findall(r"\d+", base)) for t in by_episode.get(n, ())]
+
+
 def choose(entries, targets, media_type, titles=(), exclude=()):
     """The wanted episodes' files among (name, size) entries."""
     season = targets[0][0] if targets else 1
+    by_episode = _by_episode(targets)
     files = []
     for name, size in entries:
         if not name.lower().endswith(VIDEO):
             continue
         if "sample" in name.lower() or (media_type != "movie" and _other_part(name, titles, season, exclude)):
             continue
-        for target in ([None] if media_type == "movie" else targets):
-            if target is None or episode_in(name.rsplit("/", 1)[-1], *target):
+        base = name.rsplit("/", 1)[-1]
+        for target in ([None] if media_type == "movie" else _possible(base, by_episode)):
+            if target is None or episode_in(base, *target):
                 files.append((target, {"name": name, "size": size}))
     chosen = {}
     for target, file in files:
@@ -369,12 +385,13 @@ def choose(entries, targets, media_type, titles=(), exclude=()):
 async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=(), log=None):
     """Search, judge, peek and rank; returns (rows, searched, dropped, failing).
 
-    failing: the index answered nothing even for the bare title, which means
-    it is failing, not that no copy exists. Repeated searches come from the
-    toolbox's cache and do not count against the allowance."""
+    failing: searches errored and none found a copy, so the index is failing;
+    that is not proof no copy exists (an empty answer is: it is reported as
+    nothing usable). Repeated searches come from the toolbox's cache and do
+    not count against the allowance."""
     plan = list(dict.fromkeys([*(searchable(q) for q in extra_queries), *queries(titles, targets, job.media_type, job.year)]))
     bare = {searchable(t).lower() for t in titles[:1]}
-    found, searched, used, failing = {}, [], 0, False
+    found, searched, used, errors = {}, [], 0, 0
     for query in plan:
         if used >= searches:
             break
@@ -389,10 +406,11 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
                 break  # searches are rationed: rank what was found
             raise
         except Exception:
+            # Unreachable or a bad answer: the search still used its slot.
+            used, errors = used + 1, errors + 1
             continue
         used += 0 if cached else 1
         searched.append(query)
-        failing = failing or (query.lower() in bare and not raw)
         for row in raw or []:
             candidate = judge(row, job, targets, titles, exclude)
             if candidate and candidate["info_hash"] and candidate["info_hash"] not in found:
@@ -429,13 +447,15 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
             if chosen is None and job.media_type != "movie" and spans(candidate, targets):
                 # The indexer has no file list, but the name covers the
                 # episodes: the download picks them once its list arrives.
-                rows.append({
-                    **candidate,
-                    "chosen": [f"{UNLISTED}S{s:02d}E{e:02d}" for s, e in targets],
-                    "covers": [list(t) for t in targets],
-                    "unlisted": True,
-                    "episode_size": candidate["size"] // max(candidate["files"], 1),
-                })
+                episode_size = candidate["size"] // max(candidate["files"], 1)
+                if not cap or episode_size <= cap * 1e9:
+                    rows.append({
+                        **candidate,
+                        "chosen": [f"{UNLISTED}S{s:02d}E{e:02d}" for s, e in targets],
+                        "covers": [list(t) for t in targets],
+                        "unlisted": True,
+                        "episode_size": episode_size,
+                    })
                 continue
             if not chosen:
                 continue  # no wanted episode in it, or its listing is unknown
@@ -457,7 +477,7 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
     rows.sort(key=lambda c: -score(c, job))  # packs now know what they cover
     for number, row in enumerate(rows, 1):
         row["rid"] = f"r{number}"
-    return rows, searched, len(found) - len(rows), failing and not found
+    return rows, searched, len(found) - len(rows), bool(errors) and not found
 
 
 async def titles_for(tb, job, season, targets=()):

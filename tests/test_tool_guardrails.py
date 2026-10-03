@@ -111,6 +111,35 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((rows, cached), ([{"name": "three"}], False))
         self.assertEqual(index.await_count, 3)
 
+    async def test_a_short_wait_is_not_spent_queuing_behind_a_long_one(self):
+        import asyncio
+        import time
+
+        self.toolbox.SEARCH_WINDOW, self.toolbox.SEARCH_LIMIT, self.toolbox.SEARCH_SPACING = 30, 1, 0
+        await self.toolbox.rate_limit_search(wait=1)
+        long_wait = asyncio.create_task(self.toolbox.rate_limit_search(wait=60))  # holds the turn
+        await asyncio.sleep(0.05)
+        started = time.time()
+        with self.assertRaisesRegex(ToolError, "rate limit"):
+            await asyncio.wait_for(self.toolbox.rate_limit_search(wait=0.3), 5)
+        self.assertLess(time.time() - started, 1)
+        long_wait.cancel()
+        await asyncio.gather(long_wait, return_exceptions=True)
+        self.assertFalse(self.toolbox._search_turn.locked())
+
+    async def test_a_pack_downloads_only_the_episodes_still_missing(self):
+        self.job.media_type = "tv"
+        self.job.wanted_episodes = {"1": list(range(1, 251))}
+        self.store.save_job(self.job)
+        download = Download(id="dl-pack", name="Fixture complete", magnet_url="", media_type=MediaType.TV, torrent_hash="b" * 40,
+                            metadata={"agent_managed": True, "job_id": self.job.id})
+        owned = [{"season": 1, "episode": n} for n in range(1, 11)]
+        with patch("backend.agents.node_tools.scoped_assets", return_value=owned), \
+                patch("backend.agents.node_tools.suitable", return_value=True):
+            wanted = self.toolbox.selection_for(download)
+        self.assertEqual(len(wanted), 240)  # every missing episode, none already owned
+        self.assertEqual((wanted[0], wanted[-1]), ("episode:S01E11", "episode:S01E250"))
+
     async def test_mocked_acquisition_marks_download_agent_managed(self) -> None:
         async def connect():
             return _FakeTorrentManager(), True, "ready"

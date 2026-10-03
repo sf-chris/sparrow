@@ -101,3 +101,55 @@ class MissingKeyTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaisesRegex(altprovider_loop.AltProviderStatusError, "needs an AltProvider key"):
                     await runtime._call_altprovider(session, "orders", [])
                 create.assert_not_called()
+
+    async def test_a_refused_call_releases_its_budget_hold(self):
+        import tempfile
+        from unittest.mock import AsyncMock
+        from backend.agents.models import AgentKind, AgentSession
+        from backend.agents.runtime import AgentRuntime, AgentSpec
+        from backend.agents.store import AgentStore
+
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = AgentRuntime(AgentStore(folder), lambda: "")
+            runtime._altprovider_key_getter = lambda: ""
+            spec = AgentSpec(kind=AgentKind.FETCH.value, model=lambda: "smart-model", system=AsyncMock(return_value="orders"), tools=lambda s: [])
+            runtime.register(spec)
+            session = AgentSession(agent=AgentKind.FETCH, model="smart-model")
+            runtime.store.save_session(session)
+            for _ in range(3):
+                with self.assertRaises(altprovider_loop.AltProviderStatusError):
+                    await runtime._budgeted_call(session, "orders", [], spec)
+            with runtime.store._connect() as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM reasoning_reservations").fetchone()[0], 0)
+
+
+class EscalationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_session_escalated_to_assistant_sends_no_altprovider_reasoning(self):
+        import tempfile
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from backend.agents.models import AgentKind, AgentSession
+        from backend.agents.runtime import AgentRuntime, AgentSpec
+        from backend.agents.store import AgentStore
+
+        history = [
+            {"role": "user", "content": "[wake] find episode 2"},
+            {"role": "assistant", "content": [
+                {"type": "altprovider_reasoning", "item": {"type": "reasoning", "encrypted_content": "opaque"}},
+                {"type": "tool_use", "id": "call_1", "name": "escalate_model", "input": {}},
+            ]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "call_1", "content": "Escalated."}]},
+            {"role": "assistant", "content": [{"type": "altprovider_reasoning", "item": {"type": "reasoning"}}]},
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = AgentRuntime(AgentStore(folder), lambda: "key")
+            runtime.register(AgentSpec(kind=AgentKind.FETCH.value, model=lambda: "assistant-large", system=AsyncMock(return_value="orders"), tools=lambda s: []))
+            client = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock(return_value="answer")), close=AsyncMock())
+            runtime._client = lambda: client
+            session = AgentSession(agent=AgentKind.FETCH, model="assistant-large", messages=history)
+            self.assertEqual(await runtime._call_api(session, "orders", []), "answer")
+        sent = client.create_message.await_args.kwargs["messages"]
+        self.assertNotIn("altprovider_reasoning", str(sent))
+        self.assertEqual(sent[1]["content"], [history[1]["content"][1]])
+        self.assertEqual(sent[3]["content"], "(continuing)")
+        self.assertEqual(history[1]["content"][0]["type"], "altprovider_reasoning")  # kept for AltProvider calls

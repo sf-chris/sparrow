@@ -7,19 +7,21 @@ import re
 
 def episode_in(filename: str, season: int, episode: int) -> bool:
     """Whether a release file is this episode: S01E02, 1x02 or an absolute
-    " - 02" / " 02 " number (season one only, as fansubs number seasons apart)."""
+    " - 02" / " 02 " number, in season one or under a tag naming the season
+    ("Show S2 - 05", "Show Season 2 - 05"), as fansubs number seasons apart."""
     name = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", filename)
     tagged = re.search(r"(?i)\bS(\d{1,2})\s*E(\d{1,3})\b|\b(\d{1,2})x(\d{2,3})\b", name)
     if tagged:
         found_season = int(tagged.group(1) or tagged.group(3))
         found_episode = int(tagged.group(2) or tagged.group(4))
         return (found_season, found_episode) == (season, episode)
-    if season != 1:
+    seasons = {int(next(g for g in m.groups() if g)) for m in SEASON_TAG.finditer(name)}
+    if (seasons and season not in seasons) or (not seasons and season != 1):
         return False
     # The episode number is the one marked as such (" - 14", "E14", "Ep 14"),
     # else the first standalone number: "part 2" or "Season 2" later in a
     # name is not episode 2.
-    stem = name.rsplit(".", 1)[0]
+    stem = SEASON_TAG.sub(" ", name).rsplit(".", 1)[0]
     marked = re.findall(r"(?i)(?:[\s_]-[\s_]+|\b(?:ep|episode|e)[\s._]?|#)(\d{1,4})(?:v\d)?(?![\d])", stem)
     numbers = marked or re.findall(r"(?:^|[\s_\-.])(\d{1,4})(?:v\d)?(?=[\s_\-.]|$)", stem)
     numbers = numbers or re.findall(r"\[(\d{1,4})(?:v\d)?\]", filename)  # "[Group][Show][02]"

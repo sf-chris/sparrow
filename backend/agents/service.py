@@ -1019,6 +1019,12 @@ class AgentService:
                 DownloadStatus.PAUSED,
             ):
                 continue
+            if dl.metadata.get("node_id"):
+                # An offline node answers nothing: asking it would hold up
+                # every other transfer's poll until each request times out.
+                info = nodes.info(dl.metadata["node_id"])
+                if not info or not info["online"]:
+                    continue
             try:
                 if not dl.metadata.get("selection") and self.toolbox.selection_for(dl):
                     # A pack choice waits for the torrent's file list.
@@ -1027,9 +1033,6 @@ class AgentService:
                     if dl.status == DownloadStatus.ERROR:
                         continue
                 if dl.metadata.get("node_id"):
-                    info = nodes.info(dl.metadata["node_id"])
-                    if not info or not info["online"]:
-                        continue
                     st = await nodes.execute(
                         dl.metadata["node_id"],
                         "download_status",

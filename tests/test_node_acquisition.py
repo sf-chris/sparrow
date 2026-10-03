@@ -290,6 +290,24 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("a" * 40, self.client_state)
         self.assertEqual(len(self.removed), 2)
 
+    async def test_adding_a_removed_copy_again_chooses_its_files_afresh(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture", "files": ["Fixture/part 1.mkv"]})
+        await self.call("client_remove", {"download_id": first["download_id"]})
+        await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        self.assertNotIn("wanted_files", self.storage.get_download(first["download_id"]).metadata)
+
+    async def test_an_offline_node_is_not_asked_to_choose_files(self):
+        result = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture", "files": ["Fixture/part 1.mkv"]})
+        self.worker.cancel()  # the node stops answering
+        await asyncio.gather(self.worker, return_exceptions=True)
+        offline = {**self.nodes.info(self.node_id), "online": False}
+        select = AsyncMock()
+        with patch.object(self.nodes, "info", return_value=offline), \
+                patch.object(self.service.toolbox, "apply_file_selection", select):
+            await asyncio.wait_for(self.service.reconcile_transfers(), 5)
+        select.assert_not_awaited()
+        self.assertNotEqual(self.storage.get_download(result["download_id"]).status, DownloadStatus.ERROR)
+
     async def test_a_transfer_the_app_lost_is_added_again(self):
         result = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
         self.client_state.clear()
@@ -487,6 +505,50 @@ class ScoutJudgementTests(unittest.TestCase):
         self.assertEqual(scout.resolve(with_subs, ["Show/Show - 01.mkv"]), ["Show/Show - 01.mkv", "Show/Subs/Show - 01.eng.srt"])
         self.assertTrue(scout.spans({"name": "[a-S] Samurai Champloo (01-26) (1080p)"}, [(1, 2)]))
         self.assertFalse(scout.spans({"name": "Show (01-12)"}, [(1, 20)]))
+
+    def test_later_seasons_and_long_series_pick_their_episodes(self):
+        from backend.agents import scout
+
+        season = [{"name": f"Show S2/[SubsPlease] Show S2 - {n:02d} (1080p).mkv", "size": 400} for n in (4, 5)]
+        self.assertEqual(scout.resolve(season, ["episode:S02E05"], ["Show"]), ["Show S2/[SubsPlease] Show S2 - 05 (1080p).mkv"])
+        self.assertEqual(scout.resolve(season, ["episode:S01E05"], ["Show"]), ["episode:S01E05"])
+        series = [{"name": f"Show/Show - {n:03d}.mkv", "size": 400} for n in range(1, 1001)]
+        started = time.time()
+        chosen = scout.resolve(series, [f"episode:S01E{n:02d}" for n in range(1, 1001)], ["Show"])
+        self.assertEqual(len(chosen), 1000)
+        self.assertLess(time.time() - started, 5)
+
+    def test_a_failing_index_is_told_apart_from_an_empty_one(self):
+        import httpx
+        from backend.agents import scout
+
+        job = SimpleNamespace(media_type="tv", year=2020, min_quality="720p", preferred_quality="1080p",
+                              audio_pref="original", preferences={})
+
+        class Index:
+            def __init__(self, answer):
+                self.answer, self.calls = answer, 0
+
+            async def index_search(self, query, wait=0, log=None):
+                self.calls += 1
+                if isinstance(self.answer, Exception):
+                    raise self.answer
+                return self.answer, False
+
+        down = Index(httpx.ConnectError("unreachable"))
+        rows, searched, _, failing = asyncio.run(scout.scout(down, job, [(1, 2)], ["Show"]))
+        self.assertTrue(failing)
+        self.assertLessEqual(down.calls, 6)  # a failed search still used its slot
+        rows, searched, _, failing = asyncio.run(scout.scout(Index([]), job, [(1, 2)], ["Show"]))
+        self.assertFalse(failing)  # nothing seeded: an answer, not an outage
+        self.assertTrue(searched)
+
+        pack = {"id": "7", "name": "Show (01-12) 1080p BluRay", "info_hash": "d" * 40, "seeders": 50, "size": 60 * 10**9, "num_files": 12}
+        with patch.object(scout, "peek", AsyncMock(return_value=None)):
+            for cap, offered in ((2, 0), (10, 1)):
+                job.preferences = {"values": {"max_file_size_gb": cap}}
+                rows, *_ = asyncio.run(scout.scout(Index([pack]), job, [(1, 2)], ["Show"]))
+                self.assertEqual(len(rows), offered, cap)
 
     def test_the_standard_cut_is_chosen_from_a_pack(self):
         from backend.agents import scout

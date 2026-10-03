@@ -99,6 +99,19 @@ def suitable(job, asset):
     )
 
 
+def missing_episodes(tb, job):
+    """(season, episode) pairs still missing a suitable copy."""
+    if job.media_type == "movie":
+        return []
+    have = {(a.get("season"), a.get("episode")) for a in scoped_assets(tb, job) if suitable(job, a)}
+    return [
+        (int(season), int(episode))
+        for season, episodes in sorted(job.wanted_episodes.items(), key=lambda kv: int(kv[0]))
+        for episode in sorted(episodes)
+        if (int(season), int(episode)) not in have
+    ]
+
+
 def runtime_matches(duration, minutes, approximate=False):
     """Whether a measured duration is the catalogue's runtime: within two
     minutes (10% for short items), or a quarter either way when the figure
@@ -224,6 +237,7 @@ def acquisition_tools(tb):
                     }
                 )
                 existing.metadata.pop("selection", None)
+                existing.metadata.pop("wanted_files", None)
                 if wanted_files:
                     existing.metadata["wanted_files"] = wanted_files
                 await tb.storage.update_download(
@@ -409,16 +423,7 @@ def acquisition_tools(tb):
     # ─── Scout, pick, review ──────────────────────────────────────────
 
     def wanted(job):
-        """(season, episode) pairs still missing a suitable copy."""
-        if job.media_type == "movie":
-            return []
-        have = {(a.get("season"), a.get("episode")) for a in scoped_assets(tb, job) if suitable(job, a)}
-        return [
-            (int(season), int(episode))
-            for season, episodes in sorted(job.wanted_episodes.items(), key=lambda kv: int(kv[0]))
-            for episode in sorted(episodes)
-            if (int(season), int(episode)) not in have
-        ]
+        return missing_episodes(tb, job)
 
     async def find_releases(ctx, args):
         from . import scout
@@ -460,8 +465,8 @@ def acquisition_tools(tb):
         same = f" Other titles share this name: {namesakes}; make sure a pick is not one of them." if namesakes else ""
         if failing:
             return (
-                f"The indexer answered nothing even for the bare title \"{titles[0]}\", so it is failing right now; "
-                "this is not proof that no copy exists. Hibernate with wake_me in 15 minutes and call find_releases again."
+                "The indexer is not answering right now (the searches failed), so this is not proof that no copy "
+                "exists. Hibernate with wake_me in 15 minutes and call find_releases again."
             )
         if not rows:
             return (

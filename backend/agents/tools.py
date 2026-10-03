@@ -224,11 +224,16 @@ class Toolbox:
         job = self.store.get_job(download.metadata.get("job_id", ""))
         if not job or getattr(job.media_type, "value", job.media_type) != "tv":
             return []
-        return [
-            f"episode:S{int(season):02d}E{int(episode):02d}"
-            for season, episodes in sorted(job.wanted_episodes.items(), key=lambda kv: int(kv[0]))
-            for episode in sorted(episodes)
-        ][:200]
+        from .node_tools import missing_episodes
+
+        # Episodes the library already has suitably are not downloaded again;
+        # if it has them all, the contract's episodes still bound the pack.
+        episodes = missing_episodes(self, job) or [
+            (int(season), int(episode))
+            for season, numbers in sorted(job.wanted_episodes.items(), key=lambda kv: int(kv[0]))
+            for episode in sorted(numbers)
+        ]
+        return [f"episode:S{season:02d}E{episode:02d}" for season, episode in episodes]
 
     # ─── Waiting for a transfer slot ────────────────────────────────────
 
@@ -330,7 +335,14 @@ class Toolbox:
         deadline = began + wait
         self._search_waiting += 1
         try:
-            async with self._search_turn:
+            # The wait covers queuing behind other searches too: a caller
+            # willing to wait a minute never waits out another's ten.
+            try:
+                async with asyncio.timeout(max(0.0, deadline - time.time()) if wait else None):
+                    await self._search_turn.acquire()
+            except TimeoutError:
+                raise ToolError(self._search_limit_text()) from None
+            try:
                 while self._searches_in_window() >= self.SEARCH_LIMIT:
                     free = self.SEARCH_WINDOW - (time.time() - self._search_times[0]) + 0.1
                     if time.time() + free > deadline:
@@ -339,6 +351,8 @@ class Toolbox:
                 if self._search_times and time.time() - self._search_times[-1] < self.SEARCH_SPACING:
                     await asyncio.sleep(self.SEARCH_SPACING - (time.time() - self._search_times[-1]))
                 self._search_times.append(time.time())
+            finally:
+                self._search_turn.release()
         finally:
             self._search_waiting -= 1
         return round(time.time() - began, 1)  # seconds spent waiting for a slot

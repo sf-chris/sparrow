@@ -517,7 +517,9 @@ class Subtitles:
             c
             for c in listing["candidates"]
             if c["language"] in (language, "und", "") and c["kind"] == kind
-            and (not c.get("picture") or reader_model())  # pictures need a reader
+            # Pictures need the vision reader, a model call: only when the
+            # household has the subtitle agent on.
+            and (not c.get("picture") or (values.get("verify") and reader_model()))
         ]
         # Exact language tags before untagged tracks, text before pictures;
         # more cues suggest full dialogue rather than signs. Order is advice,
@@ -550,6 +552,11 @@ class Subtitles:
         if candidate["source"] == "embedded" and candidate.get("picture"):
             # The disc's own translation as pictures: rendered on the node,
             # read by the cheap vision model, timed by the disc.
+            if not task["data"].get("verify"):
+                raise ToolError("Reading picture subtitles needs the subtitle agent switched on.")
+            left = self.allowance_left(task)
+            if left <= 0:
+                raise ToolError("This title's subtitle allowance is used up, so its picture subtitles were not read.")
             rendered = await self.nodes.execute(
                 asset["node_id"],
                 "subtitle_pictures",
@@ -561,7 +568,9 @@ class Subtitles:
                 },
                 timeout=1200,
             )
-            text, spend = await subtitle_contract.read_pictures(self.picture_reader(reader_model()), rendered)
+            text, spend = await subtitle_contract.read_pictures(
+                self.picture_reader(reader_model()), rendered, max_dollars=left
+            )
             self.charge_reading(task, spend)
             if not text:
                 raise ToolError("No readable text was found in these picture subtitles.")
@@ -1169,6 +1178,18 @@ class Subtitles:
         self.update(task, task["state"], task["data"].get("message", ""), review_outcome=outcome)
         return outcome
 
+    def allowance_left(self, task):
+        """Dollars left of this title's subtitle allowance, which the readers,
+        checkers and manager share."""
+        service = self.get_service()
+        if not service:
+            return 0.0
+        allowance = float(os.getenv("SPARROW_SUBTITLE_BUDGET") or 0) or float(
+            service.runtime.policy_getter()["max_agent_dollars"]
+        )
+        scope = "subtitle:" + task["id"]
+        return allowance - sum(s.spend.dollars for s in service.store.get_sessions() if s.budget_scope == scope)
+
     def charge_reading(self, task, spend):
         """Record picture-subtitle reading against this title's allowance."""
         holder = {"checker_session": (task["data"] or {}).get("reading_session")}
@@ -1376,6 +1397,10 @@ class Subtitles:
             return pages_.MANAGER_SYSTEM if managing(session) else pages_.SYSTEM
 
         async def load(ctx):
+            # with_ids has just read this call's evidence: one parse per call.
+            loaded = ctx.__dict__.pop("subtitle_context", None)
+            if loaded:
+                return loaded
             task = self.task(ctx.session.download_id)
             if not task:
                 raise ToolError("This subtitle work no longer exists.")
@@ -2120,9 +2145,15 @@ class Subtitles:
             # Models sometimes quote a line's or caption's text where its ID
             # belongs; the tool resolves unambiguous quotes instead of failing.
             async def run(ctx, args):
-                _, context = await load(ctx)
+                loaded = await load(ctx)
+                context = loaded[1]
                 listens = context["state"].get("listens", [])
-                return await handler(ctx, pages_.normalise_ids(args, context["utterances"], context["cues"], listens))
+                args = pages_.normalise_ids(args, context["utterances"], context["cues"], listens)
+                ctx.subtitle_context = loaded
+                try:
+                    return await handler(ctx, args)
+                finally:
+                    ctx.__dict__.pop("subtitle_context", None)
 
             return run
 
