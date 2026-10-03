@@ -6,7 +6,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.configuration import apply_config_update, public_config
+from backend import configuration
+from backend.configuration import (
+    apply_config_update,
+    effective_altprovider_key,
+    prepare_media_folder,
+    public_config,
+    suggested_media_folders,
+)
 from backend.models import SparrowConfig, TorrentClientConfig, TorrentClientType
 from backend.runtime_settings import validate_bind, websocket_origin_allowed
 
@@ -67,6 +74,75 @@ class ConfigurationTests(unittest.TestCase):
                     "staging_dir": str(parent / "Library" / "Temp"),
                     "library_dir": str(parent / "Library"),
                 })
+
+    def test_altprovider_key_is_saved_like_the_others_and_never_returned(self) -> None:
+        config = apply_config_update(SparrowConfig(), {"altprovider_api_key": " sk-altprovider "})
+        self.assertEqual(config.altprovider_api_key, "sk-altprovider")
+        self.assertEqual(SparrowConfig.from_dict(config.to_dict()).altprovider_api_key, "sk-altprovider")
+        data = public_config(config)
+        self.assertEqual(data["altprovider_api_key"], "")
+        self.assertTrue(data["altprovider_api_key_configured"])
+        self.assertEqual(apply_config_update(config, {"altprovider_api_key": ""}).altprovider_api_key, "sk-altprovider")
+        self.assertEqual(apply_config_update(config, {"clear_altprovider_api_key": True}).altprovider_api_key, "")
+        # Settings saved before this key existed still load.
+        old = SparrowConfig().to_dict()
+        old.pop("altprovider_api_key")
+        self.assertEqual(SparrowConfig.from_dict(old).altprovider_api_key, "")
+
+    def test_saved_altprovider_key_wins_over_the_environment(self) -> None:
+        saved = SparrowConfig(altprovider_api_key="saved")
+        with patch.dict(os.environ, {"ALTPROVIDER_API_KEY": "env"}):
+            self.assertEqual(effective_altprovider_key(SparrowConfig()), "env")
+            self.assertEqual(effective_altprovider_key(saved), "saved")
+            with patch.object(configuration, "_saved_config", lambda: saved):
+                self.assertEqual(effective_altprovider_key(), "saved")
+            with patch.object(configuration, "_saved_config", None):
+                self.assertEqual(effective_altprovider_key(), "env")
+        with patch.dict(os.environ, {"ALTPROVIDER_API_KEY": ""}):
+            self.assertEqual(public_config(SparrowConfig())["altprovider_api_key_configured"], False)
+
+    def test_chosen_folder_is_created_only_beneath_an_existing_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            configuration, "suggested_base", lambda: Path(tmp) / "Sparrow"
+        ):
+            prepare_media_folder(str(Path(tmp) / "Library"), writable=True)
+            self.assertTrue((Path(tmp) / "Library").is_dir())
+            with self.assertRaisesRegex(ValueError, "isn’t on this server"):
+                prepare_media_folder(str(Path(tmp) / "typo" / "Library"), writable=False)
+            self.assertFalse((Path(tmp) / "typo").exists())
+            # The suggested home may be new as well.
+            prepare_media_folder(str(Path(tmp) / "Sparrow" / "Incoming"), writable=True)
+            self.assertTrue((Path(tmp) / "Sparrow" / "Incoming").is_dir())
+            (Path(tmp) / "file").write_text("")
+            with self.assertRaisesRegex(ValueError, "is a file"):
+                prepare_media_folder(str(Path(tmp) / "file"), writable=False)
+
+    def test_incoming_folder_must_be_writable(self) -> None:
+        if os.geteuid() == 0:
+            self.skipTest("root can write anywhere")
+        with tempfile.TemporaryDirectory() as tmp:
+            locked = Path(tmp) / "Locked"
+            locked.mkdir()
+            locked.chmod(0o555)
+            try:
+                prepare_media_folder(str(locked), writable=False)
+                with self.assertRaisesRegex(ValueError, "can’t save into"):
+                    prepare_media_folder(str(locked), writable=True)
+            finally:
+                locked.chmod(0o755)
+
+    def test_folder_suggestions_reuse_existing_folders(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            configuration, "suggested_base", lambda: Path(tmp)
+        ):
+            self.assertEqual(
+                suggested_media_folders()["incoming"], str(Path(tmp) / "Incoming")
+            )
+            (Path(tmp) / "Temp").mkdir()
+            (Path(tmp) / "Library").mkdir()
+            suggested = suggested_media_folders()
+            self.assertEqual(suggested["library"], str(Path(tmp) / "Library"))
+            self.assertEqual(suggested["incoming"], str(Path(tmp) / "Temp"))
 
     def test_non_loopback_bind_requires_explicit_lan_opt_in(self) -> None:
         with patch.dict(os.environ, {}, clear=True):

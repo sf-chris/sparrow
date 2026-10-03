@@ -111,7 +111,8 @@ Everything new lives in `backend/agents/`:
 - Current model defaults: Fetch cheap with smart review and escalation
   (`SPARROW_FETCH_SCOUT=off` keeps it smart throughout), Media cheap with self-escalation,
   Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
-  (household switch) is managed by the smart model when `ALTPROVIDER_API_KEY` is set, else
+  (household switch) is managed by the smart model when an AltProvider key is set (Settings →
+  Connections, or `ALTPROVIDER_API_KEY`), else
   Assistant Large at medium effort with prompt caching. Cheap page checkers
   (the cheap model, the smart model second opinion when borderline) read every page; the
   manager reads only what they flag plus audit pages. Sources are tried in order:

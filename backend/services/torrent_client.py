@@ -6,7 +6,10 @@ a uniform API so the rest of the system doesn't care which client is running.
 """
 from __future__ import annotations
 import asyncio
+import ipaddress
+import re
 import shutil
+import socket
 import sys
 import urllib.parse
 from pathlib import Path
@@ -36,6 +39,7 @@ class TorrentClientError(Exception):
 
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+QB_VERSION = re.compile(r"v?\d+\.\d+(?:\.\d+)*[A-Za-z0-9.+-]{0,16}")
 
 
 async def start_configured_client(config: TorrentClientConfig) -> tuple[bool, str]:
@@ -46,6 +50,13 @@ async def start_configured_client(config: TorrentClientConfig) -> tuple[bool, st
     """
     if config.type == TorrentClientType.NONE:
         return False, "No download app is configured."
+    if config.managed:
+        from .managed_transmission import current
+
+        daemon = current()
+        if daemon and await daemon.recover():
+            return True, "Restarted Sparrow’s Transmission."
+        return False, "Sparrow’s Transmission isn’t running. Set it up again in Settings."
     if config.host.strip().lower() not in LOCAL_HOSTS:
         return False, "The configured download app is on another machine, so Sparrow cannot start it."
 
@@ -113,7 +124,9 @@ class QBittorrentClient:
                 if resp.text == "Ok.":
                     self._session_cookie = resp.cookies.get("SID", "")
                     return True
-                return False
+                # "Bypass authentication" for this address: the API answers unauthenticated.
+                version = await client.get(f"{self.base_url}/api/v2/app/version")
+                return version.status_code == 200 and bool(QB_VERSION.fullmatch(version.text.strip()))
             except Exception:
                 return False
 
@@ -550,23 +563,229 @@ async def select_files(manager: "TorrentManager", torrent_hash: str, wanted: lis
 
 
 # ─── Auto-discovery ───────────────────────────────────────────────────────────
+#
+# Each candidate is fingerprinted by a response only that app gives, so another
+# web service on a common port (Sparrow itself, a router page) is never reported.
+
+QUICK_PORTS = {
+    TorrentClientType.QBITTORRENT: (8080, 8090),
+    TorrentClientType.TRANSMISSION: (9091,),
+}
+WIDE_PORTS = {
+    TorrentClientType.QBITTORRENT: (8080, 8081, 8082, 8085, 8090, 8091, 9080),
+    TorrentClientType.TRANSMISSION: (9091, 9092, 9093, 9094, 9095, 9090),
+}
+SERVICE_NAMES = {
+    TorrentClientType.QBITTORRENT: ("qbittorrent",),
+    TorrentClientType.TRANSMISSION: ("transmission",),
+}
+PROBE_TIMEOUT = 1.5
+# qBittorrent bans an address after repeated failed logins, so the old default
+# password is tried at most once per address while Sparrow runs.
+_default_login_failed: set[tuple[str, int]] = set()
+
+
+def _brand(kind: TorrentClientType) -> str:
+    return "Transmission" if kind == TorrentClientType.TRANSMISSION else "qBittorrent"
+
+
+def _url_host(host: str) -> str:
+    try:
+        if ipaddress.ip_address(host).version == 6:
+            return f"[{host}]"
+    except ValueError:
+        pass
+    return host
+
+
+def _found(kind, host, port, version="", needs_login=False, problem="") -> dict:
+    return {
+        "type": kind.value,
+        "host": host,
+        "port": port,
+        "version": version,
+        "needs_login": needs_login,
+        "problem": problem,
+    }
+
+
+async def probe_qbittorrent(client: httpx.AsyncClient, host: str, port: int) -> Optional[dict]:
+    kind = TorrentClientType.QBITTORRENT
+    base = f"http://{_url_host(host)}:{port}"
+    try:
+        response = await client.get(f"{base}/api/v2/app/version")
+    except httpx.HTTPError:
+        return None
+    text = response.text.strip()
+    if response.status_code == 200 and QB_VERSION.fullmatch(text):
+        return _found(kind, host, port, text)
+    # qBittorrent refuses unauthenticated API calls; anything else is not it.
+    if response.status_code not in (401, 403):
+        return None
+    if (host, port) in _default_login_failed:
+        try:
+            page = await client.get(base + "/")
+        except httpx.HTTPError:
+            return None
+        if "qbittorrent" in page.text.lower():
+            return _found(kind, host, port, needs_login=True)
+        return None
+    try:
+        login = await client.post(
+            f"{base}/api/v2/auth/login",
+            data={"username": "admin", "password": "adminadmin"},
+        )
+    except httpx.HTTPError:
+        return None
+    answer = login.text.strip()
+    if answer == "Ok.":
+        version = ""
+        try:
+            reply = await client.get(f"{base}/api/v2/app/version", cookies=login.cookies)
+            if QB_VERSION.fullmatch(reply.text.strip()):
+                version = reply.text.strip()
+        except httpx.HTTPError:
+            pass
+        return _found(kind, host, port, version)
+    if answer == "Fails." or (login.status_code == 403 and "banned" in answer.lower()):
+        _default_login_failed.add((host, port))
+        return _found(kind, host, port, needs_login=True)
+    return None
+
+
+async def probe_transmission(client: httpx.AsyncClient, host: str, port: int) -> Optional[dict]:
+    kind = TorrentClientType.TRANSMISSION
+    url = f"http://{_url_host(host)}:{port}/transmission/rpc"
+    payload = {"method": "session-get", "arguments": {"fields": ["version"]}}
+    try:
+        response = await client.post(url, json=payload)
+    except httpx.HTTPError:
+        return None
+    server = response.headers.get("server", "").lower()
+    if response.status_code == 409 and response.headers.get("X-Transmission-Session-Id"):
+        version = ""
+        try:
+            reply = await client.post(
+                url,
+                json=payload,
+                headers={"X-Transmission-Session-Id": response.headers["X-Transmission-Session-Id"]},
+            )
+            version = str(reply.json().get("arguments", {}).get("version", ""))
+        except (httpx.HTTPError, ValueError, AttributeError):
+            pass
+        return _found(kind, host, port, version)
+    if response.status_code == 401 and "transmission" in response.headers.get("www-authenticate", "").lower():
+        return _found(kind, host, port, needs_login=True)
+    if not server.startswith("transmission"):
+        return None
+    if response.status_code == 421:
+        return _found(kind, host, port, problem="Transmission only answers to its IP address here. Use the IP address instead.")
+    if response.status_code == 403:
+        return _found(
+            kind,
+            host,
+            port,
+            problem="Transmission is refusing this server. Allow its address in Transmission’s remote access settings.",
+        )
+    return None
+
+
+def default_gateway(route_file: str = "/proc/net/route") -> Optional[str]:
+    """The container's default gateway: the Docker host, seen from inside."""
+    try:
+        lines = Path(route_file).read_text().splitlines()[1:]
+    except OSError:
+        return None
+    for line in lines:
+        fields = line.split()
+        if len(fields) > 2 and fields[1] == "00000000" and fields[2] != "00000000":
+            return socket.inet_ntoa(bytes.fromhex(fields[2])[::-1])
+    return None
+
+
+async def _resolve(name: str) -> Optional[str]:
+    try:
+        infos = await asyncio.wait_for(
+            asyncio.get_running_loop().getaddrinfo(name, None, family=socket.AF_INET),
+            PROBE_TIMEOUT,
+        )
+    except (OSError, asyncio.TimeoutError, UnicodeError):
+        return None
+    return infos[0][4][0] if infos else None
+
+
+async def candidate_hosts(kinds, container: bool) -> list[tuple[str, Optional[str], tuple]]:
+    """(host to probe, its IP, kinds) in preference order: IPs before names."""
+    hosts: list[tuple[str, Optional[str], tuple]] = [("127.0.0.1", "127.0.0.1", tuple(kinds))]
+    if not container:
+        return hosts
+    gateway = default_gateway()
+    if gateway:
+        hosts.append((gateway, gateway, tuple(kinds)))
+    named = [("host.docker.internal", tuple(kinds))] + [
+        (name, (kind,)) for kind in kinds for name in SERVICE_NAMES[kind]
+    ]
+    addresses = await asyncio.gather(*(_resolve(name) for name, _ in named))
+    for (name, name_kinds), address in zip(named, addresses):
+        if address:
+            hosts.append((name, address, name_kinds))
+    return hosts
+
+
+async def discover_download_apps(
+    kind: Optional[TorrentClientType] = None,
+    *,
+    hosts: Optional[list[tuple[str, Optional[str], tuple]]] = None,
+    container: Optional[bool] = None,
+    client: Optional[httpx.AsyncClient] = None,
+) -> list[dict]:
+    """Find download apps; one brand searches more ports than the quick look."""
+    if container is None:
+        from .managed_transmission import in_container
+
+        container = in_container()
+    kinds = (kind,) if kind else (TorrentClientType.TRANSMISSION, TorrentClientType.QBITTORRENT)
+    ports = WIDE_PORTS if kind else QUICK_PORTS
+    if hosts is None:
+        hosts = await candidate_hosts(kinds, container)
+    owned = client is None
+    client = client or httpx.AsyncClient(timeout=PROBE_TIMEOUT, follow_redirects=False)
+    probes, keys = [], []
+    try:
+        for host, address, host_kinds in hosts:
+            for each in (k for k in host_kinds if k in kinds):
+                probe = probe_transmission if each == TorrentClientType.TRANSMISSION else probe_qbittorrent
+                for port in ports[each]:
+                    keys.append((each.value, address or host, port, host, address))
+                    probes.append(probe(client, host, port))
+        results = await asyncio.gather(*probes, return_exceptions=True)
+        found, seen = [], set()
+        for (kind_value, identity, port, host, address), result in zip(keys, results):
+            if not isinstance(result, dict) or (kind_value, identity, port) in seen:
+                continue
+            if result["problem"] and address and address != host:
+                # A name Transmission won't answer to: offer the same daemon by IP.
+                retry = await probe_transmission(client, address, port)
+                if retry:
+                    result = retry
+            seen.add((kind_value, identity, port))
+            found.append(result)
+        return found
+    finally:
+        if owned:
+            await client.aclose()
+
 
 async def discover_torrent_clients() -> list[TorrentClientInfo]:
-    """Probe common ports and return all reachable torrent clients."""
-    candidates = [
-        (TorrentClientType.QBITTORRENT, "localhost", 8080, "admin", "adminadmin"),
-        (TorrentClientType.QBITTORRENT, "localhost", 8081, "admin", "adminadmin"),
-        (TorrentClientType.TRANSMISSION, "localhost", 9091, "", ""),
-        (TorrentClientType.TRANSMISSION, "localhost", 9092, "", ""),
+    """Legacy: reachable apps that need no login, as connection info."""
+    return [
+        TorrentClientInfo(
+            type=TorrentClientType(app["type"]),
+            host=app["host"],
+            port=app["port"],
+            reachable=True,
+            version=app["version"],
+        )
+        for app in await discover_download_apps()
+        if not app["needs_login"] and not app["problem"]
     ]
-    found = []
-
-    async def probe(client_type, host, port, username, password):
-        cfg = TorrentClientConfig(type=client_type, host=host, port=port, username=username, password=password)
-        manager = TorrentManager(cfg)
-        info = await manager.get_info()
-        if info.reachable:
-            found.append(info)
-
-    await asyncio.gather(*[probe(*c) for c in candidates], return_exceptions=True)
-    return found

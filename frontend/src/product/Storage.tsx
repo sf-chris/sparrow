@@ -74,6 +74,35 @@ export default function Storage({
       setBusy("");
     }
   }
+  async function chooseLocal(node: NodeInfo) {
+    setError("");
+    // Keep a saved folder only if this server can actually see it.
+    const usable = (id: string) =>
+      node.capabilities.roots.find((r) => r.id === id)?.available;
+    let library = usable("library") ? cfg.data?.library_dir || "" : "",
+      staging = usable("staging") ? cfg.data?.staging_dir || "" : "";
+    if (!library || !staging) {
+      try {
+        const suggested = await api<{ library: string; incoming: string }>(
+          "/admin/storage/suggestions",
+        );
+        library ||= suggested.library;
+        staging ||= suggested.incoming;
+      } catch {
+        // Suggestions only save typing; empty fields still work.
+      }
+    }
+    setLibrary(library);
+    setStaging(staging);
+    setLocal(true);
+  }
+  function startPairing(node?: NodeInfo) {
+    setPairingId(node?.id);
+    setName(node?.name || "Windows storage");
+    setCode("");
+    setError("");
+    setPairing(true);
+  }
   async function saveLocal() {
     setBusy("local");
     setError("");
@@ -105,23 +134,18 @@ export default function Storage({
   return (
     <Page
       embedded={onboarding}
-      title="Storage"
+      title={onboarding ? "" : "Storage"}
       action={
-        <button
-          className="btn primary"
-          onClick={() => {
-            setPairingId(undefined);
-            setPairing(true);
-            setCode("");
-          }}
-        >
-          <Plus size={18} strokeWidth={2.5} />
-          Pair a computer
-        </button>
+        !onboarding && (
+          <button className="btn primary" onClick={() => startPairing()}>
+            <Plus size={18} strokeWidth={2.5} />
+            Pair a computer
+          </button>
+        )
       }
     >
       <ErrorNote
-        error={error || nodes.error || cfg.error}
+        error={(!pairing && !local && error) || nodes.error || cfg.error}
         retry={() => {
           void nodes.refresh();
           void cfg.refresh();
@@ -130,69 +154,110 @@ export default function Storage({
       {nodes.loading && !nodes.data ? (
         <Loading label="Loading storage" />
       ) : (
-        <section aria-labelledby="devices">
-          <Bar id="devices" title="Devices">
-            <button
-              className="bar-button"
-              onClick={() => {
-                void nodes.refresh();
-                void onChanged?.();
-              }}
-            >
-              <RefreshCw size={14} strokeWidth={2.5} />
-              Refresh
-            </button>
-          </Bar>
-          <ul className="devices">
+        <section aria-labelledby={onboarding ? undefined : "devices"}>
+          {!onboarding && (
+            <Bar id="devices" title="Devices">
+              <button
+                className="bar-button"
+                onClick={() => {
+                  void nodes.refresh();
+                  void onChanged?.();
+                }}
+              >
+                <RefreshCw size={14} strokeWidth={2.5} />
+                Refresh
+              </button>
+            </Bar>
+          )}
+          <ul className={`devices ${onboarding ? "plain" : ""}`}>
             {nodes.data?.map((node) => {
-              const root = node.capabilities.roots.find(
-                (r) => r.id === "library",
-              );
-              const status = node.disabled
-                ? ["Revoked", "problem"]
+              const rootOf = (id: string) =>
+                node.capabilities.roots.find((r) => r.id === id);
+              const root = rootOf("library");
+              const chosen = !!root;
+              // Red is for something that broke; a folder not chosen yet is just the next step.
+              const problem = node.disabled
+                ? "Revoked"
                 : !node.online
-                  ? ["Offline", "problem"]
-                  : root?.available
-                    ? ["", ""]
-                    : ["Needs a folder", "problem"];
+                  ? "Offline"
+                  : chosen && !root.available
+                    ? "Folder missing"
+                    : "";
+              const local = node.id === "local";
+              const folders = local
+                ? [
+                    {
+                      label: "Library",
+                      path: cfg.data?.library_dir || "",
+                      root,
+                    },
+                    {
+                      label: "Incoming",
+                      path: cfg.data?.staging_dir || "",
+                      root: rootOf("staging"),
+                    },
+                  ]
+                : [];
               return (
                 <li className="device-card" key={node.id}>
                   <HardDrive size={26} strokeWidth={2} aria-hidden="true" />
                   <div className="device-body">
                     <div className="request-top">
                       <h2>{node.name}</h2>
-                      {status[0] && (
-                        <span className={`flag ${status[1]}`}>{status[0]}</span>
+                      {problem && (
+                        <span className="flag problem">{problem}</span>
                       )}
                     </div>
-                    <p className="meta num">
-                      {root?.free_bytes !== undefined
-                        ? `${bytes(root.free_bytes)} free`
-                        : root?.error || "No library folder yet"}
-                      {!node.capabilities.probe && " · Media tools missing"}
-                    </p>
+                    {local && (folders[0].path || folders[1].path) ? (
+                      <dl className="device-folders">
+                        {folders.map((folder) => (
+                          <div key={folder.label}>
+                            <dt>{folder.label}</dt>
+                            <dd>
+                              <span className="path">
+                                {folder.path || "Not chosen"}
+                              </span>
+                              {folder.root?.available ? (
+                                <span className="meta num">
+                                  {folder.label === "Library" &&
+                                    folder.root.free_bytes !== undefined &&
+                                    `${bytes(folder.root.free_bytes)} free`}
+                                  {folder.root.writable === false &&
+                                    " · Read only"}
+                                </span>
+                              ) : (
+                                folder.path && (
+                                  <span className="meta problem-text">
+                                    Not found on this server
+                                  </span>
+                                )
+                              )}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : (
+                      <p className="meta num">
+                        {root?.free_bytes !== undefined
+                          ? `${bytes(root.free_bytes)} free`
+                          : root?.error ||
+                            (local ? "No folders yet" : "No library folder yet")}
+                        {!node.capabilities.probe && " · Media tools missing"}
+                      </p>
+                    )}
                     <div className="actions">
-                      {node.id === "local" ? (
+                      {local ? (
                         <button
-                          className="btn"
-                          onClick={() => {
-                            setLibrary(cfg.data?.library_dir || "");
-                            setStaging(cfg.data?.staging_dir || "");
-                            setLocal(true);
-                          }}
+                          className={`btn ${onboarding && !root?.available ? "primary" : ""}`}
+                          onClick={() => void chooseLocal(node)}
                         >
-                          Choose folders
+                          {chosen ? "Change folders" : "Choose folders"}
                         </button>
                       ) : (
                         <>
                           <button
                             className="btn"
-                            onClick={() => {
-                              setPairingId(node.id);
-                              setName(node.name);
-                              setCode("");
-                              setPairing(true);
-                            }}
+                            onClick={() => startPairing(node)}
                           >
                             Reconnect
                           </button>
@@ -235,9 +300,20 @@ export default function Storage({
           </ul>
         </section>
       )}
-      <p className="muted storage-note">
-        Import shows what it found before adding anything. Files aren’t moved.
-      </p>
+      {onboarding ? (
+        <div className="storage-pair">
+          <p className="muted">Files on another computer?</p>
+          <button className="btn" onClick={() => startPairing()}>
+            <Plus size={18} strokeWidth={2.5} />
+            Pair a computer
+          </button>
+        </div>
+      ) : (
+        <p className="muted storage-note">
+          Import shows what it found before adding anything. Files aren’t
+          moved.
+        </p>
+      )}
       {pairing && (
         <Dialog title="Pair a computer" onClose={() => setPairing(false)}>
           <div className="form">
@@ -321,9 +397,8 @@ export default function Storage({
           <div className="form">
             <ErrorNote error={error} />
             <p className="muted">
-              Paths on this server, or inside the container in Docker. The
-              folders must already exist. For a Windows computer, pair it
-              instead.
+              Folders on this server. Sparrow creates a new one if its parent
+              folder exists. For another computer, pair it instead.
             </p>
             <Field
               label="Library folder"
