@@ -193,7 +193,7 @@ from .agents import resolution
 from . import __version__
 from .configuration import (
     apply_config_update, effective_anthropic_key, effective_tmdb_key, public_config,
-    track_saved_config,
+    repair_media_folders, track_saved_config,
 )
 from .doctor import build_report as build_doctor_report
 from .runtime_settings import (
@@ -301,6 +301,13 @@ async def lifespan(app: FastAPI):
     global curator, agent_service
     _setup_logging(DATA_DIR)
     await storage.load_all()
+    # Folders typed as host paths (/home/me/Media/...) live at their Docker mount.
+    repaired = SparrowConfig.from_dict(storage.get_config().to_dict())
+    try:
+        if repair_media_folders(repaired):
+            await storage.save_config(repaired)
+    except ValueError:
+        pass
     curator = Curator(storage, DATA_DIR, broadcast)
     agent_service = AgentService(storage, DATA_DIR, broadcast)
     subtitles.attach(agent_service)

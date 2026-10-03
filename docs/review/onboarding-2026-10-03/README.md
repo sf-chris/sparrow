@@ -24,13 +24,17 @@ whether the server has it. OpenAI is new and optional.
 
 ## Storage
 
-Red is only for a real problem. The card shows both folders, and pairing is secondary.
+Second pass after the owner's live retry (left): host paths showed as "Not found",
+and the red tag's text sat at the bottom of its box because error-banner styles also
+applied to red tags. Now host paths map to their Docker mount by themselves, missing
+folders are created, and each folder is one listing line with its state.
 
 | Before | After |
 | --- | --- |
-| ![Storage, before](before/storage.png) | ![Storage, after](after/storage.png) |
-| | ![Docker: /media folders](after/storage-docker.png) |
-| | ![No folders yet](after/storage-empty.png) |
+| ![Live install, before](before/storage-live.png) | ![Folders ready](after/storage-docker.png) |
+| | ![Nothing chosen: suggested folders, one click](after/storage-empty.png) |
+| | ![A folder deleted: Create folders](after/storage-missing.png) |
+| | ![Settings → Storage](after/settings-storage.png) |
 | | ![A folder the server can't see](after/folders-error.png) |
 
 ## Download app

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+import re
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping
 
 from .models import Quality, SparrowConfig, TorrentClientConfig
@@ -44,29 +45,108 @@ def in_container() -> bool:
     return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
 
 
-def prepare_media_folder(value: str, *, writable: bool) -> None:
-    """Make a chosen folder usable now, or say why it can't be.
+def _unescape_mount(value: str) -> str:
+    return re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), value)
 
-    Only the last folder is created, so a mistyped parent never leaves a trail
-    of new folders behind.
+
+def bind_mounts(mountinfo: str | None = None) -> list[tuple[PurePosixPath, Path]]:
+    """(folder on its own disk, where this process sees it) for each bind mount."""
+    if mountinfo is None:
+        try:
+            mountinfo = Path("/proc/self/mountinfo").read_text()
+        except OSError:
+            return []
+    mounts = []
+    for line in mountinfo.splitlines():
+        fields = line.split()
+        if len(fields) < 5:
+            continue
+        root, point = _unescape_mount(fields[3]), _unescape_mount(fields[4])
+        if root != "/" and point != "/":
+            mounts.append((PurePosixPath(root), Path(point)))
+    return mounts
+
+
+def mounted_path(value: str, mounts=None) -> Path | None:
+    """Where a folder named by its path on the host appears here, if it's mounted.
+
+    Docker can only show folders it mounts, so /home/me/Media/Library typed in the
+    browser is /media/Library inside the container. A mount's root is relative to
+    its own disk, so /home/me/Media can appear as /me/Media when /home is a disk.
+    """
+    parts = PurePosixPath(value).parts
+    best: tuple[int, Path] | None = None
+    for root, point in bind_mounts() if mounts is None else mounts:
+        inner = root.parts[1:]
+        if not inner:
+            continue
+        for start in range(1, len(parts) - len(inner) + 1):
+            # One-folder roots must match from the top; deeper ones are specific enough.
+            if start > 1 and len(inner) < 2:
+                break
+            if parts[start : start + len(inner)] == inner:
+                if best is None or len(inner) > best[0]:
+                    best = (len(inner), point.joinpath(*parts[start + len(inner) :]))
+                break
+    return best[1] if best else None
+
+
+def usable_media_folder(value: str, *, writable: bool) -> str:
+    """The folder Sparrow will use for a chosen path, created if it's missing.
+
+    A host path that Docker mounts elsewhere is used at its mounted location.
     """
     path = Path(value)
     where = " In Docker, choose a folder under /media." if in_container() else ""
     if not path.is_dir():
+        mounted = mounted_path(value)
+        if mounted and (mounted.is_dir() or mounted.parent.is_dir()):
+            path = mounted
+    if in_container() and not any(
+        point == path or point in path.parents for _, point in bind_mounts()
+    ):
+        # Outside a mounted volume, files vanish when the container is rebuilt.
+        raise ValueError(f"{value} isn’t on this server.{where}")
+    if not path.is_dir():
         if path.exists():
             raise ValueError(f"{value} is a file, not a folder.")
-        # The suggested home for new folders may not exist yet either.
-        suggested = path.parent == suggested_base() and path.parent.parent.is_dir()
-        if not path.parent.is_dir() and not suggested:
-            raise ValueError(f"{path.parent} isn’t on this server.{where}")
         try:
-            path.mkdir(parents=suggested)
+            path.mkdir(parents=True)
+            # The household's group (SPARROW_MEDIA_GID) may manage it too.
+            path.chmod(0o775)
         except OSError:
             raise ValueError(f"Sparrow can’t create {value}.{where}") from None
     if not os.access(path, os.R_OK | os.X_OK):
-        raise ValueError(f"Sparrow can’t open {value}.")
+        raise ValueError(f"Sparrow can’t open {path}.")
     if writable and not os.access(path, os.W_OK):
-        raise ValueError(f"Sparrow can’t save into {value}.")
+        raise ValueError(f"Sparrow can’t save into {path}.")
+    return str(path)
+
+
+def settle_media_folders(config: SparrowConfig, before: SparrowConfig) -> None:
+    """Make newly chosen folders exist where Sparrow can reach them."""
+    for name, writable in (("library_dir", False), ("staging_dir", True)):
+        value = getattr(config, name)
+        # Saving a folder that has gone missing makes it again.
+        if value and (value != getattr(before, name) or not Path(value).is_dir()):
+            setattr(config, name, usable_media_folder(value, writable=writable))
+    validate_media_roots(config)
+
+
+def repair_media_folders(config: SparrowConfig) -> bool:
+    """Point saved host paths at their mounted copies. Never creates anything:
+    a missing folder may be an unplugged drive, not a folder to make."""
+    changed = False
+    for name in ("library_dir", "staging_dir"):
+        value = getattr(config, name)
+        if value and not Path(value).is_dir():
+            mounted = mounted_path(value)
+            if mounted and mounted.is_dir():
+                setattr(config, name, str(mounted))
+                changed = True
+    if changed:
+        validate_media_roots(config)
+    return changed
 
 
 def suggested_base() -> Path:
