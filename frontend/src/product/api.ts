@@ -180,6 +180,7 @@ export type NodeInfo = {
       available: boolean;
       free_bytes?: number;
       total_bytes?: number;
+      writable?: boolean;
       error?: string;
     }[];
   };

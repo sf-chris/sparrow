@@ -100,7 +100,8 @@ Add only the services you need in **Settings → Server settings**:
 | --- | --- |
 | TMDB | Movie/show metadata and title search |
 | Anthropic | Discovery, acquisition, curation and subtitle-review reasoning |
-| Transmission or qBittorrent | Downloads requested through Sparrow's built-in source |
+| Transmission or qBittorrent | Downloads requested through Sparrow's built-in source. Setup finds one, or the Docker image runs its own Transmission |
+| OpenAI (optional) | Cheaper subtitle page checks |
 | OpenSubtitles (optional) | Additional caption candidates |
 
 Imported-media playback needs no reasoning key. Provider accounts and paid model

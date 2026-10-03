@@ -4,6 +4,16 @@ All notable changes to Sparrow are documented here.
 
 ## Unreleased — the household guide and product foundation
 
+- Setup fits a laptop screen: the cover's button is always in view, the steps
+  share the title's row and every step ends with Finish later and Continue.
+  Each key says whether the server already has it, and a blank box keeps it.
+  An optional OpenAI key can be saved in Settings as well as `.env`.
+- The download step finds Transmission or qBittorrent by itself, by brand on
+  request, or runs the Transmission bundled in the Docker image for you.
+- Compose mounts a media folder at `/media` (`SPARROW_MEDIA_DIR`,
+  `SPARROW_MEDIA_GID`). Storage suggests folders, creates a missing last
+  folder, says plainly when the server can't see a path, and keeps red for
+  real problems.
 - Every screen redesigned as the household's own TV guide: newsprint, print
   black, channel teal and biro blue in one bundled typeface (Archivo). The
   Guide replaces Home and Library, Find has one box for a title or a mood, and

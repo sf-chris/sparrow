@@ -21,6 +21,12 @@ services:
       - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:${SPARROW_PORT:-8888}:8888"
     volumes:
       - sparrow-data:/data
+      # Films, series and downloads. Set SPARROW_MEDIA_DIR to a folder on this
+      # computer to use it; otherwise they stay in a Docker volume.
+      - ${SPARROW_MEDIA_DIR:-sparrow-media}:/media
+    # Lets Sparrow write to that folder when your group owns it.
+    group_add:
+      - "${SPARROW_MEDIA_GID:-10001}"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -28,3 +34,4 @@ services:
     stop_grace_period: 45s
 volumes:
   sparrow-data:
+  sparrow-media:

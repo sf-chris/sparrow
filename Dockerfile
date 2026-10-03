@@ -20,7 +20,7 @@ RUN PYTHONPATH=/install/lib/python3.11/site-packages python /package/fetch_model
 RUN PYTHONPATH=/install/lib/python3.11/site-packages python /package/collect_licenses.py /licenses
 
 FROM python:3.11-slim-bookworm
-RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 ca-certificates && rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home sparrow
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 ca-certificates transmission-daemon && rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home sparrow
 COPY --from=dependencies /install /usr/local
 COPY --from=dependencies /models /opt/sparrow/models
 COPY --from=media /output/bin /opt/sparrow/bin
@@ -32,7 +32,7 @@ COPY backend /app/backend
 COPY --from=frontend /build/dist /app/frontend/dist
 COPY packaging/entrypoint.py /app/entrypoint.py
 ENV SPARROW_DATA_DIR=/data SPARROW_FFMPEG=/opt/sparrow/bin/ffmpeg SPARROW_FFPROBE=/opt/sparrow/bin/ffprobe SPARROW_TRANSCRIPTION_MODEL=/opt/sparrow/models/whisper-base PYTHONUNBUFFERED=1
-RUN mkdir /data && chown 10001:10001 /data
+RUN mkdir /data && chown 10001:10001 /data && mkdir -p /media/Library /media/Incoming && chown -R 10001:10001 /media
 USER 10001:10001
 VOLUME ["/data"]
 EXPOSE 8888

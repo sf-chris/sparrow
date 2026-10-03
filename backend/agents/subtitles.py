@@ -25,6 +25,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..configuration import effective_openai_key
 from . import openai_loop, subtitle_archive, subtitle_contract
 from . import subtitle_review as pages_
 from .account_api import administrator
@@ -67,7 +68,7 @@ def review_model():
     configured = os.getenv("SPARROW_SUBTITLE_MODEL")
     if configured:
         return configured
-    return DEFAULT_OPENAI_REVIEW_MODEL if os.getenv("OPENAI_API_KEY") else DEFAULT_REVIEW_MODEL
+    return DEFAULT_OPENAI_REVIEW_MODEL if effective_openai_key() else DEFAULT_REVIEW_MODEL
 
 
 def verifier_model():
@@ -100,7 +101,7 @@ def configured_model(variable, default):
     configured = (os.getenv(variable) or "").strip()
     if configured.lower() == "off":
         return ""
-    return configured or (default if os.getenv("OPENAI_API_KEY") else "")
+    return configured or (default if effective_openai_key() else "")
 
 
 def timing_summary(measured):
@@ -138,11 +139,11 @@ class Subtitles:
         self.contract_caller = lambda model: subtitle_contract.caller_for(
             model,
             self.get_service().runtime._api_key_getter(),
-            os.getenv("OPENAI_API_KEY", ""),
+            effective_openai_key(),
             os.getenv("SPARROW_SUBTITLE_CONTRACTOR_EFFORT", ""),
         )
         # Reads picture subtitles (Blu-ray, DVD) with the cheap vision model.
-        self.picture_reader = lambda model: subtitle_contract.openai_reader(os.getenv("OPENAI_API_KEY", ""), model)
+        self.picture_reader = lambda model: subtitle_contract.openai_reader(effective_openai_key(), model)
         with accounts.connect() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS subtitle_tasks(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,asset_id TEXT NOT NULL,state TEXT NOT NULL,data TEXT NOT NULL,updated REAL NOT NULL);

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 
-from ..configuration import effective_anthropic_key
+from ..configuration import effective_anthropic_key, effective_openai_key
 from .scout import table
 
 REVIEW_SYSTEM = """You review one download decision for a home media library. Code searched a torrent index, dropped impossible results and ranked the rest; a cheaper model picked one row with a reason.
@@ -58,11 +58,10 @@ def record(job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
 async def review(tb, job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
     """The smart model's decision and what it cost: (decision, dollars, model)."""
     from . import subtitle_contract
-    import os
 
     model = tb.smart_model()
     caller = subtitle_contract.caller_for(
-        model, effective_anthropic_key(tb.cfg()), os.getenv("OPENAI_API_KEY", ""), "low"
+        model, effective_anthropic_key(tb.cfg()), effective_openai_key(tb.cfg()), "low"
     )
     data, usage = await caller(REVIEW_SYSTEM, record(job, wanted, rows, pick, reason, episode_titles, namesakes), REVIEW_SCHEMA)
     return data, subtitle_contract.cost(model, usage), model, usage

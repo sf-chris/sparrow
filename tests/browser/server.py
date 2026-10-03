@@ -9,8 +9,9 @@ from unittest.mock import AsyncMock
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 STATE = Path(os.environ.get("SPARROW_BROWSER_STATE", "/tmp/sparrow-browser-check"))
 os.environ["SPARROW_DATA_DIR"] = str(STATE)
-os.environ.pop("ANTHROPIC_API_KEY", None)
-os.environ.pop("TMDB_API_KEY", None)
+# Blank rather than unset: main's load_dotenv() would refill unset keys from .env.
+for _key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "TMDB_API_KEY"):
+    os.environ[_key] = ""
 from backend import main as m
 from backend.agents.service import AgentService
 from backend.agents.models import Job, JobStatus, AgentSession, AgentKind, SessionStatus

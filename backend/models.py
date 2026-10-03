@@ -82,6 +82,7 @@ class TorrentClientConfig:
     username: str = ""
     password: str = ""
     url: str = ""  # override full URL if needed
+    managed: bool = False  # Sparrow runs this Transmission itself
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -94,6 +95,7 @@ class TorrentClientConfig:
         d.pop("password_configured", None)
         d.pop("url_configured", None)
         d["type"] = TorrentClientType(d.get("type", "none"))
+        d["managed"] = bool(d.get("managed", False))
         return cls(**d)
 
 
@@ -105,6 +107,7 @@ class SparrowConfig:
     quality_preference: Quality = Quality.Q_1080P
     tmdb_api_key: str = ""
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
     onboarding_complete: bool = False
     onboarding_deferred: bool = False
     onboarding_mode: str = "autopilot"
@@ -128,6 +131,7 @@ class SparrowConfig:
             "quality_preference": self.quality_preference.value,
             "tmdb_api_key": self.tmdb_api_key,
             "anthropic_api_key": self.anthropic_api_key,
+            "openai_api_key": self.openai_api_key,
             "onboarding_complete": self.onboarding_complete,
             "onboarding_deferred": self.onboarding_deferred,
             "onboarding_mode": self.onboarding_mode,

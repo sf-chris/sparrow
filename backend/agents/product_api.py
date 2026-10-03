@@ -12,7 +12,9 @@ from .catalogue import Catalogue
 from .models import JobStatus, Event, SessionStatus, CaseState
 from .node_executor import NodeError
 from .runtime import ToolError
-from ..configuration import public_config, apply_config_update
+from ..configuration import (
+    apply_config_update, prepare_media_folder, public_config, suggested_media_folders,
+)
 from ..models import SparrowConfig
 from ..services.library_view import build_library_view
 
@@ -32,6 +34,9 @@ def install_product(app, storage, accounts, nodes, get_service):
     from .onboarding import install_onboarding
 
     install_onboarding(app, storage, nodes)
+    from .downloader_setup import install_downloader_setup
+
+    install_downloader_setup(app, storage)
     catalogue = Catalogue(storage, nodes)
     router = APIRouter(prefix="/api/v1")
     job_lock = asyncio.Lock()
@@ -397,6 +402,11 @@ def install_product(app, storage, accounts, nodes, get_service):
         except NodeError as exc:
             raise HTTPException(422, str(exc)) from exc
 
+    @router.get("/admin/storage/suggestions")
+    def folder_suggestions(request: Request):
+        administrator(request)
+        return suggested_media_folders()
+
     @router.get("/admin/config")
     def config(request: Request):
         administrator(request)
@@ -409,8 +419,15 @@ def install_product(app, storage, accounts, nodes, get_service):
 
         try:
             body = ConfigUpdate.model_validate(await request.json())
-            config = SparrowConfig.from_dict(storage.get_config().to_dict())
+            before = storage.get_config()
+            config = SparrowConfig.from_dict(before.to_dict())
             config = apply_config_update(config, body.model_dump(exclude_unset=True))
+            for value, previous, writable in (
+                (config.library_dir, before.library_dir, False),
+                (config.staging_dir, before.staging_dir, True),
+            ):
+                if value and value != previous:
+                    prepare_media_folder(value, writable=writable)
             await storage.save_config(config)
         except (ValueError, TypeError) as exc:
             raise HTTPException(422, str(exc)) from exc

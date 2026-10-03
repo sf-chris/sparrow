@@ -775,9 +775,9 @@ details > summary::-webkit-details-marker {
   justify-content: space-between;
   gap: 0.5rem 1rem;
   margin: 1rem 0;
-  padding: 0.75rem 0.75rem 0.75rem 1rem;
-  border: 2px solid var(--red);
-  border-radius: var(--radius);
+  padding: 0.6rem 0.6rem 0.6rem 0.9rem;
+  border-left: 4px solid var(--red);
+  border-radius: 0 var(--radius) var(--radius) 0;
   background: var(--red-wash);
   font-weight: 600;
 }
@@ -1328,6 +1328,11 @@ a.tonight-art:hover .still img {
 .section:first-child {
   margin-top: 0;
 }
+/* The page title's rule already opens the first section. */
+.page-head + .form > .section:first-child > .section-head {
+  padding-top: 0;
+  border-top: 0;
+}
 .section-head {
   display: flex;
   flex-wrap: wrap;
@@ -1590,38 +1595,41 @@ a.tonight-art:hover .still img {
 .cover-page,
 .entry-page {
   min-height: 100vh;
+  min-height: 100svh;
   background: var(--band);
   color: var(--on-band);
   padding: 0 var(--gutter);
   display: flex;
   flex-direction: column;
 }
+/* The cover fits one screen, laptop included: type follows the window's height
+   as well as its width, so the button is always in view. */
 .cover-top {
   max-width: var(--max);
   width: 100%;
   margin: 0 auto;
-  padding-top: clamp(1.25rem, 3vw, 2.25rem);
+  padding-top: clamp(1rem, 3.5svh, 2.25rem);
   border-bottom: 4px solid var(--on-band);
 }
 .cover-top .logotype {
-  font-size: 5.5rem;
+  font-size: min(5.5rem, 15svh);
   letter-spacing: -0.045em;
   line-height: 0.78;
   padding-bottom: 0.2em;
 }
 @media (min-width: 30rem) {
   .cover-top .logotype {
-    font-size: 8rem;
+    font-size: min(8rem, 17svh);
   }
 }
 @media (min-width: 48rem) {
   .cover-top .logotype {
-    font-size: 11rem;
+    font-size: min(11rem, 19svh);
   }
 }
 @media (min-width: 80rem) {
   .cover-top .logotype {
-    font-size: 14rem;
+    font-size: min(14rem, 20svh);
   }
 }
 .cover-top .logotype .bird {
@@ -1633,7 +1641,7 @@ a.tonight-art:hover .still img {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 0.25rem 1rem;
-  margin-top: 0.9rem;
+  margin-top: clamp(0.4rem, 1.4svh, 0.9rem);
   padding: 0.45rem 0;
   border-top: 2px solid var(--band-rule);
   font-size: var(--t-small);
@@ -1653,19 +1661,19 @@ a.tonight-art:hover .still img {
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: clamp(2rem, 5vw, 5rem);
   align-items: center;
-  padding: clamp(2rem, 5vw, 4.5rem) 0;
+  padding: clamp(1.25rem, 4svh, 4.5rem) 0;
 }
 .cover-lines .display {
-  font-size: clamp(3.4rem, 1rem + 6.6vw, 7.5rem);
+  font-size: clamp(3rem, min(1rem + 6.6vw, 12.5svh), 7.5rem);
   line-height: 0.84;
   text-wrap: balance;
 }
 .cover-lines .lede {
-  margin: 1.4rem 0 1.8rem;
+  margin: clamp(0.8rem, 2.4svh, 1.4rem) 0 clamp(1rem, 3svh, 1.8rem);
   color: var(--on-band);
   font-size: 1.2rem;
   font-weight: 500;
-  max-width: 34ch;
+  max-width: 44ch;
 }
 .cover-lines .btn {
   min-height: 3.25rem;
@@ -1701,7 +1709,7 @@ a.tonight-art:hover .still img {
   grid-template-columns: 3.4rem minmax(0, 1fr) auto;
   gap: 0.85rem;
   align-items: start;
-  padding: 1.05rem 0;
+  padding: clamp(0.6rem, 1.8svh, 1.05rem) 0;
 }
 .demo-row + .demo-row {
   border-top: 1px solid var(--rule);
@@ -1730,7 +1738,7 @@ a.tonight-art:hover .still img {
   max-width: var(--max);
   width: 100%;
   margin: 0 auto;
-  padding: 0.8rem 0 1.4rem;
+  padding: 0.7rem 0 clamp(0.8rem, 2.5svh, 1.4rem);
   border-top: 2px solid var(--band-rule);
   font-size: var(--t-small);
   font-weight: 700;
@@ -2891,7 +2899,7 @@ a.tonight-art:hover .still img {
   grid-template-columns: 2rem minmax(0, 1fr) auto;
   gap: 0.8rem;
   align-items: center;
-  padding: 0.9rem 0.2rem;
+  padding: 0.7rem 0.2rem;
 }
 .check-row + .check-row {
   border-top: 1px solid var(--rule);
@@ -2918,15 +2926,224 @@ a.tonight-art:hover .still img {
   border: 2px solid var(--red);
   border-radius: 50%;
 }
-.setup-later {
+.setup-page .page-head {
+  align-items: center;
+  padding-bottom: 0.7rem;
+  margin-bottom: 1.5rem;
+}
+.setup-page .page-head .steps ol {
+  margin-bottom: 0;
+}
+.setup-step > .setup-heading {
+  padding-top: 0;
+  border-top: 0;
+  margin-bottom: 0.5rem;
+}
+.setup-lede {
+  max-width: 62ch;
+  margin-bottom: 1.4rem;
+  color: var(--ink-2);
+}
+.setup-bar .later {
+  margin-right: auto;
+  margin-left: -0.7rem;
+}
+.setup-bar .muted {
+  margin-right: 0;
+}
+.keys-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+}
+.key-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.key-label label {
+  font-size: var(--t-small);
+  font-weight: 750;
+}
+.key-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--ink-3);
+  font-size: var(--t-meta);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.key-state.saved {
+  color: var(--ink);
+}
+.key-state .tick {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.key-field input::placeholder {
+  color: var(--ink-3);
+}
+.key-field.invalid input {
+  border-color: var(--red);
+}
+.key-field.invalid small,
+.field-error,
+.problem-text {
+  color: var(--red);
+  font-weight: 650;
+}
+.field-error {
+  margin-top: 0.75rem;
+  font-size: var(--t-small);
+}
+button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+button.link:hover {
+  text-decoration-thickness: 2.5px;
+}
+.devices.plain {
+  border-top: 2px solid var(--ink);
+}
+.device-folders {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.3rem 1rem;
+  margin-top: 0.15rem;
+}
+.device-folders > div {
+  display: contents;
+}
+.device-folders dt {
+  font-size: var(--t-small);
+  font-weight: 750;
+}
+.device-folders dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.6rem;
+  margin: 0;
+  min-width: 0;
+}
+.storage-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 1rem;
+}
+.dl {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+}
+.dl > * {
+  max-width: 100%;
+}
+.dl .loading {
+  padding: 0.5rem 0;
+}
+.dl-current {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 1rem 0.2rem;
+  border-top: 2px solid var(--ink);
+}
+.dl-current .tick {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+.dl-current h3,
+.dl-found h3 {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 850;
+  font-stretch: 75%;
+  line-height: 1.1;
+}
+.dl-current p {
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.dl-found {
+  justify-self: stretch;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+.dl-found li {
+  padding: 0.9rem 0.2rem;
+}
+.dl-found li + li {
+  border-top: 1px solid var(--rule);
+}
+.dl-found-line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+.dl-login {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-top: 0.8rem;
+}
+.dl-login .field {
+  flex: 1 1 12rem;
+}
+.dl-none,
+.dl-note {
+  font-weight: 700;
+}
+.dl-note {
+  color: var(--red);
+}
+.dl-managed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem 1rem;
-  margin-top: 2.5rem;
-  padding-top: 0.75rem;
+}
+.dl-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  flex-basis: 100%;
+}
+.dl-command code {
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--radius);
+  background: var(--paper-sink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--t-small);
+  overflow-wrap: anywhere;
+}
+.dl-more {
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.dl-manual {
+  justify-self: stretch;
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 1rem;
   border-top: 1px solid var(--rule);
+}
+.check-open.optional {
+  border-color: var(--ink-3);
+  border-style: dashed;
 }
 .embedded .page-head {
   margin-top: 0.5rem;
@@ -3218,7 +3435,7 @@ a.tonight-art:hover .still img {
     flex-basis: 100%;
   }
   .cover-lines .display {
-    font-size: clamp(3rem, 15vw, 4.25rem);
+    font-size: clamp(2.75rem, min(15vw, 9svh), 4.25rem);
   }
   .cover-demo ol {
     padding: 0.2rem 0.75rem;
@@ -3286,4 +3503,7 @@ a.tonight-art:hover .still img {
     animation: none;
     stroke-dasharray: none;
   }
+}
+.download-limits {
+  margin-top: 1.5rem;
 }
