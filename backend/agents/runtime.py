@@ -728,6 +728,12 @@ class AgentRuntime:
                 response = await self._call_api(session, system, tools)
             except Exception as exc:
                 self._ledger_call(session, started, error=f"{type(exc).__name__}: {exc}")
+                status = getattr(exc, "status_code", None)
+                if status and 400 <= status < 500:
+                    # Refused outright (no key, a rejected request): nothing
+                    # was billed, so the reservation is released.
+                    with self.store._connect() as db:
+                        db.execute("DELETE FROM reasoning_reservations WHERE id=?", (identity,))
                 raise
             if response is None:
                 self._ledger_call(session, started, error="The AI provider could not be reached after retries.")
@@ -763,7 +769,7 @@ class AgentRuntime:
                         max_tokens=spec.max_tokens,
                         system=system,
                         tools=[t.to_api() for t in tools],
-                        messages=session.messages,
+                        messages=openai_loop.anthropic_messages(session.messages),
                         **options,
                     )
                 except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:

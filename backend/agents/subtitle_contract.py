@@ -558,11 +558,12 @@ def openai_reader(api_key, model, effort="low"):
     return read
 
 
-async def read_pictures(reader, rendered, *, parallel=4):
+async def read_pictures(reader, rendered, *, parallel=4, max_dollars=0.0):
     """SRT text from rendered picture subtitles, timed by the disc itself.
 
     Each sheet is read once, with one retry for rows the reader left out;
-    rows that stay unread are dropped rather than guessed.
+    rows that stay unread are dropped rather than guessed. No call starts once
+    max_dollars (if set) is spent.
     """
     from .subtitle_worker import render
 
@@ -576,6 +577,9 @@ async def read_pictures(reader, rendered, *, parallel=4):
             if all(n in texts for n in numbers):
                 return
             async with gate:
+                if max_dollars and spend["dollars"] >= max_dollars:
+                    spend["failures"].append(f"sheet {index + 1}: the allowance is spent")
+                    return
                 try:
                     data, usage = await reader(sheet, numbers)
                 except Exception as exc:

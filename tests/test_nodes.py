@@ -209,6 +209,32 @@ class NodeTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((self.library / "Show/episode.mp4").exists())
         self.assertTrue(source.exists())
 
+        # A publication that found an identical file there did not place it.
+        (self.library / "Show/kept.mp4").write_bytes(source.read_bytes())
+        found = await self.command("publish", {**args, "destination": "Show/kept.mp4"})
+        self.assertTrue(found["ok"], found)
+        self.assertFalse(found["value"]["placed"])
+        self.assertFalse((await self.command("withdraw", {"root_id": "library", "path": "Show/kept.mp4"}))["ok"])
+        self.assertTrue((self.library / "Show/kept.mp4").exists())
+        # A failed publication proves nothing about the file at its destination.
+        (self.library / "Show/theirs.mp4").write_bytes(b"a different movie")
+        self.assertFalse((await self.command("publish", {**args, "destination": "Show/theirs.mp4"}))["ok"])
+        self.assertFalse((await self.command("withdraw", {"root_id": "library", "path": "Show/theirs.mp4"}))["ok"])
+        self.assertTrue((self.library / "Show/theirs.mp4").exists())
+        # A placed file that changed afterwards is no longer Sparrow's copy.
+        self.assertTrue((await self.command("publish", {**args, "destination": "Show/changed.mp4"}))["ok"])
+        (self.library / "Show/changed.mp4").write_bytes(b"replaced by its owner")
+        self.assertFalse((await self.command("withdraw", {"root_id": "library", "path": "Show/changed.mp4"}))["ok"])
+        self.assertTrue((self.library / "Show/changed.mp4").exists())
+
+    async def test_polled_and_rendered_results_are_not_kept(self):
+        for kind in ("download_status", "download_select", "subtitle_pictures"):
+            with self.assertRaises(NodeError):
+                await self.nodes.execute("local", kind, {"hash": "a" * 40, "root_id": "library", "path": "missing.mkv"})
+        with self.nodes.local().db() as db:
+            kept = db.execute("SELECT json_extract(payload,'$.kind') AS kind FROM operations").fetchall()
+        self.assertEqual([row["kind"] for row in kept], [])
+
     async def test_pairing_pending_commands_and_result_replay_survive_restart(self):
         enrollment = self.nodes.enroll("Windows fixture")
         credential = secrets.token_urlsafe(32)

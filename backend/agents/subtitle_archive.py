@@ -111,9 +111,17 @@ async def fetch(candidate: dict, *, client: httpx.AsyncClient | None = None) -> 
     try:
         response = await client.get(STORAGE.format(id=candidate["attachment"], ext=candidate["format"]))
         response.raise_for_status()
-        raw = lzma.decompress(response.content, memlimit=MAX_BYTES * 4)
+        # Unpack no further than the size limit: a small download can
+        # expand to gigabytes. A damaged archive is a failed source.
+        decoder = lzma.LZMADecompressor()
+        try:
+            raw = decoder.decompress(response.content, max_length=MAX_BYTES + 1)
+        except lzma.LZMAError as exc:
+            raise ValueError("This archived subtitle could not be unpacked.") from exc
         if len(raw) > MAX_BYTES:
             raise ValueError("This archived subtitle is too large.")
+        if not decoder.eof:
+            raise ValueError("This archived subtitle is incomplete.")
         return raw.decode("utf-8-sig", "replace"), candidate["format"]
     finally:
         if own:

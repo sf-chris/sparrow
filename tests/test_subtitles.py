@@ -409,6 +409,44 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(task["data"]["archive_searched"])
         self.assertEqual(self.subtitles.track(task["data"]["track_id"])["data"]["source_id"], "archive:7")
 
+    async def test_picture_tracks_are_read_only_with_the_switch_on_and_within_the_allowance(self):
+        from backend.agents import subtitles as module
+        from backend.agents.models import AgentKind, AgentSession
+        from backend.agents.runtime import ToolError
+
+        manager = await self.manager()
+        listing = {
+            "movie_hash": "",
+            "facts": {"audio_tracks": []},
+            "candidates": [
+                {"id": "embedded:3", "source": "embedded", "index": 3, "language": "en", "kind": "full", "picture": True},
+                {"id": "embedded:2", "source": "embedded", "index": 2, "language": "en", "kind": "full"},
+            ],
+        }
+        asset = {"node_id": "local", "root_id": "library", "path": "movie.mkv", "item_id": "none"}
+        execute = AsyncMock(return_value=listing)
+        with patch.object(manager.nodes, "execute", execute), patch.object(manager, "authority"), \
+                patch.object(manager, "update"), patch.object(module, "reader_model", lambda: "gpt-6-luna"):
+            for verify, offered in ((False, ["embedded:2"]), (True, ["embedded:2", "embedded:3"])):
+                task = {"id": "picture-task", "state": "finding", "data": {
+                    "language": "en", "kind": "full", "upload": None, "audio_index": 1, "verify": verify,
+                }}
+                candidates, _ = await manager.listing(task, self.owner, asset)
+                self.assertEqual([c["id"] for c in candidates], offered)
+
+            spent = AgentSession(agent=AgentKind.SUBTITLE, budget_scope="subtitle:picture-task")
+            spent.spend.dollars = 0.6
+            self.service.store.save_session(spent)
+            execute.reset_mock()
+            with patch.dict("os.environ", {"SPARROW_SUBTITLE_BUDGET": "0.5"}):
+                with self.assertRaisesRegex(ToolError, "allowance is used up"):
+                    await manager.fetch_text(task, asset, listing["candidates"][0])
+                # A candidate stored before the switch was turned off is not read either.
+                off = {**task, "data": {**task["data"], "verify": False}}
+                with self.assertRaisesRegex(ToolError, "switched on"):
+                    await manager.fetch_text(off, asset, listing["candidates"][0])
+            execute.assert_not_awaited()
+
     def fixture_checker(self, verdict):
         async def checker(system, prompt, schema):
             if "translate" in system.split(".")[0]:
@@ -990,6 +1028,22 @@ class PictureSubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([c["text"] for c in cues_from_text(text, "srt")], [l[2] for l in lines])
         self.assertEqual((spend["read"], spend["rows"]), (3, 3))
 
+    async def test_reading_stops_once_the_allowance_is_spent(self):
+        from backend.agents.subtitle_contract import read_pictures
+
+        calls = []
+
+        async def reader(image, numbers):
+            calls.append(numbers)
+            return {"lines": [{"n": n, "text": f"line {n}"} for n in numbers]}, {"input_tokens": 900, "output_tokens": 90}
+
+        reader.model = "gpt-6-luna"
+        rendered = {"events": [{"n": n, "start": n, "end": n + 0.5} for n in (1, 2, 3)], "rows_per_sheet": 1, "sheets": ["a", "b", "c"]}
+        text, spend = await read_pictures(reader, rendered, parallel=1, max_dollars=0.0001)
+        self.assertEqual(calls, [[1]])
+        self.assertEqual(spend["read"], 1)
+        self.assertTrue(all("allowance" in f for f in spend["failures"]))
+
     async def test_a_fading_disc_line_is_one_line(self):
         import tempfile
         from pathlib import Path
@@ -1051,5 +1105,30 @@ class ArchiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Script Info", text)
         self.assertFalse(any("id=2" in url or "id=3" in url or "id=4" in url or "id=6" in url for url in asked))
         self.assertTrue(archive.episode_in("[SubsPlease] Show - 02 (1080p) [ABCD].mkv", 1, 2))
+        self.assertTrue(archive.episode_in("[SubsPlease] Show S2 - 02 (1080p).mkv", 2, 2))
+        self.assertFalse(archive.episode_in("[SubsPlease] Show S2 - 02 (1080p).mkv", 1, 2))
         self.assertFalse(archive.episode_in("Show - 12.mkv", 1, 2))
         self.assertFalse(archive.episode_in("Show S02E02.mkv", 1, 2))
+
+
+class ArchiveLimitTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_huge_or_damaged_archive_is_a_failed_source(self):
+        import httpx
+        import lzma
+        from backend.agents import subtitle_archive as archive
+
+        candidate = {"attachment": 7, "format": "srt"}
+        whole = lzma.compress(b"1\n00:00:01,000 --> 00:00:02,000\nHello\n")
+        bodies = {
+            "too large": lzma.compress(b"\0" * (archive.MAX_BYTES + 1024), preset=1),
+            "could not be unpacked": b"not an archive",
+            "incomplete": whole[:-12],
+        }
+        for reason, body in bodies.items():
+            transport = httpx.MockTransport(lambda request, body=body: httpx.Response(200, content=body))
+            async with httpx.AsyncClient(transport=transport) as client:
+                with self.assertRaisesRegex(ValueError, reason):
+                    await archive.fetch(candidate, client=client)
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, content=whole))
+        async with httpx.AsyncClient(transport=transport) as client:
+            self.assertEqual(await archive.fetch(candidate, client=client), ("1\n00:00:01,000 --> 00:00:02,000\nHello\n", "srt"))

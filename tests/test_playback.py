@@ -2,6 +2,7 @@ import base64
 import secrets
 import tempfile
 import unittest
+from unittest.mock import AsyncMock, patch
 from pathlib import Path
 import httpx
 from fastapi import FastAPI
@@ -156,6 +157,10 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         caption = await self.client.get(first["subtitles"][0]["url"])
         self.assertIn("WEBVTT", caption.text)
         self.assertIn("A second caption.", caption.text)
+        # The converted track is kept: asking again does not extract it again.
+        with patch.object(self.nodes, "execute", AsyncMock(side_effect=AssertionError("extracted twice"))):
+            again = await self.client.get(first["subtitles"][0]["url"])
+        self.assertEqual(again.text, caption.text)
         endpoint = f'/api/v1/playback/{first["id"]}/progress'
         self.assertTrue(
             (

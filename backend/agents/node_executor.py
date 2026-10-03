@@ -26,6 +26,13 @@ PROTOCOL = 1
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".m4v", ".mov", ".avi", ".webm", ".ts", ".wmv"}
 SUBTITLE_EXTENSIONS = {".srt", ".vtt", ".ass", ".ssa", ".sub"}
 READ_CHUNK = 1024 * 1024
+# Operations whose results are read once: delivered results are cleared and
+# their records pruned, so reads, polls and rendered pictures do not pile up.
+TRANSIENT_KINDS = (
+    "read", "stat", "hls_segment", "subtitle_extract", "subtitle_pictures",
+    "download_select", "download_status",
+)
+_TRANSIENT_SQL = ",".join(f"'{kind}'" for kind in TRANSIENT_KINDS)
 RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", re.I)
 
 
@@ -270,7 +277,7 @@ class Executor:
         with self.db() as db:
             if time.time() - self._last_prune > 300:
                 db.execute(
-                    "DELETE FROM operations WHERE delivered=1 AND created<? AND json_extract(payload,'$.kind') IN ('read','stat','hls_segment','subtitle_extract')",
+                    f"DELETE FROM operations WHERE delivered=1 AND created<? AND json_extract(payload,'$.kind') IN ({_TRANSIENT_SQL})",
                     (time.time() - 86400,),
                 )
                 self._last_prune = time.time()
@@ -306,7 +313,7 @@ class Executor:
             # The coordinator acknowledged receipt. Preserve the operation identity,
             # but do not retain entire streamed movies in the node database.
             db.execute(
-                "UPDATE operations SET result=? WHERE id=? AND json_extract(payload,'$.kind') IN ('read','stat','hls_segment','subtitle_extract')",
+                f"UPDATE operations SET result=? WHERE id=? AND json_extract(payload,'$.kind') IN ({_TRANSIENT_SQL})",
                 (
                     canonical(
                         {
@@ -612,7 +619,8 @@ class Executor:
                     raise NodeError(
                         "The copied bytes did not match the verified source; the original is safe."
                     )
-                if target.exists():
+                placed = not target.exists()
+                if not placed:
                     if sha256_file(target) != checksum:
                         raise NodeError(
                             "A different file already exists at the destination."
@@ -621,15 +629,18 @@ class Executor:
                     # Atomic no-clobber publication on NTFS and normal local Linux filesystems.
                     os.link(temp, target)
                 temp.unlink(missing_ok=True)
-                return checksum
+                return checksum, placed
 
-            checksum = await asyncio.to_thread(copy)
+            checksum, placed = await asyncio.to_thread(copy)
             facts = await probe_file(target)
             return {
                 "path": args["destination"],
                 "root_id": args.get("destination_root", "library"),
                 "sha256": checksum,
                 "facts": facts,
+                # Whether this publication created the file (an identical
+                # file already there belongs to whoever put it there).
+                "placed": placed,
             }
         if kind == "discard_staging":
             # A whole abandoned transfer folder, partial files included; the
@@ -642,15 +653,22 @@ class Executor:
             shutil.rmtree(path)
             return {"removed": True}
         if kind == "withdraw":
-            # Only a copy this node itself published, never other media.
+            # Only a file this node's own successful publication created, still
+            # holding the bytes it published: never other media.
             with self.db() as db:
-                placed = db.execute(
-                    "SELECT 1 FROM operations WHERE json_extract(payload,'$.kind')='publish' "
-                    "AND json_extract(payload,'$.args.destination')=? AND state='done'",
+                rows = db.execute(
+                    "SELECT result FROM operations WHERE json_extract(payload,'$.kind')='publish' "
+                    "AND json_extract(payload,'$.args.destination')=? "
+                    "AND COALESCE(json_extract(payload,'$.args.destination_root'),'library')='library' "
+                    "AND state='done' AND json_extract(result,'$.ok')=1 "
+                    "AND json_extract(result,'$.value.placed')=1",
                     (args.get("path", ""),),
-                ).fetchone()
-            if root_id != "library" or not placed or not path.is_file() or path.is_symlink():
+                ).fetchall()
+            published = {json.loads(row["result"])["value"]["sha256"] for row in rows}
+            if root_id != "library" or not published or not path.is_file() or path.is_symlink():
                 raise NodeError("Only a copy Sparrow published here can be withdrawn.")
+            if await asyncio.to_thread(sha256_file, path) not in published:
+                raise NodeError("This file changed after Sparrow published it, so it was kept.")
             path.unlink()
             return {"removed": True}
         if kind == "delete_staging":

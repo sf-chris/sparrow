@@ -36,8 +36,9 @@ Everything new lives in `backend/agents/`:
   hibernate with a trigger or close. Handles persistence, crash repair,
   durable event acknowledgements/tool results, spend tracking and API retries.
 - `tools.py` — the tool belt + guardrails. Filesystem jail (staging +
-  library only), library deletion only via verified `upgrade_swap`, indexer
-  rate limits, honest error text the agent can reason about (`ToolError`).
+  library only), library deletion only via verified `upgrade_swap` (or
+  withdrawing an unverified file the same request itself placed, unchanged),
+  indexer rate limits, honest error text the agent can reason about (`ToolError`).
 - `prompts.py` — the agents' standing orders. Philosophy → operating rules.
 - `service.py` — `AgentService`: event routing, the plumbing poller
   (files_landed / download_stalled / client_recovered / timers), job
@@ -115,7 +116,8 @@ Everything new lives in `backend/agents/`:
   (GPT-6-Luna, GPT-6-Sol second opinion when borderline) read every page; the
   manager reads only what they flag plus audit pages. Sources are tried in order:
   the release's text tracks, its picture (Blu-ray/DVD) tracks read by the cheap
-  vision model, an archive track for the same episode, then writing. A
+  vision model (only with the switch on, within the title's allowance), an
+  archive track for the same episode, then writing. A
   human-made track is verified, never edited (only OCR and timing fixes): a
   failing one is set aside for the next source. Sparrow-written tracks are
   edited through tools that re-measure every change. Checker and manager spend
