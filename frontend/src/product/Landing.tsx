@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Play } from "lucide-react";
+import { ArrowRight, Play } from "lucide-react";
 import { Circled, Logotype, Tick } from "./Brand";
 
 export default function Landing({ needsSetup }: { needsSetup: boolean }) {
@@ -26,6 +26,7 @@ export default function Landing({ needsSetup }: { needsSetup: boolean }) {
           <div className="actions">
             <Link className="btn primary" to={needsSetup ? "/setup" : "/login"}>
               {needsSetup ? "Set up Sparrow" : "Sign in"}
+              <ArrowRight size={20} strokeWidth={2.5} aria-hidden="true" />
             </Link>
           </div>
         </div>

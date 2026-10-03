@@ -13,7 +13,6 @@ tool belt.
 from __future__ import annotations
 import asyncio
 import logging
-import os
 import json
 import secrets
 import time
@@ -22,6 +21,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 import provider
 
+from ..configuration import effective_altprovider_key
 from . import ledger, altprovider_loop
 from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
@@ -211,7 +211,7 @@ class AgentRuntime:
     ):
         self.store = store
         self._api_key_getter = api_key_getter
-        self._altprovider_key_getter: Callable[[], str] = lambda: os.getenv("ALTPROVIDER_API_KEY", "")
+        self._altprovider_key_getter: Callable[[], str] = effective_altprovider_key
         self._specs: dict[str, AgentSpec] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._on_session_change = on_session_change
@@ -792,7 +792,7 @@ class AgentRuntime:
         key = self._altprovider_key_getter()
         if not key:
             # A missing key is not an outage: say so instead of retrying.
-            raise altprovider_loop.AltProviderStatusError(401, f"{session.model} needs an AltProvider key (ALTPROVIDER_API_KEY).")
+            raise altprovider_loop.AltProviderStatusError(401, f"{session.model} needs an AltProvider key. Add one in Settings → Connections.")
         delay = 2.0
         for attempt in range(3):
             try:
