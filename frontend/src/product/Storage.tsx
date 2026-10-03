@@ -9,6 +9,7 @@ import {
   Scissors,
 } from "lucide-react";
 import { api, patch, post, type NodeInfo } from "./api";
+import { Tick } from "./Brand";
 import {
   Bar,
   Dialog,
@@ -59,6 +60,9 @@ export default function Storage({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [scan, setScan] = useState<Scan | null>(null);
+  const suggested = useResource(() =>
+    api<{ library: string; incoming: string }>("/admin/storage/suggestions"),
+  );
   async function pair() {
     setBusy("pair");
     setError("");
@@ -74,27 +78,39 @@ export default function Storage({
       setBusy("");
     }
   }
-  async function chooseLocal(node: NodeInfo) {
-    setError("");
-    // Keep a saved folder only if this server can actually see it.
+  /** Saved folders this server can see, else the suggested ones. */
+  function planFolders(node: NodeInfo) {
     const usable = (id: string) =>
       node.capabilities.roots.find((r) => r.id === id)?.available;
-    let library = usable("library") ? cfg.data?.library_dir || "" : "",
-      staging = usable("staging") ? cfg.data?.staging_dir || "" : "";
-    if (!library || !staging) {
-      try {
-        const suggested = await api<{ library: string; incoming: string }>(
-          "/admin/storage/suggestions",
-        );
-        library ||= suggested.library;
-        staging ||= suggested.incoming;
-      } catch {
-        // Suggestions only save typing; empty fields still work.
-      }
-    }
-    setLibrary(library);
-    setStaging(staging);
+    return {
+      library:
+        (usable("library") && cfg.data?.library_dir) ||
+        suggested.data?.library ||
+        "",
+      staging:
+        (usable("staging") && cfg.data?.staging_dir) ||
+        suggested.data?.incoming ||
+        "",
+    };
+  }
+  function chooseLocal(node: NodeInfo) {
+    const plan = planFolders(node);
+    setError("");
+    setLibrary(plan.library);
+    setStaging(plan.staging);
     setLocal(true);
+  }
+  async function useSuggested(node: NodeInfo) {
+    const plan = planFolders(node);
+    await saveFolders(plan.library, plan.staging, "suggested");
+  }
+  /** Make missing folders again where they were. */
+  async function recreate() {
+    await saveFolders(
+      cfg.data?.library_dir || "",
+      cfg.data?.staging_dir || "",
+      "recreate",
+    );
   }
   function startPairing(node?: NodeInfo) {
     setPairingId(node?.id);
@@ -103,8 +119,8 @@ export default function Storage({
     setError("");
     setPairing(true);
   }
-  async function saveLocal() {
-    setBusy("local");
+  async function saveFolders(library: string, staging: string, key: string) {
+    setBusy(key);
     setError("");
     try {
       await patch("/admin/config", {
@@ -174,85 +190,143 @@ export default function Storage({
               const rootOf = (id: string) =>
                 node.capabilities.roots.find((r) => r.id === id);
               const root = rootOf("library");
-              const chosen = !!root;
+              const local = node.id === "local";
               // Red is for something that broke; a folder not chosen yet is just the next step.
               const problem = node.disabled
                 ? "Revoked"
                 : !node.online
                   ? "Offline"
-                  : chosen && !root.available
-                    ? "Folder missing"
-                    : "";
-              const local = node.id === "local";
-              const folders = local
-                ? [
-                    {
-                      label: "Library",
-                      path: cfg.data?.library_dir || "",
-                      root,
-                    },
-                    {
-                      label: "Incoming",
-                      path: cfg.data?.staging_dir || "",
-                      root: rootOf("staging"),
-                    },
-                  ]
-                : [];
+                  : "";
+              const folders = [
+                {
+                  label: "Library",
+                  path: cfg.data?.library_dir || "",
+                  root,
+                  suggestion: suggested.data?.library || "",
+                  write: false,
+                },
+                {
+                  label: "Incoming",
+                  path: cfg.data?.staging_dir || "",
+                  root: rootOf("staging"),
+                  suggestion: suggested.data?.incoming || "",
+                  write: true,
+                },
+              ];
+              const missing = folders.some((f) => f.path && !f.root?.available);
+              const unset = folders.some((f) => !f.path);
               return (
                 <li className="device-card" key={node.id}>
                   <HardDrive size={26} strokeWidth={2} aria-hidden="true" />
                   <div className="device-body">
-                    <div className="request-top">
+                    <div className="device-head">
                       <h2>{node.name}</h2>
                       {problem && (
                         <span className="flag problem">{problem}</span>
                       )}
+                      {root?.free_bytes !== undefined && (
+                        <span className="meta num device-free">
+                          {bytes(root.free_bytes)} free
+                        </span>
+                      )}
                     </div>
-                    {local && (folders[0].path || folders[1].path) ? (
-                      <dl className="device-folders">
-                        {folders.map((folder) => (
-                          <div key={folder.label}>
-                            <dt>{folder.label}</dt>
-                            <dd>
-                              <span className="path">
-                                {folder.path || "Not chosen"}
+                    {local ? (
+                      <ul className="folder-rows">
+                        {folders.map((folder) => {
+                          const shown = folder.path || folder.suggestion;
+                          const ready =
+                            folder.path &&
+                            folder.root?.available &&
+                            !(folder.write && folder.root.writable === false);
+                          return (
+                            <li key={folder.label}>
+                              <span className="folder-label">
+                                {folder.label}
                               </span>
-                              {folder.root?.available ? (
-                                <span className="meta num">
-                                  {folder.label === "Library" &&
-                                    folder.root.free_bytes !== undefined &&
-                                    `${bytes(folder.root.free_bytes)} free`}
-                                  {folder.root.writable === false &&
-                                    " · Read only"}
+                              <span
+                                className={`path ${folder.path ? "" : "suggested"}`}
+                              >
+                                {shown || "Not chosen"}
+                              </span>
+                              <span className="leader" aria-hidden="true" />
+                              {ready ? (
+                                <span className="folder-state">
+                                  <Tick />{" "}
+                                  {folder.root!.writable === false
+                                    ? "Read only"
+                                    : "Ready"}
+                                </span>
+                              ) : !folder.path ? (
+                                <span className="folder-state quiet">
+                                  {shown ? "Suggested" : ""}
+                                </span>
+                              ) : folder.root?.available ? (
+                                <span className="folder-state problem-text">
+                                  Can’t save here
                                 </span>
                               ) : (
-                                folder.path && (
-                                  <span className="meta problem-text">
-                                    Not found on this server
-                                  </span>
-                                )
+                                <span className="folder-state problem-text">
+                                  Not found
+                                </span>
                               )}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     ) : (
                       <p className="meta num">
-                        {root?.free_bytes !== undefined
-                          ? `${bytes(root.free_bytes)} free`
-                          : root?.error ||
-                            (local ? "No folders yet" : "No library folder yet")}
+                        {root?.available
+                          ? ""
+                          : root?.error || "No library folder yet"}
                         {!node.capabilities.probe && " · Media tools missing"}
                       </p>
                     )}
                     <div className="actions">
                       {local ? (
-                        <button
-                          className={`btn ${onboarding && !root?.available ? "primary" : ""}`}
-                          onClick={() => void chooseLocal(node)}
-                        >
-                          {chosen ? "Change folders" : "Choose folders"}
-                        </button>
+                        unset && !missing && suggested.data ? (
+                          <>
+                            <button
+                              className="btn primary"
+                              disabled={!!busy}
+                              onClick={() => void useSuggested(node)}
+                            >
+                              {busy === "suggested"
+                                ? "Creating folders…"
+                                : "Use these folders"}
+                            </button>
+                            <button
+                              className="btn quiet"
+                              onClick={() => chooseLocal(node)}
+                            >
+                              Choose other folders
+                            </button>
+                          </>
+                        ) : missing && !unset ? (
+                          <>
+                            <button
+                              className="btn primary"
+                              disabled={!!busy}
+                              onClick={() => void recreate()}
+                            >
+                              {busy === "recreate"
+                                ? "Creating folders…"
+                                : "Create folders"}
+                            </button>
+                            <button
+                              className="btn quiet"
+                              onClick={() => chooseLocal(node)}
+                            >
+                              Choose other folders
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className={`btn ${unset ? "primary" : "quiet"}`}
+                            onClick={() => chooseLocal(node)}
+                          >
+                            {unset ? "Choose folders" : "Change folders"}
+                          </button>
+                        )
                       ) : (
                         <>
                           <button
@@ -301,13 +375,12 @@ export default function Storage({
         </section>
       )}
       {onboarding ? (
-        <div className="storage-pair">
-          <p className="muted">Files on another computer?</p>
-          <button className="btn" onClick={() => startPairing()}>
-            <Plus size={18} strokeWidth={2.5} />
-            Pair a computer
+        <p className="muted storage-pair">
+          Files on another computer?{" "}
+          <button className="link" onClick={() => startPairing()}>
+            Pair it
           </button>
-        </div>
+        </p>
       ) : (
         <p className="muted storage-note">
           Import shows what it found before adding anything. Files aren’t
@@ -388,7 +461,7 @@ export default function Storage({
             <button
               className="btn primary"
               disabled={busy === "local"}
-              onClick={saveLocal}
+              onClick={() => void saveFolders(library, staging, "local")}
             >
               Save folders
             </button>
@@ -397,8 +470,8 @@ export default function Storage({
           <div className="form">
             <ErrorNote error={error} />
             <p className="muted">
-              Folders on this server. Sparrow creates a new one if its parent
-              folder exists. For another computer, pair it instead.
+              Folders on this server. Sparrow creates any that don’t exist yet.
+              For another computer, pair it instead.
             </p>
             <Field
               label="Library folder"

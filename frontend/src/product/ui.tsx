@@ -101,7 +101,7 @@ export function ErrorNote({
 }) {
   if (!error) return null;
   return (
-    <div className="problem" role="alert">
+    <div className="error-note" role="alert">
       <p>{error}</p>
       {retry && (
         <button className="btn quiet" onClick={retry}>

@@ -13,7 +13,7 @@ from .models import JobStatus, Event, SessionStatus, CaseState
 from .node_executor import NodeError
 from .runtime import ToolError
 from ..configuration import (
-    apply_config_update, prepare_media_folder, public_config, suggested_media_folders,
+    apply_config_update, public_config, settle_media_folders, suggested_media_folders,
 )
 from ..models import SparrowConfig
 from ..services.library_view import build_library_view
@@ -422,12 +422,7 @@ def install_product(app, storage, accounts, nodes, get_service):
             before = storage.get_config()
             config = SparrowConfig.from_dict(before.to_dict())
             config = apply_config_update(config, body.model_dump(exclude_unset=True))
-            for value, previous, writable in (
-                (config.library_dir, before.library_dir, False),
-                (config.staging_dir, before.staging_dir, True),
-            ):
-                if value and value != previous:
-                    prepare_media_folder(value, writable=writable)
+            settle_media_folders(config, before)
             await storage.save_config(config)
         except (ValueError, TypeError) as exc:
             raise HTTPException(422, str(exc)) from exc
