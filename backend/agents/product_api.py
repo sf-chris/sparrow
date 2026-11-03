@@ -292,7 +292,9 @@ def install_product(app, storage, accounts, nodes, get_service):
         media_type: Literal["movie", "tv"]
         wanted_episodes: dict[str, list[int]] | None = None
         preferences: dict = Field(default_factory=dict)
-        node_id: str = "local"
+        # A computer (older clients); storage also takes auto, a pool or a disk.
+        node_id: str | None = None
+        storage: str | None = Field(default=None, max_length=100)
         monitoring: Literal["", "exact", "keep_current", "seasons", "backfill"] = ""
 
     @router.post("/jobs")
@@ -302,13 +304,19 @@ def install_product(app, storage, accounts, nodes, get_service):
             raise HTTPException(
                 403, "Your account can watch; ask an administrator for request access."
             )
-        if not accounts.can_access(user, body.node_id):
-            raise HTTPException(
-                403, "This storage destination is not available to your account."
-            )
-        node = nodes.info(body.node_id)
-        if not node or node["disabled"]:
-            raise HTTPException(422, "Choose a paired storage destination.")
+        storage_choice = body.storage or body.node_id
+        computer = (storage_choice or "").partition("/")[0]
+        if storage_choice and ":" not in storage_choice and computer not in ("auto", "ask"):
+            if not accounts.can_access(user, computer):
+                raise HTTPException(
+                    403, "This storage destination is not available to your account."
+                )
+            node = nodes.info(computer)
+            if not node or node["disabled"]:
+                raise HTTPException(422, "Choose a paired storage destination.")
+        overrides = dict(body.preferences)
+        if storage_choice:
+            overrides["storage"] = storage_choice
         async with job_lock:
             try:
                 job = await get_service().create_job(
@@ -316,10 +324,9 @@ def install_product(app, storage, accounts, nodes, get_service):
                     body.wanted_episodes,
                     media_type=body.media_type,
                     user_id=user["id"],
-                    preference_overrides=body.preferences,
+                    preference_overrides=overrides,
                     monitoring=body.monitoring,
-                    library_id=body.node_id,
-                    node_id="" if body.node_id == "local" else body.node_id,
+                    library_id=None,
                 )
             except (ValueError, ToolError) as exc:
                 raise HTTPException(422, str(exc)) from exc
@@ -345,7 +352,7 @@ def install_product(app, storage, accounts, nodes, get_service):
 
     class Scan(Input):
         node_id: str = "local"
-        root_id: Literal["library"] = "library"
+        root_id: str = Field(default="library", pattern=r"^library(-\d{1,2})?$")
         path: str = ""
 
     class Selection(Input):

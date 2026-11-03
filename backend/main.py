@@ -853,6 +853,7 @@ class ConfigUpdate(BaseModel):
     model_config = {"extra": "forbid"}
     staging_dir: Optional[str] = None
     library_dir: Optional[str] = None
+    extra_library_dirs: Optional[list[str]] = Field(default=None, max_length=16)
     torrent_client: Optional[dict] = None
     quality_preference: Optional[str] = None
     tmdb_api_key: Optional[str] = None
@@ -2341,6 +2342,8 @@ from .agents.nodes import install_nodes
 nodes = install_nodes(app, storage, lambda: agent_service)
 from .agents.product_api import install_product
 catalogue = install_product(app, storage, accounts, nodes, lambda: agent_service)
+from .agents.placement import install_placement
+placement = install_placement(app, accounts, nodes, storage, lambda: agent_service)
 from .agents.subtitles import install_subtitles
 from .agents.curation import install_curation
 install_curation(app, accounts, lambda: agent_service)

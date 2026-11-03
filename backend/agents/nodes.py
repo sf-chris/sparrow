@@ -12,7 +12,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .accounts import Accounts, digest
 from .account_api import administrator
-from .node_executor import Executor, NodeError, PROTOCOL, TRANSIENT_KINDS, canonical
+from .node_executor import (
+    Executor, NodeError, PROTOCOL, TRANSIENT_KINDS, canonical, is_library, library_roots,
+)
+
 
 
 class Nodes:
@@ -38,7 +41,10 @@ class Nodes:
     def local(self):
         cfg = self.storage.get_config()
         config = {
-            "roots": {"library": cfg.library_dir, "staging": cfg.staging_dir},
+            "roots": {
+                **library_roots([cfg.library_dir, *cfg.extra_library_dirs]),
+                "staging": cfg.staging_dir,
+            },
             "downloader": cfg.torrent_client.to_dict(),
         }
         if self._local is None or config != self._local_config:
@@ -72,15 +78,15 @@ class Nodes:
         for node in self.list():
             if node["disabled"]:
                 continue
-            library_roots = [
+            libraries = [
                 root
                 for root in (node["capabilities"].get("roots") or [])
-                if isinstance(root, dict) and root.get("id") == "library"
+                if isinstance(root, dict) and is_library(root.get("id"))
             ]
             available = (
                 node["online"]
-                and bool(library_roots)
-                and all(root.get("available", False) for root in library_roots)
+                and bool(libraries)
+                and all(root.get("available", False) for root in libraries)
             )
             self.storage.operations.observe(
                 "storage:" + node["id"],

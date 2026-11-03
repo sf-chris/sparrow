@@ -40,6 +40,19 @@ class NodeError(ValueError):
     pass
 
 
+def is_library(root_id):
+    """A computer's library folders: library, library-2, library-3 ..."""
+    return bool(re.fullmatch(r"library(-\d{1,2})?", str(root_id or "")))
+
+
+def library_roots(paths):
+    """Root ids for a computer's library folders, main one first."""
+    return {
+        ("library" if number == 1 else f"library-{number}"): path
+        for number, path in enumerate([p for p in paths if p], 1)
+    }
+
+
 def executable(name):
     import sys
 
@@ -155,7 +168,9 @@ async def probe_file(path):
 
 
 class Executor:
-    def __init__(self, data_dir, roots, markers=None, downloader=None):
+    def __init__(self, data_dir, roots, markers=None, downloader=None, fetcher=None):
+        # fetcher(source, offset) yields the bytes of a copy arriving from elsewhere.
+        self.fetcher = fetcher
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.data_dir / "node.db"
@@ -254,6 +269,8 @@ class Executor:
                         "free_bytes": usage.free,
                         "total_bytes": usage.total,
                         "writable": os.access(root, os.W_OK),
+                        # Shown to people choosing a disk; never interpreted by the server.
+                        **({"label": str(root)} if is_library(root_id) else {}),
                     }
                 )
             except (NodeError, OSError) as exc:
@@ -465,7 +482,11 @@ class Executor:
                     }
                 )
             return out
+        if kind == "receive":
+            return await self._receive(root_id, args, operation_id)
         path = self.path(root_id, args.get("path", ""))
+        if kind in ("checksum", "companions", "release"):
+            return await self._library_file(kind, root_id, path, args)
         if kind == "subtitle_candidates":
             from .subtitle_node import candidates
 
@@ -579,6 +600,8 @@ class Executor:
             expected = args.get("version")
             if expected != file_version(path):
                 raise NodeError("The source changed after verification.")
+            if not is_library(args.get("destination_root", "library")):
+                raise NodeError("Publish into a library folder.")
             target = self.path(
                 args.get("destination_root", "library"), args["destination"], write=True
             )
@@ -659,13 +682,13 @@ class Executor:
                 rows = db.execute(
                     "SELECT result FROM operations WHERE json_extract(payload,'$.kind')='publish' "
                     "AND json_extract(payload,'$.args.destination')=? "
-                    "AND COALESCE(json_extract(payload,'$.args.destination_root'),'library')='library' "
+                    "AND COALESCE(json_extract(payload,'$.args.destination_root'),'library')=? "
                     "AND state='done' AND json_extract(result,'$.ok')=1 "
                     "AND json_extract(result,'$.value.placed')=1",
-                    (args.get("path", ""),),
+                    (args.get("path", ""), root_id),
                 ).fetchall()
             published = {json.loads(row["result"])["value"]["sha256"] for row in rows}
-            if root_id != "library" or not published or not path.is_file() or path.is_symlink():
+            if not is_library(root_id) or not published or not path.is_file() or path.is_symlink():
                 raise NodeError("Only a copy Sparrow published here can be withdrawn.")
             if await asyncio.to_thread(sha256_file, path) not in published:
                 raise NodeError("This file changed after Sparrow published it, so it was kept.")
@@ -685,6 +708,114 @@ class Executor:
             path.unlink()
             return {"removed": True}
         raise NodeError("Unknown node operation.")
+
+    async def _library_file(self, kind, root_id, path, args):
+        """Facts about, and removal of, a library copy that has moved elsewhere."""
+        if not is_library(root_id) or not path.is_file() or path.is_symlink():
+            if kind == "release" and is_library(root_id) and not path.exists():
+                return {"removed": False, "absent": True}
+            raise NodeError("Choose a file in a library folder.")
+        if kind == "companions":
+            # Subtitle files named after the video travel with it.
+            out = []
+            for sidecar in sorted(path.parent.iterdir()):
+                if (
+                    sidecar.name.startswith(path.stem + ".")
+                    and sidecar.suffix.lower() in SUBTITLE_EXTENSIONS
+                    and sidecar.is_file()
+                    and not sidecar.is_symlink()
+                ):
+                    out.append(
+                        {
+                            "path": sidecar.relative_to(self.roots[root_id]).as_posix(),
+                            "size_bytes": sidecar.stat().st_size,
+                            "version": file_version(sidecar),
+                            "sha256": await asyncio.to_thread(sha256_file, sidecar),
+                        }
+                    )
+            return out
+        version = file_version(path)
+        if args.get("version") and args["version"] != version:
+            raise NodeError("This media copy has changed. Refresh it before continuing.")
+        checksum = await asyncio.to_thread(sha256_file, path)
+        if file_version(path) != version:
+            raise NodeError("The file changed while it was being read.")
+        if kind == "checksum":
+            return {"sha256": checksum, "version": version, "size_bytes": version["size_bytes"]}
+        # release: only the exact bytes whose verified copy now lives elsewhere.
+        if checksum != args.get("sha256"):
+            raise NodeError("This file changed after it was copied, so it was kept.")
+        async with self._mutation_lock:
+            path.unlink()
+        return {"removed": True}
+
+    async def _receive(self, root_id, args, operation_id):
+        """A resumable, verified copy into a library folder from another disk
+        on this computer or, through the fetcher, from another computer."""
+        if not is_library(root_id):
+            raise NodeError("Copies arrive only in a library folder.")
+        target = self.path(root_id, args.get("path", ""), write=True)
+        if target.suffix.lower() not in VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS:
+            raise NodeError("Choose a media destination.")
+        size, expected = int(args["size_bytes"]), str(args["sha256"])
+
+        def result(placed):
+            return {"path": args["path"], "root_id": root_id, "sha256": expected, "placed": placed}
+
+        if target.exists():
+            if await asyncio.to_thread(sha256_file, target) == expected:
+                return result(False)
+            raise NodeError("A different file already exists at the destination.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        incoming = target.parent / ".sparrow-incoming"
+        incoming.mkdir(exist_ok=True)
+        if incoming.is_symlink():
+            raise NodeError("Unsafe incoming folder.")
+        temp = incoming / operation_id
+        have = temp.stat().st_size if temp.exists() else 0
+        if have > size:
+            temp.unlink()
+            have = 0
+        if shutil.disk_usage(target.parent).free < size - have + 64 * 1024 * 1024:
+            raise NodeError("There is not enough free space to safely copy this file.")
+        if have < size and args.get("from_root"):
+            if not is_library(args["from_root"]):
+                raise NodeError("Copies come only from a library folder.")
+            source = self.path(args["from_root"], args["from_path"])
+            if args.get("version") != file_version(source):
+                raise NodeError("The original changed since it was checked.")
+
+            def copy():
+                with source.open("rb") as reader, temp.open("ab") as output:
+                    reader.seek(have)
+                    shutil.copyfileobj(reader, output, READ_CHUNK)
+                    output.flush()
+                    os.fsync(output.fileno())
+
+            await asyncio.to_thread(copy)
+        elif have < size:
+            if not self.fetcher:
+                raise NodeError("This computer can't receive copies. Update Sparrow Node.")
+            with temp.open("ab") as output:
+                async for chunk in self.fetcher(args["source"], have):
+                    have += len(chunk)
+                    if have > size:
+                        break
+                    await asyncio.to_thread(output.write, chunk)
+                output.flush()
+                os.fsync(output.fileno())
+        if temp.stat().st_size != size or await asyncio.to_thread(sha256_file, temp) != expected:
+            temp.unlink(missing_ok=True)
+            raise NodeError("The copy did not match the original. It will be copied again.")
+        try:
+            os.link(temp, target)
+        except FileExistsError:
+            if await asyncio.to_thread(sha256_file, target) != expected:
+                raise NodeError("A different file already exists at the destination.") from None
+            temp.unlink()
+            return result(False)
+        temp.unlink()
+        return result(True)
 
     async def _download(self, kind, args):
         from ..models import TorrentClientConfig
