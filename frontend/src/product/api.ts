@@ -63,6 +63,7 @@ export type Preferences = {
   monitoring: string;
   urgency: string;
   prefer_smaller_files: boolean;
+  storage: string;
 };
 export type Effective = {
   principal: string;
@@ -142,6 +143,8 @@ export type Job = {
   wanted_episodes: Record<string, number[]>;
   user_id: string;
   node_id: string;
+  root_id: string;
+  placement: string;
   preferred_quality: string;
   audio_pref: string;
   urgency: string;
@@ -182,6 +185,7 @@ export type NodeInfo = {
       total_bytes?: number;
       writable?: boolean;
       error?: string;
+      label?: string;
     }[];
   };
 };

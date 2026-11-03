@@ -1,0 +1,29 @@
+# Sparrow Node on Linux: this computer's media folders, paired with a Sparrow server.
+# Pair once (code from Settings → Storage → Pair a computer), then start it:
+#   docker compose -f compose.node.yaml run --rm node configure --server http://SERVER:PORT \
+#     --code CODE --library /media/Library --staging /media/Incoming --allow-private-http --managed-downloader
+#   docker compose -f compose.node.yaml up -d
+# Repeat --library for each extra disk mounted under /media.
+services:
+  node:
+    build: .
+    image: sparrow:local
+    restart: unless-stopped
+    init: true
+    entrypoint: ["python", "-m", "backend.agents.node_client", "--config", "/data/node.json"]
+    command: ["run"]
+    # Downloads need inbound peer connections; the node only calls out to the server.
+    network_mode: host
+    volumes:
+      - sparrow-node:/data
+      - ${SPARROW_MEDIA_DIR:-sparrow-node-media}:/media
+    group_add:
+      - "${SPARROW_MEDIA_GID:-10001}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 45s
+volumes:
+  sparrow-node:
+  sparrow-node-media:

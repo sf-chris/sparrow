@@ -92,6 +92,16 @@ async def configure(args):
         "downloader": (
             json.loads(Path(args.downloader_config).read_text())
             if args.downloader_config
+            else {
+                # Sparrow Node runs its own Transmission, like the server can.
+                "type": "transmission",
+                "managed": True,
+                "host": "127.0.0.1",
+                "port": 0,
+                "username": "sparrow",
+                "password": secrets.token_urlsafe(24),
+            }
+            if getattr(args, "managed_downloader", False)
             else previous.get("downloader")
         ),
         "node_id": args.node_id or previous.get("node_id"),
@@ -138,9 +148,34 @@ def fetcher(config):
     return fetch
 
 
+async def managed_downloader(config_path, config):
+    """Start this node's own Transmission, saving the port it listens on."""
+    downloader = config.get("downloader") or {}
+    if not downloader.get("managed"):
+        return None
+    from ..services.managed_transmission import ManagedTransmission
+
+    daemon = ManagedTransmission(config_path.parent)
+    if not daemon.available:
+        print("transmission-daemon is missing; this node can't download.", flush=True)
+        return None
+    port = await daemon.start(
+        download_dir=config["roots"]["staging"],
+        username=downloader["username"],
+        password=downloader["password"],
+        rpc_port=downloader.get("port") or None,
+    )
+    if port != downloader.get("port"):
+        downloader["port"] = port
+        atomic_config(config_path, config)
+    await daemon.wait_ready()
+    return daemon
+
+
 async def run(config_path):
     config_path = Path(config_path)
     config = json.loads(config_path.read_text())
+    daemon = await managed_downloader(config_path, config)
     executor = Executor(
         config_path.parent,
         config["roots"],
@@ -217,6 +252,8 @@ async def run(config_path):
                 raise
         finally:
             await executor.shutdown()
+            if daemon:
+                await daemon.stop()
 
 
 def main():
@@ -235,6 +272,11 @@ def main():
     setup.add_argument("--library", required=True, action="append")
     setup.add_argument("--node-id")
     setup.add_argument("--downloader-config")
+    setup.add_argument(
+        "--managed-downloader",
+        action="store_true",
+        help="Run Sparrow's own Transmission for downloads on this computer.",
+    )
     setup.add_argument("--allow-private-http", action="store_true")
     sub.add_parser("run")
     sub.add_parser("check")

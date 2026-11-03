@@ -854,7 +854,7 @@ class AgentService:
         job.session_id = session.id
         self.store.save_session(session)
         self.store.save_job(job)
-        if placement:
+        if placement and len(self.placement.disks()) > 1:
             entry = self.store.add_journal(
                 JournalEntry(job_id=job.id, session_id=session.id, agent="fetch", text=placement)
             )

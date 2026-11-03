@@ -160,8 +160,11 @@ class PlacementTests(unittest.TestCase):
         self.nodes.computers[1]["capabilities"]["download"] = False
         self.assertEqual(self.choose()["node_id"], "local")
         self.assertEqual(self.choose(acquire=False)["node_id"], "anti")
-        with self.assertRaisesRegex(PlacementError, "no download app"):
-            self.choose("anti/library-2")
+        self.assertIn("no download app yet", self.choose("anti/library-2")["reason"])
+        self.nodes.computers[0]["capabilities"]["download"] = False
+        nowhere = self.choose()
+        self.assertEqual(nowhere["root_id"], "library-2")
+        self.assertIn("no storage here has a download app yet", nowhere["reason"])
 
     def test_a_person_only_gets_storage_they_may_use(self):
         limited = self.accounts.create_user(
@@ -229,6 +232,40 @@ class PlacementTests(unittest.TestCase):
         self.assertEqual(request["sources"]["storage"], "request")
         with self.assertRaises(ValueError):
             self.accounts.set_preferences(self.owner["id"], {"storage": "../etc"})
+
+
+class PlacementApiTests(unittest.TestCase):
+    setUp, tearDown = PlacementTests.setUp, PlacementTests.tearDown
+
+    def test_pools_rule_and_preview_take_json_bodies(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from backend.agents.placement import install_placement
+
+        app = FastAPI()
+
+        @app.middleware("http")
+        async def signed_in(request, call_next):
+            request.state.user = self.owner
+            return await call_next(request)
+
+        storage = SimpleNamespace(get_library=lambda: self.library)
+        install_placement(app, self.accounts, self.nodes, storage, lambda: None)
+        client = TestClient(app)
+        pool = client.post(
+            "/api/v1/admin/storage/pools",
+            json={"name": "Shows", "rule": "fill", "members": ["anti/library"]},
+        )
+        self.assertEqual(pool.status_code, 200, pool.text)
+        rule = client.put("/api/v1/admin/storage/rule", json={"rule": "round_robin"})
+        self.assertEqual(rule.json(), {"rule": "round_robin"})
+        preview = client.post(
+            "/api/v1/storage/preview", json={"tmdb_id": 7, "media_type": "tv", "count": 2}
+        ).json()
+        self.assertEqual(preview["label"], "Automatic")
+        self.assertIn("next in turn", preview["reason"])
+        places = client.get("/api/v1/storage/destinations").json()
+        self.assertEqual(places["pools"][0]["value"], f"pool:{pool.json()['id']}")
 
 
 class PlacedRequestTests(unittest.IsolatedAsyncioTestCase):
@@ -361,3 +398,50 @@ class SeveralDisksTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NodeSetupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_linux_node_pairs_several_disks_and_its_own_downloader(self):
+        import json
+        from argparse import Namespace
+        from unittest.mock import patch
+
+        import httpx
+
+        from backend.agents import node_client
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            seen = {}
+
+            def pair(request):
+                seen.update(json.loads(request.content))
+                return httpx.Response(200, json={"node_id": "anti", "protocol": 1})
+
+            real = httpx.AsyncClient
+            with patch.object(
+                node_client.httpx,
+                "AsyncClient",
+                lambda **kw: real(transport=httpx.MockTransport(pair), **kw),
+            ):
+                await node_client.configure(
+                    Namespace(
+                        server="http://192.168.1.103:8081",
+                        code="c" * 24,
+                        library=[str(root / "one"), str(root / "two")],
+                        staging=str(root / "in"),
+                        config=str(root / "state" / "node.json"),
+                        node_id=None,
+                        downloader_config=None,
+                        managed_downloader=True,
+                        allow_private_http=True,
+                    )
+                )
+            config = json.loads((root / "state" / "node.json").read_text())
+            self.assertEqual(set(config["roots"]), {"library", "library-2", "staging"})
+            self.assertEqual(set(config["markers"]), {"library", "library-2", "staging"})
+            self.assertTrue(config["downloader"]["managed"])
+            reported = {r["id"] for r in seen["capabilities"]["roots"]}
+            self.assertEqual(reported, {"library", "library-2", "staging"})
+            self.assertTrue(seen["capabilities"]["download"])
+            self.assertEqual(config["node_id"], "anti")

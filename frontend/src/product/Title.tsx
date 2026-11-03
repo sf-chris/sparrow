@@ -12,7 +12,6 @@ import {
   type Title as TitleData,
   type Item,
   type User,
-  type NodeInfo,
   type Asset,
   type Preferences,
 } from "./api";
@@ -35,6 +34,15 @@ import {
   useResource,
 } from "./ui";
 import { scope } from "./Collection";
+import {
+  StorageOptions,
+  places,
+  usualPlace,
+  useDestinations,
+  type Destinations,
+} from "./StoragePicker";
+
+type Placed = { reason?: string; error?: string; name?: string };
 
 /** An air date the way a listings page prints it: "Airs 5 Oct". */
 const airs = (date: string) =>
@@ -73,6 +81,29 @@ export default function Title({ user }: { user: User }) {
   }, [mediaType, tmdbId, itemId]);
   useWebSocket(() => void resource.refresh());
   const [requestOpen, setRequestOpen] = useState(false);
+  const [moving, setMoving] = useState<Item | null>(null);
+  const destinations = useDestinations();
+  const moves = useResource(
+    async () =>
+      user.role === "admin" && resource.data?.items.length
+        ? (
+            await Promise.all(
+              resource.data.items.map((i) =>
+                api<Move[]>(`/admin/moves?item_id=${i.id}`),
+              ),
+            )
+          ).flat()
+        : [],
+    [resource.data],
+  );
+  const movingNow = moves.data?.find((m) =>
+    ["copying", "switching", "cleaning"].includes(m.state),
+  );
+  useEffect(() => {
+    if (!movingNow) return;
+    const timer = setInterval(() => void moves.refresh(), 3000);
+    return () => clearInterval(timer);
+  }, [movingNow?.id]);
   const [subtitleAsset, setSubtitleAsset] = useState<Asset | null>(null);
   const [visibleSeason, setVisibleSeason] = useState("all");
   useEffect(() => setVisibleSeason("all"), [mediaType, tmdbId, itemId]);
@@ -189,6 +220,22 @@ export default function Title({ user }: { user: User }) {
               </Link>
             </p>
           )}
+          {active?.placement && places(destinations.data).count > 1 && (
+            <p className="meta">{active.placement}</p>
+          )}
+          {places(destinations.data).count > 1 &&
+            title.items.map((item) => (
+              <p className="meta stored-on" key={item.id}>
+                {movingNow?.item_id === item.id
+                  ? `Moving to ${movingNow.to} · ${movingNow.copied} of ${movingNow.files} files`
+                  : `On ${storedOn(destinations.data, item)}`}
+                {user.role === "admin" && movingNow?.item_id !== item.id && (
+                  <button className="link" onClick={() => setMoving(item)}>
+                    Move
+                  </button>
+                )}
+              </p>
+            ))}
           {assets.some((a) => a.state === "unavailable") && (
             <p className="muted">
               {tv
@@ -271,6 +318,17 @@ export default function Title({ user }: { user: User }) {
           />
         </Dialog>
       )}
+      {moving && (
+        <MoveDialog
+          item={moving}
+          destinations={destinations.data}
+          onClose={() => setMoving(null)}
+          onMoved={() => {
+            setMoving(null);
+            void moves.refresh();
+          }}
+        />
+      )}
       {requestOpen && (
         <RequestSheet
           title={title}
@@ -284,6 +342,80 @@ export default function Title({ user }: { user: User }) {
     </Page>
   );
 }
+type Move = {
+  id: string;
+  item_id: string;
+  state: string;
+  to: string;
+  message: string;
+  files: number;
+  copied: number;
+};
+
+/** Where a title's files are, by name: "antivac" or "antivac, medivac". */
+function storedOn(d: Destinations | null, item: Item) {
+  const keys = [...new Set(item.assets.map((a) => `${a.node_id}/${a.root_id}`))];
+  const disks = d?.computers.flatMap((c) => c.disks) || [];
+  return keys
+    .map((key) => disks.find((x) => x.value === key)?.name || "storage that’s gone")
+    .join(", ");
+}
+
+function MoveDialog({
+  item,
+  destinations,
+  onClose,
+  onMoved,
+}: {
+  item: Item;
+  destinations: Destinations | null;
+  onClose: () => void;
+  onMoved: () => void;
+}) {
+  const [storage, setStorage] = useState("auto");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function move() {
+    setBusy(true);
+    setError("");
+    try {
+      await post("/admin/moves", { item_id: item.id, storage });
+      onMoved();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog
+      title={`Move ${item.title}`}
+      onClose={onClose}
+      footer={
+        <button className="btn primary" disabled={busy} onClick={move}>
+          {busy ? "Starting…" : "Move"}
+        </button>
+      }
+    >
+      <div className="form">
+        <ErrorNote error={error} />
+        <Field
+          label="To"
+          hint="Copied and checked first. The old copy goes after."
+        >
+          <select value={storage} onChange={(e) => setStorage(e.target.value)}>
+            <StorageOptions destinations={destinations} />
+          </select>
+        </Field>
+        <p className="meta">
+          Now on {storedOn(destinations, item)} ·{" "}
+          {bytes(item.assets.reduce((sum, a) => sum + a.facts.size_bytes, 0))}
+        </p>
+      </div>
+    </Dialog>
+  );
+}
+
 function Episode({
   asset,
   number,
@@ -366,11 +498,10 @@ function RequestSheet({
   onClose: () => void;
   onRequested: () => void;
 }) {
-  const nodes = useResource(() => api<NodeInfo[]>("/nodes"));
-  const [node, setNode] = useState(
-    title.jobs.find((j) => ["active", "paused"].includes(j.status))?.node_id ||
-      "local",
-  );
+  const destinations = useDestinations();
+  const usual = usualPlace(destinations.data, title.preferences);
+  const [storage, setStorage] = useState("");
+  const [placed, setPlaced] = useState<Placed | null>(null);
   const [overrides, setOverrides] = useState<Partial<Preferences>>({});
   const [season, setSeason] = useState(
     title.seasons.find((s) => s.season_number > 0)?.season_number || 1,
@@ -408,6 +539,23 @@ function RequestSheet({
       cancelled = true;
     };
   }, [season, title.tmdb_id, title.media_type]);
+  const chosen = storage || usual.value;
+  const count = title.media_type === "tv" ? selected.length || 1 : 1;
+  useEffect(() => {
+    let cancelled = false;
+    if (chosen === "ask") return setPlaced(null);
+    post<Placed>("/storage/preview", {
+      tmdb_id: title.tmdb_id,
+      media_type: title.media_type,
+      count,
+      storage: storage || undefined,
+    })
+      .then((value) => !cancelled && setPlaced(value))
+      .catch(() => !cancelled && setPlaced(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [chosen, count, title.tmdb_id, title.media_type]);
   async function submit() {
     setBusy(true);
     setError("");
@@ -417,7 +565,7 @@ function RequestSheet({
         media_type: title.media_type,
         wanted_episodes:
           title.media_type === "tv" ? { [season]: selected } : null,
-        node_id: node,
+        storage: storage || undefined,
         monitoring,
         preferences: overrides,
       });
@@ -440,7 +588,11 @@ function RequestSheet({
       footer={
         <button
           className="btn primary"
-          disabled={busy || (title.media_type === "tv" && !selected.length)}
+          disabled={
+            busy ||
+            chosen === "ask" ||
+            (title.media_type === "tv" && !selected.length)
+          }
           onClick={submit}
         >
           {busy
@@ -465,7 +617,7 @@ function RequestSheet({
             </p>
           </div>
         </div>
-        <ErrorNote error={error || nodes.error} />
+        <ErrorNote error={error || destinations.error} />
         {title.jobs.some((j) => ["active", "paused"].includes(j.status)) && (
           <p className="muted">Adds to the open request.</p>
         )}
@@ -546,18 +698,28 @@ function RequestSheet({
             </Field>
           </>
         )}
-        <Field label="Store on">
-          <select value={node} onChange={(e) => setNode(e.target.value)}>
-            {nodes.data
-              ?.filter((n) => !n.disabled)
-              .map((n) => (
-                <option value={n.id} key={n.id}>
-                  {n.name}
-                  {n.online ? "" : " · offline"}
+        {(places(destinations.data).count > 1 || chosen === "ask") && (
+          <Field label="Store on">
+            <select
+              value={chosen}
+              onChange={(e) =>
+                setStorage(e.target.value === usual.value ? "" : e.target.value)
+              }
+            >
+              {chosen === "ask" && (
+                <option value="ask" disabled>
+                  Choose…
                 </option>
-              ))}
-          </select>
-        </Field>
+              )}
+              <StorageOptions destinations={destinations.data} />
+            </select>
+          </Field>
+        )}
+        {placed && places(destinations.data).count > 1 && (
+          <p className={`meta ${placed.error ? "problem-text" : ""}`}>
+            {placed.error || placed.reason}
+          </p>
+        )}
         {values && (
           <details className="disclosure order-prefs">
             <summary>

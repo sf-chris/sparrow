@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { api, patch, post, type NodeInfo } from "./api";
 import { Tick } from "./Brand";
+import Placement from "./Placement";
 import {
   Bar,
   Dialog,
@@ -48,8 +49,14 @@ export default function Storage({
 } = {}) {
   const nodes = useResource(() => api<NodeInfo[]>("/nodes"));
   const cfg = useResource(() =>
-    api<{ library_dir: string; staging_dir: string }>("/admin/config"),
+    api<{
+      library_dir: string;
+      staging_dir: string;
+      extra_library_dirs: string[];
+    }>("/admin/config"),
   );
+  const [adding, setAdding] = useState(false);
+  const [extra, setExtra] = useState("");
   const [pairingId, setPairingId] = useState<string | undefined>();
   const [pairing, setPairing] = useState(false);
   const [name, setName] = useState("Windows storage");
@@ -136,6 +143,21 @@ export default function Storage({
       setBusy("");
     }
   }
+  async function saveExtra(folders: string[]) {
+    setBusy("extra");
+    setError("");
+    try {
+      await patch("/admin/config", { extra_library_dirs: folders });
+      setAdding(false);
+      setExtra("");
+      await Promise.all([nodes.refresh(), cfg.refresh()]);
+      await onChanged?.();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
   async function preview(node: NodeInfo) {
     setBusy(node.id);
     setError("");
@@ -205,6 +227,14 @@ export default function Storage({
                   suggestion: suggested.data?.library || "",
                   write: false,
                 },
+                ...(cfg.data?.extra_library_dirs || []).map((path, n) => ({
+                  label: `Library ${n + 2}`,
+                  path,
+                  root: rootOf(`library-${n + 2}`),
+                  suggestion: "",
+                  write: false,
+                  extra: n,
+                })),
                 {
                   label: "Incoming",
                   path: cfg.data?.staging_dir || "",
@@ -213,6 +243,13 @@ export default function Storage({
                   write: true,
                 },
               ];
+              const disks = node.capabilities.roots.filter((r) =>
+                /^library(-\d+)?$/.test(r.id),
+              );
+              const free = disks.reduce(
+                (sum, r) => sum + (r.available ? r.free_bytes || 0 : 0),
+                0,
+              );
               const missing = folders.some((f) => f.path && !f.root?.available);
               const unset = folders.some((f) => !f.path);
               return (
@@ -224,9 +261,9 @@ export default function Storage({
                       {problem && (
                         <span className="flag problem">{problem}</span>
                       )}
-                      {root?.free_bytes !== undefined && (
+                      {disks.some((r) => r.free_bytes !== undefined) && (
                         <span className="meta num device-free">
-                          {bytes(root.free_bytes)} free
+                          {bytes(free)} free
                         </span>
                       )}
                     </div>
@@ -249,6 +286,21 @@ export default function Storage({
                                 {shown || "Not chosen"}
                               </span>
                               <span className="leader" aria-hidden="true" />
+                              {"extra" in folder && (
+                                <button
+                                  className="link"
+                                  disabled={!!busy}
+                                  onClick={() =>
+                                    void saveExtra(
+                                      (cfg.data?.extra_library_dirs || []).filter(
+                                        (_, n) => n !== folder.extra,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  Stop using
+                                </button>
+                              )}
                               {ready ? (
                                 <span className="folder-state">
                                   <Tick />{" "}
@@ -272,6 +324,21 @@ export default function Storage({
                             </li>
                           );
                         })}
+                      </ul>
+                    ) : disks.length > 1 ? (
+                      <ul className="folder-rows">
+                        {disks.map((disk, n) => (
+                          <li key={disk.id}>
+                            <span className="folder-label">Library {n + 1}</span>
+                            <span className="path">{disk.label || ""}</span>
+                            <span className="leader" aria-hidden="true" />
+                            <span className="folder-state num">
+                              {disk.available
+                                ? `${bytes(disk.free_bytes || 0)} free`
+                                : "Not found"}
+                            </span>
+                          </li>
+                        ))}
                       </ul>
                     ) : (
                       <p className="meta num">
@@ -320,12 +387,26 @@ export default function Storage({
                             </button>
                           </>
                         ) : (
-                          <button
-                            className={`btn ${unset ? "primary" : "quiet"}`}
-                            onClick={() => chooseLocal(node)}
-                          >
-                            {unset ? "Choose folders" : "Change folders"}
-                          </button>
+                          <>
+                            <button
+                              className={`btn ${unset ? "primary" : "quiet"}`}
+                              onClick={() => chooseLocal(node)}
+                            >
+                              {unset ? "Choose folders" : "Change folders"}
+                            </button>
+                            {!unset && (
+                              <button
+                                className="btn quiet"
+                                onClick={() => {
+                                  setError("");
+                                  setAdding(true);
+                                }}
+                              >
+                                <Plus size={16} strokeWidth={2.5} />
+                                Library folder
+                              </button>
+                            )}
+                          </>
                         )
                       ) : (
                         <>
@@ -387,6 +468,7 @@ export default function Storage({
           moved.
         </p>
       )}
+      {!onboarding && <Placement />}
       {pairing && (
         <Dialog title="Pair a computer" onClose={() => setPairing(false)}>
           <div className="form">
@@ -491,6 +573,37 @@ export default function Storage({
                 value={staging}
                 onChange={(e) => setStaging(e.target.value)}
                 placeholder="/media/incoming"
+              />
+            </Field>
+          </div>
+        </Dialog>
+      )}
+      {adding && (
+        <Dialog
+          title="Another library folder"
+          onClose={() => setAdding(false)}
+          footer={
+            <button
+              className="btn primary"
+              disabled={busy === "extra" || !extra.trim()}
+              onClick={() =>
+                void saveExtra([...(cfg.data?.extra_library_dirs || []), extra])
+              }
+            >
+              Add folder
+            </button>
+          }
+        >
+          <div className="form">
+            <ErrorNote error={error} />
+            <Field
+              label="Folder"
+              hint="Usually on another disk. New titles can go here too."
+            >
+              <input
+                value={extra}
+                onChange={(e) => setExtra(e.target.value)}
+                placeholder="/media/library-2"
               />
             </Field>
           </div>
