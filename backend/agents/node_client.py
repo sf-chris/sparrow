@@ -18,7 +18,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
-from .node_executor import Executor, PROTOCOL
+from .node_executor import Executor, PROTOCOL, library_roots
+
 
 
 def atomic_config(path, data):
@@ -64,11 +65,16 @@ async def configure(args):
         raise ValueError(
             "Enter the server origin without credentials, paths or query parameters."
         )
-    library, library_marker = root_marker(args.library)
+    folders = [args.library] if isinstance(args.library, str) else list(args.library)
+    libraries = [root_marker(folder) for folder in folders]
     staging, staging_marker = root_marker(args.staging)
-    a, b = Path(library), Path(staging)
-    if a == b or a in b.parents or b in a.parents:
-        raise ValueError("Library and staging must be separate folders.")
+    chosen = [Path(folder) for folder, _ in libraries] + [Path(staging)]
+    for number, a in enumerate(chosen):
+        for b in chosen[number + 1 :]:
+            if a == b or a in b.parents or b in a.parents:
+                raise ValueError("Library and staging must be separate folders.")
+    roots = library_roots([folder for folder, _ in libraries])
+    markers = dict(zip(roots, [marker for _, marker in libraries]))
     path = Path(args.config)
     previous = json.loads(path.read_text()) if path.exists() else {}
     config = {
@@ -81,8 +87,8 @@ async def configure(args):
             else secrets.token_urlsafe(32)
         ),
         "enrollment_fingerprint": hashlib.sha256(args.code.encode()).hexdigest(),
-        "roots": {"library": library, "staging": staging},
-        "markers": {"library": library_marker, "staging": staging_marker},
+        "roots": {**roots, "staging": staging},
+        "markers": {**markers, "staging": staging_marker},
         "downloader": (
             json.loads(Path(args.downloader_config).read_text())
             if args.downloader_config
@@ -199,8 +205,10 @@ def main():
     parser.add_argument("--config", default=str(default))
     sub = parser.add_subparsers(dest="command", required=True)
     setup = sub.add_parser("configure")
-    for name in ("server", "code", "library", "staging"):
+    for name in ("server", "code", "staging"):
         setup.add_argument("--" + name, required=True)
+    # Repeat --library for each disk this computer offers, main one first.
+    setup.add_argument("--library", required=True, action="append")
     setup.add_argument("--node-id")
     setup.add_argument("--downloader-config")
     setup.add_argument("--allow-private-http", action="store_true")
