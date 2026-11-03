@@ -21,24 +21,35 @@ def normalize_media_path(value: str) -> str:
 def normalize_config(config: SparrowConfig) -> SparrowConfig:
     config.staging_dir = normalize_media_path(config.staging_dir)
     config.library_dir = normalize_media_path(config.library_dir)
+    config.extra_library_dirs = [normalize_media_path(v) for v in config.extra_library_dirs if v]
     config.torrent_client.host = (config.torrent_client.host or "localhost").strip()
     return config
 
 
 def validate_media_roots(config: SparrowConfig) -> None:
     roots = [Path(value) for value in (config.staging_dir, config.library_dir) if value]
-    if any(path == Path(path.anchor) for path in roots):
+    extra = [Path(value) for value in config.extra_library_dirs if value]
+    if any(path == Path(path.anchor) for path in roots + extra):
         raise ValueError("Staging and library cannot be a filesystem root.")
-    if len(roots) == 2:
-        staging, library = roots
-        if (
-            staging == library
-            or staging in library.parents
-            or library in staging.parents
-        ):
-            raise ValueError(
-                "Staging and library must be separate sibling roots; neither may contain the other."
-            )
+    if extra and not config.library_dir:
+        raise ValueError("Choose the main library folder before adding more.")
+    named = [
+        (kind, Path(value))
+        for kind, value in [
+            ("staging", config.staging_dir),
+            ("library", config.library_dir),
+            *(("library", value) for value in config.extra_library_dirs),
+        ]
+        if value
+    ]
+    for number, (kind, first) in enumerate(named):
+        for other_kind, second in named[number + 1 :]:
+            if first == second or first in second.parents or second in first.parents:
+                raise ValueError(
+                    "Staging and library must be separate sibling roots; neither may contain the other."
+                    if "staging" in (kind, other_kind)
+                    else "Each library folder must be separate; none may contain another."
+                )
 
 
 def in_container() -> bool:
@@ -130,6 +141,12 @@ def settle_media_folders(config: SparrowConfig, before: SparrowConfig) -> None:
         # Saving a folder that has gone missing makes it again.
         if value and (value != getattr(before, name) or not Path(value).is_dir()):
             setattr(config, name, usable_media_folder(value, writable=writable))
+    config.extra_library_dirs = [
+        usable_media_folder(value, writable=False)
+        if value not in before.extra_library_dirs or not Path(value).is_dir()
+        else value
+        for value in config.extra_library_dirs
+    ]
     validate_media_roots(config)
 
 
@@ -143,6 +160,12 @@ def repair_media_folders(config: SparrowConfig) -> bool:
             mounted = mounted_path(value)
             if mounted and mounted.is_dir():
                 setattr(config, name, str(mounted))
+                changed = True
+    for number, value in enumerate(config.extra_library_dirs):
+        if value and not Path(value).is_dir():
+            mounted = mounted_path(value)
+            if mounted and mounted.is_dir():
+                config.extra_library_dirs[number] = str(mounted)
                 changed = True
     if changed:
         validate_media_roots(config)
@@ -226,6 +249,10 @@ def apply_config_update(
         config.staging_dir = normalize_media_path(str(values["staging_dir"]))
     if values.get("library_dir") is not None:
         config.library_dir = normalize_media_path(str(values["library_dir"]))
+    if values.get("extra_library_dirs") is not None:
+        config.extra_library_dirs = [
+            normalize_media_path(str(v)) for v in values["extra_library_dirs"] if str(v).strip()
+        ]
 
     torrent_update = values.get("torrent_client")
     if torrent_update is not None:

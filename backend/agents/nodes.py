@@ -12,7 +12,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .accounts import Accounts, digest
 from .account_api import administrator
-from .node_executor import Executor, NodeError, PROTOCOL, TRANSIENT_KINDS, canonical
+from .node_executor import (
+    Executor, NodeError, PROTOCOL, TRANSIENT_KINDS, canonical, is_library, library_roots,
+)
+
 
 
 class Nodes:
@@ -33,16 +36,26 @@ class Nodes:
                     payload TEXT NOT NULL, payload_hash TEXT NOT NULL, result TEXT, state TEXT NOT NULL,
                     created REAL NOT NULL, expires REAL NOT NULL, leased_until REAL NOT NULL DEFAULT 0);
                 CREATE INDEX IF NOT EXISTS node_pending ON node_commands(node_id,state,created);
+                CREATE TABLE IF NOT EXISTS node_transfers(token TEXT PRIMARY KEY, target TEXT NOT NULL,
+                    source TEXT NOT NULL, root_id TEXT NOT NULL, path TEXT NOT NULL,
+                    version TEXT NOT NULL, created REAL NOT NULL);
             """)
 
     def local(self):
         cfg = self.storage.get_config()
         config = {
-            "roots": {"library": cfg.library_dir, "staging": cfg.staging_dir},
+            "roots": {
+                **library_roots([cfg.library_dir, *cfg.extra_library_dirs]),
+                "staging": cfg.staging_dir,
+            },
             "downloader": cfg.torrent_client.to_dict(),
         }
         if self._local is None or config != self._local_config:
-            self._local = Executor(Path(self.storage.data_dir) / "local-node", **config)
+            self._local = Executor(
+                Path(self.storage.data_dir) / "local-node",
+                **config,
+                fetcher=lambda token, offset: self.transfer_bytes(token, "local", offset),
+            )
             self._local_config = config
         return self._local
 
@@ -72,15 +85,15 @@ class Nodes:
         for node in self.list():
             if node["disabled"]:
                 continue
-            library_roots = [
+            libraries = [
                 root
                 for root in (node["capabilities"].get("roots") or [])
-                if isinstance(root, dict) and root.get("id") == "library"
+                if isinstance(root, dict) and is_library(root.get("id"))
             ]
             available = (
                 node["online"]
-                and bool(library_roots)
-                and all(root.get("available", False) for root in library_roots)
+                and bool(libraries)
+                and all(root.get("available", False) for root in libraries)
             )
             self.storage.operations.observe(
                 "storage:" + node["id"],
@@ -275,6 +288,60 @@ class Nodes:
             raise NodeError(result.get("error", "Node operation failed."))
         return result["value"]
 
+    def open_transfer(self, token, target, source, root_id, path, version):
+        """Let one computer read one library file from another, once moved."""
+        with self.accounts.connect() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO node_transfers VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (token, target, source, root_id, path, canonical(version), time.time()),
+            )
+        return token
+
+    def close_transfers(self, prefix):
+        with self.accounts.connect() as db:
+            db.execute("DELETE FROM node_transfers WHERE token LIKE ?", (prefix + "%",))
+
+    async def transfer_bytes(self, token, target, offset=0):
+        with self.accounts.connect() as db:
+            row = db.execute(
+                "SELECT * FROM node_transfers WHERE token=? AND target=?", (token, target)
+            ).fetchone()
+        if not row:
+            raise NodeError("This copy is not authorised for this computer.")
+        version = json.loads(row["version"])
+        size, offset = version["size_bytes"], max(0, int(offset))
+        if row["source"] == "local":
+            from .media_state import file_version
+
+            path = self.local().path(row["root_id"], row["path"])
+            if file_version(path) != version:
+                raise NodeError("The original changed since it was checked.")
+            with path.open("rb") as source:
+                source.seek(offset)
+                while chunk := await asyncio.to_thread(source.read, 1024 * 1024):
+                    yield chunk
+            return
+        import base64
+
+        while offset < size:
+            result = await self.execute(
+                row["source"],
+                "read",
+                {
+                    "root_id": row["root_id"],
+                    "path": row["path"],
+                    "offset": offset,
+                    "length": 1024 * 1024,
+                    "version": version,
+                },
+                timeout=60,
+            )
+            data = base64.b64decode(result["bytes"])
+            if not data:
+                break
+            offset += len(data)
+            yield data
+
     def heartbeat(self, node_id, capabilities):
         if capabilities.get("protocol") != PROTOCOL:
             raise NodeError("Node protocol is incompatible. Update the node.")
@@ -419,6 +486,24 @@ def install_nodes(app, storage, get_service):
                 pass
             identity(request)  # Recheck revocation after waiting.
         return {"command": None}
+
+    @router.get("/node/transfers/{token}")
+    async def transfer(token: str, request: Request, offset: int = 0):
+        from fastapi.responses import StreamingResponse
+
+        node_id = identity(request)
+        stream = nodes.transfer_bytes(token, node_id, offset)
+        try:
+            first = await anext(stream, b"")
+        except NodeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+        async def body():
+            yield first
+            async for chunk in stream:
+                yield chunk
+
+        return StreamingResponse(body(), media_type="application/octet-stream")
 
     @router.post("/node/results/{operation_id}")
     def result(operation_id: str, body: Result, request: Request):

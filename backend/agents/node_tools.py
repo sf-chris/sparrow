@@ -18,7 +18,7 @@ from .nodes import Nodes
 from .catalogue import Catalogue
 
 logger = logging.getLogger(__name__)
-from .node_executor import NodeError, canonical
+from .node_executor import NodeError, canonical, is_library
 from .tools import fetch_tools, media_tools, quality_rank
 from ..models import Download, DownloadStatus, LibraryItem, MediaType
 from ..services.torrent_client import build_magnet
@@ -69,6 +69,29 @@ def reference(tb, ctx, value, default="staging"):
     nodes, _ = components(tb)
     # Portable path validation happens again on the executing machine.
     return job, download, root, relative
+
+
+def job_root(job):
+    """The library folder this request publishes into, pinned when it started."""
+    return job.root_id or "library"
+
+
+def actual_root(tb, job, path):
+    """Where a library/<path> reference lives: an owned copy's folder, a copy
+    this request published, else the request's own folder."""
+    for asset in scoped_assets(tb, job):
+        if asset["path"] == path and asset["node_id"] == (job.node_id or "local"):
+            return asset["root_id"]
+    import json
+
+    with tb.accounts.connect() as db:
+        row = db.execute(
+            "SELECT data FROM publications WHERE job_id=? AND path=? ORDER BY rowid DESC LIMIT 1",
+            (job.id, path),
+        ).fetchone()
+    if row:
+        return json.loads(row["data"]).get("root_id") or "library"
+    return job_root(job)
 
 
 def scoped_assets(tb, job):
@@ -611,6 +634,8 @@ def storage_tools(tb):
                 raise ToolError(
                     "This library file does not belong to the requested title."
                 )
+        if root == "library":
+            root = actual_root(tb, job, path)
         try:
             result = await nodes.execute(
                 job.node_id or "local",
@@ -626,7 +651,11 @@ def storage_tools(tb):
 
     async def listing(ctx, args):
         rows = await operation(ctx, "list", args.get("path"))
-        return [{**r, "path": r["root_id"] + "/" + r["path"]} for r in rows]
+        # Agents name every library folder "library"; the request pins the real one.
+        return [
+            {**r, "path": ("library" if is_library(r["root_id"]) else r["root_id"]) + "/" + r["path"]}
+            for r in rows
+        ]
 
     async def probe(ctx, args):
         facts = await operation(ctx, "probe", args["path"])
@@ -648,8 +677,12 @@ def storage_tools(tb):
                 "Publish into library/<relative path>. Staging originals stay in place."
             )
         facts = await operation(ctx, "probe", args["src"])
+        root = job_root(job)
         identity = hashlib.sha256(
-            canonical([job.id, dl.id, source, destination, facts["version"]]).encode()
+            canonical(
+                [job.id, dl.id, source, destination, facts["version"]]
+                + ([root] if root != "library" else [])
+            ).encode()
         ).hexdigest()
         try:
             result = await nodes.execute(
@@ -660,12 +693,22 @@ def storage_tools(tb):
                     "path": source,
                     "version": facts["version"],
                     "destination": destination,
+                    **({"destination_root": root} if root != "library" else {}),
                 },
                 job=job,
                 operation_id="pub-" + identity[:48],
                 timeout=300,
             )
         except NodeError as exc:
+            if "not enough free space" in str(exc):
+                # A pinned disk never silently changes: the household decides.
+                job.state_line = "Storage is full. Free some space or choose another disk, then resume."
+                tb.store.save_job(job)
+                await tb.broadcast({"type": "job_update", "data": job.to_dict()})
+                raise ToolError(
+                    "The library disk is full. The household has been told; journal it in plain words "
+                    "and hibernate without a timer. Do not download another copy."
+                ) from exc
             raise ToolError(str(exc)) from exc
         with tb.accounts.connect() as db:
             db.execute(
@@ -765,8 +808,10 @@ def storage_tools(tb):
         facts = await operation(ctx, "probe", args["path"])
         import json
 
-        if json.loads(receipt["data"])["facts"]["version"] != facts["version"]:
+        published = json.loads(receipt["data"])
+        if published["facts"]["version"] != facts["version"]:
             raise ToolError("The publication changed before it was recorded.")
+        root = published.get("root_id") or "library"
         details = await tb.tmdb_get(f"/{job.media_type}/{job.tmdb_id}")
         expected = details.get("runtime", 0)
         approximate = False
@@ -803,20 +848,24 @@ def storage_tools(tb):
         item_id = hashlib.sha256(
             f"{job.library_id}:{job.media_type}:{job.tmdb_id}".encode()
         ).hexdigest()[:24]
-        item = tb.storage.get_library_item(item_id) or LibraryItem(
-            id=item_id,
-            title=job.title,
-            tmdb_id=job.tmdb_id,
-            media_type=MediaType(job.media_type),
-            path="",
-            overview=details.get("overview", ""),
-            poster_path=details.get("poster_path") or "",
-            metadata={"library_id": job.library_id},
+        item = (
+            catalogue.item_for(job.library_id, job.media_type, job.tmdb_id)
+            or tb.storage.get_library_item(item_id)
+            or LibraryItem(
+                id=item_id,
+                title=job.title,
+                tmdb_id=job.tmdb_id,
+                media_type=MediaType(job.media_type),
+                path="",
+                overview=details.get("overview", ""),
+                poster_path=details.get("poster_path") or "",
+                metadata={"library_id": job.library_id},
+            )
         )
         asset = catalogue.save_asset(
             item.id,
             job.node_id or "local",
-            "library",
+            root,
             path,
             facts,
             season=season,
@@ -837,7 +886,7 @@ def storage_tools(tb):
         if job.node_id:
             media.update({"node_id": job.node_id, "path": path, "available": True})
         else:
-            media["path"] = str(nodes.local().path("library", path))
+            media["path"] = str(nodes.local().path(root, path))
         if job.media_type == "movie":
             item.path = media["path"]
             item.metadata.update(media)

@@ -18,7 +18,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
-from .node_executor import Executor, PROTOCOL
+from .node_executor import Executor, NodeError, PROTOCOL, library_roots
+
 
 
 def atomic_config(path, data):
@@ -64,11 +65,16 @@ async def configure(args):
         raise ValueError(
             "Enter the server origin without credentials, paths or query parameters."
         )
-    library, library_marker = root_marker(args.library)
+    folders = [args.library] if isinstance(args.library, str) else list(args.library)
+    libraries = [root_marker(folder) for folder in folders]
     staging, staging_marker = root_marker(args.staging)
-    a, b = Path(library), Path(staging)
-    if a == b or a in b.parents or b in a.parents:
-        raise ValueError("Library and staging must be separate folders.")
+    chosen = [Path(folder) for folder, _ in libraries] + [Path(staging)]
+    for number, a in enumerate(chosen):
+        for b in chosen[number + 1 :]:
+            if a == b or a in b.parents or b in a.parents:
+                raise ValueError("Library and staging must be separate folders.")
+    roots = library_roots([folder for folder, _ in libraries])
+    markers = dict(zip(roots, [marker for _, marker in libraries]))
     path = Path(args.config)
     previous = json.loads(path.read_text()) if path.exists() else {}
     config = {
@@ -81,11 +87,21 @@ async def configure(args):
             else secrets.token_urlsafe(32)
         ),
         "enrollment_fingerprint": hashlib.sha256(args.code.encode()).hexdigest(),
-        "roots": {"library": library, "staging": staging},
-        "markers": {"library": library_marker, "staging": staging_marker},
+        "roots": {**roots, "staging": staging},
+        "markers": {**markers, "staging": staging_marker},
         "downloader": (
             json.loads(Path(args.downloader_config).read_text())
             if args.downloader_config
+            else {
+                # Sparrow Node runs its own Transmission, like the server can.
+                "type": "transmission",
+                "managed": True,
+                "host": "127.0.0.1",
+                "port": 0,
+                "username": "sparrow",
+                "password": secrets.token_urlsafe(24),
+            }
+            if getattr(args, "managed_downloader", False)
             else previous.get("downloader")
         ),
         "node_id": args.node_id or previous.get("node_id"),
@@ -109,14 +125,63 @@ async def configure(args):
     print("Storage paired. Run Sparrow Node to keep this collection available.")
 
 
+def fetcher(config):
+    """Copies arriving from other storage, read through the server."""
+
+    async def fetch(token, offset):
+        try:
+            async with httpx.AsyncClient(
+                base_url=config["server"],
+                timeout=httpx.Timeout(120),
+                headers={"Authorization": "Bearer " + config["credential"]},
+            ) as client:
+                async with client.stream(
+                    "GET", f"/api/v1/node/transfers/{token}", params={"offset": offset}
+                ) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes(1024 * 1024):
+                        yield chunk
+        except httpx.HTTPError as exc:
+            # The part already copied is kept; the next attempt resumes there.
+            raise NodeError(f"The copy was interrupted ({type(exc).__name__}).") from exc
+
+    return fetch
+
+
+async def managed_downloader(config_path, config):
+    """Start this node's own Transmission, saving the port it listens on."""
+    downloader = config.get("downloader") or {}
+    if not downloader.get("managed"):
+        return None
+    from ..services.managed_transmission import ManagedTransmission
+
+    daemon = ManagedTransmission(config_path.parent)
+    if not daemon.available:
+        print("transmission-daemon is missing; this node can't download.", flush=True)
+        return None
+    port = await daemon.start(
+        download_dir=config["roots"]["staging"],
+        username=downloader["username"],
+        password=downloader["password"],
+        rpc_port=downloader.get("port") or None,
+    )
+    if port != downloader.get("port"):
+        downloader["port"] = port
+        atomic_config(config_path, config)
+    await daemon.wait_ready()
+    return daemon
+
+
 async def run(config_path):
     config_path = Path(config_path)
     config = json.loads(config_path.read_text())
+    daemon = await managed_downloader(config_path, config)
     executor = Executor(
         config_path.parent,
         config["roots"],
         config.get("markers"),
         config.get("downloader"),
+        fetcher(config),
     )
     async with httpx.AsyncClient(
         base_url=config["server"],
@@ -187,6 +252,8 @@ async def run(config_path):
                 raise
         finally:
             await executor.shutdown()
+            if daemon:
+                await daemon.stop()
 
 
 def main():
@@ -199,10 +266,17 @@ def main():
     parser.add_argument("--config", default=str(default))
     sub = parser.add_subparsers(dest="command", required=True)
     setup = sub.add_parser("configure")
-    for name in ("server", "code", "library", "staging"):
+    for name in ("server", "code", "staging"):
         setup.add_argument("--" + name, required=True)
+    # Repeat --library for each disk this computer offers, main one first.
+    setup.add_argument("--library", required=True, action="append")
     setup.add_argument("--node-id")
     setup.add_argument("--downloader-config")
+    setup.add_argument(
+        "--managed-downloader",
+        action="store_true",
+        help="Run Sparrow's own Transmission for downloads on this computer.",
+    )
     setup.add_argument("--allow-private-http", action="store_true")
     sub.add_parser("run")
     sub.add_parser("check")

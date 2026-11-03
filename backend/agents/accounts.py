@@ -16,6 +16,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from ..models import quality_rank
 
+DESTINATION = re.compile(
+    r"auto|ask|pool:[a-z0-9]{1,40}|[A-Za-z0-9_-]{1,64}(/library(-\d{1,2})?)?"
+)
+
 
 class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -32,6 +36,15 @@ class Preferences(BaseModel):
     monitoring: Literal["exact", "keep_current"] = "exact"
     urgency: Literal["tonight", "soon", "whenever"] = "soon"
     prefer_smaller_files: bool = False
+    # Where new requests are stored: auto, ask, pool:<id>, a computer or computer/disk.
+    storage: str = Field(default="auto", max_length=100)
+
+    @field_validator("storage")
+    @classmethod
+    def storage_place(cls, value):
+        if not DESTINATION.fullmatch(value):
+            raise ValueError("Choose a storage place from the list.")
+        return value
 
     @field_validator("audio_pref")
     @classmethod
