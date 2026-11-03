@@ -204,9 +204,11 @@ export const duration = (seconds: number) =>
       ? `${Math.floor(seconds / 3600)} hr ${Math.floor((seconds % 3600) / 60)} min`
       : `${Math.floor(seconds / 60)} min`;
 export const bytes = (value: number) =>
-  value >= 1e9
-    ? `${(value / 1e9).toFixed(1)} GB`
-    : `${Math.round(value / 1e6)} MB`;
+  value >= 1e12
+    ? `${(value / 1e12).toFixed(1)} TB`
+    : value >= 1e9
+      ? `${(value / 1e9).toFixed(1)} GB`
+      : `${Math.round(value / 1e6)} MB`;
 export const itemLink = (item: Item) =>
   item.tmdb_id
     ? `/title/${item.media_type}/${item.tmdb_id}`

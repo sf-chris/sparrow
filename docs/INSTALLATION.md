@@ -133,6 +133,35 @@ state in `%ProgramData%\SparrowNode`. Revoke the node in Sparrow when retiring i
 Logs are bounded under that state directory; access is limited to the service
 and administrators. Do not share `node.json`, which contains its pairing credential.
 
+## Linux storage
+
+Another Linux computer with Docker can hold part of the collection. Copy this
+repository to it, set `SPARROW_MEDIA_DIR` (and `SPARROW_MEDIA_GID`) in `.env` as
+for the server, and generate a pairing code in **Settings → Storage → Pair a
+computer**. Then pair and start it:
+
+```sh
+docker compose -f compose.node.yaml run --rm node configure \
+  --server http://<server-address>:<port> --code <code> \
+  --library /media/Library --staging /media/Incoming \
+  --allow-private-http --managed-downloader
+docker compose -f compose.node.yaml up -d
+```
+
+Repeat `--library` for each extra disk mounted under `/media`. Without
+`--managed-downloader` the computer stores and plays media but does not download.
+
+## Where new titles go
+
+Each request is placed once, when it starts, and stays there. **Automatic** keeps
+a show on the disk it already uses, skips storage that is offline, nearly full or
+has no download app, then picks by the household's rule (most free space, fill in
+order, or take turns) in **Settings → Storage**. A pool does the same within the
+disks it lists. Each person can choose their own default in Preferences, and any
+request can choose its own. A sleeping destination makes the request wait; it is
+never downloaded again elsewhere. Administrators can move a title from its page:
+every file is copied and checked before the original is removed.
+
 ## Checks and local development
 
 Install Python 3.11, Node.js 22.12 or newer, FFmpeg/ffprobe and ripgrep first.

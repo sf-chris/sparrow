@@ -4,8 +4,6 @@ A destination is resolved once, when a request starts, and pinned to the job.
 Placement reads reported capacity; publication still checks the real bytes.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import secrets
@@ -377,12 +375,12 @@ class Placement:
             needed = expected_bytes(values or {}, media_type, count)
         film = media_type == "movie"
 
-        def problem(disk):
+        def problem(disk, download=acquire):
             if not disk["available"]:
                 return f"{disk['name']} is offline"
             if not disk["writable"]:
                 return f"Sparrow can't save to {disk['name']}"
-            if acquire and not disk["download"]:
+            if download and not disk["download"]:
                 return f"{disk['name']} has no download app"
             free = disk["free_bytes"]
             if free is not None and free < needed + headroom(disk["total_bytes"]):
@@ -400,7 +398,7 @@ class Placement:
 
         if single:
             disk = candidates[0]
-            why = problem(disk)
+            why = problem(disk, download=False)
             whose = {
                 "request": "as chosen",
                 "personal": "your storage",
@@ -417,7 +415,9 @@ class Placement:
                     if "full" in why
                     else f"{why}. Choose another place."
                 )
-            return picked(disk, f"On {disk['name']}, {whose}.")
+            # A place someone chose is used; the request says if it can't download.
+            later = " It has no download app yet." if acquire and not disk["download"] else ""
+            return picked(disk, f"On {disk['name']}, {whose}.{later}")
 
         by_key = {d["key"]: d for d in candidates}
         notes = []
@@ -425,21 +425,25 @@ class Placement:
             disk = by_key.get(key)
             if not disk:
                 continue
-            together = (
-                "with the other copy" if film else "with the rest of the show"
-            )
+            beside = "with the other copy" if film else "with the rest of the show"
             why = problem(disk)
             if not why:
-                return picked(disk, f"Kept {together} on {disk['name']}.")
+                return picked(disk, f"Kept {beside} on {disk['name']}.")
             if not disk["online"]:
                 # Waiting keeps a show in one place; a new copy elsewhere splits it.
                 return picked(
                     disk,
-                    f"Kept {together} on {disk['name']}. It's offline, so this starts when it's back.",
+                    f"Kept {beside} on {disk['name']}. It's offline, so this starts when it's back.",
                 )
             notes.append(why)
             break
         eligible = [d for d in candidates if not problem(d)]
+        if not eligible and acquire:
+            # Nowhere can download yet: place it anyway and say so.
+            eligible = [d for d in candidates if not problem(d, download=False)]
+            if eligible:
+                notes.append("no storage here has a download app yet")
+                acquire = False
         if not eligible:
             reasons = "; ".join(problem(d) for d in candidates)
             raise PlacementError(

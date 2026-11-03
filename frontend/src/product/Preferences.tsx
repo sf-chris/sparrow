@@ -12,6 +12,12 @@ import {
   type Policy,
 } from "./api";
 import { ErrorNote, Field, Loading, Page, useResource } from "./ui";
+import {
+  StorageOptions,
+  places,
+  useDestinations,
+  type Destinations,
+} from "./StoragePicker";
 
 const quality = [
   ["480p", "Standard · 480p"],
@@ -24,11 +30,14 @@ export function PreferenceFields({
   onChange,
   sources,
   onReset,
+  destinations,
 }: {
   values: Values;
   onChange: (key: keyof Values, value: unknown) => void;
   sources?: Record<string, string>;
   onReset?: (key: keyof Values) => void;
+  /** Shows where new titles go, when there is more than one place. */
+  destinations?: Destinations | null;
 }) {
   function field(
     key: keyof Values,
@@ -229,6 +238,24 @@ export function PreferenceFields({
           )}
         </div>
       </fieldset>
+      {places(destinations).count > 1 && (
+        <fieldset className="preference-group">
+          <legend>Storage</legend>
+          <div className="form-grid">
+            {field(
+              "storage",
+              "New titles go to",
+              <select
+                value={values.storage || "auto"}
+                onChange={(e) => onChange("storage", e.target.value)}
+              >
+                <StorageOptions destinations={destinations} ask />
+              </select>,
+              "Automatic keeps a show together, then picks by free space.",
+            )}
+          </div>
+        </fieldset>
+      )}
     </div>
   );
 }
@@ -245,6 +272,7 @@ export default function Preferences({
   continueSetup?: boolean;
 }) {
   const ownerSetup = welcome && user.role === "admin";
+  const destinations = useDestinations();
   const resource = useResource(async () => {
     if (ownerSetup) {
       const data = await api<{ defaults: Values; policy: Policy }>(
@@ -334,6 +362,7 @@ export default function Preferences({
         values && (
           <>
             <PreferenceFields
+              destinations={destinations.data}
               values={values}
               onChange={(key, value) => {
                 setDraft({ ...draft, [key]: value });

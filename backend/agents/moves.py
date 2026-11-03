@@ -4,8 +4,6 @@ The original stays until every file has a verified copy and the catalogue
 points at it. Asset identities survive, so progress and subtitles follow.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging
