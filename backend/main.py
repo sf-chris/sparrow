@@ -323,6 +323,7 @@ async def lifespan(app: FastAPI):
     from .agents.setup_info import log_setup
     log_setup(DATA_DIR)
     migration_task=asyncio.create_task(catalogue.migrate_verified_legacy(broadcast))
+    moves_task = asyncio.create_task(moves.loop())
     # v3: the deterministic curator is demoted — its loop only runs if
     # explicitly re-enabled. Agents own decisions now.
     task4 = None
@@ -331,6 +332,7 @@ async def lifespan(app: FastAPI):
     yield
     await subtitles.stop()
     migration_task.cancel()
+    moves_task.cancel()
     curator.stop()
     await agent_service.shutdown()
     await nodes.local().shutdown()
@@ -2344,6 +2346,8 @@ from .agents.product_api import install_product
 catalogue = install_product(app, storage, accounts, nodes, lambda: agent_service)
 from .agents.placement import install_placement
 placement = install_placement(app, accounts, nodes, storage, lambda: agent_service)
+from .agents.moves import install_moves
+moves = install_moves(app, accounts, nodes, storage, catalogue, placement, lambda: agent_service)
 from .agents.subtitles import install_subtitles
 from .agents.curation import install_curation
 install_curation(app, accounts, lambda: agent_service)

@@ -350,6 +350,34 @@ def install_product(app, storage, accounts, nodes, get_service):
         }[action]
         return (await method(job.id)).to_dict()
 
+    class Restore(Input):
+        storage: str = Field(min_length=1, max_length=100)
+
+    @router.post("/jobs/{job_id}/storage")
+    async def restore(job_id: str, body: Restore, request: Request):
+        """Another disk on the same computer: its downloads stay usable there."""
+        job = job_for(request.state.user, job_id)
+        if request.state.user["role"] not in ("admin", "requester"):
+            raise HTTPException(403, "Request access is required.")
+        node_id, _, root_id = body.storage.partition("/")
+        service = get_service()
+        disk = next(
+            (d for d in service.placement.disks() if d["key"] == body.storage), None
+        )
+        if not disk or node_id != (job.node_id or "local"):
+            raise HTTPException(
+                422, "Choose another disk on the computer already downloading this."
+            )
+        if job.status not in (JobStatus.ACTIVE, JobStatus.PAUSED):
+            raise HTTPException(422, "This request has finished.")
+        was_paused = job.status == JobStatus.PAUSED
+        job = await service.pause_job(job.id)
+        job.root_id = "" if root_id == "library" else root_id
+        job.placement = f"On {disk['name']}, as chosen."
+        job.state_line = "Storage changed."
+        service.store.save_job(job)
+        return (job if was_paused else await service.resume_job(job.id)).to_dict()
+
     class Scan(Input):
         node_id: str = "local"
         root_id: str = Field(default="library", pattern=r"^library(-\d{1,2})?$")

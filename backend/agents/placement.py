@@ -354,6 +354,9 @@ class Placement:
         source="request",
         acquire=True,
         commit=True,
+        needed=None,
+        together=True,
+        exclude=(),
     ):
         """Pick one disk for new work and say why, in one plain line."""
         destination = destination or "auto"
@@ -363,11 +366,15 @@ class Placement:
             raise PlacementError("Choose where to store this.")
         candidates, rule, scope, single = self.members(destination)
         candidates = [
-            d for d in candidates if self.accounts.can_access(user, d["node_id"])
+            d
+            for d in candidates
+            if self.accounts.can_access(user, d["node_id"])
+            and (single or d["key"] not in exclude)
         ]
         if not candidates:
             raise PlacementError("None of this storage is available to your account.")
-        needed = expected_bytes(values or {}, media_type, count)
+        if needed is None:
+            needed = expected_bytes(values or {}, media_type, count)
         film = media_type == "movie"
 
         def problem(disk):
@@ -414,7 +421,7 @@ class Placement:
 
         by_key = {d["key"]: d for d in candidates}
         notes = []
-        for key in self.home(tmdb_id, media_type):
+        for key in self.home(tmdb_id, media_type) if together else ():
             disk = by_key.get(key)
             if not disk:
                 continue

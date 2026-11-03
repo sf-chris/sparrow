@@ -700,6 +700,15 @@ def storage_tools(tb):
                 timeout=300,
             )
         except NodeError as exc:
+            if "not enough free space" in str(exc):
+                # A pinned disk never silently changes: the household decides.
+                job.state_line = "Storage is full. Free some space or choose another disk, then resume."
+                tb.store.save_job(job)
+                await tb.broadcast({"type": "job_update", "data": job.to_dict()})
+                raise ToolError(
+                    "The library disk is full. The household has been told; journal it in plain words "
+                    "and hibernate without a timer. Do not download another copy."
+                ) from exc
             raise ToolError(str(exc)) from exc
         with tb.accounts.connect() as db:
             db.execute(
@@ -839,15 +848,19 @@ def storage_tools(tb):
         item_id = hashlib.sha256(
             f"{job.library_id}:{job.media_type}:{job.tmdb_id}".encode()
         ).hexdigest()[:24]
-        item = tb.storage.get_library_item(item_id) or LibraryItem(
-            id=item_id,
-            title=job.title,
-            tmdb_id=job.tmdb_id,
-            media_type=MediaType(job.media_type),
-            path="",
-            overview=details.get("overview", ""),
-            poster_path=details.get("poster_path") or "",
-            metadata={"library_id": job.library_id},
+        item = (
+            catalogue.item_for(job.library_id, job.media_type, job.tmdb_id)
+            or tb.storage.get_library_item(item_id)
+            or LibraryItem(
+                id=item_id,
+                title=job.title,
+                tmdb_id=job.tmdb_id,
+                media_type=MediaType(job.media_type),
+                path="",
+                overview=details.get("overview", ""),
+                poster_path=details.get("poster_path") or "",
+                metadata={"library_id": job.library_id},
+            )
         )
         asset = catalogue.save_asset(
             item.id,
