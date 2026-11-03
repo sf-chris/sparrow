@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
-from .node_executor import Executor, PROTOCOL, library_roots
+from .node_executor import Executor, NodeError, PROTOCOL, library_roots
 
 
 
@@ -115,6 +115,29 @@ async def configure(args):
     print("Storage paired. Run Sparrow Node to keep this collection available.")
 
 
+def fetcher(config):
+    """Copies arriving from other storage, read through the server."""
+
+    async def fetch(token, offset):
+        try:
+            async with httpx.AsyncClient(
+                base_url=config["server"],
+                timeout=httpx.Timeout(120),
+                headers={"Authorization": "Bearer " + config["credential"]},
+            ) as client:
+                async with client.stream(
+                    "GET", f"/api/v1/node/transfers/{token}", params={"offset": offset}
+                ) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes(1024 * 1024):
+                        yield chunk
+        except httpx.HTTPError as exc:
+            # The part already copied is kept; the next attempt resumes there.
+            raise NodeError(f"The copy was interrupted ({type(exc).__name__}).") from exc
+
+    return fetch
+
+
 async def run(config_path):
     config_path = Path(config_path)
     config = json.loads(config_path.read_text())
@@ -123,6 +146,7 @@ async def run(config_path):
         config["roots"],
         config.get("markers"),
         config.get("downloader"),
+        fetcher(config),
     )
     async with httpx.AsyncClient(
         base_url=config["server"],

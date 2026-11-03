@@ -77,6 +77,13 @@ class Curation:
         identity = hashlib.sha256(
             f"{user_id}:{media_type}:{tmdb_id}:{node_id}".encode()
         ).hexdigest()[:32]
+        with self.accounts.connect() as db:
+            # A subscription keeps its identity when its title moves to other storage.
+            moved = db.execute(
+                "SELECT id FROM subscriptions WHERE user_id=? AND media_type=? AND tmdb_id=? AND node_id=?",
+                (user_id, media_type, tmdb_id, node_id),
+            ).fetchone()
+        identity = moved["id"] if moved else identity
         row = self.row(identity)
         mandate = (
             Mandate.from_dict(row["data"]["mandate"])

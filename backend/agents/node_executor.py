@@ -760,7 +760,13 @@ class Executor:
         size, expected = int(args["size_bytes"]), str(args["sha256"])
 
         def result(placed):
-            return {"path": args["path"], "root_id": root_id, "sha256": expected, "placed": placed}
+            return {
+                "path": args["path"],
+                "root_id": root_id,
+                "sha256": expected,
+                "version": file_version(target),
+                "placed": placed,
+            }
 
         if target.exists():
             if await asyncio.to_thread(sha256_file, target) == expected:

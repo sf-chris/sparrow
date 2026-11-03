@@ -35,6 +35,21 @@ class Catalogue:
                     PRIMARY KEY(user_id,asset_id));
             """)
 
+    def item_for(self, library_id, media_type, tmdb_id):
+        """This library's record of a title, including one that moved here."""
+        if not tmdb_id:
+            return None
+        return next(
+            (
+                i
+                for i in self.storage.get_library()
+                if i.tmdb_id == tmdb_id
+                and i.media_type.value == media_type
+                and i.metadata.get("library_id", "local") == library_id
+            ),
+            None,
+        )
+
     def visible_item(self, user, item):
         return self.accounts.can_access(user, item.metadata.get("library_id", "local"))
 
@@ -325,8 +340,9 @@ class Catalogue:
         # Matched titles merge only within a single library. Unmatched files
         # remain distinct, even when they have the same provisional title.
         key = f"{row['node_id']}:{media_type}:{tmdb_id or candidate['id']}"
-        item_id = hashlib.sha256(key.encode()).hexdigest()[:24]
-        item = self.storage.get_library_item(item_id)
+        item = self.item_for(row["node_id"], media_type, tmdb_id)
+        item_id = item.id if item else hashlib.sha256(key.encode()).hexdigest()[:24]
+        item = item or self.storage.get_library_item(item_id)
         year_raw = (details.get("release_date") or details.get("first_air_date") or "")[
             :4
         ]
