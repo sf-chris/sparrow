@@ -58,6 +58,9 @@ Everything new lives in `backend/agents/`:
   checks that wake the Librarian only for eligible work.
 - `accounts.py`, `nodes.py`, `node_executor.py`, `catalogue.py`, `playback.py` —
   household preferences/permissions, durable portable storage and media delivery.
+- `placement.py`, `moves.py` — where a request is stored (Automatic, pools, a
+  person's storage or one disk), pinned when it starts with a plain reason; and
+  verified copy-then-remove moves of a title between disks and computers.
 - `subtitles.py`, `subtitle_worker.py` — built-in preparation of a playable
   track; `subtitle_evidence.py` (whole-soundtrack speech evidence on the storage
   node), `subtitle_sync.py` (measured timing and correction) and

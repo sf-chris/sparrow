@@ -3560,3 +3560,29 @@ button.link:hover {
 .download-limits {
   margin-top: 1.5rem;
 }
+/* Where a title lives, with the move beside it for administrators. */
+.stored-on {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+}
+/* Storage: how new titles are placed, pools and moves. */
+.placement {
+  margin-top: 2.5rem;
+}
+.placement .form-grid {
+  max-width: 54rem;
+  margin: 0.9rem 0;
+}
+.placement .folder-rows,
+.placement .actions {
+  max-width: 54rem;
+}
+.placement .actions {
+  margin-top: 0.6rem;
+}
+.placement .folder-label {
+  width: auto;
+  min-width: 6.25rem;
+}

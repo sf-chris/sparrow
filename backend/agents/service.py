@@ -27,6 +27,7 @@ from .models import (
     Event,
     Job,
     JobStatus,
+    JournalEntry,
     Mandate,
     MonitoringMode,
     SessionStatus,
@@ -127,6 +128,7 @@ class AgentService:
         from .curation import Curation
 
         self.curation = Curation(self)
+        self._placement = None
         self._create_lock = asyncio.Lock()
         self._tasks: list[asyncio.Task] = []
         self._wake_tasks: set[asyncio.Task] = set()
@@ -663,10 +665,12 @@ class AgentService:
         monitoring: str = "",
         user_id: str = "",
         preference_overrides: Optional[dict] = None,
-        library_id: str = "local",
+        library_id: Optional[str] = "local",
         node_id: str = "",
+        root_id: str = "",
         authority_check=None,
     ) -> Job:
+        """library_id=None places the request by the person's storage choice."""
         cfg = self.storage.get_config()
         contract = {}
         if user_id:
@@ -712,6 +716,25 @@ class AgentService:
                     )
                 normalized[str(number)] = chosen
             wanted_episodes = normalized
+
+        placement = ""
+        if library_id is None:
+            # Chosen once, before any authority is recorded, then pinned.
+            user = self.accounts.user(user_id) if user_id else None
+            choice = self.placement.choose(
+                user,
+                contract.get("values", {}).get("storage", "auto"),
+                source=contract.get("sources", {}).get("storage", "server"),
+                tmdb_id=tmdb_id,
+                media_type=media_type,
+                count=sum(len(e) for e in (wanted_episodes or {}).values()) or 1,
+                values=contract.get("values", {}),
+            )
+            library_id = choice["node_id"]
+            node_id = "" if library_id == "local" else library_id
+            root_id, placement = choice["root_id"], choice["reason"]
+        elif not root_id:
+            root_id = self.placement.root_on(library_id, tmdb_id, media_type)
 
         def check_requester():
             if authority_check:
@@ -808,6 +831,8 @@ class AgentService:
             user_id=user_id,
             library_id=library_id,
             node_id=node_id,
+            root_id="" if root_id == "library" else root_id,
+            placement=placement,
             preferences=contract,
             year=int(year_raw) if year_raw.isdigit() else None,
             poster_path=details.get("poster_path") or "",
@@ -829,6 +854,11 @@ class AgentService:
         job.session_id = session.id
         self.store.save_session(session)
         self.store.save_job(job)
+        if placement and len(self.placement.disks()) > 1:
+            entry = self.store.add_journal(
+                JournalEntry(job_id=job.id, session_id=session.id, agent="fetch", text=placement)
+            )
+            await self.broadcast({"type": "journal", "data": entry.to_dict()})
         await self.broadcast({"type": "job_added", "data": job.to_dict()})
         await self.emit(
             Event(
@@ -838,6 +868,17 @@ class AgentService:
             )
         )
         return job
+
+    @property
+    def placement(self):
+        if self._placement is None:
+            from .placement import Placement
+            from .node_tools import components
+
+            self._placement = Placement(
+                self.accounts, components(self.toolbox)[0], self.storage, lambda: self
+            )
+        return self._placement
 
     async def nudge(self, job_id: str) -> None:
         await self.emit(

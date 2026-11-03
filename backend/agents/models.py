@@ -185,6 +185,10 @@ class Job:
     user_id: str = ""
     library_id: str = "local"
     node_id: str = ""
+    # The library folder on that computer ("" is its first), pinned at the start.
+    root_id: str = ""
+    # Where it is stored and why, in one plain line.
+    placement: str = ""
     preferences: dict = field(default_factory=dict)
     revision: int = 1  # invalidates already-running tool contexts
     original_language: str = ""

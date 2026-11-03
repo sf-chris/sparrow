@@ -103,6 +103,8 @@ class TorrentClientConfig:
 class SparrowConfig:
     staging_dir: str = ""
     library_dir: str = ""
+    # More library folders on this server, usually on other disks.
+    extra_library_dirs: list[str] = field(default_factory=list)
     torrent_client: TorrentClientConfig = field(default_factory=TorrentClientConfig)
     quality_preference: Quality = Quality.Q_1080P
     tmdb_api_key: str = ""
@@ -127,6 +129,7 @@ class SparrowConfig:
         return {
             "staging_dir": self.staging_dir,
             "library_dir": self.library_dir,
+            "extra_library_dirs": list(self.extra_library_dirs),
             "torrent_client": self.torrent_client.to_dict(),
             "quality_preference": self.quality_preference.value,
             "tmdb_api_key": self.tmdb_api_key,
@@ -161,6 +164,7 @@ class SparrowConfig:
         d.setdefault("prefer_season_packs", True)
         d.setdefault("season_pack_size_limit_gb", 0.0)
         d.setdefault("max_active_transfers", 3)
+        d.setdefault("extra_library_dirs", [])
         d.setdefault("smart_model", "claude-sonnet-5")
         d.setdefault("cheap_model", "claude-haiku-4-5")
         return cls(**d)

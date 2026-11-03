@@ -21,10 +21,12 @@ import {
 import { Tick } from "./Brand";
 import SubtitleProviderSettings from "./SubtitleProviderSettings";
 import { PreferenceFields } from "./Preferences";
+import { useDestinations } from "./StoragePicker";
 import { KEYS, KeyField } from "./Keys";
 import DownloadApp from "./DownloadApp";
 
 export function Defaults() {
+  const destinations = useDestinations();
   const resource = useResource(() =>
     api<{ defaults: Preferences; policy: Policy }>("/admin/defaults"),
   );
@@ -61,6 +63,7 @@ export function Defaults() {
       {resource.data ? (
         <>
           <PreferenceFields
+            destinations={destinations.data}
             values={{ ...resource.data.defaults, ...draft }}
             onChange={(key, value) => {
               setDraft({ ...draft, [key]: value });
