@@ -97,7 +97,57 @@ not Linux settings. A download app outside the container must save to the
 incoming folder at the same path Sparrow sees, so Sparrow's own Transmission is
 simpler in Docker.
 
-## Windows storage
+## Pair a computer
+
+Another computer can hold part of the collection. In **Settings → Storage**,
+choose **Pair a computer**, pick its system and paste the one line shown into
+Terminal (Mac, Linux) or PowerShell (Windows) on that computer:
+
+```sh
+curl -fsSL http://<server>/api/v1/node/setup/<code>.sh | sh   # Mac and Linux
+irm http://<server>/api/v1/node/setup/<code>.ps1 | iex       # Windows
+```
+
+The command installs Sparrow Node, pairs it and keeps it running in the
+background. The dialog follows along and, once the computer connects, asks for
+its library folder and a separate incoming folder, browsed on that computer from
+Sparrow. The computer takes its own name. Each command works once and for ten
+minutes (longer once it has started); an old one says so and asks for a fresh
+one.
+
+What it sets up:
+
+- **Python:** the computer's own Python 3.11 or newer, otherwise a private copy
+  downloaded with [uv](https://docs.astral.sh/uv/) into Sparrow Node's folder.
+  Sparrow Node's code and its one library (httpx) come from your server.
+- **Linux:** a systemd user service that keeps running after you sign out
+  (`loginctl enable-linger`; the command says if that needs `sudo`). Run as
+  root (`| sudo sh`), it installs a system service for your user, and on Debian
+  or Ubuntu also installs ffmpeg and Transmission. Without systemd it starts now
+  and from cron at reboot.
+- **Mac:** a LaunchAgent that starts when you sign in.
+- **Windows:** a scheduled task. From PowerShell run as administrator it starts
+  with Windows; otherwise when you sign in.
+- **Downloads:** if Transmission is installed (`transmission-daemon`), the
+  computer runs its own copy for Sparrow, saving into its incoming folder once
+  that's chosen. Without it, the computer stores and plays media but doesn't
+  download. ffmpeg enables media checks. The command prints how to add either.
+
+Folders can only be chosen inside the computer's own places: its home, drives
+and mounted disks (in Docker, the mounted folders). For this server, set
+`SPARROW_FOLDER_ROOTS` (paths separated by `:`) to offer other places instead. Choose **Change folders** on
+its card to move them later; other library disks keep their place. Reconnect
+runs the same command with a fresh code and keeps the chosen folders.
+
+State lives in `~/.local/share/SparrowNode` (Linux), `~/Library/Application
+Support/SparrowNode` (Mac) or `%LOCALAPPDATA%\SparrowNode` (Windows), or
+`/var/lib/sparrow-node` when installed by root. Don't share its `node.json`,
+which holds the pairing credential. Revoke the computer in Sparrow when retiring
+it. The same command was checked end to end on Linux (a clean Debian 12 without
+Python, and as root with apt); Mac and Windows scripts are syntax-checked only,
+so treat them as unproven until run on real hardware.
+
+## Windows storage (installer)
 
 The `Build Windows storage node` workflow builds an installer on Windows and
 runs installation, NTFS, authenticated playback and service-restart checks.
@@ -105,8 +155,11 @@ Download its `SparrowNode-Windows-x64` artifact after that workflow passes. This
 checkout does not imply that an installer has already been published or that
 physical Windows hardware has passed validation.
 
-1. In the web app, open **Settings → Storage → Pair a computer**, name the node and
-   generate a pairing code.
+The one-line command above is simpler. The installer is the alternative for a
+machine that should run as a Windows service with its own account.
+
+1. In the web app, open **Settings → Storage → Pair a computer** and choose
+   Windows. The code is the last part of the command, before `.ps1`.
 2. Run `SparrowNode-Setup-x64.exe` on Windows. Open **Connect Sparrow storage**.
    Windows requests administrator access once for service installation.
 3. Enter the server origin, the ten-minute code, a library folder and a separate
@@ -133,23 +186,23 @@ state in `%ProgramData%\SparrowNode`. Revoke the node in Sparrow when retiring i
 Logs are bounded under that state directory; access is limited to the service
 and administrators. Do not share `node.json`, which contains its pairing credential.
 
-## Linux storage
+## Linux storage in Docker
 
-Another Linux computer with Docker can hold part of the collection. Copy this
-repository to it, set `SPARROW_MEDIA_DIR` (and `SPARROW_MEDIA_GID`) in `.env` as
-for the server, and generate a pairing code in **Settings → Storage → Pair a
-computer**. Then pair and start it:
+A Linux computer with Docker can also run Sparrow Node from this repository's
+image. Set `SPARROW_MEDIA_DIR` (and `SPARROW_MEDIA_GID`) in `.env` as for the
+server, take the code from **Pair a computer** (the part before `.sh`), then:
 
 ```sh
 docker compose -f compose.node.yaml run --rm node configure \
   --server http://<server-address>:<port> --code <code> \
-  --library /media/Library --staging /media/Incoming \
   --allow-private-http --managed-downloader
 docker compose -f compose.node.yaml up -d
 ```
 
-Repeat `--library` for each extra disk mounted under `/media`. Without
-`--managed-downloader` the computer stores and plays media but does not download.
+Choose its folders in Sparrow; inside Docker they're under `/media`. Folders can
+still be given here with `--library` (repeat for each disk) and `--staging`.
+Without `--managed-downloader` the computer stores and plays media but does not
+download.
 
 ## Where new titles go
 

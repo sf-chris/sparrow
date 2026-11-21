@@ -61,6 +61,10 @@ Everything new lives in `backend/agents/`:
 - `placement.py`, `moves.py` — where a request is stored (Automatic, pools, a
   person's storage or one disk), pinned when it starts with a plain reason; and
   verified copy-then-remove moves of a title between disks and computers.
+- `folders.py`, `node_package.py`, `node_install/` — browsing and making folders
+  inside a computer's own places (server or paired computer); the one-line
+  setup command that installs, pairs and starts Sparrow Node, whose package is
+  this server's code plus httpx. Its folders are then chosen from Sparrow.
 - `subtitles.py`, `subtitle_worker.py` — built-in preparation of a playable
   track; `subtitle_evidence.py` (whole-soundtrack speech evidence on the storage
   node), `subtitle_sync.py` (measured timing and correction) and

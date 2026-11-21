@@ -1,9 +1,11 @@
 # Sparrow Node on Linux: this computer's media folders, paired with a Sparrow server.
-# Pair once (code from Settings → Storage → Pair a computer), then start it:
+# Without Docker, the one-line command in Settings → Storage → Pair a computer is simpler.
+# With Docker, take the code from that command (the part before .sh), pair, then start:
 #   docker compose -f compose.node.yaml run --rm node configure --server http://SERVER:PORT \
-#     --code CODE --library /media/Library --staging /media/Incoming --allow-private-http --managed-downloader
+#     --code CODE --allow-private-http --managed-downloader
 #   docker compose -f compose.node.yaml up -d
-# Repeat --library for each extra disk mounted under /media.
+# Then choose its folders in Sparrow (they're under /media here), or give them above
+# with --library /media/Library --staging /media/Incoming (repeat --library per disk).
 services:
   node:
     build: .

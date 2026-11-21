@@ -3106,6 +3106,237 @@ button.link:hover {
 .storage-pair {
   margin-top: 0.75rem;
 }
+.device-card.just-paired {
+  background: var(--blue-wash);
+  transition: background 1.2s ease-out;
+}
+
+/* ─── Folder picker: chosen folders, then a listing to choose from ─── */
+.picker {
+  display: grid;
+  gap: 0.85rem;
+}
+.picker-intro {
+  margin-bottom: 0.85rem;
+}
+.picker-slots {
+  margin-top: 0;
+}
+.picker-slots li {
+  padding: 0;
+}
+.picker-slot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.picker-slots li.active .picker-slot {
+  background: var(--reverse);
+  color: var(--on-reverse);
+}
+.picker-slots li.active .path.suggested {
+  color: inherit;
+  opacity: 0.75;
+}
+.picker-slots li.active .folder-state {
+  color: var(--reverse-accent);
+}
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.3rem;
+  font-size: var(--t-small);
+  font-weight: 700;
+}
+.crumbs > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow-wrap: anywhere;
+}
+.crumbs [aria-current] {
+  font-weight: 850;
+}
+.crumbs button {
+  text-align: left;
+}
+.picker-list {
+  max-height: min(20rem, 38vh);
+  overflow-y: auto;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+.picker-list[aria-busy="true"] {
+  opacity: 0.55;
+}
+.picker-list li + li {
+  border-top: 1px solid var(--rule);
+}
+.picker-list button {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.picker-list button:hover:not(:disabled) {
+  background: var(--paper-sink);
+}
+.picker-list button:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: -3px;
+}
+.picker-list button:disabled {
+  color: var(--ink-3);
+  cursor: default;
+}
+.picker-list svg {
+  flex: none;
+}
+.picker-list .leader {
+  align-self: center;
+}
+.picker-name {
+  min-width: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.picker-empty {
+  padding: 0.8rem 0.4rem;
+}
+.picker-actions,
+.picker-new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.picker-free {
+  margin-left: auto;
+}
+.picker-new input {
+  flex: 1 1 12rem;
+  min-height: var(--control);
+  padding: 0 0.85rem;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper-lift);
+}
+.picker-new input[aria-invalid="true"] {
+  border-color: var(--red);
+}
+.picker-new p {
+  flex-basis: 100%;
+  font-size: var(--t-small);
+}
+.picker-error {
+  font-size: var(--t-small);
+}
+.sheet-problem {
+  flex: 1 1 16rem;
+  align-self: center;
+  font-size: var(--t-small);
+}
+
+/* ─── Pairing: one command to paste, then progress ─── */
+.pair .segmented {
+  justify-self: start;
+}
+.pair-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: stretch;
+}
+.pair-command textarea {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--reverse);
+  color: var(--on-reverse);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--t-small);
+  line-height: 1.45;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+.pair-command .btn {
+  align-self: start;
+}
+.pair-address {
+  display: grid;
+  gap: 0.35rem;
+  font-size: var(--t-small);
+  font-weight: 700;
+}
+.pair-address input {
+  min-height: var(--control);
+  padding: 0 0.85rem;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper-lift);
+  font-weight: 500;
+}
+.pair-change {
+  justify-self: start;
+  font-size: var(--t-small);
+}
+.pair-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+  font-weight: 700;
+}
+.pulse {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (max-width: 30rem) {
+  .pair-command {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .picker-list .leader {
+    display: none;
+  }
+  .picker-free {
+    margin-left: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+  .device-card.just-paired {
+    transition: none;
+  }
+}
 .dl {
   display: grid;
   gap: 1rem;

@@ -370,7 +370,8 @@ class SeveralDisksTests(unittest.TestCase):
         roots = {r["id"]: r for r in executor.capabilities()["roots"]}
         self.assertEqual(set(roots), {"library", "library-2", "staging"})
         self.assertEqual(roots["library-2"]["label"], str(self.root / "two"))
-        self.assertNotIn("label", roots["staging"])
+        # Incoming is labelled for the device card; placement only uses library disks.
+        self.assertEqual(roots["staging"]["label"], str(self.root / "in"))
         import asyncio
         from backend.agents.media_state import file_version
 
