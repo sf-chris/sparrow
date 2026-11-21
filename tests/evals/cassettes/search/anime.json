@@ -1,0 +1,290 @@
+{
+  "version": 1,
+  "source": "synthetic: release names modelled on those met in the 2026-10-01/02 anime field test and ledger runs (fansub and scene naming, packs, raws, dubs, dead swarms, sequels, spin-offs and same-named live-action series). Not live recordings: seeders, sizes and some episode titles are illustrative. A live run records real cassettes with `search_bench.py live --record DIR`.",
+  "row_format": "rows: [id, name, seeders, size GB, files]; series: one row per number; listings: {id: [[path, MB]]}; correct: the ids a careful person would accept (right show, episode, language and quality); expect 'nothing' when no usable copy exists",
+  "titles": [
+    {
+      "key": "naruto",
+      "alternatives": [["JP", "NARUTO", ""], ["US", "Naruto", ""]],
+      "episode_names": {"1": {"2": "My Name is Konohamaru!"}},
+      "rows": [
+        ["1001", "Naruto Shippuden (001-500) Complete [1080p] [Dual Audio]", 310, 210.0, 500],
+        ["1002", "Naruto Complete Series 001-220 [BD 1080p] [Dual Audio]", 151, 180.0, 220],
+        ["1003", "[Judas] Naruto (Season 1) [BD 1080p][HEVC x265 10bit][Dual-Audio][Multi-Subs]", 38, 25.0, 57],
+        ["1004", "Naruto - 002 [720p] [Dual Audio]", 3, 0.35, 1],
+        ["1005", "[DB] Naruto - 002 [480p]", 9, 0.15, 1],
+        ["1006", "Boruto Naruto Next Generations - 002 [1080p]", 22, 0.5, 1],
+        ["1007", "Naruto the Movie Ninja Clash in the Land of Snow 2004 1080p", 14, 2.1, 1],
+        ["1008", "Naruto S01E02 English Dubbed 720p", 6, 0.3, 1]
+      ],
+      "series": [
+        {"name": "[Group] Naruto Shippuden - {n:03d} [1080p]", "from": 1, "to": 60, "seeders": 25, "gb": 0.45, "first_id": 1100}
+      ],
+      "listings": {
+        "1002": [["Naruto Complete Series/Naruto - 001 - Enter Naruto Uzumaki!.mkv", 380], ["Naruto Complete Series/Naruto - 002 - My Name is Konohamaru!.mkv", 382], ["Naruto Complete Series/Naruto - 003 - Sasuke and Sakura.mkv", 379], ["Naruto Complete Series/Movies/Naruto the Movie 1.mkv", 2100]],
+        "1003": [["[Judas] Naruto (Season 1)/[Judas] Naruto - S01E01.mkv", 430], ["[Judas] Naruto (Season 1)/[Judas] Naruto - S01E02.mkv", 428], ["[Judas] Naruto (Season 1)/[Judas] Naruto - S01E03.mkv", 431]]
+      },
+      "correct": ["1002", "1003", "1004"]
+    },
+    {
+      "key": "one-piece",
+      "alternatives": [["JP", "ONE PIECE", ""], ["US", "One Piece", ""]],
+      "episode_names": {"1": {"2": "The Great Swordsman Appears! Pirate Hunter, Roronoa Zoro"}},
+      "namesakes": [{"id": 111110, "name": "ONE PIECE", "year": 2023, "language": "en", "episodes": {"1": {"2": "The Man in the Straw Hat"}}}],
+      "rows": [
+        ["1201", "One.Piece.2023.S01E02.1080p.NF.WEB-DL.DDP5.1.Atmos.x264-FLUX", 210, 2.4, 1],
+        ["1202", "ONE PIECE S01E02 THE MAN IN THE STRAW HAT 1080p NF WEB-DL", 120, 2.3, 1],
+        ["1203", "One Piece - 002 [BD 1080p] [Dual Audio]", 45, 0.6, 1],
+        ["1204", "One Piece Episodes 001-100 [1080p] [Dual Audio]", 25, 60.0, 100],
+        ["1205", "One Piece S01E02 1080p WEB H264", 8, 1.9, 1],
+        ["1206", "LEGO ONE PIECE S01E02 1080p", 4, 0.4, 1],
+        ["1207", "One Piece Film Red 2022 1080p BluRay", 90, 3.5, 1],
+        ["1208", "[One Pace] One Piece - Romance Dawn 02 [1080p]", 12, 0.7, 1],
+        ["1209", "One Piece - 1002 [1080p]", 80, 1.4, 1]
+      ],
+      "listings": {
+        "1204": [["One Piece 001-100/One Piece - 001.mkv", 600], ["One Piece 001-100/One Piece - 002.mkv", 598], ["One Piece 001-100/One Piece - 003.mkv", 601]]
+      },
+      "correct": ["1203", "1204"]
+    },
+    {
+      "key": "cowboy-bebop",
+      "alternatives": [["JP", "Cowboy Bebop", ""], ["JP", "Kauboi Bibappu", ""]],
+      "episode_names": {"1": {"5": "Ballad of Fallen Angels"}},
+      "namesakes": [{"id": 90200, "name": "Cowboy Bebop", "year": 2021, "language": "en", "episodes": {"1": {"5": "Ballad of Fallen Angels"}}}],
+      "rows": [
+        ["1301", "Cowboy.Bebop.2021.S01E05.1080p.NF.WEB-DL.DDP5.1.x264", 75, 2.1, 1],
+        ["1302", "Cowboy Bebop Complete Series + Movie [BD 1080p] [Dual Audio]", 140, 70.0, 27],
+        ["1303", "Cowboy Bebop (1998) S01 [BD 1080p] [Dual Audio]", 90, 52.0, 26],
+        ["1304", "[Group] Cowboy Bebop - 05 [BD 1080p][Dual Audio]", 12, 1.6, 1],
+        ["1305", "Cowboy Bebop - 05 - Ballad of Fallen Angels [BD 1080p]", 9, 1.6, 1],
+        ["1306", "Cowboy Bebop S01E05 English Dubbed 1080p", 15, 1.2, 1],
+        ["1307", "Cowboy Bebop The Movie 2001 1080p BluRay", 60, 6.0, 1],
+        ["1308", "LEGO Cowboy Bebop S01E05 1080p", 2, 0.3, 1]
+      ],
+      "listings": {
+        "1302": [["Cowboy Bebop/Cowboy Bebop - 04 - Gateway Shuffle.mkv", 2000], ["Cowboy Bebop/Cowboy Bebop - 05 - Ballad of Fallen Angels.mkv", 2010], ["Cowboy Bebop/Movie/Cowboy Bebop The Movie.mkv", 6000]],
+        "1303": [["Cowboy Bebop S01/Cowboy Bebop - S01E04.mkv", 2000], ["Cowboy Bebop S01/Cowboy Bebop - S01E05.mkv", 2010], ["Cowboy Bebop S01/Cowboy Bebop - S01E06.mkv", 1990]]
+      },
+      "correct": ["1302", "1303", "1304", "1305"]
+    },
+    {
+      "key": "samurai-champloo",
+      "alternatives": [["JP", "Samurai Champloo", ""]],
+      "episode_names": {"1": {"2": "Hellhounds for Hire (Part 1)"}},
+      "rows": [
+        ["1401", "[a-S] Samurai Champloo (01-26) (1080p)", 64, 13.0, 26],
+        ["1402", "Samurai Champloo (01-26) 1080p RAW", 64, 13.0, 26],
+        ["1403", "[philosophy-raws][Samurai Champloo][BDRIP][1920X1080]", 20, 38.0, 26],
+        ["1404", "Samurai Champloo Music Record Disc 2", 30, 0.2, 18],
+        ["1405", "Samurai Champloo S01E02 720p BluRay Dual Audio", 6, 0.5, 1],
+        ["1406", "Samurai Champloo Complete Series 480p", 40, 4.0, 26]
+      ],
+      "listings": {
+        "1403": [["[philosophy-raws][Samurai Champloo][01][BDRIP].mkv", 1400], ["[philosophy-raws][Samurai Champloo][02][BDRIP].mkv", 1410], ["[philosophy-raws][Samurai Champloo][03][BDRIP].mkv", 1405]]
+      },
+      "correct": ["1401", "1405"]
+    },
+    {
+      "key": "tokyo-ghoul",
+      "alternatives": [["JP", "Tokyo Ghoul", ""], ["JP", "Tokyo Ghoul √A", "Season 2"], ["JP", "Tokyo Ghoul:re", "Season 3"]],
+      "episode_names": {"1": {"2": "Incubation"}},
+      "rows": [
+        ["1501", "[HorribleSubs] Tokyo Ghoul - 02 [1080p]", 25, 0.5, 1],
+        ["1502", "Tokyo Ghoul Root A - 02 [1080p]", 30, 0.5, 1],
+        ["1503", "Tokyo Ghoul:re - 02 [1080p]", 28, 0.5, 1],
+        ["1504", "Tokyo Ghoul S01 [BD 1080p][Dual Audio]", 70, 18.0, 12],
+        ["1505", "Tokyo Ghoul 2014 Season 2 Complete 1080p WEB", 33, 6.0, 12],
+        ["1506", "Tokyo Ghoul S01E02 English Dub 720p", 7, 0.3, 1],
+        ["1507", "Tokyo Ghoul 2017 Live Action 1080p BluRay", 18, 2.0, 1]
+      ],
+      "listings": {
+        "1504": [["Tokyo Ghoul S01/Tokyo Ghoul - S01E01.mkv", 1500], ["Tokyo Ghoul S01/Tokyo Ghoul - S01E02.mkv", 1510], ["Tokyo Ghoul S01/Tokyo Ghoul - S01E03.mkv", 1490]]
+      },
+      "correct": ["1501", "1504"]
+    },
+    {
+      "key": "psycho-pass",
+      "alternatives": [["JP", "PSYCHO-PASS", ""]],
+      "episode_names": {"1": {"2": "Those Who Cannot Be Saved"}},
+      "rows": [
+        ["1601", "[Coalgirls] Psycho-Pass (1920x1080 Blu-ray FLAC)", 22, 40.0, 22],
+        ["1602", "Psycho-Pass - 02 [1080p]", 5, 0.5, 1],
+        ["1603", "Psycho-Pass 2 - 02 [1080p]", 19, 0.5, 1],
+        ["1604", "Psycho-Pass 3 - 02 [1080p]", 17, 0.5, 1],
+        ["1605", "Psycho-Pass Providence 2023 1080p BluRay", 26, 4.0, 1],
+        ["1606", "Psycho Pass S01E02 1080p BD Dual Audio", 9, 1.1, 1]
+      ],
+      "listings": {
+        "1601": [["[Coalgirls]_Psycho-Pass_01_(1920x1080_Blu-ray_FLAC)_[A1B2C3D4].mkv", 1800], ["[Coalgirls]_Psycho-Pass_02_(1920x1080_Blu-ray_FLAC)_[B2C3D4E5].mkv", 1810], ["[Coalgirls]_Psycho-Pass_03_(1920x1080_Blu-ray_FLAC)_[C3D4E5F6].mkv", 1795]]
+      },
+      "correct": ["1601", "1602", "1606"]
+    },
+    {
+      "key": "parasyte",
+      "alternatives": [["JP", "Kiseijuu: Sei no Kakuritsu", ""], ["US", "Parasyte: The Maxim", ""]],
+      "episode_names": {"1": {"2": "The Devil's Whisper"}},
+      "rows": [
+        ["1701", "[HorribleSubs] Parasyte - the maxim - 02 [1080p]", 15, 0.5, 1],
+        ["1702", "Kiseijuu Sei no Kakuritsu - 02 [1080p]", 4, 0.5, 1],
+        ["1703", "Parasyte The Maxim S01 1080p BluRay Dual Audio", 40, 24.0, 24],
+        ["1704", "Parasyte The Grey S01E02 1080p NF WEB-DL", 85, 1.8, 1],
+        ["1705", "Parasyte Part 1 2014 1080p BluRay", 20, 2.5, 1]
+      ],
+      "listings": {
+        "1703": [["Parasyte The Maxim S01/Parasyte The Maxim - S01E01.mkv", 1000], ["Parasyte The Maxim S01/Parasyte The Maxim - S01E02.mkv", 1010], ["Parasyte The Maxim S01/Parasyte The Maxim - S01E03.mkv", 995]]
+      },
+      "correct": ["1701", "1702", "1703"]
+    },
+    {
+      "key": "steins-gate",
+      "alternatives": [["JP", "STEINS;GATE", ""]],
+      "episode_names": {"1": {"3": "Parallel Process Paranoia"}},
+      "rows": [
+        ["1801", "[Commie] Steins;Gate - 03 [BD 1080p]", 8, 0.9, 1],
+        ["1802", "Steins;Gate (2011) [BD 1080p] [Dual Audio]", 33, 30.0, 25],
+        ["1803", "Steins;Gate 0 - 03 [1080p]", 21, 0.6, 1],
+        ["1804", "Steins;Gate The Movie Load Region of Deja Vu 2013 1080p", 12, 3.0, 1],
+        ["1805", "Steins Gate S01E03 720p", 3, 0.4, 1],
+        ["1806", "Steins;Gate Elite PC Game", 5, 12.0, 40]
+      ],
+      "listings": {
+        "1802": [["Steins;Gate/Steins;Gate - 02 - Time Travel Paranoia.mkv", 1200], ["Steins;Gate/Steins;Gate - 03 - Parallel Process Paranoia.mkv", 1210], ["Steins;Gate/Steins;Gate - 04 - Interpreter Rendezvous.mkv", 1190]]
+      },
+      "correct": ["1801", "1802", "1805"]
+    },
+    {
+      "key": "hunter-x-hunter",
+      "alternatives": [["JP", "HUNTER×HUNTER", ""], ["US", "Hunter x Hunter (2011)", ""]],
+      "episode_names": {"1": {"2": "Test × And × Trial"}},
+      "namesakes": [{"id": 46, "name": "Hunter x Hunter", "year": 1999, "language": "ja", "episodes": {"1": {"2": "Test of Tests"}}}],
+      "rows": [
+        ["1901", "[HorribleSubs] Hunter x Hunter (2011) - 02 [1080p]", 20, 0.5, 1],
+        ["1902", "Hunter x Hunter 1999 - 02 [DVD 480p]", 6, 0.2, 1],
+        ["1903", "Hunter x Hunter (1999) Complete [DVD]", 14, 30.0, 62],
+        ["1904", "Hunter x Hunter 2011 Complete Series [BD 1080p] [Dual Audio]", 95, 160.0, 148],
+        ["1905", "Hunter X Hunter - 02 [1080p] [Dual Audio]", 6, 0.6, 1],
+        ["1906", "Hunter x Hunter Phantom Rouge 2013 1080p", 11, 2.0, 1]
+      ],
+      "listings": {
+        "1904": [["Hunter x Hunter (2011)/Hunter x Hunter (2011) - 001 [BD 1080p].mkv", 1000], ["Hunter x Hunter (2011)/Hunter x Hunter (2011) - 002 [BD 1080p].mkv", 1010], ["Hunter x Hunter (2011)/Hunter x Hunter (2011) - 003 [BD 1080p].mkv", 990]]
+      },
+      "correct": ["1901", "1904", "1905"]
+    },
+    {
+      "key": "chainsaw-man",
+      "alternatives": [["JP", "Chainsaw Man", ""]],
+      "episode_names": {"1": {"2": "Arrival in Tokyo"}},
+      "rows": [
+        ["2001", "[SubsPlease] Chainsaw Man - 02 (1080p) [F2A8E3B1].mkv", 45, 1.4, 1],
+        ["2002", "[Erai-raws] Chainsaw Man - 02 [1080p][Multiple Subtitle]", 30, 1.4, 1],
+        ["2003", "Chainsaw Man S01E02 Arrival in Tokyo 1080p CR WEB-DL AAC2.0 H 264-VARYG", 25, 1.4, 1],
+        ["2004", "[Ohys-Raws] Chainsaw Man - 02 (TX 1280x720 x264 AAC).mp4", 10, 0.4, 1],
+        ["2005", "Chainsaw Man S01E02 English Dubbed 1080p", 12, 1.3, 1],
+        ["2006", "Chainsaw Man The Movie Reze Arc 2025 1080p WEB-DL", 150, 4.0, 1],
+        ["2007", "Chainsaw Man S01 1080p BluRay Dual Audio", 60, 17.0, 12]
+      ],
+      "listings": {
+        "2007": [["Chainsaw Man S01/Chainsaw Man - S01E01 - Dog & Chainsaw.mkv", 1400], ["Chainsaw Man S01/Chainsaw Man - S01E02 - Arrival in Tokyo.mkv", 1410], ["Chainsaw Man S01/Chainsaw Man - S01E03 - Meowy's Whereabouts.mkv", 1395]]
+      },
+      "correct": ["2001", "2002", "2003", "2007"]
+    },
+    {
+      "key": "mob-psycho-100",
+      "alternatives": [["JP", "Mob Psycho 100", ""]],
+      "episode_names": {"1": {"2": "Doubts About Youth ~Telepathy Club Appears~"}},
+      "rows": [
+        ["2101", "[HorribleSubs] Mob Psycho 100 - 02 [1080p]", 0, 0.5, 1],
+        ["2102", "Mob Psycho 100 S01 [BD 1080p][Dual Audio]", 0, 14.0, 12],
+        ["2103", "Mob Psycho 100 II - 02 [1080p]", 16, 0.5, 1],
+        ["2104", "Mob Psycho 100 III - 02 [1080p]", 21, 0.5, 1],
+        ["2105", "Mob Psycho 100 - 02 [720p]", 2, 0.3, 1],
+        ["2106", "Mob Psycho 100 Reigen The Miraculous Unknown Psychic 1080p", 9, 1.0, 1]
+      ],
+      "correct": ["2105"]
+    },
+    {
+      "key": "violet-evergarden",
+      "alternatives": [["JP", "Violet Evergarden", ""]],
+      "episode_names": {"1": {"2": "Never Coming Back"}},
+      "rows": [
+        ["2201", "Violet Evergarden - 02 [480p]", 12, 0.2, 1],
+        ["2202", "Violet Evergarden S01 480p WEB", 8, 2.0, 13],
+        ["2203", "Violet Evergarden The Movie 2020 1080p BluRay", 70, 4.5, 1],
+        ["2204", "Violet Evergarden Gaiden Eternity and the Auto Memory Doll 2019 1080p", 30, 2.5, 1],
+        ["2205", "Violet Evergarden S01E02 1080p", 0, 1.0, 1]
+      ],
+      "correct": [],
+      "expect": "nothing"
+    },
+    {
+      "key": "my-hero-academia",
+      "alternatives": [["JP", "Boku no Hero Academia", ""], ["US", "My Hero Academia", ""]],
+      "episode_names": {"1": {"2": "What It Takes to Be a Hero"}},
+      "rows": [
+        ["2301", "[HorribleSubs] Boku no Hero Academia - 02 [1080p]", 18, 0.5, 1],
+        ["2302", "My Hero Academia S01E02 1080p Dual Audio", 7, 1.0, 1],
+        ["2303", "My Hero Academia Seasons 1 to 6 +Movies", 55, 180.0, 140],
+        ["2304", "My Hero Academia Vigilantes - 02 [1080p]", 40, 1.2, 1],
+        ["2305", "My Hero Academia S02E02 1080p", 20, 1.0, 1],
+        ["2306", "My Hero Academia You're Next 2024 1080p WEB-DL", 66, 3.0, 1]
+      ],
+      "listings": {
+        "2303": [["My Hero Academia/Season 1/My Hero Academia - S01E02 - What It Takes to Be a Hero.mkv", 1100], ["My Hero Academia/Season 2/My Hero Academia - S02E02 - Roaring Sports Festival.mkv", 1100], ["My Hero Academia/Movies/My Hero Academia Two Heroes.mkv", 3000]]
+      },
+      "correct": ["2301", "2302", "2303"]
+    },
+    {
+      "key": "erased",
+      "alternatives": [["JP", "Boku dake ga Inai Machi", ""]],
+      "episode_names": {"1": {"2": "Palm of the Hand"}},
+      "namesakes": [{"id": 72637, "name": "ERASED", "year": 2017, "language": "ja"}],
+      "rows": [
+        ["2401", "[HorribleSubs] Boku dake ga Inai Machi - 02 [1080p]", 14, 0.5, 1],
+        ["2402", "ERASED 2017 S01E02 1080p NF WEB-DL", 30, 1.5, 1],
+        ["2403", "ERASED S01E02 1080p BluRay Dual Audio", 9, 1.2, 1],
+        ["2404", "Erased 2012 1080p BluRay x264", 25, 2.0, 1],
+        ["2405", "Boku dake ga Inai Machi (2016) [BD 1080p] [Dual Audio]", 26, 15.0, 12]
+      ],
+      "listings": {
+        "2405": [["Boku dake ga Inai Machi/Boku dake ga Inai Machi - 01.mkv", 1200], ["Boku dake ga Inai Machi/Boku dake ga Inai Machi - 02.mkv", 1210], ["Boku dake ga Inai Machi/Boku dake ga Inai Machi - 03.mkv", 1195]]
+      },
+      "correct": ["2401", "2403", "2405"]
+    },
+    {
+      "key": "oshi-no-ko",
+      "alternatives": [["JP", "【推しの子】", ""], ["US", "Oshi no Ko", ""]],
+      "episode_names": {"1": {"2": "Third Option"}},
+      "rows": [
+        ["2501", "[SubsPlease] Oshi no Ko - 02 (1080p)", 30, 1.4, 1],
+        ["2502", "Oshi no Ko S01E02 Third Option 1080p", 12, 1.3, 1],
+        ["2503", "Oshi no Ko S02E02 1080p", 24, 1.3, 1],
+        ["2504", "[SubsPlease] Oshi no Ko - 13 (1080p)", 28, 1.4, 1],
+        ["2505", "Oshi no Ko 2024 Live Action S01E02 1080p", 15, 1.6, 1],
+        ["2506", "Oshi no Ko S01 1080p BluRay Dual Audio", 40, 16.0, 11]
+      ],
+      "listings": {
+        "2506": [["Oshi no Ko S01/Oshi no Ko - S01E01 - Mother and Children.mkv", 2900], ["Oshi no Ko S01/Oshi no Ko - S01E02 - Third Option.mkv", 1450], ["Oshi no Ko S01/Oshi no Ko - S01E03 - Lowered Gaze.mkv", 1440]]
+      },
+      "correct": ["2501", "2502", "2506"]
+    },
+    {
+      "key": "dragon-ball-z",
+      "alternatives": [["JP", "Dragon Ball Z", ""]],
+      "episode_names": {"1": {"2": "The World's Strongest Team"}},
+      "rows": [
+        ["2601", "Dragon Ball Z - 002 [1080p] [Dual Audio]", 11, 0.9, 1],
+        ["2602", "Dragon.Ball.DAIMA.S01E02.1080p.WEB-DL", 60, 1.5, 1],
+        ["2603", "Dragon Ball Z Kai - 02 [1080p]", 20, 0.6, 1],
+        ["2604", "Dragon Ball Super - 002 [1080p]", 30, 0.6, 1],
+        ["2605", "Dragon Ball Z (1989) Complete Series [BD 1080p] [Dual Audio]", 120, 280.0, 291],
+        ["2606", "Dragon Ball Z S01E02 English Dub 480p", 9, 0.2, 1],
+        ["2607", "Dragon Ball Z Resurrection F 2015 1080p BluRay", 35, 3.0, 1]
+      ],
+      "listings": {
+        "2605": [["Dragon Ball Z/Dragon Ball Z - 001.mkv", 900], ["Dragon Ball Z/Dragon Ball Z - 002.mkv", 905], ["Dragon Ball Z/Dragon Ball Z - 003.mkv", 899]]
+      },
+      "correct": ["2601", "2605"]
+    }
+  ]
+}

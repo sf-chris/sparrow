@@ -1,0 +1,1539 @@
+{
+ "version": 1,
+ "mode": "offline",
+ "revision": "02742d127def6a3c625e5120a7fa0680f95b00df",
+ "working_tree_changed": true,
+ "scout_sha256": "e42dc2f212b56abf6da50af4b81b2a517d21ef754b8dc1317d4fb905a2544161",
+ "cassettes_sha256": "2e0a1358e792d2f11bd387d5a55b929d836bae894e54f74898242dff9623ca7b",
+ "model_calls": 0,
+ "cost_usd": 0,
+ "sources": [
+  "synthetic"
+ ],
+ "summary": {
+  "titles": 28,
+  "scored": 28,
+  "right_first": 28,
+  "right_first_rate": 1.0,
+  "would_escalate": 1,
+  "escalation_rate": 0.036,
+  "searches_median": 6.0,
+  "searches_max": 6,
+  "peeks": 22,
+  "simulated_queries": 134
+ },
+ "by_set": {
+  "anime": {
+   "titles": 16,
+   "scored": 16,
+   "right_first": 16,
+   "right_first_rate": 1.0,
+   "would_escalate": 1,
+   "escalation_rate": 0.062,
+   "searches_median": 6.0,
+   "searches_max": 6,
+   "peeks": 16,
+   "simulated_queries": 92
+  },
+  "films": {
+   "titles": 6,
+   "scored": 6,
+   "right_first": 6,
+   "right_first_rate": 1.0,
+   "would_escalate": 0,
+   "escalation_rate": 0.0,
+   "searches_median": 2.0,
+   "searches_max": 3,
+   "peeks": 0,
+   "simulated_queries": 14
+  },
+  "tv": {
+   "titles": 6,
+   "scored": 6,
+   "right_first": 6,
+   "right_first_rate": 1.0,
+   "would_escalate": 0,
+   "escalation_rate": 0.0,
+   "searches_median": 6.0,
+   "searches_max": 6,
+   "peeks": 6,
+   "simulated_queries": 28
+  }
+ },
+ "missing_cassettes": [],
+ "results": [
+  {
+   "key": "naruto",
+   "set": "anime",
+   "title": "Naruto",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 2,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Naruto S01E02",
+    "Naruto",
+    "Naruto -shippuden",
+    "Naruto 2002",
+    "Naruto complete",
+    "Naruto 02"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Naruto"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Naruto Complete Series 001-220 [BD 1080p] [Dual Audio]",
+     "seeders": 151,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "[Judas] Naruto (Season 1) [BD 1080p][HEVC x265 10bit][Dual-Audio][Multi-Subs]",
+     "seeders": 38,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Naruto - 002 [720p] [Dual Audio]",
+     "seeders": 3,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "one-piece",
+   "set": "anime",
+   "title": "One Piece",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "One Piece S01E02",
+    "One Piece",
+    "One Piece 1999",
+    "One Piece complete",
+    "One Piece 02",
+    "One Piece S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "One Piece"
+   ],
+   "excluded": [
+    "The Man in the Straw Hat"
+   ],
+   "namesakes": "ONE PIECE (2023, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "One Piece - 002 [BD 1080p] [Dual Audio]",
+     "seeders": 45,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "One Piece Episodes 001-100 [1080p] [Dual Audio]",
+     "seeders": 25,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "One Piece S01E02 1080p WEB H264",
+     "seeders": 8,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": false
+    }
+   ]
+  },
+  {
+   "key": "cowboy-bebop",
+   "set": "anime",
+   "title": "Cowboy Bebop",
+   "wanted": "S01E05",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 2,
+   "kept": 2,
+   "dropped": 1,
+   "queries": [
+    "Cowboy Bebop S01E05",
+    "Cowboy Bebop",
+    "Kauboi Bibappu S01E05",
+    "Kauboi Bibappu 05",
+    "Cowboy Bebop 1998",
+    "Cowboy Bebop complete"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Cowboy Bebop",
+    "Kauboi Bibappu"
+   ],
+   "excluded": [
+    "Ballad of Fallen Angels"
+   ],
+   "namesakes": "Cowboy Bebop (2021, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Cowboy Bebop (1998) S01 [BD 1080p] [Dual Audio]",
+     "seeders": 90,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "[Group] Cowboy Bebop - 05 [BD 1080p][Dual Audio]",
+     "seeders": 12,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "samurai-champloo",
+   "set": "anime",
+   "title": "Samurai Champloo",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 2,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Samurai Champloo S01E02",
+    "Samurai Champloo",
+    "Samurai Champloo 2004",
+    "Samurai Champloo complete",
+    "Samurai Champloo 02",
+    "Samurai Champloo S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Samurai Champloo"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "[a-S] Samurai Champloo (01-26) (1080p)",
+     "seeders": 64,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Samurai Champloo (01-26) 1080p RAW",
+     "seeders": 64,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": false
+    },
+    {
+     "rid": "r3",
+     "name": "Samurai Champloo S01E02 720p BluRay Dual Audio",
+     "seeders": 6,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "tokyo-ghoul",
+   "set": "anime",
+   "title": "Tokyo Ghoul",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 2,
+   "dropped": 0,
+   "queries": [
+    "Tokyo Ghoul S01E02",
+    "Tokyo Ghoul",
+    "Tokyo Ghoul 2014",
+    "Tokyo Ghoul complete",
+    "Tokyo Ghoul 02",
+    "Tokyo Ghoul S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Tokyo Ghoul"
+   ],
+   "excluded": [
+    "Tokyo Ghoul √A",
+    "Tokyo Ghoul:re"
+   ],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Tokyo Ghoul S01 [BD 1080p][Dual Audio]",
+     "seeders": 70,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "[HorribleSubs] Tokyo Ghoul - 02 [1080p]",
+     "seeders": 25,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "psycho-pass",
+   "set": "anime",
+   "title": "Psycho-Pass",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Psycho-Pass S01E02",
+    "Psycho-Pass",
+    "Psycho-Pass 2012",
+    "Psycho-Pass complete",
+    "Psycho-Pass 02",
+    "Psycho-Pass S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Psycho-Pass"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Psycho Pass S01E02 1080p BD Dual Audio",
+     "seeders": 9,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Psycho-Pass - 02 [1080p]",
+     "seeders": 5,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "[Coalgirls] Psycho-Pass (1920x1080 Blu-ray FLAC)",
+     "seeders": 22,
+     "quality": "unknown",
+     "coverage": "pack",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "parasyte",
+   "set": "anime",
+   "title": "Parasyte -the maxim-",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Parasyte the maxim S01E02",
+    "Parasyte the maxim",
+    "Kiseijuu S01E02",
+    "Kiseijuu 02",
+    "Parasyte the maxim 2014",
+    "Parasyte the maxim complete"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Parasyte -the maxim-",
+    "Kiseijuu: Sei no Kakuritsu"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Parasyte The Maxim S01 1080p BluRay Dual Audio",
+     "seeders": 40,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "[HorribleSubs] Parasyte - the maxim - 02 [1080p]",
+     "seeders": 15,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Kiseijuu Sei no Kakuritsu - 02 [1080p]",
+     "seeders": 4,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "steins-gate",
+   "set": "anime",
+   "title": "Steins;Gate",
+   "wanted": "S01E03",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Steins Gate S01E03",
+    "Steins Gate",
+    "Steins Gate 2011",
+    "Steins Gate complete",
+    "Steins Gate 03",
+    "Steins Gate S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Steins;Gate"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Steins;Gate (2011) [BD 1080p] [Dual Audio]",
+     "seeders": 33,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "[Commie] Steins;Gate - 03 [BD 1080p]",
+     "seeders": 8,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Steins Gate S01E03 720p",
+     "seeders": 3,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "hunter-x-hunter",
+   "set": "anime",
+   "title": "Hunter x Hunter",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Hunter x Hunter S01E02",
+    "Hunter x Hunter",
+    "Hunter x Hunter 2011",
+    "Hunter x Hunter complete",
+    "Hunter x Hunter 02",
+    "Hunter x Hunter S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Hunter x Hunter"
+   ],
+   "excluded": [
+    "Test of Tests"
+   ],
+   "namesakes": "Hunter x Hunter (1999, original language ja)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Hunter x Hunter 2011 Complete Series [BD 1080p] [Dual Audio]",
+     "seeders": 95,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "[HorribleSubs] Hunter x Hunter (2011) - 02 [1080p]",
+     "seeders": 20,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Hunter X Hunter - 02 [1080p] [Dual Audio]",
+     "seeders": 6,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "chainsaw-man",
+   "set": "anime",
+   "title": "Chainsaw Man",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 2,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 5,
+   "dropped": 0,
+   "queries": [
+    "Chainsaw Man S01E02",
+    "Chainsaw Man"
+   ],
+   "simulated_queries": 2,
+   "search_titles": [
+    "Chainsaw Man"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Chainsaw Man S01 1080p BluRay Dual Audio",
+     "seeders": 60,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Chainsaw Man S01E02 Arrival in Tokyo 1080p CR WEB-DL AAC2.0 H 264-VARYG",
+     "seeders": 25,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "[SubsPlease] Chainsaw Man - 02 (1080p) [F2A8E3B1].mkv",
+     "seeders": 45,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r4",
+     "name": "[Erai-raws] Chainsaw Man - 02 [1080p][Multiple Subtitle]",
+     "seeders": 30,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r5",
+     "name": "[Ohys-Raws] Chainsaw Man - 02 (TX 1280x720 x264 AAC).mp4",
+     "seeders": 10,
+     "quality": "unknown",
+     "coverage": "single",
+     "right": false
+    }
+   ]
+  },
+  {
+   "key": "mob-psycho-100",
+   "set": "anime",
+   "title": "Mob Psycho 100",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 1,
+   "dropped": 0,
+   "queries": [
+    "Mob Psycho 100 S01E02",
+    "Mob Psycho 100",
+    "Mob Psycho 100 2016",
+    "Mob Psycho 100 complete",
+    "Mob Psycho 100 02",
+    "Mob Psycho 100 S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Mob Psycho 100"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Mob Psycho 100 - 02 [720p]",
+     "seeders": 2,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "violet-evergarden",
+   "set": "anime",
+   "title": "Violet Evergarden",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": null,
+   "would_escalate": true,
+   "why": "nothing usable, as expected",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 0,
+   "dropped": 0,
+   "queries": [
+    "Violet Evergarden S01E02",
+    "Violet Evergarden",
+    "Violet Evergarden 2018",
+    "Violet Evergarden complete",
+    "Violet Evergarden 02",
+    "Violet Evergarden S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Violet Evergarden"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": []
+  },
+  {
+   "key": "my-hero-academia",
+   "set": "anime",
+   "title": "My Hero Academia",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "My Hero Academia S01E02",
+    "My Hero Academia",
+    "Boku no Hero Academia S01E02",
+    "Boku no Hero Academia 02",
+    "My Hero Academia 2016",
+    "My Hero Academia complete"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "My Hero Academia",
+    "Boku no Hero Academia"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "[HorribleSubs] Boku no Hero Academia - 02 [1080p]",
+     "seeders": 18,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "My Hero Academia S01E02 1080p Dual Audio",
+     "seeders": 7,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "My Hero Academia Seasons 1 to 6 +Movies",
+     "seeders": 55,
+     "quality": "unknown",
+     "coverage": "pack",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "erased",
+   "set": "anime",
+   "title": "ERASED",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 2,
+   "dropped": 0,
+   "queries": [
+    "ERASED S01E02",
+    "ERASED",
+    "Boku dake ga Inai Machi S01E02",
+    "Boku dake ga Inai Machi 02",
+    "ERASED 2016",
+    "ERASED complete"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "ERASED",
+    "Boku dake ga Inai Machi"
+   ],
+   "excluded": [],
+   "namesakes": "ERASED (2017, original language ja)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "[HorribleSubs] Boku dake ga Inai Machi - 02 [1080p]",
+     "seeders": 14,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "ERASED S01E02 1080p BluRay Dual Audio",
+     "seeders": 9,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "oshi-no-ko",
+   "set": "anime",
+   "title": "【OSHI NO KO】",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "OSHI NO KO S01E02",
+    "OSHI NO KO",
+    "OSHI NO KO 2023",
+    "OSHI NO KO complete",
+    "OSHI NO KO 02",
+    "OSHI NO KO S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "【OSHI NO KO】"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Oshi no Ko S01 1080p BluRay Dual Audio",
+     "seeders": 40,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "[SubsPlease] Oshi no Ko - 02 (1080p)",
+     "seeders": 30,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Oshi no Ko S01E02 Third Option 1080p",
+     "seeders": 12,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "dragon-ball-z",
+   "set": "anime",
+   "title": "Dragon Ball Z",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 2,
+   "dropped": 0,
+   "queries": [
+    "Dragon Ball Z S01E02",
+    "Dragon Ball Z",
+    "Dragon Ball Z 1989",
+    "Dragon Ball Z complete",
+    "Dragon Ball Z 02",
+    "Dragon Ball Z S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Dragon Ball Z"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Dragon Ball Z (1989) Complete Series [BD 1080p] [Dual Audio]",
+     "seeders": 120,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Dragon Ball Z - 002 [1080p] [Dual Audio]",
+     "seeders": 11,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "spirited-away",
+   "set": "films",
+   "title": "Spirited Away",
+   "wanted": "2001",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 3,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Spirited Away 2001",
+    "Spirited Away",
+    "Sen to Chihiro no Kamikakushi 2001"
+   ],
+   "simulated_queries": 3,
+   "search_titles": [
+    "Spirited Away",
+    "Sen to Chihiro no Kamikakushi"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Spirited.Away.2001.1080p.BluRay.x265-RARBG",
+     "seeders": 140,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Spirited Away (2001) 1080p BluRay x264 Dual Audio",
+     "seeders": 85,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Sen to Chihiro no Kamikakushi (2001) [BD 1080p]",
+     "seeders": 12,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "parasite",
+   "set": "films",
+   "title": "Parasite",
+   "wanted": "2019",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 2,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Parasite 2019",
+    "Parasite"
+   ],
+   "simulated_queries": 2,
+   "search_titles": [
+    "Parasite"
+   ],
+   "excluded": [],
+   "namesakes": "Parasite (1982, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Parasite.2019.1080p.BluRay.x264-SPARKS",
+     "seeders": 160,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Parasite (2019) [1080p] [BluRay] [Korean]",
+     "seeders": 60,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Parasite 2019 2160p UHD BluRay REMUX HDR",
+     "seeders": 25,
+     "quality": "2160p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "oldboy",
+   "set": "films",
+   "title": "Oldboy",
+   "wanted": "2003",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 2,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 2,
+   "dropped": 0,
+   "queries": [
+    "Oldboy 2003",
+    "Oldboy"
+   ],
+   "simulated_queries": 2,
+   "search_titles": [
+    "Oldboy"
+   ],
+   "excluded": [],
+   "namesakes": "Oldboy (2013, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Oldboy.2003.1080p.BluRay.x264-CiNEFiLE",
+     "seeders": 75,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Oldboy (2003) Korean 720p BRRip",
+     "seeders": 20,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "dune",
+   "set": "films",
+   "title": "Dune",
+   "wanted": "2021",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 2,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 2,
+   "dropped": 0,
+   "queries": [
+    "Dune 2021",
+    "Dune"
+   ],
+   "simulated_queries": 2,
+   "search_titles": [
+    "Dune"
+   ],
+   "excluded": [],
+   "namesakes": "Dune (1984, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Dune.2021.1080p.WEB-DL.DDP5.1.Atmos.H.264-EVO",
+     "seeders": 260,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Dune (2021) 2160p UHD BluRay REMUX HDR",
+     "seeders": 95,
+     "quality": "2160p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "amelie",
+   "set": "films",
+   "title": "Amélie",
+   "wanted": "2001",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 2,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 1,
+   "dropped": 0,
+   "queries": [
+    "Amelie 2001",
+    "Amelie"
+   ],
+   "simulated_queries": 2,
+   "search_titles": [
+    "Amélie"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Amelie.2001.1080p.BluRay.x264-AMIABLE",
+     "seeders": 70,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "the-thing",
+   "set": "films",
+   "title": "The Thing",
+   "wanted": "1982",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 3,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "The Thing 1982",
+    "The Thing",
+    "John Carpenter's The Thing 1982"
+   ],
+   "simulated_queries": 3,
+   "search_titles": [
+    "The Thing",
+    "John Carpenter's The Thing"
+   ],
+   "excluded": [],
+   "namesakes": "The Thing (2011, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "The.Thing.1982.1080p.BluRay.x264-AMIABLE",
+     "seeders": 90,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "The Thing (1982) 2160p UHD BluRay REMUX",
+     "seeders": 35,
+     "quality": "2160p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "John Carpenters The Thing 1982 720p BRRip",
+     "seeders": 9,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "breaking-bad",
+   "set": "tv",
+   "title": "Breaking Bad",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 2,
+   "cached": 0,
+   "peeks": 2,
+   "kept": 4,
+   "dropped": 0,
+   "queries": [
+    "Breaking Bad S01E02",
+    "Breaking Bad"
+   ],
+   "simulated_queries": 2,
+   "search_titles": [
+    "Breaking Bad"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Breaking Bad Complete Series 1080p BluRay",
+     "seeders": 240,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Breaking Bad S01 1080p BluRay x264",
+     "seeders": 80,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Breaking.Bad.S01E02.1080p.BluRay.x264-ROVERS",
+     "seeders": 55,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r4",
+     "name": "Breaking Bad S01E02 720p HDTV x264",
+     "seeders": 12,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "the-office",
+   "set": "tv",
+   "title": "The Office",
+   "wanted": "S02E01",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 2,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 4,
+   "dropped": 0,
+   "queries": [
+    "The Office S02E01",
+    "The Office"
+   ],
+   "simulated_queries": 2,
+   "search_titles": [
+    "The Office"
+   ],
+   "excluded": [],
+   "namesakes": "The Office (2001, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "The Office (US) Season 2 1080p BluRay",
+     "seeders": 70,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "The.Office.US.S02E01.1080p.BluRay.x264",
+     "seeders": 40,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "The Office S02E01 The Dundies 720p WEB-DL",
+     "seeders": 15,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r4",
+     "name": "The.Office.UK.S02E01.720p.BluRay.x264",
+     "seeders": 9,
+     "quality": "720p",
+     "coverage": "single",
+     "right": false
+    }
+   ]
+  },
+  {
+   "key": "fleabag",
+   "set": "tv",
+   "title": "Fleabag",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 2,
+   "dropped": 0,
+   "queries": [
+    "Fleabag S01E02",
+    "Fleabag",
+    "Fleabag 2016",
+    "Fleabag complete",
+    "Fleabag 02",
+    "Fleabag S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Fleabag"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Fleabag.S01E02.1080p.AMZN.WEB-DL.DDP2.0.H.264",
+     "seeders": 30,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Fleabag S01 Complete 720p WEB",
+     "seeders": 25,
+     "quality": "720p",
+     "coverage": "pack",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "severance",
+   "set": "tv",
+   "title": "Severance",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Severance S01E02",
+    "Severance",
+    "Severance 2022",
+    "Severance complete",
+    "Severance 02",
+    "Severance S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Severance"
+   ],
+   "excluded": [],
+   "namesakes": "",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Severance.S01E02.Half.Loop.1080p.ATVP.WEB-DL.DDP5.1.H.264",
+     "seeders": 110,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Severance 2022 S01 1080p WEB-DL",
+     "seeders": 90,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Severance S01E02 2160p ATVP WEB-DL HDR",
+     "seeders": 35,
+     "quality": "2160p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "shogun",
+   "set": "tv",
+   "title": "Shōgun",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 0,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Shogun S01E02",
+    "Shogun",
+    "Shogun 2024",
+    "Shogun complete",
+    "Shogun 02",
+    "Shogun S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Shōgun"
+   ],
+   "excluded": [
+    "Toranaga's Decision"
+   ],
+   "namesakes": "Shōgun (1980, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Shogun.2024.S01E02.1080p.DSNP.WEB-DL.DDP5.1.H.264",
+     "seeders": 140,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Shogun S01E02 1080p WEB H264",
+     "seeders": 25,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Shogun 2024 S01E02 Servants of Two Masters 2160p HDR",
+     "seeders": 40,
+     "quality": "2160p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  },
+  {
+   "key": "doctor-who",
+   "set": "tv",
+   "title": "Doctor Who",
+   "wanted": "S01E02",
+   "scored": true,
+   "right_first": true,
+   "rank": 1,
+   "would_escalate": false,
+   "why": "right copy first",
+   "searches": 6,
+   "cached": 0,
+   "peeks": 1,
+   "kept": 3,
+   "dropped": 0,
+   "queries": [
+    "Doctor Who S01E02",
+    "Doctor Who",
+    "Doctor Who 2005",
+    "Doctor Who complete",
+    "Doctor Who 02",
+    "Doctor Who S01"
+   ],
+   "simulated_queries": 6,
+   "search_titles": [
+    "Doctor Who"
+   ],
+   "excluded": [
+    "The Cave of Skulls",
+    "The Devil's Chord"
+   ],
+   "namesakes": "Doctor Who (1963, original language en); Doctor Who (2023, original language en)",
+   "short_list": [
+    {
+     "rid": "r1",
+     "name": "Doctor Who (2005) Series 1 1080p BluRay",
+     "seeders": 50,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true
+    },
+    {
+     "rid": "r2",
+     "name": "Doctor.Who.2005.S01E02.1080p.BluRay.x264",
+     "seeders": 25,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": true
+    },
+    {
+     "rid": "r3",
+     "name": "Doctor Who S01E02 The End of the World 720p",
+     "seeders": 10,
+     "quality": "720p",
+     "coverage": "single",
+     "right": true
+    }
+   ]
+  }
+ ]
+}
