@@ -36,6 +36,10 @@ All notable changes to Sparrow are documented here.
   ripgrep explicitly, and CI retains results and server logs for diagnosis.
 - Opt-in nearby-service discovery prototype with bounded mDNS queries; no
   automatic scanning, device pairing or mounted shares.
+- Retired the old curator (`SPARROW_LEGACY_CURATOR`), v2 request/goal/show
+  routes, old search and suggestion routes, auto-organiser and filename rescan,
+  together with their unowned Haiku calls and the description call behind
+  `/api/resolve`. Saved request history still loads.
 
 - Owner accounts, invitations, storage permissions, inherited preferences and
   personal sessions/progress.

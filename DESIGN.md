@@ -1,9 +1,9 @@
 # Sparrow — Design Philosophy & System
 
 > This document supersedes all previous design directions, including the Code
-> World Model (CWM) and the deterministic curator/planner pipeline. Executable
-> CWM paths have been removed. Retained deterministic parsing/ranking helpers
-> are advisory tools, never decision-makers.
+> World Model (CWM) and the deterministic curator/planner pipeline. Both have
+> been removed. The retained regex release-name parse is an advisory tool,
+> never a decision-maker.
 
 Updated product direction, 2026-09-09: the owner accepted the product review
 and added agentic discovery, subtitle/audio synchronisation, mobile use,
@@ -109,7 +109,7 @@ creates a job; search content cannot authorise acquisition. Keep fast direct
 title suggestions alongside the richer agent flow.
 
 `discovery.py` implements the new flow on the existing persistent tool runtime;
-`resolution.py` retains the legacy direct lookup/description route. The current
+fast suggestions are a direct TMDB lookup with no model call. The current
 runtime enforces cancellation, persistence, cost and tool-access contracts.
 The SDK migration decision and remaining live evaluation are recorded in
 `docs/IMPLEMENTATION.md`; a package change is conditional on demonstrated parity.
@@ -228,9 +228,9 @@ local processing and evidence.
 - **The CWM** (self-evolving Python strategy file): executable paths removed. Learning now
   lives in agent memory notes.
 - **The deterministic curator/planner/parser pipeline as decision-maker**:
-  demoted. `parse_name`, `rank_candidates`, and query generators remain
-  available as triage tools an agent may call on large result sets — their
-  output is advisory, never final.
+  removed. The regex release-name parse remains as the scout's first guess and
+  the `triage_parse` tool an agent may call on large result sets — its output
+  is advisory, never final.
 - **Status-machine "done"**: replaced by spec reconciliation. A job is
   complete when inventory matches the TMDB contract, verified, with metadata
   and artwork in place.

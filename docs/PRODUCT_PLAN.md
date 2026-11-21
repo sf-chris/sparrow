@@ -26,7 +26,7 @@ Mobile use, accounts, guided self-hosting, subtitle preparation, agentic discove
 
 **1. Use agents for discovery, judgement and verification; automate predictable processing.**
 
-The existing Fetch, Media and Librarian are already agents: persistent model/tool loops with event wakeups, history and tools. The current title resolver is direct TMDB lookup plus a single description call. Installing an agent SDK would replace parts of the orchestration machinery; it would not, by itself, repair scope, verification or recovery.
+The existing Fetch, Media and Librarian are already agents: persistent model/tool loops with event wakeups, history and tools. Fast title suggestions are a direct TMDB lookup; descriptions go to the Discovery agent, with no one-shot model call. Installing an agent SDK would replace parts of the orchestration machinery; it would not, by itself, repair scope, verification or recovery.
 
 | Role | Work it owns | Default reasoning approach |
 |---|---|---|
