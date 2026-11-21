@@ -241,6 +241,12 @@ class PairingCommandTests(unittest.IsolatedAsyncioTestCase):
         # A used code can't set up another computer.
         self.assertIn("expired or was already used", self.client.get(f"/api/v1/node/setup/{code}.sh").text)
 
+    async def test_codes_never_start_with_a_dash(self):
+        from unittest import mock
+
+        with mock.patch("backend.agents.nodes.secrets.token_urlsafe", side_effect=["-abc" * 8, "Abc" * 11]):
+            self.assertEqual(self.nodes.enroll()["code"], "Abc" * 11)
+
     async def test_expired_or_unknown_commands_say_so_plainly(self):
         unknown = secrets.token_urlsafe(24)
         for kind in ("sh", "ps1"):
