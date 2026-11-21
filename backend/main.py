@@ -174,13 +174,12 @@ def _tail_log_lines(path: Path, n: int) -> list[str]:
 
 from .storage import Storage
 from .models import (
-    Download, LibraryItem, SparrowConfig, TorrentClientConfig,
+    Download, SparrowConfig, TorrentClientConfig,
     MediaType, Quality, DownloadStatus, TorrentClientType,
 )
 from .services import torrent_client as tc_svc
 from .services import search_engine
 from .services import metadata_service as meta_svc
-from .services import file_organizer
 from .services import release_parser
 from .services.library_view import build_library_view
 from .agents.service import AgentService
@@ -417,12 +416,9 @@ async def download_progress_loop():
                     updates["staging_path"] = status_data.get("save_path", "")
 
                     # v3: agent-managed downloads belong to the Media Agent —
-                    # enrich_download would clobber the job metadata, and
-                    # auto-organize would race the agent.
+                    # enrich_download would clobber the job metadata.
                     if not dl.metadata.get("agent_managed"):
                         asyncio.create_task(enrich_download(dl.id))
-                        if config.auto_organize:
-                            asyncio.create_task(auto_organize_download(dl.id))
 
                 await storage.update_download(dl.id, **updates)
                 await broadcast({"type": "download_update", "data": {**dl.to_dict(), **updates, "status": new_status.value}})
@@ -431,27 +427,6 @@ async def download_progress_loop():
             break
         except Exception:
             pass
-
-
-def _find_existing_library_item(tmdb_id, title: str, media_type: MediaType):
-    for existing in storage.get_library():
-        if existing.media_type != media_type:
-            continue
-        if tmdb_id and existing.tmdb_id == tmdb_id:
-            return existing
-        if not tmdb_id and title and existing.title.lower() == title.lower():
-            return existing
-    return None
-
-
-def _series_root(dst: Path) -> Path:
-    """Given a placed file path, walk up to the show's root folder."""
-    for parent in dst.parents:
-        if parent.name == "TV Shows":
-            rel = dst.relative_to(parent)
-            if rel.parts:
-                return parent / rel.parts[0]
-    return dst.parent
 
 
 async def enrich_download(download_id: str):
@@ -480,145 +455,6 @@ async def enrich_download(download_id: str):
             log.warning("Metadata not found", extra={"dl_name": dl.name, "media_type": dl.media_type.value})
     except Exception as e:
         log.warning("Metadata fetch failed", extra={"dl_name": dl.name, "error": str(e)})
-
-
-async def auto_organize_download(download_id: str):
-    """Automatically organize a completed download into the library."""
-    log = logging.getLogger("sparrow.organize")
-    await asyncio.sleep(2)  # Give the torrent client a moment
-    dl = storage.get_download(download_id)
-    if not dl or not dl.staging_path:
-        return
-    config = storage.get_config()
-    if not config.library_dir:
-        return
-
-    log.info("Organizing", extra={"dl_name": dl.name, "staging": dl.staging_path, "media_type": dl.media_type.value})
-    await storage.update_download(download_id, status=DownloadStatus.ORGANIZING)
-    await broadcast({"type": "download_update", "data": {"id": download_id, "status": "organizing"}})
-
-    try:
-        ops = await file_organizer.organize_download(
-            staging_path=dl.staging_path,
-            library_dir=config.library_dir,
-            media_type=dl.media_type,
-            metadata=dl.metadata,
-            data_dir=DATA_DIR,
-            anthropic_api_key=config.anthropic_api_key,
-            storage=storage,
-        )
-        successful = [op for op in ops if op["success"]]
-        if successful:
-            verification = file_organizer.verify_organized_operations(ops, dl.media_type, dl.metadata)
-            library_path = successful[0]["dst"]
-            updated_metadata = {**(dl.metadata or {}), "_organize_verification": verification}
-            await storage.update_download(
-                download_id,
-                status=DownloadStatus.ORGANIZED,
-                library_path=library_path,
-                metadata=updated_metadata,
-            )
-            if not verification["ok"]:
-                log.warning("Organize verification found issues", extra={
-                    "dl_name": dl.name,
-                    "issues": "; ".join(verification["issues"][:3]),
-                })
-
-            # Resolve UNKNOWN media_type from where the file was placed
-            resolved_type = dl.media_type
-            if dl.media_type == MediaType.UNKNOWN:
-                if "/Movies/" in library_path or "\\Movies\\" in library_path:
-                    resolved_type = MediaType.MOVIE
-                elif "/TV Shows/" in library_path or "\\TV Shows\\" in library_path:
-                    resolved_type = MediaType.TV
-                else:
-                    resolved_type = MediaType.MOVIE
-
-            # Merge into the library: one item per title, per-episode inventory
-            meta = updated_metadata
-            item = _find_existing_library_item(meta.get("tmdb_id"), meta.get("title", dl.name), resolved_type)
-            if item is None:
-                item = LibraryItem(
-                    id=str(uuid.uuid4()),
-                    title=meta.get("title", dl.name),
-                    media_type=resolved_type,
-                    path=str(Path(library_path).parent),
-                    year=meta.get("year"),
-                    tmdb_id=meta.get("tmdb_id"),
-                    imdb_id=meta.get("imdb_id"),
-                    overview=meta.get("overview", ""),
-                    poster_path=meta.get("poster_path", ""),
-                    backdrop_path=meta.get("backdrop_path", ""),
-                    genres=meta.get("genres", []),
-                    rating=meta.get("rating"),
-                    seasons=meta.get("seasons"),
-                    episode_count=meta.get("episode_count"),
-                    size_bytes=dl.size_bytes,
-                    metadata=meta,
-                )
-                if resolved_type == MediaType.TV:
-                    item.path = str(_series_root(Path(library_path)))
-                await storage.add_library_item(item)
-            else:
-                item.size_bytes += dl.size_bytes
-
-            # Record every placed episode in the inventory; replace upgraded files
-            for op in successful:
-                for s, e in op.get("episodes") or []:
-                    old = item.episode_file(s, e)
-                    if old and old.get("path") and old["path"] != op["dst"]:
-                        try:
-                            old_path = Path(old["path"])
-                            if old_path.exists():
-                                old_path.unlink()
-                                item.size_bytes = max(0, item.size_bytes - int(old.get("size_bytes") or 0))
-                                log.info("Replaced episode file with better version", extra={
-                                    "old": old["path"], "new": op["dst"],
-                                })
-                        except Exception:
-                            pass
-                    try:
-                        size = Path(op["dst"]).stat().st_size
-                    except OSError:
-                        size = 0
-                    item.set_episode_file(s, e, {
-                        "quality": op.get("quality", "unknown"),
-                        "path": op["dst"],
-                        "size_bytes": size,
-                        "added_at": time.time(),
-                        "verified": True,
-                    })
-            await storage.update_library_item(
-                item.id,
-                episodes=item.episodes,
-                size_bytes=item.size_bytes,
-                metadata={**item.metadata, "_organize_verification": verification},
-            )
-            await broadcast({"type": "library_update", "data": item.to_dict()})
-            log.info("Organized", extra={
-                "dl_name": dl.name, "dst": library_path,
-                "title": item.title, "media_type": resolved_type.value, "tmdb_id": item.tmdb_id,
-            })
-
-            # Remove torrent from client after successful organize (files are already moved)
-            if dl.torrent_hash and config.torrent_client.type != TorrentClientType.NONE:
-                try:
-                    organize_manager = tc_svc.TorrentManager(config.torrent_client)
-                    await organize_manager.delete_torrent(dl.torrent_hash, delete_files=False)
-                    log.info("Torrent removed after organize", extra={"dl_name": dl.name, "hash": dl.torrent_hash})
-                except Exception as e:
-                    log.warning("Could not remove torrent after organize", extra={"dl_name": dl.name, "error": str(e)})
-        else:
-            errors = "; ".join(op["error"] for op in ops if op["error"])
-            log.error("Organize failed", extra={"dl_name": dl.name, "errors": errors})
-            await storage.update_download(download_id, status=DownloadStatus.ERROR, error_message=errors)
-    except Exception as e:
-        log.error("Organize exception", extra={"dl_name": dl.name, "error": str(e)})
-        await storage.update_download(download_id, status=DownloadStatus.ERROR, error_message=str(e))
-
-    updated = storage.get_download(download_id)
-    if updated:
-        await broadcast({"type": "download_update", "data": updated.to_dict()})
 
 
 async def artwork_enrichment_loop():
@@ -834,12 +670,6 @@ class AddDownloadRequest(BaseModel):
     magnet_url: str
     name: str = ""
     media_type: str = "unknown"
-    tmdb_id: Optional[int] = None
-
-
-class OrganizeRequest(BaseModel):
-    download_id: str
-    media_type: Optional[str] = None
     tmdb_id: Optional[int] = None
 
 
@@ -1669,32 +1499,6 @@ async def enrich_download_metadata(download_id: str):
         raise HTTPException(500, str(e))
 
 
-@app.post("/api/downloads/{download_id}/organize")
-async def organize_download(download_id: str, req: OrganizeRequest):
-    dl = storage.get_download(download_id)
-    if not dl:
-        raise HTTPException(404, "Download not found")
-
-    if req.media_type:
-        await storage.update_download(download_id, media_type=MediaType(req.media_type))
-        dl.media_type = MediaType(req.media_type)
-
-    config = storage.get_config()
-    if not config.library_dir:
-        raise HTTPException(400, "No library directory configured")
-
-    if req.tmdb_id and req.tmdb_id != dl.tmdb_id:
-        art_dir = Path(DATA_DIR) / "art"
-        meta = await meta_svc.fetch_metadata_for_torrent(
-            dl.name, dl.media_type, config.tmdb_api_key, art_dir, tmdb_id=req.tmdb_id
-        )
-        await storage.update_download(download_id, metadata=meta, tmdb_id=req.tmdb_id)
-        dl.metadata = meta
-
-    asyncio.create_task(auto_organize_download(download_id))
-    return {"success": True, "message": "Organization started"}
-
-
 # ─── Library routes ───────────────────────────────────────────────────────────
 
 @app.get("/api/library")
@@ -1776,63 +1580,6 @@ async def enrich_library_item(item_id: str):
         return {"success": True, "poster": meta.get("poster_path", "")}
     except Exception as e:
         raise HTTPException(500, str(e))
-
-
-@app.post("/api/library/scan")
-async def scan_library():
-    config = storage.get_config()
-    if not config.library_dir:
-        raise HTTPException(400, "No library directory configured")
-
-    items = file_organizer.scan_library(config.library_dir)
-    added = 0
-    refreshed = 0
-    for item_data in items:
-        # Already known: refresh the on-disk episode inventory
-        existing = [i for i in storage.get_library() if i.path == item_data["path"]]
-        if existing:
-            item = existing[0]
-            disk_eps = item_data.get("episodes") or {}
-            if item.media_type == MediaType.TV and disk_eps != item.episodes:
-                merged = {season: dict(episodes) for season, episodes in item.episodes.items()}
-                for season, episodes in disk_eps.items():
-                    for episode, record in episodes.items():
-                        old = item.episodes.get(season, {}).get(episode)
-                        merged.setdefault(season, {})[episode] = old if old and old.get("path") == record.get("path") else record
-                await storage.update_library_item(item.id, episodes=merged)
-                refreshed += 1
-            continue
-
-        art_dir = Path(DATA_DIR) / "art"
-        meta = await meta_svc.fetch_metadata_for_torrent(
-            torrent_name=item_data["title"],
-            media_type=MediaType(item_data["media_type"]),
-            api_key=config.tmdb_api_key,
-            art_cache_dir=art_dir,
-        )
-
-        item = LibraryItem(
-            id=str(uuid.uuid4()),
-            title=meta.get("title", item_data["title"]),
-            media_type=MediaType(item_data["media_type"]),
-            path=item_data["path"],
-            year=meta.get("year") or item_data.get("year"),
-            tmdb_id=meta.get("tmdb_id"),
-            imdb_id=meta.get("imdb_id"),
-            overview=meta.get("overview", ""),
-            poster_path=meta.get("poster_path", ""),
-            backdrop_path=meta.get("backdrop_path", ""),
-            genres=meta.get("genres", []),
-            rating=meta.get("rating"),
-            seasons=meta.get("seasons"),
-            episode_count=meta.get("episode_count"),
-            metadata=meta,
-            episodes=item_data.get("episodes") or {},
-        )
-        await storage.add_library_item(item)
-        added += 1
-
-    return {"scanned": len(items), "added": added, "refreshed": refreshed}
 
 
 # ─── Metadata routes ──────────────────────────────────────────────────────────
