@@ -286,20 +286,27 @@ def _other_part(path, titles, season, exclude):
     return False
 
 
-async def peek(apibay_id, targets, media_type, titles=(), exclude=()):
-    """The wanted episodes' files inside a pack ({(season, episode): file}):
-    empty when none are there, None when the indexer cannot list it."""
+async def listing(apibay_id):
+    """A torrent's files as the indexer lists them, as (name, size) pairs:
+    empty when it has no list. The search benchmark replays this."""
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.get(f"https://apibay.org/f.php?id={urllib.parse.quote(apibay_id)}")
-        listing = response.json()
+        data = response.json()
     from .tools import _apibay_indexed_value as value
 
     entries = []
-    for entry in listing if isinstance(listing, list) else []:
+    for entry in data if isinstance(data, list) else []:
         if isinstance(entry, dict):
             name, size = value(entry.get("name"), ""), value(entry.get("size"), 0)
             if name and name != "Filelist not found":
                 entries.append((str(name), int(size or 0)))
+    return entries
+
+
+async def peek(apibay_id, targets, media_type, titles=(), exclude=()):
+    """The wanted episodes' files inside a pack ({(season, episode): file}):
+    empty when none are there, None when the indexer cannot list it."""
+    entries = await listing(apibay_id)
     return choose(entries, targets, media_type, titles, exclude) if entries else None
 
 
@@ -382,13 +389,14 @@ def choose(entries, targets, media_type, titles=(), exclude=()):
     return chosen
 
 
-async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=(), log=None):
+async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=(), log=None, peek_log=None):
     """Search, judge, peek and rank; returns (rows, searched, dropped, failing).
 
     failing: searches errored and none found a copy, so the index is failing;
     that is not proof no copy exists (an empty answer is: it is reported as
     nothing usable). Repeated searches come from the toolbox's cache and do
-    not count against the allowance."""
+    not count against the allowance. peek_log: the cost ledger's list of
+    packs looked inside (listed or not, wanted files found), appended to."""
     plan = list(dict.fromkeys([*(searchable(q) for q in extra_queries), *queries(titles, targets, job.media_type, job.year)]))
     bare = {searchable(t).lower() for t in titles[:1]}
     found, searched, used, errors = {}, [], 0, 0
@@ -444,6 +452,8 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
                 chosen = await peek(candidate["apibay_id"], targets, job.media_type, titles, exclude)
             except (httpx.HTTPError, ValueError):
                 chosen = None
+            if peek_log is not None:
+                peek_log.append({"id": candidate["apibay_id"], "listed": chosen is not None, "wanted": len(chosen or {})})
             if chosen is None and job.media_type != "movie" and spans(candidate, targets):
                 # The indexer has no file list, but the name covers the
                 # episodes: the download picks them once its list arrives.

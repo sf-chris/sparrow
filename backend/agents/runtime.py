@@ -197,6 +197,9 @@ class AgentSpec:
     effort: str = ""  # output_config effort; empty uses the model's default
     # Allowance per budget scope for this agent kind; 0 uses household policy.
     max_dollars: float = 0.0
+    # The cost ledger's phase for a model call: (session, trigger) -> name.
+    # Unset, the ledger's default for the agent kind applies.
+    phase: Optional[Callable[[AgentSession, dict], str]] = None
 
 
 class AgentRuntime:
@@ -636,7 +639,7 @@ class AgentRuntime:
         is_error = bool(result.get("is_error"))
         ledger.record_tool(
             self.store, session_id=ctx.session.id, tool_id=tu.id, name=tu.name,
-            outcome=ledger.tool_outcome(content, is_error), call_id=self._current_call.get(ctx.session.id, ""),
+            outcome=ledger.tool_outcome(content, is_error, ctx.facts), call_id=self._current_call.get(ctx.session.id, ""),
             job_id=ctx.session.job_id, ts=started, duration=round(time.time() - started, 3), facts={**({"args": args} if args else {}), **ctx.facts} or None,
         )
         await self._notify_tool(
@@ -727,7 +730,8 @@ class AgentRuntime:
             try:
                 response = await self._call_api(session, system, tools)
             except Exception as exc:
-                self._ledger_call(session, started, error=f"{type(exc).__name__}: {exc}")
+                self._ledger_call(session, started, error=f"{type(exc).__name__}: {exc}",
+                                  error_class=ledger.error_class(exc))
                 status = getattr(exc, "status_code", None)
                 if status and 400 <= status < 500:
                     # Refused outright (no key, a rejected request): nothing
@@ -736,7 +740,8 @@ class AgentRuntime:
                         db.execute("DELETE FROM reasoning_reservations WHERE id=?", (identity,))
                 raise
             if response is None:
-                self._ledger_call(session, started, error="The AI provider could not be reached after retries.")
+                self._ledger_call(session, started, error="The AI provider could not be reached after retries.",
+                                  error_class="unreachable")
             if response is not None:
                 self._track_spend(session, response)
                 self._ledger_call(session, started, response=response)
@@ -822,17 +827,31 @@ class AgentRuntime:
         about = next((e.payload.get("description") for e in events if e.payload.get("description")), "")
         self._triggers[session.id] = {"kinds": [e.kind for e in events], "about": str(about)[:200], "step": 0}
 
-    def _ledger_call(self, session: AgentSession, started: float, response=None, error: str = "") -> None:
+    def current_call(self, session_id: str) -> str:
+        """The ledger id of a session's latest model call: what a tool's own
+        model call (a pick review) was requested by."""
+        return self._current_call.get(session_id, "")
+
+    def _ledger_call(self, session: AgentSession, started: float, response=None, error: str = "",
+                     error_class: str = "") -> None:
         """Write one model call to the cost ledger: what woke it, what it cost,
         what it asked for."""
         trigger = self._triggers.setdefault(session.id, {"kinds": [], "about": "", "step": 0})
         entry = session.spend.entries[-1] if response is not None and session.spend.entries else {}
         tools = [{"id": b.id, "name": b.name} for b in (response.content if response is not None else []) if b.type == "tool_use"]
+        spec = self._specs.get(session.agent.value)
+        try:
+            phase = spec.phase(session, trigger) if spec and spec.phase else ledger.phase_for(
+                session.agent.value, trigger.get("kinds"), escalated=bool(spec) and session.model != spec.model())
+        except Exception:
+            logger.exception("ledger: no phase for this call")
+            phase = session.agent.value
         self._current_call[session.id] = ledger.record_call(
             self.store, session_id=session.id, job_id=session.job_id, user_id=session.user_id,
-            agent=session.agent.value, phase=session.agent.value, model=session.model, usage=entry,
+            agent=session.agent.value, phase=phase, model=session.model, usage=entry,
             cost=float(entry.get("cost") or 0), latency=round(time.time() - started, 3),
-            trigger=dict(trigger), tools=tools, error=error[:500],
+            trigger=dict(trigger), tools=tools, error=error[:500], effort=spec.effort if spec else "",
+            rates=entry.get("rates"), error_class=error_class,
         )
         trigger["step"] += 1
 
