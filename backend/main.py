@@ -184,7 +184,6 @@ from .services.library_view import build_library_view
 from .agents.service import AgentService
 from .agents.models import JobStatus
 from .agents.runtime import PRICING_SOURCE, rates_for_model, spend_snapshot
-from .agents import resolution
 from . import __version__
 from .configuration import (
     apply_config_update, effective_anthropic_key, effective_tmdb_key, public_config,
@@ -854,13 +853,9 @@ async def get_activity(limit: int = 100, request_id: str = ""):
 
 @app.get("/api/resolve")
 async def resolve_query(q: str):
-    """Search box → poster cards. TMDB direct; fuzzy descriptions get one
-    cheap LLM call. Cards are annotated with library/job state."""
-    config = storage.get_config()
-    cards = await resolution.resolve(
-        q, config.tmdb_api_key or os.getenv("TMDB_API_KEY", ""),
-        config.anthropic_api_key or os.getenv("ANTHROPIC_API_KEY", ""),
-        agent_service.cheap_model())
+    """Direct TMDB title lookup → poster cards annotated with library/job
+    state. No model call: descriptions belong to the Discovery agent."""
+    cards = await meta_svc.tmdb_quick_suggest(q, effective_tmdb_key(storage.get_config()))
     active = {
         (j.media_type, j.tmdb_id): j
         for j in agent_service.store.get_jobs(JobStatus.ACTIVE)
