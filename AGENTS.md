@@ -52,8 +52,8 @@ Everything new lives in `backend/agents/`:
 - `scout.py`, `acquisition_review.py`, `release_match.py` — code search, judging
   and ranking of releases; the smart model's review of the cheap model's pick.
 - `discovery.py` — persistent, scoped Discovery tool loop with inspected title
-  proposals. Fast TMDB suggestions remain alongside it; `resolution.py` retains
-  the legacy description route.
+  proposals. Fast direct TMDB suggestions remain alongside it; descriptions go
+  to Discovery, never to a one-shot model call.
 - `curation.py` — personal subscriptions, versioned authority and changed-fact
   checks that wake the Librarian only for eligible work.
 - `accounts.py`, `nodes.py`, `node_executor.py`, `catalogue.py`, `playback.py` —
@@ -97,7 +97,8 @@ Everything new lives in `backend/agents/`:
 
 ## Key API surfaces
 
-- `GET /api/resolve?q=` — search box → poster cards.
+- `GET /api/resolve?q=` — direct TMDB lookup → annotated poster cards (no
+  model call; the product's search box uses `/api/v1/suggest` and Discovery).
 - `POST /api/jobs`, `GET /api/jobs[/{id}]`, nudge/pause/resume/cancel.
 - `GET /api/journal`, `GET /api/agent-sessions` — the ops console.
 - WebSocket `/ws` events: `journal`, `job_added`, `job_update`,
@@ -137,20 +138,26 @@ Everything new lives in `backend/agents/`:
   including timing measurement and correction for foreign dialogue, is built in
   and makes no model call; no setup-agent implementation is planned now.
   Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
-- Agent-managed downloads carry `metadata.agent_managed` — the legacy
-  enrich/auto-organize path must skip them (the Media Agent owns landing).
+- Agent-managed downloads carry `metadata.agent_managed` — the legacy download
+  poller and its metadata enrichment must skip them (the Media Agent owns landing).
 
-## Legacy (demoted, not deleted)
+## Legacy (retired; history still loads)
 
-- The deterministic curator loop is off by default; set
-  `SPARROW_LEGACY_CURATOR=1` to re-enable. `release_parser.parse_release_name`
-  and the ranking helpers survive only as advisory triage tools
-  (`triage_parse`) — their output is never final.
-- The executable CWM source, service and routes have been deleted. Existing
-  CWM log records remain readable by the storage migration layer; installed data
-  is preserved. Learning lives in scoped agent memory notes.
-- v2 goals/requests routes still have administrator API consumers and await
-  retirement. The unmounted legacy frontend pages/client have been deleted.
+- The deterministic curator, coverage planner, v2 request planner, release
+  decision engine, old search/suggestion routes, auto-organiser, filename
+  rescan and every one-shot model call they made have been deleted, as have the
+  executable CWM and the old frontend. `SPARROW_LEGACY_CURATOR` no longer
+  exists. Saved CWM logs, requests/goals and activity still migrate and load;
+  installed data is preserved. Learning lives in scoped agent memory notes.
+- `release_parser.parse_release_name` survives only as a regex first guess for
+  the scout, the import preview and the advisory `triage_parse` tool — its
+  output is never final. `services/apibay.py` is the index query the Fetch
+  tools use.
+- Remaining non-`/api/v1` administrator routes in `backend/main.py` (config,
+  health, downloads, library, metadata, logs, activity and the v3 jobs/journal
+  console) have no product caller; the legacy download poller still tracks
+  manually added, non-agent transfers. Retire them with their owning migration;
+  `docs/agentic-audit/IMPLEMENTATION.md` records each disposition.
 
 ## Run
 
@@ -184,9 +191,14 @@ privately to the owner; household invitations are generated separately in People
 
 Every model and tool call is recorded in the cost ledger
 ([issue #15](https://github.com/sf-chris/sparrow/issues/15)):
-`python -m backend.agents.ledger report|timelines|export|audit|backfill --data <state dir>`
-gives cost per title by phase, escalations, searches and waste flags. Judge
-acquisition and subtitle changes by a before/after ledger report on the same titles.
+`python -m backend.agents.ledger report|timelines|export|audit|backfill|tag --data <state dir> [--batch NAME]`
+gives cost per title by phase, escalations, searches, each pick's review and what
+came of it, and waste flags. Administrators read the same at `GET /api/ledger` (and
+`/api/ledger/export`); the requests page alerts them when a title or recent run is
+over its target (search median ≤ 2¢, p90 ≤ 10¢, escalation ≤ 15%; subtitles < $1).
+Judge acquisition and subtitle changes by a before/after ledger report on the same
+titles: `tests/evals/search_bench.py` replays fixed title sets offline and runs the
+live search-only benchmark (see `tests/evals/README.md`).
 
 [The implementation ledger](docs/agentic-audit/IMPLEMENTATION.md) records current
 cleanup dispositions, recovery guarantees, evaluations and outstanding work.

@@ -2,13 +2,42 @@ import CollectionCare from "./CollectionCare";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Pause, Play } from "lucide-react";
-import { api, post, type Job } from "./api";
+import { api, post, type Job, type User } from "./api";
 import { Circled } from "./Brand";
-import { Empty, ErrorNote, Flag, Loading, Page, useResource } from "./ui";
+import { Bar, Empty, ErrorNote, Flag, Loading, Page, useResource } from "./ui";
 import { Age, scope } from "./Collection";
 import { useWebSocket } from "../hooks/useWebSocket";
 
-export default function Activity() {
+type Spending = {
+  alerts: { kind: string; measure: string; text: string; job_id?: string }[];
+};
+
+/** Administrators only: titles and recent runs whose cost to find (or to
+ * subtitle) is over its target. Titles and money only. */
+function SpendingAlerts({ open }: { open: (id: string) => void }) {
+  const resource = useResource(() => api<Spending>("/admin/spending"));
+  const alerts = resource.data?.alerts || [];
+  if (!alerts.length) return null;
+  return (
+    <section className="spending" aria-labelledby="spending">
+      <Bar id="spending" title="Over target" />
+      <ul className="rows">
+        {alerts.map((alert) => (
+          <li className="row" key={`${alert.measure}:${alert.job_id || ""}`}>
+            <p>{alert.text}</p>
+            {alert.job_id && (
+              <button className="btn quiet" onClick={() => open(alert.job_id!)}>
+                Open request
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export default function Activity({ user }: { user: User }) {
   const [params, setParams] = useSearchParams();
   const selectedRequest = params.get("request");
   const resource = useResource(() => api<Job[]>("/jobs"));
@@ -51,6 +80,9 @@ export default function Activity() {
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
+      {user.role === "admin" && (
+        <SpendingAlerts open={(id) => setParams({ request: id })} />
+      )}
       <div className="request-tools">
         <div className="tabs" role="tablist" aria-label="Which requests">
           {[

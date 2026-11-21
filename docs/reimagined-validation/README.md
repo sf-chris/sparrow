@@ -36,7 +36,7 @@ All results below are from the bright interface on 10 September 2026:
   bootstrap, first preferences, sign-out to the public landing, failed-login
   input retention and sign-in back to a protected title. Twelve layouts pass
   automated audits. A second run against the LAN preview passes the existing
-  account flow and four error-state layouts.
+  account flow and four error-state layouts ([results](lan-entry-results.json)).
 - Python compilation, JavaScript syntax and `git diff --check` pass.
 
 The fresh setup test ran only against a temporary fixture on loopback port 8892;

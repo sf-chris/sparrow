@@ -4,6 +4,12 @@ All notable changes to Sparrow are documented here.
 
 ## Unreleased — the household guide and product foundation
 
+- The cost ledger tells a pick from an escalation and a stall, follows each
+  reviewed pick to what came of it, and is readable by administrators at
+  `GET /api/ledger`. Requests shows administrators when finding or subtitling
+  a title, or a recent run, costs more than its target. A search benchmark
+  replays fixed title sets offline and runs a live search-only pass that stops
+  at the chosen download.
 - Setup fits a laptop screen: the cover's button is always in view, the steps
   share the title's row and every step ends with Finish later and Continue.
   Each key says whether the server already has it, and a blank box keeps it.
@@ -36,6 +42,10 @@ All notable changes to Sparrow are documented here.
   ripgrep explicitly, and CI retains results and server logs for diagnosis.
 - Opt-in nearby-service discovery prototype with bounded mDNS queries; no
   automatic scanning, device pairing or mounted shares.
+- Retired the old curator (`SPARROW_LEGACY_CURATOR`), v2 request/goal/show
+  routes, old search and suggestion routes, auto-organiser and filename rescan,
+  together with their unowned Small calls and the description call behind
+  `/api/resolve`. Saved request history still loads.
 
 - Owner accounts, invitations, storage permissions, inherited preferences and
   personal sessions/progress.
