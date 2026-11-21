@@ -155,7 +155,20 @@ export function FolderPicker({
 
   useEffect(() => {
     const start = initial[active]?.value || initial.find((s) => s.value)?.value;
-    void open(start ? parentOf(start) : "");
+    void (async () => {
+      if (start) {
+        // Know whether there's more than one place before opening a folder in it.
+        try {
+          const places = await api<Listing>(
+            `/admin/storage/browse?node_id=${encodeURIComponent(nodeId)}&path=`,
+          );
+          setSingle(places.folders.length === 1);
+        } catch {
+          /* The folder itself will say what's wrong. */
+        }
+      }
+      await open(start ? parentOf(start) : "");
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId]);
 
@@ -383,7 +396,7 @@ export function FolderPicker({
           </button>
           <button
             className="btn quiet"
-            disabled={!listing?.path || listing.writable === false}
+            disabled={!listing?.path || listing.writable === false || loading}
             onClick={() => {
               setName("");
               setNaming(true);
