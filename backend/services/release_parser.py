@@ -1,29 +1,16 @@
 """
-Release name parser — turns messy torrent release names into structured facts.
+Release name parser — turns messy torrent release names into advisory facts.
 
-This replaces the CWM's self-evolving regex strategies. The design is tiered:
-
-  Tier 0 (free):   deterministic regex parsing handles conventional names
-                   (SxxExx, season packs, complete series, quality/codec tags).
-  Tier 1 (Small):  names the regex tier can't parse confidently are batch-sent
-                   to assistant-small for structured extraction (~$0.0001/name).
-  Cache:           every parse (regex or AI) is cached in sqlite by name hash,
-                   so a given release name is never paid for twice.
-
-The output answers the one question the pipeline actually needs:
-"exactly which episodes does this torrent cover, at what quality?"
+Deterministic regex parsing only: conventional names (SxxExx, season packs,
+complete series, quality/source/codec tags). The scout, the import preview
+and the agents' triage_parse tool use it as a first guess; names lie, so its
+output is never proof of what a torrent or file contains.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import Optional
-
-SMALL_MODEL = "assistant-small"
-
-VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".m4v", ".mov", ".wmv", ".ts", ".webm"}
 
 RISK_TERMS = ("cam", "hdcam", "camrip", "telesync", "hdts", "sample", "trailer", "screener")
 
@@ -45,40 +32,9 @@ class ParsedRelease:
     group: str = ""                      # release group
     risk_flags: list[str] = field(default_factory=list)
     confidence: float = 0.0              # 0-1: how sure we are about coverage
-    parsed_by: str = "regex"             # regex | ai
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "ParsedRelease":
-        known = {f for f in cls.__dataclass_fields__}
-        return cls(**{k: v for k, v in d.items() if k in known})
-
-    def covers(self, season: int, episode: int) -> bool:
-        """Does this release contain the given episode?"""
-        if self.is_complete_series:
-            return True
-        if [season, episode] in self.episodes:
-            return True
-        if self.is_season_pack and season in self.seasons and not self.episodes:
-            return True
-        return False
-
-    def covered_episodes(self, season: int, episode_count: int) -> set[int]:
-        """Episodes of `season` this release covers, given the season's size."""
-        if self.is_complete_series:
-            return set(range(1, episode_count + 1))
-        if self.is_season_pack and season in self.seasons and not self.episodes:
-            return set(range(1, episode_count + 1))
-        return {e for s, e in self.episodes if s == season}
 
 
-def name_hash(name: str) -> str:
-    return hashlib.sha256(name.strip().lower().encode()).hexdigest()[:32]
-
-
-# ─── Tier 0: deterministic parsing ───────────────────────────────────────────
+# ─── Deterministic parsing ───────────────────────────────────────────────────
 
 _QUALITY_PATTERNS = [
     (re.compile(r"\b(2160p|4k|uhd)\b", re.I), "2160p"),
@@ -141,7 +97,7 @@ def _clean_title(fragment: str) -> str:
 
 
 def parse_release_name(name: str, size_bytes: int = 0) -> ParsedRelease:
-    """Deterministic tier-0 parse. Sets confidence low when coverage is unclear."""
+    """Deterministic parse. Sets confidence low when coverage is unclear."""
     p = ParsedRelease(raw_name=name)
     work = name.strip()
 
@@ -250,161 +206,3 @@ def parse_release_name(name: str, size_bytes: int = 0) -> ParsedRelease:
     if not p.title:
         p.confidence = min(p.confidence, 0.3)
     return p
-
-
-# ─── Tier 1: Small batch parsing for the hard cases ──────────────────────────
-
-_AI_TOOL = {
-    "name": "report_parsed_releases",
-    "description": "Report structured parsing results for torrent release names.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "releases": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "index": {"type": "integer", "description": "Index of the name in the input list"},
-                        "media_type": {"type": "string", "enum": ["movie", "tv", "unknown"]},
-                        "title": {"type": "string"},
-                        "year": {"type": ["integer", "null"]},
-                        "seasons": {"type": "array", "items": {"type": "integer"}},
-                        "episodes": {
-                            "type": "array",
-                            "items": {"type": "array", "items": {"type": "integer"}},
-                            "description": "[season, episode] pairs explicitly covered. Empty for full packs.",
-                        },
-                        "is_season_pack": {"type": "boolean"},
-                        "is_complete_series": {"type": "boolean"},
-                        "is_absolute_numbering": {"type": "boolean"},
-                        "quality": {"type": "string", "enum": ["2160p", "1080p", "720p", "480p", "unknown"]},
-                        "group": {"type": "string"},
-                        "confidence": {"type": "number"},
-                    },
-                    "required": ["index", "media_type", "title", "confidence"],
-                },
-            }
-        },
-        "required": ["releases"],
-    },
-}
-
-_AI_SYSTEM = (
-    "You parse torrent release names into structured facts. You are expert in "
-    "every naming convention: scene releases, fansub anime (absolute episode "
-    "numbering, [Group] prefixes, batch markers), season packs (S01, Stagione 1, "
-    "Saison 1), multi-season ranges (S01-S05), complete-series bundles, and "
-    "multi-episode files (S01E01E02, E01-E03). For anime absolute numbering, "
-    "report episodes as [0, N] pairs (season 0 = unknown/absolute) and set "
-    "is_absolute_numbering. Be precise about exactly which episodes a name "
-    "covers — that is the entire point. If a name gives no episode information "
-    "but is clearly a full season, set is_season_pack with the season numbers."
-)
-
-
-async def _ai_parse_batch(names: list[str], api_key: str) -> dict[int, dict]:
-    """One Small call parsing up to ~40 names. Returns index -> parsed dict."""
-    import provider
-
-    client = provider.AsyncProvider(api_key=api_key)
-    numbered = "\n".join(f"{i}: {n}" for i, n in enumerate(names))
-    resp = await client.create_message(
-        model=SMALL_MODEL,
-        max_tokens=4000,
-        system=_AI_SYSTEM,
-        tools=[_AI_TOOL],
-        tool_choice={"type": "tool", "name": "report_parsed_releases"},
-        messages=[{
-            "role": "user",
-            "content": f"Parse these torrent release names:\n{numbered}",
-        }],
-    )
-    out: dict[int, dict] = {}
-    for block in resp.content:
-        if block.type == "tool_use":
-            for rel in block.input.get("releases", []):
-                idx = rel.get("index")
-                if isinstance(idx, int) and 0 <= idx < len(names):
-                    out[idx] = rel
-    return out
-
-
-AI_CONFIDENCE_THRESHOLD = 0.7
-
-
-async def parse_releases(
-    names: list[str],
-    storage=None,
-    provider_api_key: str = "",
-    ai_batch_limit: int = 40,
-) -> list[ParsedRelease]:
-    """Parse a batch of release names: cache → regex → Small for the rest.
-
-    Order of results matches the input. Never raises on AI failure — falls
-    back to the regex parse.
-    """
-    results: list[Optional[ParsedRelease]] = [None] * len(names)
-    needs_ai: list[int] = []
-
-    for i, name in enumerate(names):
-        h = name_hash(name)
-        cached = storage.get_parsed_release(h) if storage else None
-        if cached:
-            results[i] = ParsedRelease.from_dict(cached)
-            continue
-        parsed = parse_release_name(name)
-        results[i] = parsed
-        if parsed.confidence < AI_CONFIDENCE_THRESHOLD and provider_api_key:
-            needs_ai.append(i)
-        elif storage:
-            storage.put_parsed_release(h, name, parsed.to_dict(), "regex")
-
-    if needs_ai and provider_api_key:
-        for start in range(0, len(needs_ai), ai_batch_limit):
-            chunk = needs_ai[start:start + ai_batch_limit]
-            chunk_names = [names[i] for i in chunk]
-            try:
-                ai_out = await _ai_parse_batch(chunk_names, provider_api_key)
-            except Exception:
-                ai_out = {}
-            for local_idx, orig_idx in enumerate(chunk):
-                base = results[orig_idx]
-                rel = ai_out.get(local_idx)
-                if rel:
-                    merged = ParsedRelease(
-                        raw_name=names[orig_idx],
-                        media_type=rel.get("media_type", base.media_type),
-                        title=rel.get("title") or base.title,
-                        year=rel.get("year", base.year),
-                        seasons=rel.get("seasons") or base.seasons,
-                        episodes=[list(e) for e in (rel.get("episodes") or base.episodes)],
-                        is_season_pack=rel.get("is_season_pack", base.is_season_pack),
-                        is_complete_series=rel.get("is_complete_series", base.is_complete_series),
-                        is_absolute_numbering=rel.get("is_absolute_numbering", base.is_absolute_numbering),
-                        quality=rel.get("quality", base.quality) if rel.get("quality", "unknown") != "unknown" else base.quality,
-                        source=base.source,
-                        codec=base.codec,
-                        group=rel.get("group") or base.group,
-                        risk_flags=base.risk_flags,
-                        confidence=float(rel.get("confidence", 0.75)),
-                        parsed_by="ai",
-                    )
-                    results[orig_idx] = merged
-                if storage:
-                    final = results[orig_idx]
-                    storage.put_parsed_release(
-                        name_hash(names[orig_idx]), names[orig_idx],
-                        final.to_dict(), final.parsed_by,
-                    )
-    elif needs_ai and storage:
-        # No API key: cache the low-confidence regex parses anyway so we don't
-        # re-parse, but mark them as regex so a future AI pass can improve them.
-        for i in needs_ai:
-            storage.put_parsed_release(name_hash(names[i]), names[i], results[i].to_dict(), "regex")
-
-    return results  # type: ignore[return-value]
-
-
-async def parse_one(name: str, storage=None, provider_api_key: str = "") -> ParsedRelease:
-    return (await parse_releases([name], storage, provider_api_key))[0]
