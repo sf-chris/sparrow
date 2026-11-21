@@ -175,6 +175,9 @@ export type NodeInfo = {
   last_seen: number;
   capabilities: {
     platform: string;
+    hostname?: string;
+    /** Its folders can be browsed and chosen from Sparrow. */
+    folders?: boolean;
     probe: boolean;
     transcode: boolean;
     download: boolean;
