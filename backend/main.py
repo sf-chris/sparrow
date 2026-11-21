@@ -185,7 +185,6 @@ from .services import file_organizer
 from .services import request_service
 from .services import release_parser
 from .services.library_view import build_library_view
-from .services.curator import Curator
 from .agents.service import AgentService
 from .agents.models import JobStatus
 from .agents.runtime import PRICING_SOURCE, rates_for_model, spend_snapshot
@@ -204,7 +203,6 @@ from .runtime_settings import (
 DATA_DIR = str(Path(os.getenv("SPARROW_DATA_DIR", "./data")).expanduser().resolve(strict=False))
 storage = Storage(DATA_DIR)
 track_saved_config(storage.get_config)
-curator: Optional[Curator] = None
 agent_service: Optional[AgentService] = None
 
 # Active WebSocket connections
@@ -298,7 +296,7 @@ def _classify_media_type(torrent_name: str) -> MediaType:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global curator, agent_service
+    global agent_service
     _setup_logging(DATA_DIR)
     await storage.load_all()
     # Folders typed as host paths (/home/me/Media/...) live at their Docker mount.
@@ -308,7 +306,6 @@ async def lifespan(app: FastAPI):
             await storage.save_config(repaired)
     except ValueError:
         pass
-    curator = Curator(storage, DATA_DIR, broadcast)
     agent_service = AgentService(storage, DATA_DIR, broadcast)
     subtitles.attach(agent_service)
     subtitles.recover()
@@ -324,16 +321,10 @@ async def lifespan(app: FastAPI):
     log_setup(DATA_DIR)
     migration_task=asyncio.create_task(catalogue.migrate_verified_legacy(broadcast))
     moves_task = asyncio.create_task(moves.loop())
-    # v3: the deterministic curator is demoted — its loop only runs if
-    # explicitly re-enabled. Agents own decisions now.
-    task4 = None
-    if os.getenv("SPARROW_LEGACY_CURATOR") == "1":
-        task4 = asyncio.create_task(curator.run_forever())
     yield
     await subtitles.stop()
     migration_task.cancel()
     moves_task.cancel()
-    curator.stop()
     await agent_service.shutdown()
     await nodes.local().shutdown()
     downloader_task.cancel()
@@ -341,8 +332,6 @@ async def lifespan(app: FastAPI):
     task1.cancel()
     task2.cancel()
     task3.cancel()
-    if task4:
-        task4.cancel()
 
 
 app = FastAPI(title="Sparrow", version=__version__, lifespan=lifespan)
@@ -472,10 +461,7 @@ async def update_requests_for_download(download_id: str):
     """Refresh request progress when a linked download changes state."""
     dl = storage.get_download(download_id)
     if dl and dl.metadata.get("goal_id"):
-        # Curator-managed download: the curator owns goal status, computed
-        # from the episode inventory rather than download states.
-        if curator:
-            curator.poke()
+        # Retired curator goals are history only; their status is not recomputed.
         return
     for req in storage.get_requests():
         if download_id not in req.download_ids:
@@ -644,8 +630,6 @@ async def auto_organize_download(download_id: str):
                 "dl_name": dl.name, "dst": library_path,
                 "title": item.title, "media_type": resolved_type.value, "tmdb_id": item.tmdb_id,
             })
-            if curator:
-                curator.poke()
 
             # Remove torrent from client after successful organize (files are already moved)
             if dl.torrent_hash and config.torrent_client.type != TorrentClientType.NONE:
@@ -1551,198 +1535,7 @@ async def delete_request(request_id: str):
     return {"success": True}
 
 
-# ─── v2: Shows / Goals / Activity ────────────────────────────────────────────
-
-class CreateGoalRequest(BaseModel):
-    tmdb_id: Optional[int] = None
-    media_type: str = "unknown"
-    title: str = ""
-    query: str = ""
-    seasons: Optional[list[int]] = None
-    episodes: Optional[dict] = None      # {"2": [7, 9]}
-    quality: str = ""
-    min_quality: str = "any"
-
-
-@app.get("/api/shows/{tmdb_id}")
-async def get_show(tmdb_id: int):
-    """A TV show with per-season/per-episode coverage: on disk, on the way, missing."""
-    config = storage.get_config()
-    details = await meta_svc.get_tv_details(tmdb_id, config.tmdb_api_key)
-    if not details:
-        raise HTTPException(404, "Show not found on TMDB")
-    seasons_meta = await meta_svc.tmdb_tv_seasons(tmdb_id, config.tmdb_api_key)
-
-    item = next((i for i in storage.get_library() if i.tmdb_id == tmdb_id and i.media_type == MediaType.TV), None)
-    inventory = item.episodes if item else {}
-    mandate = agent_service.store.get_mandate(tmdb_id, "tv")
-
-    # Episodes on the way, from this show's goals' active downloads
-    in_flight: set[tuple[int, int]] = set()
-    goals = [r for r in storage.get_requests()
-             if r.tmdb_id == tmdb_id and r.media_type == MediaType.TV]
-    for goal in goals:
-        for dl_id in goal.download_ids:
-            dl = storage.get_download(dl_id)
-            if dl and dl.status not in (DownloadStatus.ORGANIZED, DownloadStatus.ERROR):
-                for s, e in dl.metadata.get("covers") or []:
-                    in_flight.add((int(s), int(e)))
-
-    seasons_out = []
-    for s in seasons_meta:
-        snum, count = s["season_number"], s["episode_count"]
-        have = inventory.get(str(snum), {})
-        episodes = []
-        for e in range(1, count + 1):
-            info = have.get(str(e))
-            episodes.append({
-                "episode": e,
-                "have": info is not None,
-                "quality": (info or {}).get("quality", ""),
-                "in_flight": (snum, e) in in_flight,
-            })
-        seasons_out.append({
-            "season_number": snum,
-            "name": s.get("name") or f"Season {snum}",
-            "episode_count": count,
-            "have_count": len([e for e in episodes if e["have"]]),
-            "in_flight_count": len([e for e in episodes if e["in_flight"] and not e["have"]]),
-            "episodes": episodes,
-        })
-
-    poster = details.get("poster_path")
-    backdrop = details.get("backdrop_path")
-    return {
-        "tmdb_id": tmdb_id,
-        "media_type": "tv",
-        "title": details.get("name", ""),
-        "year": int((details.get("first_air_date") or "0000")[:4] or 0) or None,
-        "overview": details.get("overview", ""),
-        "rating": details.get("vote_average"),
-        "genres": [g["name"] for g in details.get("genres", [])],
-        "poster_url": meta_svc.tmdb_image_url(poster, "w500") if poster else (item.poster_path if item else None),
-        "backdrop_url": meta_svc.tmdb_image_url(backdrop, "w1280") if backdrop else None,
-        "status": details.get("status", ""),
-        "in_library": item is not None,
-        "library_item_id": item.id if item else None,
-        "seasons": seasons_out,
-        "goals": [g.to_dict() for g in goals],
-        "mandate": mandate.to_dict() if mandate else None,
-        "mandate_summary": (mandate.describe() if mandate
-                            else "Nothing requested yet."),
-    }
-
-
-@app.get("/api/movies/{tmdb_id}")
-async def get_movie(tmdb_id: int):
-    """A movie title with its current verified-library state."""
-    config = storage.get_config()
-    details = await meta_svc.get_movie_details(tmdb_id, config.tmdb_api_key)
-    if not details or not details.get("id"):
-        raise HTTPException(404, "Movie not found on TMDB")
-    item = next(
-        (candidate for candidate in storage.get_library()
-         if candidate.tmdb_id == tmdb_id and candidate.media_type == MediaType.MOVIE),
-        None,
-    )
-    poster = details.get("poster_path")
-    backdrop = details.get("backdrop_path")
-    return {
-        "tmdb_id": tmdb_id,
-        "media_type": "movie",
-        "title": details.get("title", ""),
-        "year": int((details.get("release_date") or "0000")[:4] or 0) or None,
-        "overview": details.get("overview", ""),
-        "rating": details.get("vote_average"),
-        "genres": [genre["name"] for genre in details.get("genres", [])],
-        "poster_url": (meta_svc.tmdb_image_url(poster, "w500") if poster else
-                       (item.poster_path if item else None)),
-        "backdrop_url": (meta_svc.tmdb_image_url(backdrop, "w1280")
-                         if backdrop else None),
-        "status": details.get("status", ""),
-        "in_library": item is not None and bool(item.metadata.get("verified")),
-        "library_item_id": item.id if item else None,
-        "seasons": [],
-        "goals": [],
-    }
-
-
-@app.get("/api/movies/{tmdb_id}/status")
-async def get_movie_status(tmdb_id: int):
-    """Whether a movie is in the library / being worked on."""
-    item = next((i for i in storage.get_library() if i.tmdb_id == tmdb_id and i.media_type == MediaType.MOVIE), None)
-    goals = [r.to_dict() for r in storage.get_requests()
-             if r.tmdb_id == tmdb_id and r.media_type == MediaType.MOVIE]
-    return {
-        "tmdb_id": tmdb_id,
-        "in_library": item is not None,
-        "library_item_id": item.id if item else None,
-        "goals": goals,
-    }
-
-
-@app.post("/api/goals")
-async def create_goal(req: CreateGoalRequest):
-    """Create a durable goal — the curator takes it from here."""
-    if not req.tmdb_id and not (req.query or req.title):
-        raise HTTPException(400, "tmdb_id or a query is required")
-    config = storage.get_config()
-    if config.torrent_client.type == TorrentClientType.NONE:
-        raise HTTPException(400, "No torrent client configured. Open Settings first.")
-    if not config.staging_dir:
-        raise HTTPException(400, "No download folder configured. Open Settings first.")
-
-    media_type = MediaType(req.media_type) if req.media_type in MediaType._value2member_map_ else MediaType.UNKNOWN
-    # Resolve unknown type from TMDB when we have an id
-    if media_type == MediaType.UNKNOWN and req.tmdb_id and config.tmdb_api_key:
-        tv = await meta_svc.get_tv_details(req.tmdb_id, config.tmdb_api_key)
-        media_type = MediaType.TV if tv and tv.get("name") else MediaType.MOVIE
-
-    # Don't double-create: an active goal for the same scope is reused
-    for existing in storage.get_requests():
-        if (existing.tmdb_id and existing.tmdb_id == req.tmdb_id
-                and existing.status not in (RequestStatus.FAILED,)
-                and existing.media_type == media_type
-                and not existing.paused):
-            if media_type == MediaType.MOVIE:
-                return existing.to_dict()
-            wanted_new = set((req.seasons or []))
-            wanted_old = {int(s) for s in (existing.wanted_episodes or {})}
-            if not wanted_new or wanted_new <= wanted_old:
-                return existing.to_dict()
-
-    goal = await curator.create_goal(
-        query=req.query,
-        tmdb_id=req.tmdb_id,
-        media_type=media_type,
-        title=req.title,
-        seasons=req.seasons,
-        episodes=req.episodes,
-        quality=req.quality,
-        min_quality=req.min_quality,
-    )
-    return goal.to_dict()
-
-
-@app.post("/api/goals/{goal_id}/pause")
-async def pause_goal(goal_id: str):
-    goal = await storage.update_request(goal_id, paused=True)
-    if not goal:
-        raise HTTPException(404, "Goal not found")
-    await broadcast({"type": "request_update", "data": goal.to_dict()})
-    return goal.to_dict()
-
-
-@app.post("/api/goals/{goal_id}/resume")
-async def resume_goal(goal_id: str):
-    goal = await storage.update_request(goal_id, paused=False, next_check_at=0.0, check_interval=0.0)
-    if not goal:
-        raise HTTPException(404, "Goal not found")
-    if curator:
-        curator.poke()
-    await broadcast({"type": "request_update", "data": goal.to_dict()})
-    return goal.to_dict()
-
+# ─── Activity ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/activity")
 async def get_activity(limit: int = 100, request_id: str = ""):
@@ -2248,8 +2041,6 @@ async def scan_library():
         await storage.add_library_item(item)
         added += 1
 
-    if curator:
-        curator.poke()
     return {"scanned": len(items), "added": added, "refreshed": refreshed}
 
 
