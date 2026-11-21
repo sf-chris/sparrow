@@ -409,6 +409,25 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(task["data"]["archive_searched"])
         self.assertEqual(self.subtitles.track(task["data"]["track_id"])["data"]["source_id"], "archive:7")
 
+    async def test_an_unusable_upload_is_reported_not_replaced(self):
+        # The fixture file has its own English track, and the online search is
+        # on: neither may quietly stand in for the person's broken file.
+        await self.manager()
+        searched = []
+
+        async def offer(user, asset, language, kind):
+            searched.append((language, kind))
+            return []
+
+        self.subtitles.archive_candidates = offer
+        with patch.dict("os.environ", {"SPARROW_SUBTITLE_ARCHIVE": ""}):
+            task = await self.request({"text": "This is not a subtitle file."})
+        self.assertEqual(task["state"], "needs_attention", task["data"]["message"])
+        self.assertTrue(task["data"]["message"].startswith("Your subtitle file could not be used"))
+        self.assertEqual([a["source_id"] for a in task["data"]["attempts"]], ["upload"])
+        self.assertEqual(searched, [])
+        self.assertEqual(self.subtitles.tracks(self.owner, self.asset), [])
+
     async def test_picture_tracks_are_read_only_with_the_switch_on_and_within_the_allowance(self):
         from backend.agents import subtitles as module
         from backend.agents.models import AgentKind, AgentSession
