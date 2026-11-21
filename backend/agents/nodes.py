@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import os
 import re
 import secrets
 import time
@@ -49,6 +50,8 @@ class Nodes:
 
     def local(self):
         cfg = self.storage.get_config()
+        # Where this server's folders may be chosen; default: home, drives, mounts.
+        places = [p for p in os.getenv("SPARROW_FOLDER_ROOTS", "").split(os.pathsep) if p]
         config = {
             "roots": {
                 **library_roots([cfg.library_dir, *cfg.extra_library_dirs]),
@@ -62,6 +65,7 @@ class Nodes:
                 **config,
                 fetcher=lambda token, offset: self.transfer_bytes(token, "local", offset),
                 exclude=[self.storage.data_dir],
+                places=places or None,
             )
             self._local_config = config
         return self._local

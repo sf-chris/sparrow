@@ -53,10 +53,19 @@ class FolderTests(unittest.TestCase):
             with self.assertRaises(FolderError):
                 folders.browse(outside, self.points)
 
-    def test_sparrows_own_state_is_never_a_place(self):
+    def test_sparrows_own_state_is_never_a_place_it_finds(self):
+        from unittest import mock
+
         state = self.place / "state"
         state.mkdir()
-        self.assertEqual(folders.starting_points([str(state), str(self.place)], [state]), [self.place])
+        with mock.patch.object(folders, "in_container", return_value=False), \
+                mock.patch.object(folders, "_linux_disks", return_value=[state]), \
+                mock.patch("pathlib.Path.home", return_value=self.place):
+            found = folders.starting_points(None, [state])
+        self.assertIn(self.place, found)
+        self.assertNotIn(state, found)
+        # Places someone sets are used as given.
+        self.assertEqual(folders.starting_points([str(state)], [state]), [state])
 
     def test_new_folder_names_are_checked_before_anything_is_made(self):
         for name, words in [

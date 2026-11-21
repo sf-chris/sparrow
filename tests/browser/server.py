@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 STATE = Path(os.environ.get("SPARROW_BROWSER_STATE", "/tmp/sparrow-browser-check"))
 os.environ["SPARROW_DATA_DIR"] = str(STATE)
+# The fixture's folders live in its state directory; offer it in the folder picker.
+os.environ["SPARROW_FOLDER_ROOTS"] = str(STATE)
 # Blank rather than unset: main's load_dotenv() would refill unset keys from .env.
 for _key in ("PROVIDER_API_KEY", "ALTPROVIDER_API_KEY", "TMDB_API_KEY"):
     os.environ[_key] = ""
