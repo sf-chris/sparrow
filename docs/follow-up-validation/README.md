@@ -46,8 +46,10 @@ readable. The journey checks those values survive pagination too.
 
 The compact-layout review also checked the actual preview on port 3000. The
 public landing passed four accessibility/overflow checks, with its tag starting
-22–28px below navigation. The security header aligns with the sidebar at 2048px.
-A focused browser check exercised the conversion action (playable HLS, retained
+22–28px below navigation. The security header aligns with the sidebar at 2048px
+([capture](security-wide.png)).
+A focused browser check exercised the conversion action
+([playback help](playback-help-1440.png); playable HLS, retained
 position, unchanged source hash), password mismatch/cancel/focus restoration,
 and six progress cards in one internally scrolling row, including an offline
 copy without a resume button. [preview-results.json](preview-results.json)
