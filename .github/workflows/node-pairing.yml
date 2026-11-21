@@ -19,7 +19,7 @@ jobs:
         include:
           - os: windows-2022
             flags: ''
-          - os: macos-14
+          - os: macos-latest
             flags: --no-system-python
           - os: ubuntu-24.04
             flags: ''
