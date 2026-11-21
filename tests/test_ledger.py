@@ -2,13 +2,14 @@
 import csv
 import io
 import json
+import os
 import sqlite3
 import tempfile
 import time
 import unittest
 from contextlib import redirect_stdout
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import httpx
 from fastapi import FastAPI
@@ -120,14 +121,16 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
     async def test_the_fetch_agent_phase_follows_its_tools(self):
         storage = Storage(self.temp.name)
         await storage.load_all()
-        await storage.save_config(SparrowConfig(smart_model="smart-model", cheap_model="cheap-model"))
+        await storage.save_config(SparrowConfig())
         service = AgentService(storage, self.temp.name, AsyncMock())
         phase = service.runtime._specs["fetch"].phase
         cheap = AgentSession(agent=AgentKind.FETCH, model="cheap-model")
         smart = AgentSession(agent=AgentKind.FETCH, model="smart-model")
-        self.assertEqual(phase(cheap, {"kinds": ["job_created"]}), "scout_pick")
-        self.assertEqual(phase(smart, {"kinds": ["timer"]}), "escalated_search")
-        self.assertEqual(phase(smart, {"kinds": ["download_stalled"]}), "stall")
+        # Other tests load a developer .env; the roles here are fixed.
+        with patch.dict(os.environ, {"SPARROW_SMART_MODEL": "smart-model", "SPARROW_CHEAP_MODEL": "cheap-model"}):
+            self.assertEqual(phase(cheap, {"kinds": ["job_created"]}), "scout_pick")
+            self.assertEqual(phase(smart, {"kinds": ["timer"]}), "escalated_search")
+            self.assertEqual(phase(smart, {"kinds": ["download_stalled"]}), "stall")
 
     def test_the_report_sums_a_run_and_flags_waste(self):
         other = Job(title="Cheap Show", wanted_episodes={"1": [1]})
