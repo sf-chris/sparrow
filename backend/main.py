@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -174,22 +174,16 @@ def _tail_log_lines(path: Path, n: int) -> list[str]:
 
 from .storage import Storage
 from .models import (
-    Download, LibraryItem, SparrowConfig, TorrentClientConfig,
-    MediaType, Quality, DownloadStatus, TorrentClientType, MediaRequest,
-    RequestStatus, RequestStrategy
+    Download, SparrowConfig, TorrentClientConfig,
+    MediaType, DownloadStatus, TorrentClientType,
 )
 from .services import torrent_client as tc_svc
-from .services import search_engine
 from .services import metadata_service as meta_svc
-from .services import file_organizer
-from .services import request_service
 from .services import release_parser
 from .services.library_view import build_library_view
-from .services.curator import Curator
 from .agents.service import AgentService
 from .agents.models import JobStatus
 from .agents.runtime import PRICING_SOURCE, rates_for_model, spend_snapshot
-from .agents import resolution
 from . import __version__
 from .configuration import (
     apply_config_update, effective_anthropic_key, effective_tmdb_key, public_config,
@@ -204,7 +198,6 @@ from .runtime_settings import (
 DATA_DIR = str(Path(os.getenv("SPARROW_DATA_DIR", "./data")).expanduser().resolve(strict=False))
 storage = Storage(DATA_DIR)
 track_saved_config(storage.get_config)
-curator: Optional[Curator] = None
 agent_service: Optional[AgentService] = None
 
 # Active WebSocket connections
@@ -226,59 +219,6 @@ async def broadcast(event: dict) -> None:
     ws_clients.difference_update(dead)
 
 
-# ─── Suggestion helpers ───────────────────────────────────────────────────────
-
-async def _haiku_title_expand(query: str, api_key: str) -> list[str]:
-    """Ask claude-haiku to suggest canonical + related titles for a partial query."""
-    if not api_key:
-        return []
-    try:
-        import anthropic
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        msg = await asyncio.wait_for(
-            client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=300,
-                tools=[{
-                    "name": "suggest_titles",
-                    "description": "Return canonical and related movie/TV titles",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "titles": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "5-6 canonical titles",
-                            }
-                        },
-                        "required": ["titles"],
-                    },
-                }],
-                tool_choice={"type": "any"},
-                messages=[{"role": "user", "content": f"""User typed: "{query}"
-
-Suggest 5-6 movie/TV titles they might be searching for:
-1. The exact canonical title (fix spelling, expand abbreviations — 'dbz'→'Dragon Ball Z')
-2. 3-4 related titles (same franchise, genre, or vibe)
-3. 1 broader similar title
-
-Examples:
-- "dbz" → ["Dragon Ball Z", "Dragon Ball Super", "Naruto", "One Piece", "Bleach"]
-- "meth teacher" → ["Breaking Bad", "Better Call Saul", "Ozark", "Weeds"]
-- "demon sl" → ["Demon Slayer: Kimetsu no Yaiba", "Jujutsu Kaisen", "Attack on Titan", "Bleach"]
-
-Canonical titles only. No explanations."""}],
-            ),
-            timeout=8.0,
-        )
-        for block in msg.content:
-            if block.type == "tool_use" and block.name == "suggest_titles":
-                return block.input.get("titles", [])
-    except Exception:
-        pass
-    return []
-
-
 # ─── Media-type classification ────────────────────────────────────────────────
 
 def _classify_media_type(torrent_name: str) -> MediaType:
@@ -298,7 +238,7 @@ def _classify_media_type(torrent_name: str) -> MediaType:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global curator, agent_service
+    global agent_service
     _setup_logging(DATA_DIR)
     await storage.load_all()
     # Folders typed as host paths (/home/me/Media/...) live at their Docker mount.
@@ -308,7 +248,6 @@ async def lifespan(app: FastAPI):
             await storage.save_config(repaired)
     except ValueError:
         pass
-    curator = Curator(storage, DATA_DIR, broadcast)
     agent_service = AgentService(storage, DATA_DIR, broadcast)
     subtitles.attach(agent_service)
     subtitles.recover()
@@ -324,16 +263,10 @@ async def lifespan(app: FastAPI):
     log_setup(DATA_DIR)
     migration_task=asyncio.create_task(catalogue.migrate_verified_legacy(broadcast))
     moves_task = asyncio.create_task(moves.loop())
-    # v3: the deterministic curator is demoted — its loop only runs if
-    # explicitly re-enabled. Agents own decisions now.
-    task4 = None
-    if os.getenv("SPARROW_LEGACY_CURATOR") == "1":
-        task4 = asyncio.create_task(curator.run_forever())
     yield
     await subtitles.stop()
     migration_task.cancel()
     moves_task.cancel()
-    curator.stop()
     await agent_service.shutdown()
     await nodes.local().shutdown()
     downloader_task.cancel()
@@ -341,8 +274,6 @@ async def lifespan(app: FastAPI):
     task1.cancel()
     task2.cancel()
     task3.cancel()
-    if task4:
-        task4.cancel()
 
 
 app = FastAPI(title="Sparrow", version=__version__, lifespan=lifespan)
@@ -430,73 +361,17 @@ async def download_progress_loop():
                     updates["staging_path"] = status_data.get("save_path", "")
 
                     # v3: agent-managed downloads belong to the Media Agent —
-                    # enrich_download would clobber the job metadata, and
-                    # auto-organize would race the agent.
+                    # enrich_download would clobber the job metadata.
                     if not dl.metadata.get("agent_managed"):
                         asyncio.create_task(enrich_download(dl.id))
-                        if config.auto_organize:
-                            asyncio.create_task(auto_organize_download(dl.id))
 
                 await storage.update_download(dl.id, **updates)
-                await update_requests_for_download(dl.id)
                 await broadcast({"type": "download_update", "data": {**dl.to_dict(), **updates, "status": new_status.value}})
 
         except asyncio.CancelledError:
             break
         except Exception:
             pass
-
-
-def _find_existing_library_item(tmdb_id, title: str, media_type: MediaType):
-    for existing in storage.get_library():
-        if existing.media_type != media_type:
-            continue
-        if tmdb_id and existing.tmdb_id == tmdb_id:
-            return existing
-        if not tmdb_id and title and existing.title.lower() == title.lower():
-            return existing
-    return None
-
-
-def _series_root(dst: Path) -> Path:
-    """Given a placed file path, walk up to the show's root folder."""
-    for parent in dst.parents:
-        if parent.name == "TV Shows":
-            rel = dst.relative_to(parent)
-            if rel.parts:
-                return parent / rel.parts[0]
-    return dst.parent
-
-
-async def update_requests_for_download(download_id: str):
-    """Refresh request progress when a linked download changes state."""
-    dl = storage.get_download(download_id)
-    if dl and dl.metadata.get("goal_id"):
-        # Curator-managed download: the curator owns goal status, computed
-        # from the episode inventory rather than download states.
-        if curator:
-            curator.poke()
-        return
-    for req in storage.get_requests():
-        if download_id not in req.download_ids:
-            continue
-        linked = [storage.get_download(dl_id) for dl_id in req.download_ids]
-        linked = [dl for dl in linked if dl]
-        if not linked:
-            continue
-        complete_states = {DownloadStatus.ORGANIZED, DownloadStatus.COMPLETED, DownloadStatus.SEEDING}
-        done = sum(1 for dl in linked if dl.status in complete_states)
-        if done == len(linked):
-            status = RequestStatus.COMPLETE if not req.missing_episodes else RequestStatus.PARTIAL
-        elif any(dl.status == DownloadStatus.ERROR for dl in linked):
-            status = RequestStatus.PARTIAL if done else RequestStatus.FAILED
-        elif any(dl.status == DownloadStatus.ORGANIZING for dl in linked):
-            status = RequestStatus.ORGANIZING
-        else:
-            status = RequestStatus.DOWNLOADING
-        refreshed = await storage.update_request(req.id, status=status, progress_found=done)
-        if refreshed:
-            await broadcast({"type": "request_update", "data": refreshed.to_dict()})
 
 
 async def enrich_download(download_id: str):
@@ -525,147 +400,6 @@ async def enrich_download(download_id: str):
             log.warning("Metadata not found", extra={"dl_name": dl.name, "media_type": dl.media_type.value})
     except Exception as e:
         log.warning("Metadata fetch failed", extra={"dl_name": dl.name, "error": str(e)})
-
-
-async def auto_organize_download(download_id: str):
-    """Automatically organize a completed download into the library."""
-    log = logging.getLogger("sparrow.organize")
-    await asyncio.sleep(2)  # Give the torrent client a moment
-    dl = storage.get_download(download_id)
-    if not dl or not dl.staging_path:
-        return
-    config = storage.get_config()
-    if not config.library_dir:
-        return
-
-    log.info("Organizing", extra={"dl_name": dl.name, "staging": dl.staging_path, "media_type": dl.media_type.value})
-    await storage.update_download(download_id, status=DownloadStatus.ORGANIZING)
-    await broadcast({"type": "download_update", "data": {"id": download_id, "status": "organizing"}})
-
-    try:
-        ops = await file_organizer.organize_download(
-            staging_path=dl.staging_path,
-            library_dir=config.library_dir,
-            media_type=dl.media_type,
-            metadata=dl.metadata,
-            data_dir=DATA_DIR,
-            anthropic_api_key=config.anthropic_api_key,
-            storage=storage,
-        )
-        successful = [op for op in ops if op["success"]]
-        if successful:
-            verification = file_organizer.verify_organized_operations(ops, dl.media_type, dl.metadata)
-            library_path = successful[0]["dst"]
-            updated_metadata = {**(dl.metadata or {}), "_organize_verification": verification}
-            await storage.update_download(
-                download_id,
-                status=DownloadStatus.ORGANIZED,
-                library_path=library_path,
-                metadata=updated_metadata,
-            )
-            if not verification["ok"]:
-                log.warning("Organize verification found issues", extra={
-                    "dl_name": dl.name,
-                    "issues": "; ".join(verification["issues"][:3]),
-                })
-
-            # Resolve UNKNOWN media_type from where the file was placed
-            resolved_type = dl.media_type
-            if dl.media_type == MediaType.UNKNOWN:
-                if "/Movies/" in library_path or "\\Movies\\" in library_path:
-                    resolved_type = MediaType.MOVIE
-                elif "/TV Shows/" in library_path or "\\TV Shows\\" in library_path:
-                    resolved_type = MediaType.TV
-                else:
-                    resolved_type = MediaType.MOVIE
-
-            # Merge into the library: one item per title, per-episode inventory
-            meta = updated_metadata
-            item = _find_existing_library_item(meta.get("tmdb_id"), meta.get("title", dl.name), resolved_type)
-            if item is None:
-                item = LibraryItem(
-                    id=str(uuid.uuid4()),
-                    title=meta.get("title", dl.name),
-                    media_type=resolved_type,
-                    path=str(Path(library_path).parent),
-                    year=meta.get("year"),
-                    tmdb_id=meta.get("tmdb_id"),
-                    imdb_id=meta.get("imdb_id"),
-                    overview=meta.get("overview", ""),
-                    poster_path=meta.get("poster_path", ""),
-                    backdrop_path=meta.get("backdrop_path", ""),
-                    genres=meta.get("genres", []),
-                    rating=meta.get("rating"),
-                    seasons=meta.get("seasons"),
-                    episode_count=meta.get("episode_count"),
-                    size_bytes=dl.size_bytes,
-                    metadata=meta,
-                )
-                if resolved_type == MediaType.TV:
-                    item.path = str(_series_root(Path(library_path)))
-                await storage.add_library_item(item)
-            else:
-                item.size_bytes += dl.size_bytes
-
-            # Record every placed episode in the inventory; replace upgraded files
-            for op in successful:
-                for s, e in op.get("episodes") or []:
-                    old = item.episode_file(s, e)
-                    if old and old.get("path") and old["path"] != op["dst"]:
-                        try:
-                            old_path = Path(old["path"])
-                            if old_path.exists():
-                                old_path.unlink()
-                                item.size_bytes = max(0, item.size_bytes - int(old.get("size_bytes") or 0))
-                                log.info("Replaced episode file with better version", extra={
-                                    "old": old["path"], "new": op["dst"],
-                                })
-                        except Exception:
-                            pass
-                    try:
-                        size = Path(op["dst"]).stat().st_size
-                    except OSError:
-                        size = 0
-                    item.set_episode_file(s, e, {
-                        "quality": op.get("quality", "unknown"),
-                        "path": op["dst"],
-                        "size_bytes": size,
-                        "added_at": time.time(),
-                        "verified": True,
-                    })
-            await storage.update_library_item(
-                item.id,
-                episodes=item.episodes,
-                size_bytes=item.size_bytes,
-                metadata={**item.metadata, "_organize_verification": verification},
-            )
-            await broadcast({"type": "library_update", "data": item.to_dict()})
-            log.info("Organized", extra={
-                "dl_name": dl.name, "dst": library_path,
-                "title": item.title, "media_type": resolved_type.value, "tmdb_id": item.tmdb_id,
-            })
-            if curator:
-                curator.poke()
-
-            # Remove torrent from client after successful organize (files are already moved)
-            if dl.torrent_hash and config.torrent_client.type != TorrentClientType.NONE:
-                try:
-                    organize_manager = tc_svc.TorrentManager(config.torrent_client)
-                    await organize_manager.delete_torrent(dl.torrent_hash, delete_files=False)
-                    log.info("Torrent removed after organize", extra={"dl_name": dl.name, "hash": dl.torrent_hash})
-                except Exception as e:
-                    log.warning("Could not remove torrent after organize", extra={"dl_name": dl.name, "error": str(e)})
-        else:
-            errors = "; ".join(op["error"] for op in ops if op["error"])
-            log.error("Organize failed", extra={"dl_name": dl.name, "errors": errors})
-            await storage.update_download(download_id, status=DownloadStatus.ERROR, error_message=errors)
-    except Exception as e:
-        log.error("Organize exception", extra={"dl_name": dl.name, "error": str(e)})
-        await storage.update_download(download_id, status=DownloadStatus.ERROR, error_message=str(e))
-
-    updated = storage.get_download(download_id)
-    if updated:
-        await broadcast({"type": "download_update", "data": updated.to_dict()})
 
 
 async def artwork_enrichment_loop():
@@ -882,28 +616,6 @@ class AddDownloadRequest(BaseModel):
     name: str = ""
     media_type: str = "unknown"
     tmdb_id: Optional[int] = None
-
-
-class OrganizeRequest(BaseModel):
-    download_id: str
-    media_type: Optional[str] = None
-    tmdb_id: Optional[int] = None
-
-
-class CreateMediaRequest(BaseModel):
-    query: str
-    quality: Optional[str] = None
-
-
-class CreateSelectedMediaRequest(BaseModel):
-    query: str
-    quality: Optional[str] = None
-    resolved: dict = {}
-    selected: dict = {}
-    selected_items: list[dict] = []
-    strategy: str = "movie"
-    score: dict = {}
-    summary: str = ""
 
 
 # ─── Config routes ────────────────────────────────────────────────────────────
@@ -1130,619 +842,7 @@ async def health_action(issue_id: str):
     return {"applied": applied, "message": message, "health": overview}
 
 
-# ─── Suggestion routes ────────────────────────────────────────────────────────
-
-@app.get("/api/search/suggest")
-async def search_suggest(q: str = Query(..., min_length=2)):
-    """Fast suggestions: local library/downloads + direct TMDB multi-search."""
-    _slog = logging.getLogger("sparrow.suggest")
-    config = storage.get_config()
-    from .services.search_engine import _check_library, _check_downloads
-    library = _check_library(q, DATA_DIR)
-    downloads = _check_downloads(q, DATA_DIR)
-    tmdb: list[dict] = []
-    if config.tmdb_api_key:
-        tmdb = await meta_svc.tmdb_quick_suggest(q, config.tmdb_api_key)
-    _slog.info("Suggest", extra={"q": q, "library": len(library), "downloads": len(downloads), "tmdb": len(tmdb)})
-    return {"library": library, "downloads": downloads, "tmdb": tmdb}
-
-
-@app.get("/api/search/suggest/expand")
-async def search_suggest_expand(q: str = Query(..., min_length=2)):
-    """Haiku-expanded suggestions: canonical + related titles, each TMDB-enriched."""
-    _slog = logging.getLogger("sparrow.suggest")
-    config = storage.get_config()
-    if not config.anthropic_api_key or not config.tmdb_api_key:
-        return {"suggestions": []}
-    _slog.info("Expand (haiku)", extra={"q": q})
-    titles = await _haiku_title_expand(q, config.anthropic_api_key)
-    if not titles:
-        return {"suggestions": []}
-    _slog.info("Haiku titles", extra={"q": q, "titles": titles})
-    tasks = [meta_svc.tmdb_quick_suggest(t, config.tmdb_api_key) for t in titles[:6]]
-    per_title = await asyncio.gather(*tasks, return_exceptions=True)
-    seen: set[int] = set()
-    suggestions = []
-    for results in per_title:
-        if isinstance(results, Exception) or not results:
-            continue
-        r = results[0]
-        if r["tmdb_id"] not in seen:
-            seen.add(r["tmdb_id"])
-            suggestions.append(r)
-    _slog.info("Expand done", extra={"q": q, "suggestions": len(suggestions)})
-    return {"suggestions": suggestions}
-
-
-@app.get("/api/search/suggest/tv/{tmdb_id}")
-async def search_suggest_tv(tmdb_id: int):
-    """Season list for a TV show — powers the episode picker in the dropdown."""
-    config = storage.get_config()
-    if not config.tmdb_api_key:
-        return {"seasons": []}
-    seasons = await meta_svc.tmdb_tv_seasons(tmdb_id, config.tmdb_api_key)
-    return {"seasons": seasons}
-
-
-# ─── Search routes ────────────────────────────────────────────────────────────
-
-@app.get("/api/search")
-async def search(
-    q: str = Query(..., min_length=1),
-    type: Optional[str] = Query(None),
-    quality: Optional[str] = Query(None),
-    limit: int = Query(30, le=100),
-):
-    config = storage.get_config()
-    media_type = MediaType(type) if type else None
-    q_pref = Quality(quality) if quality else config.quality_preference
-
-    results = await search_engine.search(
-        q,
-        media_type=media_type,
-        quality=q_pref,
-        limit=limit,
-        data_dir=DATA_DIR,
-        tmdb_api_key=config.tmdb_api_key,
-        anthropic_api_key=config.anthropic_api_key,
-    )
-    return [r.to_dict() for r in results]
-
-
-@app.get("/api/search/stream")
-async def search_stream(
-    q: str = Query(..., min_length=1),
-    type: Optional[str] = Query(None),
-    quality: Optional[str] = Query(None),
-    limit: int = Query(30, le=100),
-):
-    """Server-Sent Events endpoint — streams search progress events in real time."""
-    config = storage.get_config()
-    media_type = MediaType(type) if type else None
-    q_pref = Quality(quality) if quality else config.quality_preference
-
-    async def event_generator():
-        try:
-            async for event in search_engine.search_stream(
-                q,
-                media_type=media_type,
-                quality=q_pref,
-                limit=limit,
-                data_dir=DATA_DIR,
-                tmdb_api_key=config.tmdb_api_key,
-                anthropic_api_key=config.anthropic_api_key,
-                prefer_smaller=config.prefer_smaller_files,
-            ):
-                yield f"data: {json.dumps(event)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-@app.get("/api/search/deeper/stream")
-async def search_deeper_stream_endpoint(
-    q: str = Query(..., min_length=1),
-    exclude: str = Query(""),  # comma-separated existing info_hashes
-    type: Optional[str] = Query(None),
-    quality: Optional[str] = Query(None),
-    limit: int = Query(20, le=50),
-):
-    """SSE — find alternatives when existing results aren't satisfactory."""
-    config = storage.get_config()
-    media_type = MediaType(type) if type else None
-    q_pref = Quality(quality) if quality else config.quality_preference
-    existing_hashes = [h.strip() for h in exclude.split(",") if h.strip()]
-
-    async def event_generator():
-        try:
-            async for event in search_engine.search_deeper_stream(
-                q,
-                existing_hashes=existing_hashes,
-                media_type=media_type,
-                quality=q_pref,
-                limit=limit,
-                data_dir=DATA_DIR,
-                anthropic_api_key=config.anthropic_api_key,
-            ):
-                yield f"data: {json.dumps(event)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-@app.get("/api/search/season/stream")
-async def season_search_stream(
-    title: str = Query(...),
-    season: int = Query(...),
-    episodes: int = Query(...),
-    tmdb_id: Optional[int] = Query(None),
-    quality: Optional[str] = Query(None),
-):
-    """SSE — search for every episode in a TV season and queue each as a download."""
-    config = storage.get_config()
-    if config.torrent_client.type == TorrentClientType.NONE:
-        raise HTTPException(400, "No torrent client configured.")
-    if not config.staging_dir:
-        raise HTTPException(400, "No staging directory configured.")
-
-    q_pref = Quality(quality) if quality else config.quality_preference
-    dl_log = logging.getLogger("sparrow.downloads")
-
-    async def event_generator():
-        found = 0
-        missing: list[int] = []
-
-        for ep_num in range(1, episodes + 1):
-            yield f"data: {json.dumps({'type': 'episode_start', 'episode': ep_num, 'total': episodes})}\n\n"
-
-            try:
-                result = await search_engine.search_episode_torrent(
-                    title=title, season=season, episode=ep_num,
-                    quality=q_pref, data_dir=DATA_DIR, cat="208",
-                )
-            except Exception as e:
-                dl_log.error("Season episode search error", extra={"show": title, "season": season, "episode": ep_num, "error": str(e)})
-                missing.append(ep_num)
-                yield f"data: {json.dumps({'type': 'episode_missing', 'episode': ep_num})}\n\n"
-                await asyncio.sleep(0)
-                continue
-
-            if result:
-                try:
-                    m = re.search(r"xt=urn:btih:([0-9a-fA-F]+)", result.magnet_url, re.IGNORECASE)
-                    info_hash = m.group(1).lower() if m else str(uuid.uuid4())
-
-                    existing = storage.find_download_by_hash(info_hash)
-                    if existing:
-                        found += 1
-                        yield f"data: {json.dumps({'type': 'episode_found', 'episode': ep_num, 'torrent_name': result.name, 'download_id': existing.id, 'duplicate': True})}\n\n"
-                        await asyncio.sleep(0)
-                        continue
-
-                    manager = tc_svc.TorrentManager(config.torrent_client)
-                    torrent_hash = await manager.add_magnet(result.magnet_url, config.staging_dir)
-
-                    dl_id = str(uuid.uuid4())
-                    dl = Download(
-                        id=dl_id,
-                        name=result.name,
-                        magnet_url=result.magnet_url,
-                        media_type=MediaType.TV,
-                        status=DownloadStatus.QUEUED,
-                        torrent_hash=torrent_hash or info_hash,
-                        tmdb_id=tmdb_id,
-                    )
-                    await storage.add_download(dl)
-                    await broadcast({"type": "download_added", "data": dl.to_dict()})
-                    asyncio.create_task(enrich_download(dl_id))
-
-                    dl_log.info("Season episode queued", extra={
-                        "show": title, "season": season, "episode": ep_num,
-                        "torrent_name": result.name,
-                    })
-                    found += 1
-                    yield f"data: {json.dumps({'type': 'episode_found', 'episode': ep_num, 'torrent_name': result.name, 'download_id': dl_id})}\n\n"
-                except Exception as e:
-                    dl_log.error("Season episode queue error", extra={"show": title, "season": season, "episode": ep_num, "error": str(e)})
-                    missing.append(ep_num)
-                    yield f"data: {json.dumps({'type': 'episode_missing', 'episode': ep_num})}\n\n"
-            else:
-                missing.append(ep_num)
-                dl_log.warning("Season episode not found", extra={"show": title, "season": season, "episode": ep_num})
-                yield f"data: {json.dumps({'type': 'episode_missing', 'episode': ep_num})}\n\n"
-
-            await asyncio.sleep(0)
-
-        yield f"data: {json.dumps({'type': 'season_done', 'found': found, 'total': episodes, 'missing': missing})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-@app.get("/api/search/log")
-async def search_log(limit: int = 50):
-    """Recent search history with strategies tried and outcomes."""
-    import json
-    log_path = Path(DATA_DIR) / "search_log.json"
-    if not log_path.exists():
-        return []
-    try:
-        entries = json.loads(log_path.read_text())
-        return list(reversed(entries[-limit:]))
-    except Exception:
-        return []
-
-
-# ─── Request routes ───────────────────────────────────────────────────────────
-
-@app.get("/api/requests")
-async def list_requests():
-    return [r.to_dict() for r in storage.get_requests()]
-
-
-@app.post("/api/requests")
-async def create_request(req: CreateMediaRequest):
-    query = req.query.strip()
-    if not query:
-        raise HTTPException(400, "Request query is required")
-    config = storage.get_config()
-    quality = req.quality or config.quality_preference.value
-    media_request = MediaRequest(
-        id=str(uuid.uuid4()),
-        query=query,
-        quality=quality,
-    )
-    await storage.add_request(media_request)
-    await broadcast({"type": "request_added", "data": media_request.to_dict()})
-    asyncio.create_task(request_service.process_request(storage, media_request.id, DATA_DIR, broadcast))
-    return media_request.to_dict()
-
-
-@app.post("/api/requests/selected")
-async def create_selected_request(req: CreateSelectedMediaRequest):
-    query = req.query.strip()
-    if not query:
-        raise HTTPException(400, "Request query is required")
-    selected_items = req.selected_items or ([req.selected] if req.selected else [])
-    selected_items = [item for item in selected_items if item and item.get("magnet_url")]
-    if not selected_items:
-        raise HTTPException(400, "Selected release is missing a magnet URL")
-    selected = selected_items[0]
-
-    config = storage.get_config()
-    if config.torrent_client.type == TorrentClientType.NONE:
-        raise HTTPException(400, "No torrent client configured.")
-    if not config.staging_dir:
-        raise HTTPException(400, "No staging directory configured.")
-
-    resolved = req.resolved or {}
-    media_type = MediaType(resolved.get("media_type") or selected.get("media_type") or "unknown")
-    tmdb_id = resolved.get("tmdb_id")
-    try:
-        season = int(resolved.get("season")) if resolved.get("season") is not None else None
-    except Exception:
-        season = None
-    try:
-        episode_count = int(resolved.get("episode_count")) if resolved.get("episode_count") is not None else None
-    except Exception:
-        episode_count = None
-
-    strategy_value = req.strategy if req.strategy in RequestStrategy._value2member_map_ else ("season_pack" if media_type == MediaType.TV else "movie")
-    media_request = MediaRequest(
-        id=str(uuid.uuid4()),
-        query=query,
-        quality=req.quality or resolved.get("quality") or config.quality_preference.value,
-        title=resolved.get("title") or query,
-        media_type=media_type,
-        season=season,
-        episode_count=episode_count,
-        tmdb_id=tmdb_id,
-        status=RequestStatus.EVALUATING,
-        strategy=RequestStrategy(strategy_value),
-        decision_summary=req.summary or f"User selected release: {selected.get('name', 'torrent')}",
-        evaluation={
-            "selected": selected,
-            "score": req.score,
-            "strategy": strategy_value,
-            "selection_method": "user_confirmed",
-            "reason": req.summary,
-        },
-        progress_total=len(selected_items) or episode_count or 1,
-    )
-    await storage.add_request(media_request)
-    await broadcast({"type": "request_added", "data": media_request.to_dict()})
-
-    try:
-        manager = tc_svc.TorrentManager(config.torrent_client)
-        queued: list[Download] = []
-        for item in selected_items:
-            torrent_hash = await manager.add_magnet(item["magnet_url"], config.staging_dir)
-            dl = Download(
-                id=str(uuid.uuid4()),
-                name=item.get("name") or "Selected release",
-                magnet_url=item["magnet_url"],
-                media_type=media_type,
-                status=DownloadStatus.QUEUED,
-                torrent_hash=torrent_hash or item.get("info_hash", ""),
-                tmdb_id=tmdb_id,
-                size_bytes=int(item.get("size_bytes") or 0),
-            )
-            await storage.add_download(dl)
-            await storage.link_request_download(media_request.id, dl.id)
-            queued.append(dl)
-        await storage.update_request(
-            media_request.id,
-            status=RequestStatus.DOWNLOADING,
-            progress_found=len(queued),
-            download_ids=[dl.id for dl in queued],
-        )
-        for dl in queued:
-            await broadcast({"type": "download_added", "data": dl.to_dict()})
-        refreshed = storage.get_request(media_request.id)
-        if refreshed:
-            await broadcast({"type": "request_update", "data": refreshed.to_dict()})
-            return refreshed.to_dict()
-        return media_request.to_dict()
-    except Exception as exc:
-        await storage.update_request(media_request.id, status=RequestStatus.FAILED, error_message=str(exc))
-        refreshed = storage.get_request(media_request.id)
-        if refreshed:
-            await broadcast({"type": "request_update", "data": refreshed.to_dict()})
-            return refreshed.to_dict()
-        raise
-
-
-@app.post("/api/requests/preview")
-async def preview_request(req: CreateMediaRequest):
-    query = req.query.strip()
-    if not query:
-        raise HTTPException(400, "Request query is required")
-    config = storage.get_config()
-    quality = req.quality or config.quality_preference.value
-    return await request_service.preview_request_plan(query, quality, config, DATA_DIR)
-
-
-@app.get("/api/requests/{request_id}")
-async def get_request(request_id: str):
-    req = storage.get_request(request_id)
-    if not req:
-        raise HTTPException(404, "Request not found")
-    return req.to_dict()
-
-
-@app.post("/api/requests/{request_id}/retry")
-async def retry_request(request_id: str):
-    req = storage.get_request(request_id)
-    if not req:
-        raise HTTPException(404, "Request not found")
-    refreshed = await storage.update_request(
-        request_id,
-        status=RequestStatus.PENDING,
-        error_message="",
-        decision_summary="Retry queued",
-    )
-    await broadcast({"type": "request_update", "data": refreshed.to_dict()})
-    asyncio.create_task(request_service.process_request(storage, request_id, DATA_DIR, broadcast))
-    return refreshed.to_dict()
-
-
-@app.delete("/api/requests/{request_id}")
-async def delete_request(request_id: str):
-    ok = await storage.delete_request(request_id)
-    if not ok:
-        raise HTTPException(404, "Request not found")
-    await broadcast({"type": "request_removed", "data": {"id": request_id}})
-    return {"success": True}
-
-
-# ─── v2: Shows / Goals / Activity ────────────────────────────────────────────
-
-class CreateGoalRequest(BaseModel):
-    tmdb_id: Optional[int] = None
-    media_type: str = "unknown"
-    title: str = ""
-    query: str = ""
-    seasons: Optional[list[int]] = None
-    episodes: Optional[dict] = None      # {"2": [7, 9]}
-    quality: str = ""
-    min_quality: str = "any"
-
-
-@app.get("/api/shows/{tmdb_id}")
-async def get_show(tmdb_id: int):
-    """A TV show with per-season/per-episode coverage: on disk, on the way, missing."""
-    config = storage.get_config()
-    details = await meta_svc.get_tv_details(tmdb_id, config.tmdb_api_key)
-    if not details:
-        raise HTTPException(404, "Show not found on TMDB")
-    seasons_meta = await meta_svc.tmdb_tv_seasons(tmdb_id, config.tmdb_api_key)
-
-    item = next((i for i in storage.get_library() if i.tmdb_id == tmdb_id and i.media_type == MediaType.TV), None)
-    inventory = item.episodes if item else {}
-    mandate = agent_service.store.get_mandate(tmdb_id, "tv")
-
-    # Episodes on the way, from this show's goals' active downloads
-    in_flight: set[tuple[int, int]] = set()
-    goals = [r for r in storage.get_requests()
-             if r.tmdb_id == tmdb_id and r.media_type == MediaType.TV]
-    for goal in goals:
-        for dl_id in goal.download_ids:
-            dl = storage.get_download(dl_id)
-            if dl and dl.status not in (DownloadStatus.ORGANIZED, DownloadStatus.ERROR):
-                for s, e in dl.metadata.get("covers") or []:
-                    in_flight.add((int(s), int(e)))
-
-    seasons_out = []
-    for s in seasons_meta:
-        snum, count = s["season_number"], s["episode_count"]
-        have = inventory.get(str(snum), {})
-        episodes = []
-        for e in range(1, count + 1):
-            info = have.get(str(e))
-            episodes.append({
-                "episode": e,
-                "have": info is not None,
-                "quality": (info or {}).get("quality", ""),
-                "in_flight": (snum, e) in in_flight,
-            })
-        seasons_out.append({
-            "season_number": snum,
-            "name": s.get("name") or f"Season {snum}",
-            "episode_count": count,
-            "have_count": len([e for e in episodes if e["have"]]),
-            "in_flight_count": len([e for e in episodes if e["in_flight"] and not e["have"]]),
-            "episodes": episodes,
-        })
-
-    poster = details.get("poster_path")
-    backdrop = details.get("backdrop_path")
-    return {
-        "tmdb_id": tmdb_id,
-        "media_type": "tv",
-        "title": details.get("name", ""),
-        "year": int((details.get("first_air_date") or "0000")[:4] or 0) or None,
-        "overview": details.get("overview", ""),
-        "rating": details.get("vote_average"),
-        "genres": [g["name"] for g in details.get("genres", [])],
-        "poster_url": meta_svc.tmdb_image_url(poster, "w500") if poster else (item.poster_path if item else None),
-        "backdrop_url": meta_svc.tmdb_image_url(backdrop, "w1280") if backdrop else None,
-        "status": details.get("status", ""),
-        "in_library": item is not None,
-        "library_item_id": item.id if item else None,
-        "seasons": seasons_out,
-        "goals": [g.to_dict() for g in goals],
-        "mandate": mandate.to_dict() if mandate else None,
-        "mandate_summary": (mandate.describe() if mandate
-                            else "Nothing requested yet."),
-    }
-
-
-@app.get("/api/movies/{tmdb_id}")
-async def get_movie(tmdb_id: int):
-    """A movie title with its current verified-library state."""
-    config = storage.get_config()
-    details = await meta_svc.get_movie_details(tmdb_id, config.tmdb_api_key)
-    if not details or not details.get("id"):
-        raise HTTPException(404, "Movie not found on TMDB")
-    item = next(
-        (candidate for candidate in storage.get_library()
-         if candidate.tmdb_id == tmdb_id and candidate.media_type == MediaType.MOVIE),
-        None,
-    )
-    poster = details.get("poster_path")
-    backdrop = details.get("backdrop_path")
-    return {
-        "tmdb_id": tmdb_id,
-        "media_type": "movie",
-        "title": details.get("title", ""),
-        "year": int((details.get("release_date") or "0000")[:4] or 0) or None,
-        "overview": details.get("overview", ""),
-        "rating": details.get("vote_average"),
-        "genres": [genre["name"] for genre in details.get("genres", [])],
-        "poster_url": (meta_svc.tmdb_image_url(poster, "w500") if poster else
-                       (item.poster_path if item else None)),
-        "backdrop_url": (meta_svc.tmdb_image_url(backdrop, "w1280")
-                         if backdrop else None),
-        "status": details.get("status", ""),
-        "in_library": item is not None and bool(item.metadata.get("verified")),
-        "library_item_id": item.id if item else None,
-        "seasons": [],
-        "goals": [],
-    }
-
-
-@app.get("/api/movies/{tmdb_id}/status")
-async def get_movie_status(tmdb_id: int):
-    """Whether a movie is in the library / being worked on."""
-    item = next((i for i in storage.get_library() if i.tmdb_id == tmdb_id and i.media_type == MediaType.MOVIE), None)
-    goals = [r.to_dict() for r in storage.get_requests()
-             if r.tmdb_id == tmdb_id and r.media_type == MediaType.MOVIE]
-    return {
-        "tmdb_id": tmdb_id,
-        "in_library": item is not None,
-        "library_item_id": item.id if item else None,
-        "goals": goals,
-    }
-
-
-@app.post("/api/goals")
-async def create_goal(req: CreateGoalRequest):
-    """Create a durable goal — the curator takes it from here."""
-    if not req.tmdb_id and not (req.query or req.title):
-        raise HTTPException(400, "tmdb_id or a query is required")
-    config = storage.get_config()
-    if config.torrent_client.type == TorrentClientType.NONE:
-        raise HTTPException(400, "No torrent client configured. Open Settings first.")
-    if not config.staging_dir:
-        raise HTTPException(400, "No download folder configured. Open Settings first.")
-
-    media_type = MediaType(req.media_type) if req.media_type in MediaType._value2member_map_ else MediaType.UNKNOWN
-    # Resolve unknown type from TMDB when we have an id
-    if media_type == MediaType.UNKNOWN and req.tmdb_id and config.tmdb_api_key:
-        tv = await meta_svc.get_tv_details(req.tmdb_id, config.tmdb_api_key)
-        media_type = MediaType.TV if tv and tv.get("name") else MediaType.MOVIE
-
-    # Don't double-create: an active goal for the same scope is reused
-    for existing in storage.get_requests():
-        if (existing.tmdb_id and existing.tmdb_id == req.tmdb_id
-                and existing.status not in (RequestStatus.FAILED,)
-                and existing.media_type == media_type
-                and not existing.paused):
-            if media_type == MediaType.MOVIE:
-                return existing.to_dict()
-            wanted_new = set((req.seasons or []))
-            wanted_old = {int(s) for s in (existing.wanted_episodes or {})}
-            if not wanted_new or wanted_new <= wanted_old:
-                return existing.to_dict()
-
-    goal = await curator.create_goal(
-        query=req.query,
-        tmdb_id=req.tmdb_id,
-        media_type=media_type,
-        title=req.title,
-        seasons=req.seasons,
-        episodes=req.episodes,
-        quality=req.quality,
-        min_quality=req.min_quality,
-    )
-    return goal.to_dict()
-
-
-@app.post("/api/goals/{goal_id}/pause")
-async def pause_goal(goal_id: str):
-    goal = await storage.update_request(goal_id, paused=True)
-    if not goal:
-        raise HTTPException(404, "Goal not found")
-    await broadcast({"type": "request_update", "data": goal.to_dict()})
-    return goal.to_dict()
-
-
-@app.post("/api/goals/{goal_id}/resume")
-async def resume_goal(goal_id: str):
-    goal = await storage.update_request(goal_id, paused=False, next_check_at=0.0, check_interval=0.0)
-    if not goal:
-        raise HTTPException(404, "Goal not found")
-    if curator:
-        curator.poke()
-    await broadcast({"type": "request_update", "data": goal.to_dict()})
-    return goal.to_dict()
-
+# ─── Activity ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/activity")
 async def get_activity(limit: int = 100, request_id: str = ""):
@@ -1753,13 +853,9 @@ async def get_activity(limit: int = 100, request_id: str = ""):
 
 @app.get("/api/resolve")
 async def resolve_query(q: str):
-    """Search box → poster cards. TMDB direct; fuzzy descriptions get one
-    cheap LLM call. Cards are annotated with library/job state."""
-    config = storage.get_config()
-    cards = await resolution.resolve(
-        q, config.tmdb_api_key or os.getenv("TMDB_API_KEY", ""),
-        config.anthropic_api_key or os.getenv("ANTHROPIC_API_KEY", ""),
-        agent_service.cheap_model())
+    """Direct TMDB title lookup → poster cards annotated with library/job
+    state. No model call: descriptions belong to the Discovery agent."""
+    cards = await meta_svc.tmdb_quick_suggest(q, effective_tmdb_key(storage.get_config()))
     active = {
         (j.media_type, j.tmdb_id): j
         for j in agent_service.store.get_jobs(JobStatus.ACTIVE)
@@ -2085,32 +1181,6 @@ async def enrich_download_metadata(download_id: str):
         raise HTTPException(500, str(e))
 
 
-@app.post("/api/downloads/{download_id}/organize")
-async def organize_download(download_id: str, req: OrganizeRequest):
-    dl = storage.get_download(download_id)
-    if not dl:
-        raise HTTPException(404, "Download not found")
-
-    if req.media_type:
-        await storage.update_download(download_id, media_type=MediaType(req.media_type))
-        dl.media_type = MediaType(req.media_type)
-
-    config = storage.get_config()
-    if not config.library_dir:
-        raise HTTPException(400, "No library directory configured")
-
-    if req.tmdb_id and req.tmdb_id != dl.tmdb_id:
-        art_dir = Path(DATA_DIR) / "art"
-        meta = await meta_svc.fetch_metadata_for_torrent(
-            dl.name, dl.media_type, config.tmdb_api_key, art_dir, tmdb_id=req.tmdb_id
-        )
-        await storage.update_download(download_id, metadata=meta, tmdb_id=req.tmdb_id)
-        dl.metadata = meta
-
-    asyncio.create_task(auto_organize_download(download_id))
-    return {"success": True, "message": "Organization started"}
-
-
 # ─── Library routes ───────────────────────────────────────────────────────────
 
 @app.get("/api/library")
@@ -2192,65 +1262,6 @@ async def enrich_library_item(item_id: str):
         return {"success": True, "poster": meta.get("poster_path", "")}
     except Exception as e:
         raise HTTPException(500, str(e))
-
-
-@app.post("/api/library/scan")
-async def scan_library():
-    config = storage.get_config()
-    if not config.library_dir:
-        raise HTTPException(400, "No library directory configured")
-
-    items = file_organizer.scan_library(config.library_dir)
-    added = 0
-    refreshed = 0
-    for item_data in items:
-        # Already known: refresh the on-disk episode inventory
-        existing = [i for i in storage.get_library() if i.path == item_data["path"]]
-        if existing:
-            item = existing[0]
-            disk_eps = item_data.get("episodes") or {}
-            if item.media_type == MediaType.TV and disk_eps != item.episodes:
-                merged = {season: dict(episodes) for season, episodes in item.episodes.items()}
-                for season, episodes in disk_eps.items():
-                    for episode, record in episodes.items():
-                        old = item.episodes.get(season, {}).get(episode)
-                        merged.setdefault(season, {})[episode] = old if old and old.get("path") == record.get("path") else record
-                await storage.update_library_item(item.id, episodes=merged)
-                refreshed += 1
-            continue
-
-        art_dir = Path(DATA_DIR) / "art"
-        meta = await meta_svc.fetch_metadata_for_torrent(
-            torrent_name=item_data["title"],
-            media_type=MediaType(item_data["media_type"]),
-            api_key=config.tmdb_api_key,
-            art_cache_dir=art_dir,
-        )
-
-        item = LibraryItem(
-            id=str(uuid.uuid4()),
-            title=meta.get("title", item_data["title"]),
-            media_type=MediaType(item_data["media_type"]),
-            path=item_data["path"],
-            year=meta.get("year") or item_data.get("year"),
-            tmdb_id=meta.get("tmdb_id"),
-            imdb_id=meta.get("imdb_id"),
-            overview=meta.get("overview", ""),
-            poster_path=meta.get("poster_path", ""),
-            backdrop_path=meta.get("backdrop_path", ""),
-            genres=meta.get("genres", []),
-            rating=meta.get("rating"),
-            seasons=meta.get("seasons"),
-            episode_count=meta.get("episode_count"),
-            metadata=meta,
-            episodes=item_data.get("episodes") or {},
-        )
-        await storage.add_library_item(item)
-        added += 1
-
-    if curator:
-        curator.poke()
-    return {"scanned": len(items), "added": added, "refreshed": refreshed}
 
 
 # ─── Metadata routes ──────────────────────────────────────────────────────────
