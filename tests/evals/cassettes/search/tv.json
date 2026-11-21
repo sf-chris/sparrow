@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "source": "synthetic: scene and P2P western TV naming with season and series packs, other seasons, same-named series (another country or decade) and spin-offs. Not live recordings: seeders and sizes are illustrative.",
+  "row_format": "rows: [id, name, seeders, size GB, files]; listings: {id: [[path, MB]]}; correct: the ids a careful person would accept",
+  "titles": [
+    {
+      "key": "breaking-bad",
+      "alternatives": [["US", "Breaking Bad", ""]],
+      "episode_names": {"1": {"2": "Cat's in the Bag..."}},
+      "rows": [
+        ["6001", "Breaking.Bad.S01E02.1080p.BluRay.x264-ROVERS", 55, 2.3, 1],
+        ["6002", "Breaking Bad S01E02 720p HDTV x264", 12, 0.6, 1],
+        ["6003", "Breaking Bad S01 1080p BluRay x264", 80, 16.0, 7],
+        ["6004", "Breaking Bad Complete Series 1080p BluRay", 240, 120.0, 62],
+        ["6005", "El Camino A Breaking Bad Movie 2019 1080p", 90, 3.0, 1],
+        ["6006", "Breaking Bad S02E02 1080p BluRay", 40, 2.3, 1],
+        ["6007", "Breaking Bad S01E02 480p", 20, 0.3, 1]
+      ],
+      "listings": {
+        "6003": [["Breaking Bad S01/Breaking.Bad.S01E01.1080p.BluRay.mkv", 2300], ["Breaking Bad S01/Breaking.Bad.S01E02.1080p.BluRay.mkv", 2290], ["Breaking Bad S01/Breaking.Bad.S01E03.1080p.BluRay.mkv", 2310]],
+        "6004": [["Breaking Bad/Season 1/Breaking.Bad.S01E02.1080p.mkv", 2290], ["Breaking Bad/Season 2/Breaking.Bad.S02E02.1080p.mkv", 2290]]
+      },
+      "correct": ["6001", "6002", "6003", "6004"]
+    },
+    {
+      "key": "the-office",
+      "alternatives": [["US", "The Office (US)", ""]],
+      "episode_names": {"2": {"1": "The Dundies"}},
+      "namesakes": [{"id": 2996, "name": "The Office", "year": 2001, "language": "en", "episodes": {"2": {"1": "Charity"}}}],
+      "rows": [
+        ["6101", "The.Office.US.S02E01.1080p.BluRay.x264", 40, 1.1, 1],
+        ["6102", "The Office S02E01 The Dundies 720p WEB-DL", 15, 0.5, 1],
+        ["6103", "The.Office.UK.S02E01.720p.BluRay.x264", 9, 0.9, 1],
+        ["6104", "The Office (US) Season 2 1080p BluRay", 70, 24.0, 22],
+        ["6105", "The Office S02E02 1080p", 30, 1.1, 1],
+        ["6106", "The Office 2024 S01E01 1080p WEB", 18, 1.5, 1]
+      ],
+      "listings": {
+        "6104": [["The Office (US) Season 2/The.Office.US.S02E01.The.Dundies.mkv", 1100], ["The Office (US) Season 2/The.Office.US.S02E02.Sexual.Harassment.mkv", 1100]]
+      },
+      "correct": ["6101", "6102", "6104"]
+    },
+    {
+      "key": "fleabag",
+      "alternatives": [["GB", "Fleabag", ""]],
+      "episode_names": {"1": {"2": "Episode 2"}},
+      "rows": [
+        ["6201", "Fleabag.S01E02.1080p.AMZN.WEB-DL.DDP2.0.H.264", 30, 1.0, 1],
+        ["6202", "Fleabag S01 Complete 720p WEB", 25, 2.5, 6],
+        ["6203", "Fleabag Live 2019 National Theatre 1080p", 10, 2.0, 1],
+        ["6204", "Fleabag S02E02 1080p WEB", 28, 1.0, 1]
+      ],
+      "listings": {
+        "6202": [["Fleabag S01/Fleabag.S01E01.720p.mkv", 400], ["Fleabag S01/Fleabag.S01E02.720p.mkv", 410]]
+      },
+      "correct": ["6201", "6202"]
+    },
+    {
+      "key": "severance",
+      "alternatives": [["US", "Severance", ""]],
+      "episode_names": {"1": {"2": "Half Loop"}},
+      "rows": [
+        ["6301", "Severance.S01E02.Half.Loop.1080p.ATVP.WEB-DL.DDP5.1.H.264", 110, 3.0, 1],
+        ["6302", "Severance S01E02 2160p ATVP WEB-DL HDR", 35, 8.0, 1],
+        ["6303", "Severance 2022 S01 1080p WEB-DL", 90, 27.0, 9],
+        ["6304", "Severance S02E02 1080p ATVP WEB-DL", 200, 3.0, 1],
+        ["6305", "Severance 2006 1080p BluRay", 6, 1.8, 1]
+      ],
+      "listings": {
+        "6303": [["Severance S01/Severance.S01E01.Good.News.About.Hell.mkv", 3000], ["Severance S01/Severance.S01E02.Half.Loop.mkv", 3000]]
+      },
+      "correct": ["6301", "6302", "6303"]
+    },
+    {
+      "key": "shogun",
+      "alternatives": [["US", "Shogun", ""]],
+      "episode_names": {"1": {"2": "Servants of Two Masters"}},
+      "namesakes": [{"id": 1497, "name": "Shōgun", "year": 1980, "language": "en", "episodes": {"1": {"2": "Toranaga's Decision"}}}],
+      "rows": [
+        ["6401", "Shogun.2024.S01E02.1080p.DSNP.WEB-DL.DDP5.1.H.264", 140, 2.5, 1],
+        ["6402", "Shogun 2024 S01E02 Servants of Two Masters 2160p HDR", 40, 7.0, 1],
+        ["6403", "Shogun S01E02 1080p WEB H264", 25, 2.4, 1],
+        ["6404", "Shogun 1980 S01E02 DVDRip", 5, 0.7, 1],
+        ["6405", "Shogun (1980) Complete Miniseries 720p", 12, 9.0, 5]
+      ],
+      "correct": ["6401", "6402", "6403"]
+    },
+    {
+      "key": "doctor-who",
+      "alternatives": [["GB", "Doctor Who", ""]],
+      "episode_names": {"1": {"2": "The End of the World"}},
+      "namesakes": [
+        {"id": 121, "name": "Doctor Who", "year": 1963, "language": "en", "episodes": {"1": {"2": "The Cave of Skulls"}}},
+        {"id": 239770, "name": "Doctor Who", "year": 2023, "language": "en", "episodes": {"1": {"2": "The Devil's Chord"}}}
+      ],
+      "rows": [
+        ["6501", "Doctor.Who.2005.S01E02.1080p.BluRay.x264", 25, 2.0, 1],
+        ["6502", "Doctor Who S01E02 The End of the World 720p", 10, 0.7, 1],
+        ["6503", "Doctor.Who.2023.S01E02.The.Devils.Chord.1080p.DSNP.WEB-DL", 60, 2.2, 1],
+        ["6504", "Doctor Who S01E02 The Devil's Chord 1080p", 30, 2.1, 1],
+        ["6505", "Doctor Who 1963 S01E02 The Cave of Skulls", 3, 0.3, 1],
+        ["6506", "Doctor Who (2005) Series 1 1080p BluRay", 50, 26.0, 13]
+      ],
+      "listings": {
+        "6506": [["Doctor Who Series 1/Doctor.Who.2005.S01E01.Rose.mkv", 2000], ["Doctor Who Series 1/Doctor.Who.2005.S01E02.The.End.of.the.World.mkv", 2000]]
+      },
+      "correct": ["6501", "6502", "6506"]
+    }
+  ]
+}

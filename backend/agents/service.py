@@ -218,12 +218,20 @@ class AgentService:
                 hidden = {"tpb_search", "torrent_peek", "client_add", "triage_parse"}
             return [t for t in tools if t.name not in hidden]
 
+        def fetch_phase(session, trigger):
+            # The same split as the tools: the smart model searches with the
+            # raw tools (escalated, or with the scout off); the cheap one picks.
+            if "download_stalled" in (trigger.get("kinds") or []):
+                return "stall"
+            return "escalated_search" if session.model == self.smart_model() else "scout_pick"
+
         self.runtime.register(
             AgentSpec(
                 kind=AgentKind.FETCH.value,
                 model=self.fetch_model,
                 system=fetch_system,
                 tools=fetch_tools_for,
+                phase=fetch_phase,
             )
         )
         self.runtime.register(
