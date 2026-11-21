@@ -351,6 +351,8 @@ class LibraryItem:
 
 
 # ─── Requests ────────────────────────────────────────────────────────────────
+# Retired v2 requests and curator goals. Nothing creates or updates them now;
+# the model remains so installed history still migrates and loads.
 
 @dataclass
 class MediaRequest:
@@ -388,19 +390,6 @@ class MediaRequest:
     next_check_at: float = 0.0   # curator cooldown; 0 = check ASAP
     check_interval: float = 0.0  # current backoff interval in seconds
     paused: bool = False         # user paused the goal
-
-    def tried_hashes(self) -> set[str]:
-        return {a.get("info_hash", "").lower() for a in self.attempts if a.get("info_hash")}
-
-    def record_attempt(self, info_hash: str, name: str, outcome: str, note: str = "") -> None:
-        self.attempts.append({
-            "ts": time.time(),
-            "info_hash": (info_hash or "").lower(),
-            "name": name,
-            "outcome": outcome,
-            "note": note,
-        })
-        self.attempts = self.attempts[-200:]
 
     def to_dict(self) -> dict:
         return {
