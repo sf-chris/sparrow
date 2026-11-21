@@ -180,9 +180,14 @@ privately to the owner; household invitations are generated separately in People
 
 Every model and tool call is recorded in the cost ledger
 ([issue #15](https://github.com/sf-chris/sparrow/issues/15)):
-`python -m backend.agents.ledger report|timelines|export|audit|backfill --data <state dir>`
-gives cost per title by phase, escalations, searches and waste flags. Judge
-acquisition and subtitle changes by a before/after ledger report on the same titles.
+`python -m backend.agents.ledger report|timelines|export|audit|backfill|tag --data <state dir> [--batch NAME]`
+gives cost per title by phase, escalations, searches, each pick's review and what
+came of it, and waste flags. Administrators read the same at `GET /api/ledger` (and
+`/api/ledger/export`); the requests page alerts them when a title or recent run is
+over its target (search median ≤ 2¢, p90 ≤ 10¢, escalation ≤ 15%; subtitles < $1).
+Judge acquisition and subtitle changes by a before/after ledger report on the same
+titles: `tests/evals/search_bench.py` replays fixed title sets offline and runs the
+live search-only benchmark (see `tests/evals/README.md`).
 
 [The implementation ledger](docs/agentic-audit/IMPLEMENTATION.md) records current
 cleanup dispositions, recovery guarantees, evaluations and outstanding work.
