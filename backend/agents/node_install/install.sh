@@ -120,7 +120,7 @@ if [ -z "$python" ]; then
 fi
 
 report pairing
-set -- --config "$dir/node.json" configure --server "$SERVER" --code "$CODE"
+set -- --config "$dir/node.json" configure "--server=$SERVER" "--code=$CODE"
 case "$SERVER" in http://*) set -- "$@" --allow-private-http ;; esac
 if has transmission-daemon || [ -x /opt/homebrew/bin/transmission-daemon ] || [ -x /usr/local/bin/transmission-daemon ]; then
   set -- "$@" --managed-downloader

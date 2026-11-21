@@ -120,6 +120,8 @@ class Nodes:
 
     def enroll(self, name="", node_id=None):
         token = secrets.token_urlsafe(24)
+        while token[0] == "-":  # A leading dash reads as an option on a command line.
+            token = secrets.token_urlsafe(24)
         node_id = node_id or secrets.token_hex(12)
         with self.accounts.connect() as db:
             db.execute(

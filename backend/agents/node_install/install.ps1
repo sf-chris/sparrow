@@ -86,7 +86,7 @@
     $stage = 'pair'
     $why = "Pairing didn't work. Get a fresh command in Sparrow and run it again."
     Report 'pairing'
-    $arguments = @((Join-Path $app 'sparrow-node.py'), '--config', (Join-Path $dir 'node.json'), 'configure', '--server', $Server, '--code', $Code)
+    $arguments = @((Join-Path $app 'sparrow-node.py'), '--config', (Join-Path $dir 'node.json'), 'configure', "--server=$Server", "--code=$Code")
     if ($Server.StartsWith('http://')) { $arguments += '--allow-private-http' }
     if ((Get-Command transmission-daemon -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:ProgramFiles 'Transmission\transmission-daemon.exe'))) {
       $arguments += '--managed-downloader'
