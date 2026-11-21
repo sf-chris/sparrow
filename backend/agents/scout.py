@@ -18,7 +18,7 @@ import httpx
 
 from ..services.release_parser import parse_release_name
 from .release_match import covers_season, episode_in, other_season, sequel_of
-from .runtime import ToolError
+from .errors import ToolError
 
 QUALITY_RANK = {"480p": 1, "720p": 2, "1080p": 3, "2160p": 4}
 ROWS = 8

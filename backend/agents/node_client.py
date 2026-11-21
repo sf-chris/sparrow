@@ -18,8 +18,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
-from .node_executor import Executor, NodeError, PROTOCOL, library_roots
-
+from .node_executor import Executor, NodeError, PROTOCOL, library_roots, root_marker
 
 
 def atomic_config(path, data):
@@ -31,15 +30,6 @@ def atomic_config(path, data):
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temporary, path)
-
-
-def root_marker(path):
-    path = Path(path).expanduser().resolve()
-    path.mkdir(parents=True, exist_ok=True)
-    marker = path / ".sparrow-root-id"
-    if not marker.exists():
-        marker.write_text(secrets.token_hex(16))
-    return str(path), marker.read_text().strip()
 
 
 async def configure(args):
@@ -65,18 +55,24 @@ async def configure(args):
         raise ValueError(
             "Enter the server origin without credentials, paths or query parameters."
         )
-    folders = [args.library] if isinstance(args.library, str) else list(args.library)
-    libraries = [root_marker(folder) for folder in folders]
-    staging, staging_marker = root_marker(args.staging)
-    chosen = [Path(folder) for folder, _ in libraries] + [Path(staging)]
-    for number, a in enumerate(chosen):
-        for b in chosen[number + 1 :]:
-            if a == b or a in b.parents or b in a.parents:
-                raise ValueError("Library and staging must be separate folders.")
-    roots = library_roots([folder for folder, _ in libraries])
-    markers = dict(zip(roots, [marker for _, marker in libraries]))
     path = Path(args.config)
     previous = json.loads(path.read_text()) if path.exists() else {}
+    folders = [args.library] if isinstance(args.library, str) else list(args.library or [])
+    if bool(folders) != bool(args.staging):
+        raise ValueError("Give both --library and --staging, or neither and choose them in Sparrow.")
+    if folders:
+        from .folders import labelled, overlap
+
+        chosen = [str(Path(f).expanduser().resolve()) for f in [*folders, args.staging]]
+        problem = overlap(labelled(chosen[:-1], chosen[-1]))
+        if problem:
+            raise ValueError(problem)
+        marked = [root_marker(f) for f in chosen]
+        roots = {**library_roots([f for f, _ in marked[:-1]]), "staging": marked[-1][0]}
+        markers = dict(zip(roots, [m for _, m in marked]))
+    else:
+        # Pairing again keeps this computer's folders; a new one chooses them in Sparrow.
+        roots, markers = previous.get("roots") or {}, previous.get("markers") or {}
     config = {
         "server": server,
         "credential": (
@@ -87,8 +83,10 @@ async def configure(args):
             else secrets.token_urlsafe(32)
         ),
         "enrollment_fingerprint": hashlib.sha256(args.code.encode()).hexdigest(),
-        "roots": {**roots, "staging": staging},
-        "markers": {**markers, "staging": staging_marker},
+        "roots": roots,
+        "markers": markers,
+        # Places folders may be chosen from; only this computer can change them.
+        "places": list(getattr(args, "folder_root", None) or []) or previous.get("places") or None,
         "downloader": (
             json.loads(Path(args.downloader_config).read_text())
             if args.downloader_config
@@ -108,21 +106,28 @@ async def configure(args):
     }
     atomic_config(path, config)
     executor = Executor(
-        path.parent, config["roots"], config["markers"], config["downloader"]
+        path.parent, config["roots"], config["markers"], config["downloader"],
+        places=config["places"], on_folders=lambda *_: None,
     )
     async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(
-            server + "/api/v1/node/pair",
-            json={
-                "code": args.code,
-                "credential": config["credential"],
-                "capabilities": executor.capabilities(),
-            },
-        )
+        try:
+            response = await client.post(
+                server + "/api/v1/node/pair",
+                json={
+                    "code": args.code,
+                    "credential": config["credential"],
+                    "capabilities": executor.capabilities(),
+                },
+            )
+        except httpx.HTTPError:
+            raise ValueError(f"Sparrow didn’t answer at {server}. Check the address and that this computer can reach it.") from None
+        if response.status_code in (400, 404, 409, 422):
+            detail = response.json().get("detail") if response.headers.get("content-type", "").startswith("application/json") else ""
+            raise ValueError(detail if isinstance(detail, str) and detail else "Sparrow refused this pairing code. Get a fresh command in Sparrow.")
         response.raise_for_status()
         config["node_id"] = response.json()["node_id"]
     atomic_config(path, config)
-    print("Storage paired. Run Sparrow Node to keep this collection available.")
+    print("Paired with Sparrow.")
 
 
 def fetcher(config):
@@ -151,8 +156,9 @@ def fetcher(config):
 async def managed_downloader(config_path, config):
     """Start this node's own Transmission, saving the port it listens on."""
     downloader = config.get("downloader") or {}
-    if not downloader.get("managed"):
-        return None
+    staging = (config.get("roots") or {}).get("staging")
+    if not downloader.get("managed") or not staging:
+        return None  # Starts once this computer's folders are chosen.
     from ..services.managed_transmission import ManagedTransmission
 
     daemon = ManagedTransmission(config_path.parent)
@@ -160,7 +166,7 @@ async def managed_downloader(config_path, config):
         print("transmission-daemon is missing; this node can't download.", flush=True)
         return None
     port = await daemon.start(
-        download_dir=config["roots"]["staging"],
+        download_dir=staging,
         username=downloader["username"],
         password=downloader["password"],
         rpc_port=downloader.get("port") or None,
@@ -175,13 +181,28 @@ async def managed_downloader(config_path, config):
 async def run(config_path):
     config_path = Path(config_path)
     config = json.loads(config_path.read_text())
+
     daemon = await managed_downloader(config_path, config)
+
+    async def save_folders(roots, markers):
+        nonlocal daemon
+        moved = (config.get("roots") or {}).get("staging") != roots.get("staging")
+        config["roots"], config["markers"] = roots, markers
+        atomic_config(config_path, config)
+        if moved:
+            # Downloads land in the incoming folder, so Transmission follows it.
+            if daemon:
+                await daemon.stop()
+            daemon = await managed_downloader(config_path, config)
+
     executor = Executor(
         config_path.parent,
         config["roots"],
         config.get("markers"),
         config.get("downloader"),
         fetcher(config),
+        places=config.get("places"),
+        on_folders=save_folders,
     )
     async with httpx.AsyncClient(
         base_url=config["server"],
@@ -266,10 +287,17 @@ def main():
     parser.add_argument("--config", default=str(default))
     sub = parser.add_subparsers(dest="command", required=True)
     setup = sub.add_parser("configure")
-    for name in ("server", "code", "staging"):
+    for name in ("server", "code"):
         setup.add_argument("--" + name, required=True)
+    # Folders may be given here, or chosen afterwards from Sparrow.
     # Repeat --library for each disk this computer offers, main one first.
-    setup.add_argument("--library", required=True, action="append")
+    setup.add_argument("--library", action="append")
+    setup.add_argument("--staging")
+    setup.add_argument(
+        "--folder-root",
+        action="append",
+        help="A place Sparrow may choose folders in (repeatable). Default: home, drives and mounted disks.",
+    )
     setup.add_argument("--node-id")
     setup.add_argument("--downloader-config")
     setup.add_argument(
@@ -297,6 +325,9 @@ def main():
             print(json.dumps(executor.capabilities(), indent=2))
     except KeyboardInterrupt:
         pass
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
     except Exception as exc:
         print(
             f"Sparrow Node could not continue: {type(exc).__name__}. Check its configuration and server access.",

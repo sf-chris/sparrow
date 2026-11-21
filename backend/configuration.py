@@ -33,23 +33,13 @@ def validate_media_roots(config: SparrowConfig) -> None:
         raise ValueError("Staging and library cannot be a filesystem root.")
     if extra and not config.library_dir:
         raise ValueError("Choose the main library folder before adding more.")
-    named = [
-        (kind, Path(value))
-        for kind, value in [
-            ("staging", config.staging_dir),
-            ("library", config.library_dir),
-            *(("library", value) for value in config.extra_library_dirs),
-        ]
-        if value
-    ]
-    for number, (kind, first) in enumerate(named):
-        for other_kind, second in named[number + 1 :]:
-            if first == second or first in second.parents or second in first.parents:
-                raise ValueError(
-                    "Staging and library must be separate sibling roots; neither may contain the other."
-                    if "staging" in (kind, other_kind)
-                    else "Each library folder must be separate; none may contain another."
-                )
+    from .agents.folders import labelled, overlap
+
+    problem = overlap(
+        labelled([config.library_dir, *config.extra_library_dirs], config.staging_dir)
+    )
+    if problem:
+        raise ValueError(problem)
 
 
 def in_container() -> bool:

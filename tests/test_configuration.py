@@ -71,7 +71,7 @@ class ConfigurationTests(unittest.TestCase):
             })
             self.assertTrue(Path(updated.staging_dir).is_absolute())
 
-            with self.assertRaisesRegex(ValueError, "separate sibling roots"):
+            with self.assertRaisesRegex(ValueError, "Incoming can’t be inside Library"):
                 apply_config_update(SparrowConfig(), {
                     "staging_dir": str(parent / "Library" / "Temp"),
                     "library_dir": str(parent / "Library"),

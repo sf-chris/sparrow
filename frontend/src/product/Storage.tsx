@@ -1,15 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  HardDrive,
-  Plus,
-  RefreshCw,
-  FolderOpen,
-  Check,
-  Scissors,
-} from "lucide-react";
+import { HardDrive, Plus, RefreshCw, FolderOpen, Check } from "lucide-react";
 import { api, patch, post, type NodeInfo } from "./api";
 import { Tick } from "./Brand";
+import FolderSheet from "./FolderBrowser";
+import PairComputer from "./PairComputer";
 import Placement from "./Placement";
 import {
   Bar,
@@ -55,35 +50,29 @@ export default function Storage({
       extra_library_dirs: string[];
     }>("/admin/config"),
   );
-  const [adding, setAdding] = useState(false);
-  const [extra, setExtra] = useState("");
-  const [pairingId, setPairingId] = useState<string | undefined>();
-  const [pairing, setPairing] = useState(false);
-  const [name, setName] = useState("Windows storage");
-  const [code, setCode] = useState("");
-  const [local, setLocal] = useState(false);
-  const [library, setLibrary] = useState("");
-  const [staging, setStaging] = useState("");
+  const [pairing, setPairing] = useState<{ node?: NodeInfo } | null>(null);
+  const [sheet, setSheet] = useState<
+    { kind: "local" | "extra" } | { kind: "node"; node: NodeInfo } | null
+  >(null);
+  const [highlight, setHighlight] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [scan, setScan] = useState<Scan | null>(null);
   const suggested = useResource(() =>
     api<{ library: string; incoming: string }>("/admin/storage/suggestions"),
   );
-  async function pair() {
-    setBusy("pair");
-    setError("");
-    try {
-      const result = await post<{ code: string }>("/admin/nodes/enroll", {
-        name,
-        node_id: pairingId,
-      });
-      setCode(result.code);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy("");
-    }
+  useEffect(() => {
+    if (!highlight || !nodes.data) return;
+    document
+      .getElementById(`device-${highlight}`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const timer = window.setTimeout(() => setHighlight(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [highlight, nodes.data]);
+  async function paired(id: string) {
+    setPairing(null);
+    await Promise.all([nodes.refresh(), onChanged?.()]);
+    setHighlight(id);
   }
   /** Saved folders this server can see, else the suggested ones. */
   function planFolders(node: NodeInfo) {
@@ -100,12 +89,9 @@ export default function Storage({
         "",
     };
   }
-  function chooseLocal(node: NodeInfo) {
-    const plan = planFolders(node);
+  function chooseLocal() {
     setError("");
-    setLibrary(plan.library);
-    setStaging(plan.staging);
-    setLocal(true);
+    setSheet({ kind: "local" });
   }
   async function useSuggested(node: NodeInfo) {
     const plan = planFolders(node);
@@ -120,13 +106,16 @@ export default function Storage({
     );
   }
   function startPairing(node?: NodeInfo) {
-    setPairingId(node?.id);
-    setName(node?.name || "Windows storage");
-    setCode("");
     setError("");
-    setPairing(true);
+    setPairing({ node });
   }
-  async function saveFolders(library: string, staging: string, key: string) {
+  /** Save this server's folders; a sheet shows its own errors, so it rethrows. */
+  async function saveFolders(
+    library: string,
+    staging: string,
+    key: string,
+    rethrow = false,
+  ) {
     setBusy(key);
     setError("");
     try {
@@ -134,29 +123,38 @@ export default function Storage({
         library_dir: library,
         staging_dir: staging,
       });
-      setLocal(false);
+      setSheet(null);
       await Promise.all([nodes.refresh(), cfg.refresh()]);
       await onChanged?.();
     } catch (e) {
+      if (rethrow) throw e;
       setError((e as Error).message);
     } finally {
       setBusy("");
     }
   }
-  async function saveExtra(folders: string[]) {
+  async function saveExtra(folders: string[], rethrow = false) {
     setBusy("extra");
     setError("");
     try {
       await patch("/admin/config", { extra_library_dirs: folders });
-      setAdding(false);
-      setExtra("");
+      setSheet(null);
       await Promise.all([nodes.refresh(), cfg.refresh()]);
       await onChanged?.();
     } catch (e) {
+      if (rethrow) throw e;
       setError((e as Error).message);
     } finally {
       setBusy("");
     }
+  }
+  async function saveNodeFolders(node: NodeInfo, library: string, staging: string) {
+    await post(`/admin/nodes/${node.id}/folders`, {
+      libraries: [library],
+      staging,
+    });
+    setSheet(null);
+    await Promise.all([nodes.refresh(), onChanged?.()]);
   }
   async function preview(node: NodeInfo) {
     setBusy(node.id);
@@ -183,7 +181,7 @@ export default function Storage({
       }
     >
       <ErrorNote
-        error={(!pairing && !local && error) || nodes.error || cfg.error}
+        error={(!pairing && !sheet && error) || nodes.error || cfg.error}
         retry={() => {
           void nodes.refresh();
           void cfg.refresh();
@@ -253,7 +251,11 @@ export default function Storage({
               const missing = folders.some((f) => f.path && !f.root?.available);
               const unset = folders.some((f) => !f.path);
               return (
-                <li className="device-card" key={node.id}>
+                <li
+                  className={`device-card ${highlight === node.id ? "just-paired" : ""}`}
+                  key={node.id}
+                  id={`device-${node.id}`}
+                >
                   <HardDrive size={26} strokeWidth={2} aria-hidden="true" />
                   <div className="device-body">
                     <div className="device-head">
@@ -325,20 +327,35 @@ export default function Storage({
                           );
                         })}
                       </ul>
-                    ) : disks.length > 1 ? (
+                    ) : disks.length > 1 ||
+                      (node.capabilities.folders && disks.length) ? (
                       <ul className="folder-rows">
-                        {disks.map((disk, n) => (
-                          <li key={disk.id}>
-                            <span className="folder-label">Library {n + 1}</span>
-                            <span className="path">{disk.label || ""}</span>
-                            <span className="leader" aria-hidden="true" />
-                            <span className="folder-state num">
-                              {disk.available
-                                ? `${bytes(disk.free_bytes || 0)} free`
-                                : "Not found"}
-                            </span>
-                          </li>
-                        ))}
+                        {[...disks, rootOf("staging")]
+                          .filter((r) => r !== undefined)
+                          .map((disk, n) => (
+                            <li key={disk.id}>
+                              <span className="folder-label">
+                                {disk.id === "staging"
+                                  ? "Incoming"
+                                  : disks.length > 1
+                                    ? `Library ${n + 1}`
+                                    : "Library"}
+                              </span>
+                              <span className="path">{disk.label || ""}</span>
+                              <span className="leader" aria-hidden="true" />
+                              <span
+                                className={`folder-state num ${disk.available ? "" : "problem-text"}`}
+                              >
+                                {!disk.available
+                                  ? "Not found"
+                                  : disk.id === "staging"
+                                    ? disk.writable === false
+                                      ? "Can’t save here"
+                                      : "Ready"
+                                    : `${bytes(disk.free_bytes || 0)} free`}
+                              </span>
+                            </li>
+                          ))}
                       </ul>
                     ) : (
                       <p className="meta num">
@@ -363,7 +380,7 @@ export default function Storage({
                             </button>
                             <button
                               className="btn quiet"
-                              onClick={() => chooseLocal(node)}
+                              onClick={chooseLocal}
                             >
                               Choose other folders
                             </button>
@@ -381,7 +398,7 @@ export default function Storage({
                             </button>
                             <button
                               className="btn quiet"
-                              onClick={() => chooseLocal(node)}
+                              onClick={chooseLocal}
                             >
                               Choose other folders
                             </button>
@@ -390,7 +407,7 @@ export default function Storage({
                           <>
                             <button
                               className={`btn ${unset ? "primary" : "quiet"}`}
-                              onClick={() => chooseLocal(node)}
+                              onClick={chooseLocal}
                             >
                               {unset ? "Choose folders" : "Change folders"}
                             </button>
@@ -399,7 +416,7 @@ export default function Storage({
                                 className="btn quiet"
                                 onClick={() => {
                                   setError("");
-                                  setAdding(true);
+                                  setSheet({ kind: "extra" });
                                 }}
                               >
                                 <Plus size={16} strokeWidth={2.5} />
@@ -410,6 +427,19 @@ export default function Storage({
                         )
                       ) : (
                         <>
+                          {node.capabilities.folders &&
+                            node.online &&
+                            !node.disabled && (
+                              <button
+                                className={`btn ${disks.length ? "quiet" : "primary"}`}
+                                onClick={() => {
+                                  setError("");
+                                  setSheet({ kind: "node", node });
+                                }}
+                              >
+                                {disks.length ? "Change folders" : "Choose folders"}
+                              </button>
+                            )}
                           <button
                             className="btn"
                             onClick={() => startPairing(node)}
@@ -470,144 +500,75 @@ export default function Storage({
       )}
       {!onboarding && <Placement />}
       {pairing && (
-        <Dialog title="Pair a computer" onClose={() => setPairing(false)}>
-          <div className="form">
-            <ErrorNote error={error} />
-            {code ? (
-              <>
-                <div className="coupon ticket">
-                  <Scissors
-                    className="coupon-cut"
-                    size={18}
-                    strokeWidth={2}
-                    aria-hidden="true"
-                  />
-                  <Field label="Server address">
-                    <input
-                      readOnly
-                      value={location.origin}
-                      onFocus={(e) => e.target.select()}
-                    />
-                  </Field>
-                  <Field label="Pairing code" hint="Expires in 10 minutes.">
-                    <input
-                      className="big-code"
-                      readOnly
-                      value={code}
-                      onFocus={(e) => e.target.select()}
-                    />
-                  </Field>
-                </div>
-                <p className="muted">
-                  On the other computer, open Sparrow Node and enter the address
-                  and code. Then choose a library folder and a separate incoming
-                  folder.
-                </p>
-                <button
-                  className="btn primary"
-                  onClick={() => {
-                    setPairing(false);
-                    void nodes.refresh();
-                    void onChanged?.();
-                  }}
-                >
-                  Check connection
-                </button>
-              </>
-            ) : (
-              <>
-                <Field label="Name">
-                  <input
-                    value={name}
-                    maxLength={100}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </Field>
-                <button
-                  className="btn primary"
-                  disabled={busy === "pair"}
-                  onClick={pair}
-                >
-                  {busy === "pair" ? "Creating code…" : "Get pairing code"}
-                </button>
-              </>
-            )}
-          </div>
-        </Dialog>
+        <PairComputer
+          node={pairing.node}
+          onClose={() => {
+            setPairing(null);
+            void nodes.refresh();
+            void onChanged?.();
+          }}
+          onPaired={(id) => void paired(id)}
+        />
       )}
-      {local && (
-        <Dialog
+      {sheet?.kind === "local" && (
+        <FolderSheet
           title="Folders on this server"
-          onClose={() => setLocal(false)}
-          footer={
-            <button
-              className="btn primary"
-              disabled={busy === "local"}
-              onClick={() => void saveFolders(library, staging, "local")}
-            >
-              Save folders
-            </button>
-          }
-        >
-          <div className="form">
-            <ErrorNote error={error} />
-            <p className="muted">
-              Folders on this server. Sparrow creates any that don’t exist yet.
-              For another computer, pair it instead.
-            </p>
-            <Field
-              label="Library folder"
-              hint="Where your films and series are."
-            >
-              <input
-                value={library}
-                onChange={(e) => setLibrary(e.target.value)}
-                placeholder="/media/library"
-              />
-            </Field>
-            <Field
-              label="Incoming folder"
-              hint="A separate folder for downloads in progress."
-            >
-              <input
-                value={staging}
-                onChange={(e) => setStaging(e.target.value)}
-                placeholder="/media/incoming"
-              />
-            </Field>
-          </div>
-        </Dialog>
+          nodeId="local"
+          slots={(() => {
+            const here = nodes.data?.find((n) => n.id === "local");
+            const plan = here
+              ? planFolders(here)
+              : { library: cfg.data?.library_dir || "", staging: cfg.data?.staging_dir || "" };
+            return [
+              { key: "library", label: "Library", value: plan.library },
+              { key: "staging", label: "Incoming", value: plan.staging, write: true },
+            ];
+          })()}
+          onSave={(v) => saveFolders(v.library, v.staging, "local", true)}
+          onClose={() => setSheet(null)}
+        />
       )}
-      {adding && (
-        <Dialog
+      {sheet?.kind === "extra" && (
+        <FolderSheet
           title="Another library folder"
-          onClose={() => setAdding(false)}
-          footer={
-            <button
-              className="btn primary"
-              disabled={busy === "extra" || !extra.trim()}
-              onClick={() =>
-                void saveExtra([...(cfg.data?.extra_library_dirs || []), extra])
-              }
-            >
-              Add folder
-            </button>
+          nodeId="local"
+          slots={[
+            {
+              key: "extra",
+              label: `Library ${(cfg.data?.extra_library_dirs.length || 0) + 2}`,
+              value: "",
+            },
+          ]}
+          onSave={(v) =>
+            saveExtra([...(cfg.data?.extra_library_dirs || []), v.extra], true)
           }
-        >
-          <div className="form">
-            <ErrorNote error={error} />
-            <Field
-              label="Folder"
-              hint="Usually on another disk. New titles can go here too."
-            >
-              <input
-                value={extra}
-                onChange={(e) => setExtra(e.target.value)}
-                placeholder="/media/library-2"
-              />
-            </Field>
-          </div>
-        </Dialog>
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet?.kind === "node" && (
+        <FolderSheet
+          title={`Folders on ${sheet.node.name}`}
+          nodeId={sheet.node.id}
+          slots={[
+            {
+              key: "library",
+              label: "Library",
+              value:
+                sheet.node.capabilities.roots.find((r) => r.id === "library")
+                  ?.label || "",
+            },
+            {
+              key: "staging",
+              label: "Incoming",
+              value:
+                sheet.node.capabilities.roots.find((r) => r.id === "staging")
+                  ?.label || "",
+              write: true,
+            },
+          ]}
+          onSave={(v) => saveNodeFolders(sheet.node, v.library, v.staging)}
+          onClose={() => setSheet(null)}
+        />
       )}
       {scan && <ImportPreview scan={scan} onClose={() => setScan(null)} />}
     </Page>

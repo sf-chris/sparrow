@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import re
 import secrets
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .accounts import Accounts, digest
 from .account_api import administrator
+from . import node_package
 from .node_executor import (
     Executor, NodeError, PROTOCOL, TRANSIENT_KINDS, canonical, is_library, library_roots,
 )
@@ -40,6 +42,10 @@ class Nodes:
                     source TEXT NOT NULL, root_id TEXT NOT NULL, path TEXT NOT NULL,
                     version TEXT NOT NULL, created REAL NOT NULL);
             """)
+            columns = {r["name"] for r in db.execute("PRAGMA table_info(node_enrollment)")}
+            if "progress" not in columns:
+                # What the setup command on the other computer last reported.
+                db.execute("ALTER TABLE node_enrollment ADD COLUMN progress TEXT")
 
     def local(self):
         cfg = self.storage.get_config()
@@ -55,6 +61,7 @@ class Nodes:
                 Path(self.storage.data_dir) / "local-node",
                 **config,
                 fetcher=lambda token, offset: self.transfer_bytes(token, "local", offset),
+                exclude=[self.storage.data_dir],
             )
             self._local_config = config
         return self._local
@@ -107,20 +114,52 @@ class Nodes:
     def info(self, node_id):
         return next((n for n in self.list() if n["id"] == node_id), None)
 
-    def enroll(self, name, node_id=None):
+    def enroll(self, name="", node_id=None):
         token = secrets.token_urlsafe(24)
         node_id = node_id or secrets.token_hex(12)
         with self.accounts.connect() as db:
             db.execute(
-                "INSERT INTO node_enrollment VALUES (?, ?, ?, ?, NULL)",
-                (
-                    digest(token),
-                    node_id,
-                    name.strip()[:100] or "Storage node",
-                    time.time() + 600,
-                ),
+                "INSERT INTO node_enrollment VALUES (?, ?, ?, ?, NULL, NULL)",
+                # Unnamed computers take their own name when they pair.
+                (digest(token), node_id, (name or "").strip()[:100], time.time() + 600),
             )
         return {"code": token, "expires_in_seconds": 600, "node_id": node_id}
+
+    def enrollment(self, code):
+        """The pairing a setup command belongs to, while its code is current."""
+        with self.accounts.connect() as db:
+            return db.execute(
+                "SELECT * FROM node_enrollment WHERE token_hash=? AND expires>?",
+                (digest(code), time.time()),
+            ).fetchone()
+
+    def report(self, code, stage):
+        now = time.time()
+        with self.accounts.connect() as db:
+            db.execute(
+                "UPDATE node_enrollment SET progress=?, expires=MAX(expires, ?) "
+                "WHERE token_hash=? AND expires>?",
+                # A setup that has started gets time to finish downloading Python.
+                (stage, now + 900 if stage == "fetched" else 0, digest(code), now),
+            )
+
+    def pairing(self, node_id):
+        """How the newest pairing for a computer is going, for the dialog watching it."""
+        with self.accounts.connect() as db:
+            row = db.execute(
+                "SELECT * FROM node_enrollment WHERE node_id=? ORDER BY expires DESC LIMIT 1",
+                (node_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "stage": "paired" if row["used"] and row["progress"] in (None, "pairing") else row["progress"],
+            "paired": bool(row["used"]),
+            # Set up by the one-line command, which says when the node is running.
+            "scripted": row["progress"] is not None,
+            "expires_in_seconds": max(0, int(row["expires"] - time.time())),
+            "node": self.info(node_id) if row["used"] else None,
+        }
 
     def pair(self, code, credentials, capabilities):
         if capabilities.get("protocol") != PROTOCOL:
@@ -133,7 +172,7 @@ class Nodes:
             ).fetchone()
             if not row:
                 raise NodeError(
-                    "Pairing code expired or was already used. Generate a new code in Storage."
+                    "This pairing command expired or was already used. In Sparrow, open Settings > Storage > Pair a computer for a fresh one."
                 )
             if row["used"]:
                 paired = db.execute(
@@ -142,7 +181,9 @@ class Nodes:
                 ).fetchone()
                 if paired:
                     return {"node_id": row["node_id"], "protocol": PROTOCOL}
-                raise NodeError("This pairing code was already used.")
+                raise NodeError(
+                    "This pairing command was already used. In Sparrow, open Settings > Storage > Pair a computer for a fresh one."
+                )
             # Client generates and persists its credential before pairing, so a
             # lost response cannot leave the node with an unknown server-side secret.
             db.execute(
@@ -150,7 +191,9 @@ class Nodes:
                 "token_hash=excluded.token_hash, disabled=0, last_seen=excluded.last_seen, capabilities=excluded.capabilities",
                 (
                     row["node_id"],
-                    row["name"],
+                    row["name"]
+                    or str(capabilities.get("hostname") or "")[:100].strip()
+                    or "Storage computer",
                     digest(credentials),
                     time.time(),
                     canonical(capabilities),
@@ -409,8 +452,20 @@ def install_nodes(app, storage, get_service):
         model_config = ConfigDict(extra="forbid")
 
     class Enrollment(Input):
-        name: str = Field(min_length=1, max_length=100)
+        name: str = Field(default="", max_length=100)
         node_id: str | None = None
+
+    class Folders(Input):
+        libraries: list[str] = Field(min_length=1, max_length=8)
+        staging: str = Field(min_length=1, max_length=1000)
+
+    class NewFolder(Input):
+        node_id: str = "local"
+        path: str = Field(min_length=1, max_length=1000)
+        name: str = Field(max_length=200)
+
+    class Progress(Input):
+        stage: str = Field(pattern=r"^[a-z]+(:[a-z]+)?$", max_length=40)
 
     class Pair(Input):
         code: str = Field(min_length=20, max_length=100)
@@ -446,6 +501,110 @@ def install_nodes(app, storage, get_service):
         if body.node_id and body.node_id == "local":
             raise HTTPException(422, "The local server cannot be paired as a node.")
         return nodes.enroll(body.name, body.node_id)
+
+    @router.get("/admin/nodes/pairing/{node_id}")
+    def pairing(node_id: str, request: Request):
+        administrator(request)
+        status = nodes.pairing(node_id)
+        if not status:
+            raise HTTPException(404, "No pairing for this computer.")
+        return status
+
+    def browsable(node_id):
+        if node_id == "local":
+            return
+        node = nodes.info(node_id)
+        if not node or node["disabled"]:
+            raise HTTPException(404, "This computer isn’t paired.")
+        if not node["online"]:
+            raise HTTPException(409, f"{node['name']} is offline. Wake it, then try again.")
+        if not node["capabilities"].get("folders"):
+            raise HTTPException(
+                409, f"Update Sparrow Node on {node['name']} to choose its folders here."
+            )
+
+    @router.get("/admin/storage/browse")
+    async def browse_folders(request: Request, node_id: str = "local", path: str = ""):
+        """Folders on a computer, for choosing where its library and downloads go."""
+        administrator(request)
+        browsable(node_id)
+        try:
+            return await nodes.execute(node_id, "browse", {"path": path}, timeout=20)
+        except NodeError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @router.post("/admin/storage/browse/folder")
+    async def new_folder(body: NewFolder, request: Request):
+        administrator(request)
+        browsable(body.node_id)
+        try:
+            return await nodes.execute(
+                body.node_id, "make_folder", {"path": body.path, "name": body.name}, timeout=20
+            )
+        except NodeError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @router.post("/admin/nodes/{node_id}/folders")
+    async def node_folders(node_id: str, body: Folders, request: Request):
+        """Use these folders on a paired computer, made there if they're missing."""
+        administrator(request)
+        if node_id == "local":
+            raise HTTPException(422, "Change this server’s folders in its own settings.")
+        browsable(node_id)
+        try:
+            capabilities = await nodes.execute(
+                node_id,
+                "set_folders",
+                {"libraries": body.libraries, "staging": body.staging},
+                timeout=30,
+            )
+            nodes.heartbeat(node_id, capabilities)
+        except NodeError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        nodes.observe_availability()
+        return nodes.info(node_id)
+
+    def origin(request):
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+        if scheme not in ("http", "https") or not re.fullmatch(r"[A-Za-z0-9.\-:\[\]]+", request.url.netloc):
+            raise HTTPException(400, "Open Sparrow by its address to pair a computer.")
+        return f"{scheme}://{request.url.netloc}"
+
+    @router.get("/node/setup/{name}")
+    def setup_script(name: str, request: Request):
+        """The one-command setup a computer runs: install, pair, start."""
+        from fastapi.responses import PlainTextResponse
+
+        code, _, kind = name.rpartition(".")
+        if kind not in ("sh", "ps1") or not node_package.CODE.fullmatch(code):
+            raise HTTPException(404, "Not found.")
+        row = nodes.enrollment(code)
+        valid = bool(row and not row["used"])
+        if valid:
+            nodes.report(code, "fetched")
+        return PlainTextResponse(
+            node_package.script(kind, origin(request), code, valid),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/node/setup/{code}/package.{kind}")
+    async def setup_package(code: str, kind: str):
+        from fastapi.responses import Response
+
+        if kind not in ("tar.gz", "zip") or not node_package.CODE.fullmatch(code) or not nodes.enrollment(code):
+            raise HTTPException(404, "This setup command expired. Get a fresh one in Sparrow.")
+        data = await asyncio.to_thread(node_package.package, kind)
+        return Response(
+            data,
+            media_type="application/zip" if kind == "zip" else "application/gzip",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/node/setup/{code}/progress")
+    def setup_progress(code: str, body: Progress):
+        if node_package.CODE.fullmatch(code):
+            nodes.report(code, body.stage)
+        return {"ok": True}
 
     @router.delete("/admin/nodes/{node_id}")
     def revoke(node_id: str, request: Request):
