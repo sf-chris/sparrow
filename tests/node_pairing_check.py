@@ -67,6 +67,9 @@ def run_command(line, hide_python):
         # Only the operating system's own tools: exercises Sparrow's own Python.
         env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
     if WINDOWS:
+        # A PowerShell window starts with its own module path; CI's pwsh would
+        # otherwise hand Windows PowerShell 5.1 modules it can't load.
+        env.pop("PSModulePath", None)
         shell = shutil.which("powershell") or shutil.which("pwsh")
         command = [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", line]
     else:

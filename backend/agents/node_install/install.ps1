@@ -62,16 +62,24 @@
     Write-Host 'Getting Python 3.12'
     $uv = @((Join-Path $dir 'uv\uv.exe'), (Join-Path $dir 'uv\bin\uv.exe')) | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $uv) {
-      $env:UV_UNMANAGED_INSTALL = Join-Path $dir 'uv'
-      Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression | Out-Null
-      $uv = @((Join-Path $dir 'uv\uv.exe'), (Join-Path $dir 'uv\bin\uv.exe')) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      # uv's own release, unzipped here: no installer script runs in this window.
+      $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
+      $uvZip = Join-Path $dir 'uv.zip'
+      $uvDir = Join-Path $dir 'uv'
+      Invoke-WebRequest -UseBasicParsing -OutFile $uvZip `
+        -Uri "https://github.com/astral-sh/uv/releases/latest/download/uv-$arch-pc-windows-msvc.zip"
+      if (Test-Path $uvDir) { Remove-Item -Recurse -Force $uvDir }
+      Add-Type -AssemblyName System.IO.Compression.FileSystem
+      [System.IO.Compression.ZipFile]::ExtractToDirectory($uvZip, $uvDir)
+      Remove-Item -Force $uvZip
+      $uv = Get-ChildItem -Path $uvDir -Recurse -Filter 'uv.exe' | Select-Object -First 1 -ExpandProperty FullName
     }
     if (-not $uv) { throw $why }
     $env:UV_PYTHON_INSTALL_DIR = Join-Path $dir 'python'
     if ((Invoke-Program $uv @('python', 'install', '3.12')).Code) { throw $why }
     $found = Invoke-Program $uv @('python', 'find', '3.12')
     if ($found.Code) { throw $why }
-    $python = $found.Text.Trim()
+    $python = ($found.Text -split "`n")[-1].Trim()
     $pythonw = Join-Path (Split-Path $python) 'pythonw.exe'
     if (-not (Test-Path $pythonw)) { $pythonw = $python }
 
