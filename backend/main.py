@@ -2356,6 +2356,8 @@ from .agents.playback import install_playback
 playback = install_playback(app, storage, accounts, nodes, catalogue)
 from .agents.discovery import install_discovery
 discovery = install_discovery(app, accounts, catalogue, lambda: agent_service)
+from .agents.ledger import install_ledger
+install_ledger(app, lambda: agent_service)
 
 # ─── Static file serving ──────────────────────────────────────────────────────
 
