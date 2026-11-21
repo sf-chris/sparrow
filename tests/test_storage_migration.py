@@ -97,3 +97,35 @@ class StorageMigrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(saved["summary"], history[0]["summary"])
             self.assertEqual(original.read_text(), source)
             self.assertEqual(json.loads((root / "cwm_logs.json").read_text()), history)
+
+    async def test_retired_request_history_still_migrates_and_loads(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            history = [
+                {
+                    "id": "old-goal",
+                    "query": "Fixture show",
+                    "status": "waiting",
+                    "strategy": "episodes",
+                    "media_type": "tv",
+                    "tmdb_id": 101,
+                    "download_ids": ["old-download"],
+                    "wanted_episodes": {"1": [1, 2]},
+                    "attempts": [{"info_hash": "a" * 40, "outcome": "queued"}],
+                    "paused": True,
+                    "created_at": 1,
+                }
+            ]
+            (root / "requests.json").write_text(json.dumps(history))
+            storage = Storage(temp)
+            await storage.load_all()
+            restarted = Storage(temp)
+            await restarted.load_all()
+            [loaded] = restarted.get_requests()
+            self.assertEqual(loaded.id, "old-goal")
+            self.assertEqual(loaded.wanted_episodes, {"1": [1, 2]})
+            self.assertTrue(loaded.paused)
+            with restarted._connect() as db:
+                link = db.execute("SELECT download_id FROM request_downloads").fetchone()
+            self.assertEqual(link["download_id"], "old-download")
+            self.assertEqual(json.loads((root / "requests.json").read_text()), history)

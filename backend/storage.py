@@ -128,13 +128,6 @@ class Storage:
                     data TEXT NOT NULL,
                     timestamp REAL NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS parsed_releases (
-                    name_hash TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    data TEXT NOT NULL,
-                    parsed_by TEXT NOT NULL,
-                    created_at REAL NOT NULL
-                );
             """)
 
     def _load_config_sqlite(self) -> Optional[SparrowConfig]:
@@ -321,7 +314,7 @@ class Storage:
         await self._save_library_sqlite()
         atomic_text(self._library_path, json.dumps(data, indent=2))
 
-    # ─── Requests ────────────────────────────────────────────────────────
+    # ─── Requests (retired v2 history, read-only) ────────────────────────
 
     def _load_requests(self) -> dict[str, MediaRequest]:
         if self._requests_path.exists():
@@ -331,51 +324,6 @@ class Storage:
             except Exception as exc:
                 raise ValueError("Cannot migrate malformed requests.json; original data was preserved.") from exc
         return {}
-
-    async def _save_requests(self) -> None:
-        data = [r.to_dict() for r in self._requests.values()]
-        await self._save_requests_sqlite()
-        atomic_text(self._requests_path, json.dumps(data, indent=2))
-
-    async def add_request(self, request: MediaRequest) -> MediaRequest:
-        async with self._lock:
-            self._requests[request.id] = request
-            await self._save_requests()
-        return request
-
-    async def update_request(self, request_id: str, **kwargs) -> Optional[MediaRequest]:
-        async with self._lock:
-            if request_id not in self._requests:
-                return None
-            req = self._requests[request_id]
-            for k, v in kwargs.items():
-                if hasattr(req, k):
-                    setattr(req, k, v)
-            req.updated_at = time.time()
-            await self._save_requests()
-            return req
-
-    async def link_request_download(self, request_id: str, download_id: str) -> Optional[MediaRequest]:
-        async with self._lock:
-            req = self._requests.get(request_id)
-            if not req:
-                return None
-            if download_id not in req.download_ids:
-                req.download_ids.append(download_id)
-            req.updated_at = time.time()
-            await self._save_requests()
-            return req
-
-    async def delete_request(self, request_id: str) -> bool:
-        async with self._lock:
-            if request_id not in self._requests:
-                return False
-            del self._requests[request_id]
-            await self._save_requests()
-            return True
-
-    def get_request(self, request_id: str) -> Optional[MediaRequest]:
-        return self._requests.get(request_id)
 
     def get_requests(self) -> list[MediaRequest]:
         return sorted(self._requests.values(), key=lambda r: r.created_at, reverse=True)
@@ -484,29 +432,6 @@ class Storage:
         if request_id:
             events = [e for e in events if e.request_id == request_id]
         return list(reversed(events[-limit:]))
-
-    # ─── Parsed Release Cache ────────────────────────────────────────────
-
-    def get_parsed_release(self, name_hash: str) -> Optional[dict]:
-        try:
-            with self._connect() as conn:
-                row = conn.execute(
-                    "SELECT data FROM parsed_releases WHERE name_hash = ?", (name_hash,)
-                ).fetchone()
-            return json.loads(row["data"]) if row else None
-        except Exception:
-            return None
-
-    def put_parsed_release(self, name_hash: str, name: str, data: dict, parsed_by: str) -> None:
-        try:
-            with self._connect() as conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO parsed_releases "
-                    "(name_hash, name, data, parsed_by, created_at) VALUES (?, ?, ?, ?, ?)",
-                    (name_hash, name, json.dumps(data), parsed_by, time.time()),
-                )
-        except Exception:
-            pass
 
     # ─── Art Cache ───────────────────────────────────────────────────────
 

@@ -671,7 +671,11 @@ class Subtitles:
                 )
             if await self.try_candidates(task, asset):
                 return True
-            if task["data"].get("archive_searched") or os.getenv("SPARROW_SUBTITLE_ARCHIVE", "").lower() == "off":
+            if (
+                task["data"].get("upload_failed")
+                or task["data"].get("archive_searched")
+                or os.getenv("SPARROW_SUBTITLE_ARCHIVE", "").lower() == "off"
+            ):
                 return False
             # Nothing in or beside the file worked: look for this episode's
             # English track from another release before writing our own.
@@ -712,6 +716,10 @@ class Subtitles:
 
     async def try_candidates(self, task, asset):
         """Prepare the first untried listed candidate that works."""
+        if task["data"].get("upload_failed"):
+            # The person's own file failed: that is reported, and no other
+            # track is substituted (not even after a restart).
+            return False
         attempts = list(task["data"].get("attempts", []))
         tried = {a["source_id"] for a in attempts}
         for candidate in task["data"]["candidates"]:

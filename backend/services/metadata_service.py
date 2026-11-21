@@ -55,30 +55,6 @@ async def tmdb_quick_suggest(query: str, api_key: str, *, strict: bool = False) 
         return []
 
 
-async def tmdb_tv_seasons(tmdb_id: int, api_key: str) -> list[dict]:
-    """Return the season list for a TV show (skips season 0 / specials)."""
-    if not api_key:
-        return []
-    try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            resp = await client.get(
-                f"{TMDB_BASE}/tv/{tmdb_id}",
-                params={"api_key": api_key},
-            )
-            seasons = []
-            for s in resp.json().get("seasons", []):
-                if s.get("season_number", 0) == 0:
-                    continue
-                seasons.append({
-                    "season_number": s["season_number"],
-                    "episode_count": s.get("episode_count", 0),
-                    "name": s.get("name", f"Season {s['season_number']}"),
-                })
-            return seasons
-    except Exception:
-        return []
-
-
 async def search_tmdb(query: str, media_type: MediaType, api_key: str, year: Optional[int] = None) -> list[dict]:
     """Search TMDB for movies or TV shows. For UNKNOWN type, uses /search/multi and picks best result."""
     if not api_key:

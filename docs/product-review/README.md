@@ -8,7 +8,7 @@ The actual FastAPI application and routes ran against isolated temporary SQLite 
 
 `evidence.json` has five result groups: `browser_baseline`, `browser_interactions`, `browser_additional`, `isolated_backend`, and `additional_backend`. Observation names in the main report are keys within those groups. The description-search result comes from the installed Anthropic SDK rejecting the call before network activity. The step-limit diagnostic uses a finite scripted response sequence, so its 46 calls are simulated provider responses, with no paid usage.
 
-The backend diagnostic is preserved in [backend_reproductions.py](backend_reproductions.py). With the repository's Python dependencies installed, run it from the repository root using `.venv/bin/python docs/product-review/backend_reproductions.py`. It prints JSON, uses temporary storage, disables service wake scheduling and substitutes downloader/model actions. It demonstrates current behaviour; it is not a regression test asserting that behaviour should continue. The browser screenshots require the synthetic fixture state and are not a claim that a clean installation contains these titles.
+The backend diagnostic is preserved in [backend_reproductions.py](backend_reproductions.py). It exercises code as of `b84450c`, including modules since retired, so run it from a checkout of that commit with its Python dependencies installed: `.venv/bin/python docs/product-review/backend_reproductions.py`. It prints JSON, uses temporary storage, disables service wake scheduling and substitutes downloader/model actions. It demonstrates current behaviour; it is not a regression test asserting that behaviour should continue. The browser screenshots require the synthetic fixture state and are not a claim that a clean installation contains these titles.
 
 **Capture notes.** Most images are full-page captures, so a phone image can be much taller than the viewport. Fixed drawers remain viewport-height even in a full-page screenshot; background below a drawer in that image is not evidence of a modal-height defect. Progress images were recaptured after supplying consistent downloaded-byte counters in the synthetic transfer fixture. The initial counter discrepancy is excluded from findings. Automated accessibility results describe the captured desktop states and do not constitute a full conformance audit.
 
@@ -47,9 +47,9 @@ The backend diagnostic is preserved in [backend_reproductions.py](backend_reprod
 | Ready ignores verification | Browser/API | [library_view.py](../../backend/services/library_view.py), inventory projection at 117 |
 | Movie detail trusts stored verification | Browser/API | [main.py](../../backend/main.py), movie detail at 1634 |
 | Completion accepts missing file / does not enforce audio | Isolated | [tools.py](../../backend/agents/tools.py), completion tool at 741 |
-| TV scan assigns verified from filenames | Isolated | [file_organizer.py](../../backend/services/file_organizer.py), `scan_show_episodes` at 245 |
+| TV scan assigns verified from filenames | Isolated | [file_organizer.py](https://github.com/sf-chris/sparrow/blob/b84450c/backend/services/file_organizer.py), `scan_show_episodes` at 245 |
 | Search Get defaults to all seasons | Browser/API | [Home.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Home.tsx), `handleGet` at 291; [service.py](../../backend/agents/service.py), `create_job` at 468 |
-| Description call missing required argument | Installed SDK | [resolution.py](../../backend/agents/resolution.py), `_describe_to_titles` at 57 |
+| Description call missing required argument | Installed SDK | [resolution.py](https://github.com/sf-chris/sparrow/blob/b84450c/backend/agents/resolution.py), `_describe_to_titles` at 57 |
 | Episode request summarised as season | Isolated | [models.py](../../backend/agents/models.py), `Mandate.describe` |
 | Complete job hides next season action | Browser + source | [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx), action condition at 1059, `loadJob` at 1145, header at 1468 |
 | Cannot add a second active request for title | Source | [main.py](../../backend/main.py), create-job route at 1790 |
@@ -66,7 +66,7 @@ The backend diagnostic is preserved in [backend_reproductions.py](backend_reprod
 | WebSocket reconnect after unmount | Browser + source | [useWebSocket.ts](../../frontend/src/hooks/useWebSocket.ts), reconnect at 24 and cleanup at 34 |
 | Stale statistics called stalled | Source + rendered state | [Library.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Library.tsx), status line at 181 |
 | Setup completeness uses field presence | Browser + source | [Onboarding.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Onboarding.tsx), readiness at 124 and finish at 194 |
-| Scan misses current agent TV layout | Isolated + source | [file_organizer.py](../../backend/services/file_organizer.py), layout at 225; [prompts.py](../../backend/agents/prompts.py), convention at 154 |
+| Scan misses current agent TV layout | Isolated + source | [file_organizer.py](https://github.com/sf-chris/sparrow/blob/b84450c/backend/services/file_organizer.py), layout at 225; [prompts.py](../../backend/agents/prompts.py), convention at 154 |
 | Rescan replaces richer inventory | Source | [main.py](../../backend/main.py), scan update at 2206 |
 | Unmatched catalogue entries merge | Isolated | [library_view.py](../../backend/services/library_view.py), identity key at 96 |
 | Unowned monitored show absent from normal overview | Isolated + API | [tools.py](../../backend/agents/tools.py), Librarian overview at 1096; [service.py](../../backend/agents/service.py), monitoring save at 455 |

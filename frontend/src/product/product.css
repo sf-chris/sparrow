@@ -2380,6 +2380,20 @@ a.tonight-art:hover .still img {
 
 /* ─── Requests, logs ────────────────────────────────────────────── */
 
+.spending {
+  margin-bottom: 2rem;
+}
+.spending .rows {
+  border-bottom: 2px solid var(--ink);
+}
+.spending .row {
+  padding-inline: 0.25rem;
+}
+.spending .row p {
+  flex: 1 1 16rem;
+  color: var(--ink);
+  font-size: inherit;
+}
 .request-tools {
   display: flex;
   flex-wrap: wrap;

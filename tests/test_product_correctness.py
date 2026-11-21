@@ -22,7 +22,6 @@ from backend.agents.service import AgentService
 from backend.agents.tools import fetch_tools
 from backend.models import SparrowConfig, LibraryItem, MediaType
 from backend.services.library_view import build_library_view
-from backend.services.file_organizer import scan_show_episodes
 from backend.storage import Storage
 
 
@@ -210,10 +209,6 @@ class ProductCorrectnessTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(view), 3)
         failed = next(e for e in view if e["tmdb_id"] == 1)
         self.assertTrue(failed["needs_attention"])
-
-    def test_filename_scan_is_never_verification(self):
-        (self.root / "Fixture S01E01.mkv").write_text("this is not video")
-        self.assertFalse(scan_show_episodes(self.root)["1"]["1"]["verified"])
 
     async def test_tv_requests_require_scope_without_creating_a_mandate(self):
         self.service.toolbox.tmdb_get = AsyncMock(return_value={"name": "Fixture"})
