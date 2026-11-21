@@ -37,6 +37,7 @@ def find_executable() -> Optional[str]:
         "/opt/homebrew/bin/transmission-daemon",
         "/usr/local/bin/transmission-daemon",
         "/usr/bin/transmission-daemon",
+        os.path.join(os.getenv("ProgramFiles", "C:/Program Files"), "Transmission", "transmission-daemon.exe"),
     ):
         if os.access(candidate, os.X_OK):
             return candidate

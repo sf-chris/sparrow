@@ -25,6 +25,7 @@ from ..configuration import effective_altprovider_key
 from . import ledger, altprovider_loop
 from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
+from .errors import ToolError  # noqa: F401  (tools import it from here)
 
 logger = logging.getLogger("sparrow.agents")
 
@@ -983,9 +984,6 @@ def _append_user(session: AgentSession, text: str) -> None:
     msgs.append({"role": "user", "content": text})
 
 
-class ToolError(Exception):
-    """Raise from a tool handler for a clean is_error result the agent can
-    reason about (vs. an unexpected crash)."""
 
 
 def _to_text(obj: Any) -> str:

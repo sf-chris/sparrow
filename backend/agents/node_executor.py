@@ -30,7 +30,7 @@ READ_CHUNK = 1024 * 1024
 # their records pruned, so reads, polls and rendered pictures do not pile up.
 TRANSIENT_KINDS = (
     "read", "stat", "hls_segment", "subtitle_extract", "subtitle_pictures",
-    "download_select", "download_status",
+    "download_select", "download_status", "browse",
 )
 _TRANSIENT_SQL = ",".join(f"'{kind}'" for kind in TRANSIENT_KINDS)
 RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", re.I)
@@ -51,6 +51,18 @@ def library_roots(paths):
         ("library" if number == 1 else f"library-{number}"): path
         for number, path in enumerate([p for p in paths if p], 1)
     }
+
+
+def root_marker(path):
+    """Make a chosen folder and mark it, so a swapped disk is noticed."""
+    import secrets
+
+    path = Path(path).expanduser().resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    marker = path / ".sparrow-root-id"
+    if not marker.exists():
+        marker.write_text(secrets.token_hex(16))
+    return str(path), marker.read_text().strip()
 
 
 def executable(name):
@@ -168,20 +180,21 @@ async def probe_file(path):
 
 
 class Executor:
-    def __init__(self, data_dir, roots, markers=None, downloader=None, fetcher=None):
+    def __init__(
+        self, data_dir, roots, markers=None, downloader=None, fetcher=None,
+        *, places=None, exclude=(), on_folders=None,
+    ):
         # fetcher(source, offset) yields the bytes of a copy arriving from elsewhere.
         self.fetcher = fetcher
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.data_dir / "node.db"
-        self.roots = {
-            key: Path(path).expanduser().resolve()
-            for key, path in roots.items()
-            if path
-        }
         self.cache_root = self.data_dir / "cache"
         self.cache_root.mkdir(exist_ok=True)
-        self.roots["cache"] = self.cache_root.resolve()
+        self._set_roots(roots)
+        # Where folders may be browsed and chosen; on_folders saves a new choice.
+        self.places, self.exclude = places, [self.data_dir, *exclude]
+        self.on_folders = on_folders
         self._hls_cache = None
         self.markers = markers or {}
         self.downloader = downloader
@@ -194,6 +207,54 @@ class Executor:
                     result TEXT, state TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS job_revisions(id TEXT PRIMARY KEY, revision INTEGER NOT NULL);
             """)
+
+    def _set_roots(self, roots):
+        self.roots = {
+            key: Path(path).expanduser().resolve()
+            for key, path in roots.items()
+            if path
+        }
+        self.roots["cache"] = self.cache_root.resolve()
+
+    def starting_points(self):
+        from .folders import starting_points
+
+        return starting_points(self.places, self.exclude)
+
+    async def _set_folders(self, args):
+        """Use newly chosen folders, made and marked inside this computer's places."""
+        from .folders import FolderError, labelled, overlap, within
+
+        if not self.on_folders:
+            raise NodeError("Change this server's folders in its settings.")
+        libraries = [str(p) for p in (args.get("libraries") or []) if p][:8]
+        staging = str(args.get("staging") or "")
+        if args.get("keep_extra", True):
+            # Other disks keep their order, so their titles stay where they are.
+            extra = sorted(
+                (k for k in self.roots if is_library(k) and k != "library"),
+                key=lambda k: int(k.split("-")[1]),
+            )
+            libraries = libraries[:1] + [str(self.roots[k]) for k in extra]
+        if not libraries or not staging:
+            raise NodeError("Choose a library folder and an incoming folder.")
+        points = self.starting_points()
+        try:
+            chosen = [str(within(p, points)) for p in [*libraries, staging]]
+        except FolderError as exc:
+            raise NodeError(str(exc)) from None
+        problem = overlap(labelled(chosen[:-1], chosen[-1]))
+        if problem:
+            raise NodeError(problem)
+        marked = [root_marker(p) for p in chosen]
+        roots = {**library_roots([p for p, _ in marked[:-1]]), "staging": marked[-1][0]}
+        markers = dict(zip(roots, [m for _, m in marked]))
+        saved = self.on_folders(roots, markers)
+        if asyncio.iscoroutine(saved):
+            await saved
+        self._set_roots(roots)
+        self.markers = markers
+        return self.capabilities()
 
     @contextmanager
     def db(self):
@@ -269,8 +330,8 @@ class Executor:
                         "free_bytes": usage.free,
                         "total_bytes": usage.total,
                         "writable": os.access(root, os.W_OK),
-                        # Shown to people choosing a disk; never interpreted by the server.
-                        **({"label": str(root)} if is_library(root_id) else {}),
+                        # Shown to people choosing folders; never interpreted by the server.
+                        **({"label": str(root)} if root_id != "cache" else {}),
                     }
                 )
             except (NodeError, OSError) as exc:
@@ -278,6 +339,9 @@ class Executor:
         return {
             "protocol": PROTOCOL,
             "platform": __import__("platform").system(),
+            "hostname": __import__("platform").node()[:100],
+            # Folders can be browsed and chosen from Sparrow.
+            "folders": bool(self.on_folders),
             "roots": result,
             "probe": bool(executable("ffprobe")),
             "transcode": bool(executable("ffmpeg")),
@@ -397,6 +461,7 @@ class Executor:
                     "download_select",
                     "discard_staging",
                     "withdraw",
+                    "set_folders",
                 ):
                     async with self._mutation_lock:
                         if command.get("expires", 0) < time.time():
@@ -438,6 +503,21 @@ class Executor:
             )
         if kind.startswith("download_"):
             return await self._download(kind, args)
+        if kind in ("browse", "make_folder"):
+            from .folders import FolderError, browse, make_folder
+
+            points = self.starting_points()
+            try:
+                if kind == "browse":
+                    return await asyncio.to_thread(browse, str(args.get("path") or ""), points)
+                path = await asyncio.to_thread(
+                    make_folder, str(args.get("path") or ""), str(args.get("name") or ""), points
+                )
+                return {"path": path}
+            except FolderError as exc:
+                raise NodeError(str(exc)) from None
+        if kind == "set_folders":
+            return await self._set_folders(args)
         root_id = args.get("root_id", "library")
         if kind == "list":
             root = self.path(root_id, args.get("path", ""))
