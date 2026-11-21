@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "note": "Fixed title sets for the search benchmark (issue #15). The anime set is reconstructed from the series named in the 2026-10-01/02 field-test and ledger-run commits and the scout tests; the exact batch-1 and batch-3 lists live only in those runs' state directories (not in the repository). Pin them with `search_bench.py titles --from-state DIR --name batch-3 --write`. TMDB ids are checked against TMDB by name and year before a live run uses them.",
+  "sets": {
+    "anime": [
+      {"key": "naruto", "title": "Naruto", "media_type": "tv", "tmdb_id": 46260, "year": 2002, "episodes": {"1": [2]}},
+      {"key": "one-piece", "title": "One Piece", "media_type": "tv", "tmdb_id": 37854, "year": 1999, "episodes": {"1": [2]}},
+      {"key": "cowboy-bebop", "title": "Cowboy Bebop", "media_type": "tv", "tmdb_id": 30991, "year": 1998, "episodes": {"1": [5]}},
+      {"key": "samurai-champloo", "title": "Samurai Champloo", "media_type": "tv", "tmdb_id": 30983, "year": 2004, "episodes": {"1": [2]}},
+      {"key": "tokyo-ghoul", "title": "Tokyo Ghoul", "media_type": "tv", "tmdb_id": 61374, "year": 2014, "episodes": {"1": [2]}},
+      {"key": "psycho-pass", "title": "Psycho-Pass", "media_type": "tv", "tmdb_id": 45845, "year": 2012, "episodes": {"1": [2]}},
+      {"key": "parasyte", "title": "Parasyte -the maxim-", "media_type": "tv", "tmdb_id": 61459, "year": 2014, "episodes": {"1": [2]}},
+      {"key": "steins-gate", "title": "Steins;Gate", "media_type": "tv", "tmdb_id": 42509, "year": 2011, "episodes": {"1": [3]}},
+      {"key": "hunter-x-hunter", "title": "Hunter x Hunter", "media_type": "tv", "tmdb_id": 46298, "year": 2011, "episodes": {"1": [2]}},
+      {"key": "chainsaw-man", "title": "Chainsaw Man", "media_type": "tv", "tmdb_id": 114410, "year": 2022, "episodes": {"1": [2]}},
+      {"key": "mob-psycho-100", "title": "Mob Psycho 100", "media_type": "tv", "tmdb_id": 67075, "year": 2016, "episodes": {"1": [2]}},
+      {"key": "violet-evergarden", "title": "Violet Evergarden", "media_type": "tv", "tmdb_id": 75214, "year": 2018, "episodes": {"1": [2]}},
+      {"key": "my-hero-academia", "title": "My Hero Academia", "media_type": "tv", "tmdb_id": 65930, "year": 2016, "episodes": {"1": [2]}},
+      {"key": "erased", "title": "ERASED", "media_type": "tv", "tmdb_id": 65942, "year": 2016, "episodes": {"1": [2]}},
+      {"key": "oshi-no-ko", "title": "【OSHI NO KO】", "media_type": "tv", "tmdb_id": 203737, "year": 2023, "episodes": {"1": [2]}},
+      {"key": "dragon-ball-z", "title": "Dragon Ball Z", "media_type": "tv", "tmdb_id": 12971, "year": 1989, "episodes": {"1": [2]}}
+    ],
+    "films": [
+      {"key": "spirited-away", "title": "Spirited Away", "media_type": "movie", "tmdb_id": 129, "year": 2001},
+      {"key": "parasite", "title": "Parasite", "media_type": "movie", "tmdb_id": 496243, "year": 2019},
+      {"key": "oldboy", "title": "Oldboy", "media_type": "movie", "tmdb_id": 670, "year": 2003},
+      {"key": "dune", "title": "Dune", "media_type": "movie", "tmdb_id": 438631, "year": 2021},
+      {"key": "amelie", "title": "Amélie", "media_type": "movie", "tmdb_id": 194, "year": 2001},
+      {"key": "the-thing", "title": "The Thing", "media_type": "movie", "tmdb_id": 1091, "year": 1982}
+    ],
+    "tv": [
+      {"key": "breaking-bad", "title": "Breaking Bad", "media_type": "tv", "tmdb_id": 1396, "year": 2008, "episodes": {"1": [2]}},
+      {"key": "the-office", "title": "The Office", "media_type": "tv", "tmdb_id": 2316, "year": 2005, "episodes": {"2": [1]}},
+      {"key": "fleabag", "title": "Fleabag", "media_type": "tv", "tmdb_id": 67070, "year": 2016, "episodes": {"1": [2]}},
+      {"key": "severance", "title": "Severance", "media_type": "tv", "tmdb_id": 95396, "year": 2022, "episodes": {"1": [2]}},
+      {"key": "shogun", "title": "Shōgun", "media_type": "tv", "tmdb_id": 126308, "year": 2024, "episodes": {"1": [2]}},
+      {"key": "doctor-who", "title": "Doctor Who", "media_type": "tv", "tmdb_id": 57243, "year": 2005, "episodes": {"1": [2]}}
+    ]
+  }
+}

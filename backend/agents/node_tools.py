@@ -370,6 +370,7 @@ def acquisition_tools(tb):
                 discarded = bool(result.get("removed"))
             except NodeError as exc:
                 logger.warning("staging for %s not discarded: %s", dl.id, exc)
+        ctx.facts.update(discarded=discarded, published=bool(published))
         await tb.storage.update_download(
             dl.id,
             status=DownloadStatus.ERROR,
@@ -459,7 +460,8 @@ def acquisition_tools(tb):
         titles, exclude, namesakes = await scout.titles_for(tb, job, season, targets)
         extra = [str(q)[:120] for q in (args.get("queries") or []) if str(q).strip()][:3]
         rows, searched, dropped, failing = await scout.scout(
-            tb, job, targets, titles, extra, exclude=exclude, log=ctx.facts.setdefault("searches", [])
+            tb, job, targets, titles, extra, exclude=exclude, log=ctx.facts.setdefault("searches", []),
+            peek_log=ctx.facts.setdefault("peeks", []),
         )
         # Copies this request already abandoned (stalled, crawling, wrong)
         # go last and say so: neither picker nor reviewer should choose them again.
@@ -530,9 +532,11 @@ def acquisition_tools(tb):
             )
         except Exception as exc:
             raise ToolError(f"The reviewer could not be reached ({str(exc)[:120]}); try again shortly.") from exc
-        acquisition_review.charge(ctx.session, model, usage, dollars, tb.store)
+        acquisition_review.charge(ctx.session, model, usage, dollars, tb.store,
+                                  requested_by=ctx.runtime.current_call(ctx.session.id))
         ctx.facts.update(
-            pick=pick, name=memo["rows"][pick]["name"], approved=bool(decision.get("approve")),
+            pick=pick, name=memo["rows"][pick]["name"], info_hash=memo["rows"][pick]["info_hash"],
+            approved=bool(decision.get("approve")),
             reason=decision.get("reason", ""), instead=decision.get("instead", ""), queries=decision.get("queries") or [],
             reviewer=model, review_cost=dollars, vetoes_before=memo.get("vetoes", 0),
         )

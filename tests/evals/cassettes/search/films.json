@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "source": "synthetic: scene and P2P film naming with remakes, sequels, dubs, camera copies, other cuts and collections. Not live recordings: seeders and sizes are illustrative.",
+  "row_format": "rows: [id, name, seeders, size GB, files]; listings: {id: [[path, MB]]}; correct: the ids a careful person would accept",
+  "titles": [
+    {
+      "key": "spirited-away",
+      "alternatives": [["JP", "Sen to Chihiro no Kamikakushi", ""], ["US", "Spirited Away", ""]],
+      "rows": [
+        ["5001", "Spirited Away (2001) 1080p BluRay x264 Dual Audio", 85, 4.2, 1],
+        ["5002", "Spirited.Away.2001.1080p.BluRay.x265-RARBG", 140, 2.1, 1],
+        ["5003", "Spirited Away 2001 720p BRRip English Dub", 30, 1.0, 1],
+        ["5004", "Spirited Away 2001 HDCAM", 4, 0.9, 1],
+        ["5005", "Sen to Chihiro no Kamikakushi (2001) [BD 1080p]", 12, 8.0, 1],
+        ["5006", "Spirited Away Live On Stage 2022 1080p", 7, 3.0, 1],
+        ["5007", "Studio Ghibli Collection 1080p BluRay", 200, 120.0, 22]
+      ],
+      "correct": ["5001", "5002", "5005"]
+    },
+    {
+      "key": "parasite",
+      "alternatives": [["KR", "Gisaengchung", ""], ["US", "Parasite", ""]],
+      "namesakes": [{"id": 27461, "name": "Parasite", "year": 1982, "language": "en"}],
+      "rows": [
+        ["5101", "Parasite.2019.1080p.BluRay.x264-SPARKS", 160, 10.0, 1],
+        ["5102", "Parasite (2019) [1080p] [BluRay] [Korean]", 60, 2.2, 1],
+        ["5103", "Parasite 1982 DVDRip x264", 5, 0.9, 1],
+        ["5104", "Parasite 2019 English Dubbed 720p", 20, 1.0, 1],
+        ["5105", "Parasite 2019 2160p UHD BluRay REMUX HDR", 25, 58.0, 1]
+      ],
+      "correct": ["5101", "5102", "5105"]
+    },
+    {
+      "key": "oldboy",
+      "alternatives": [["KR", "Oldeuboi", ""], ["US", "Old Boy", ""]],
+      "namesakes": [{"id": 87516, "name": "Oldboy", "year": 2013, "language": "en"}],
+      "rows": [
+        ["5201", "Oldboy.2003.1080p.BluRay.x264-CiNEFiLE", 75, 8.0, 1],
+        ["5202", "Oldboy 2013 1080p BluRay x264", 110, 7.0, 1],
+        ["5203", "Oldboy (2003) Korean 720p BRRip", 20, 1.1, 1],
+        ["5204", "Old Boy 2003 REMASTERED 1080p BluRay", 15, 9.0, 1],
+        ["5205", "Oldboy 2003 CAM", 2, 0.7, 1]
+      ],
+      "correct": ["5201", "5203", "5204"]
+    },
+    {
+      "key": "dune",
+      "alternatives": [["US", "Dune: Part One", ""]],
+      "namesakes": [{"id": 841, "name": "Dune", "year": 1984, "language": "en"}],
+      "rows": [
+        ["5301", "Dune.2021.1080p.WEB-DL.DDP5.1.Atmos.H.264-EVO", 260, 6.0, 1],
+        ["5302", "Dune.Part.Two.2024.1080p.WEB-DL.DDP5.1.Atmos.H.264", 480, 6.5, 1],
+        ["5303", "Dune 1984 Extended Edition 1080p BluRay", 40, 12.0, 1],
+        ["5304", "Dune (2021) 2160p UHD BluRay REMUX HDR", 95, 70.0, 1],
+        ["5305", "Dune 2021 HDCAM x264", 8, 1.5, 1],
+        ["5306", "Dune Prophecy S01E01 1080p", 120, 2.0, 1]
+      ],
+      "correct": ["5301", "5304"]
+    },
+    {
+      "key": "amelie",
+      "alternatives": [["FR", "Le Fabuleux Destin d'Amélie Poulain", ""], ["US", "Amelie", ""]],
+      "rows": [
+        ["5401", "Amelie.2001.1080p.BluRay.x264-AMIABLE", 70, 8.0, 1],
+        ["5402", "Le Fabuleux Destin d'Amelie Poulain 2001 1080p BluRay FRENCH", 25, 9.0, 1],
+        ["5403", "Amelie 2001 720p English Dubbed", 6, 1.0, 1],
+        ["5404", "Amelie 2001 480p DVDRip", 18, 0.7, 1]
+      ],
+      "correct": ["5401", "5402"]
+    },
+    {
+      "key": "the-thing",
+      "alternatives": [["US", "John Carpenter's The Thing", ""]],
+      "namesakes": [{"id": 60935, "name": "The Thing", "year": 2011, "language": "en"}],
+      "rows": [
+        ["5501", "The.Thing.1982.1080p.BluRay.x264-AMIABLE", 90, 9.0, 1],
+        ["5502", "The Thing 2011 1080p BluRay x264", 60, 7.0, 1],
+        ["5503", "The Thing (1982) 2160p UHD BluRay REMUX", 35, 60.0, 1],
+        ["5504", "The Thing from Another World 1951 720p", 12, 1.2, 1],
+        ["5505", "John Carpenters The Thing 1982 720p BRRip", 9, 1.0, 1]
+      ],
+      "correct": ["5501", "5503", "5505"]
+    }
+  ]
+}
