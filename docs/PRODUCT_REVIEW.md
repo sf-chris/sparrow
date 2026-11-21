@@ -62,7 +62,7 @@ Show partial success explicitly: “Episode 1 ready; episodes 2–3 downloading.
 
 **Success:** the same item has compatible states everywhere; an offline copy remains visible with an availability explanation; imported filename guesses never become verified media evidence.
 
-Evidence: `library_states`, `unverified_movie_detail`, `missing_movie_detail`, `complete_missing_file_wrong_audio`, and `scan_text_file` in [evidence.json](product-review/evidence.json). Code: [library_view.py](../backend/services/library_view.py), [tools.py](../backend/agents/tools.py), [file_organizer.py](../backend/services/file_organizer.py).
+Evidence: `library_states`, `unverified_movie_detail`, `missing_movie_detail`, `complete_missing_file_wrong_audio`, and `scan_text_file` in [evidence.json](product-review/evidence.json). Code: [library_view.py](../backend/services/library_view.py), [tools.py](../backend/agents/tools.py), [file_organizer.py](https://github.com/sf-chris/sparrow/blob/b84450c/backend/services/file_organizer.py).
 
 **3. Make the acquisition scope obvious before accepting it. — Essential**
 
@@ -136,7 +136,7 @@ Provide an import preview with matched, uncertain, duplicate and unsupported gro
 
 **Success:** scanning twice preserves a correct catalogue, never merges unrelated unknown titles, and gives the user a practical way to resolve uncertainty without renaming an entire collection manually.
 
-Evidence: `scan_text_file`, `scan_agent_layout_found`, `unmatched_library`; [file_organizer.py](../backend/services/file_organizer.py), scan route in [main.py](../backend/main.py), naming instructions in [prompts.py](../backend/agents/prompts.py), [library_view.py](../backend/services/library_view.py).
+Evidence: `scan_text_file`, `scan_agent_layout_found`, `unmatched_library`; [file_organizer.py](https://github.com/sf-chris/sparrow/blob/b84450c/backend/services/file_organizer.py), scan route in [main.py](../backend/main.py), naming instructions in [prompts.py](../backend/agents/prompts.py), [library_view.py](../backend/services/library_view.py).
 
 **9. Make monitoring visible even before a show is owned. — Daily use**
 
@@ -194,7 +194,7 @@ Provide enforceable per-request and overall limits, with a clear state when a bu
 
 **Success:** leaving Sparrow unattended cannot exceed the chosen policy through repeated model turns, and hitting a limit produces a recoverable status rather than a silent failure.
 
-Evidence: `wake_step_limit`; [runtime.py](../backend/agents/runtime.py), [resolution.py](../backend/agents/resolution.py), [Activity.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Activity.tsx).
+Evidence: `wake_step_limit`; [runtime.py](../backend/agents/runtime.py), [resolution.py](https://github.com/sf-chris/sparrow/blob/b84450c/backend/agents/resolution.py), [Activity.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Activity.tsx).
 
 **14. Close the loop when media is wrong and when the user is away. — Daily use**
 

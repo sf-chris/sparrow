@@ -23,7 +23,7 @@ import httpx
 from ..models import Download, DownloadStatus, MediaType, LibraryItem, quality_rank
 from ..storage import Storage
 from ..services.torrent_client import TorrentManager, build_magnet, match_files, select_files, start_configured_client
-from ..services.search_engine import _query as apibay_query
+from ..services.apibay import query as apibay_query
 from ..services.release_parser import parse_release_name
 from .models import (AgentKind, AgentSession, Event, JournalEntry, JobStatus,
                      MonitoringMode)

@@ -315,7 +315,12 @@ authority for external effects. Cancellation/revision fences apply to late resul
 The executable CWM, unreachable legacy frontend graph and its unused assets
 were removed. `clsx`, `aiofiles`, `aiosqlite`, `beautifulsoup4`, `lxml` and the
 Beautiful Soup dependency `soupsieve` were removed from the relevant manifests
-and lockfiles. Retained versions were unchanged.
+and lockfiles. Retained versions were unchanged. The old curator and coverage
+planner, v2 request/goal routes and planner, release decision engine, old
+search/suggestion routes, auto-organiser and filename rescan, the parser's
+Small tier and the one-shot description call behind `/api/resolve` were then
+removed; the index query the Fetch tools use moved to `services/apibay.py`.
+Saved request/goal history still migrates and loads.
 Current artwork, fixture attribution, installed data and historical storage
 readers are preserved. Two superseded design documents were consolidated into
 the interface contract and removed; historical source links are pinned.

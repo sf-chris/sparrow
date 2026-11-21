@@ -170,50 +170,6 @@ class SparrowConfig:
         return cls(**d)
 
 
-# ─── Search ──────────────────────────────────────────────────────────────────
-
-@dataclass
-class SearchResult:
-    id: str
-    name: str
-    info_hash: str
-    seeders: int
-    leechers: int
-    size_bytes: int
-    added_ts: int
-    category: str
-    source: str
-    imdb_id: Optional[str] = None
-    uploader: str = ""
-    magnet_url: str = ""
-
-    @property
-    def size_human(self) -> str:
-        b = self.size_bytes
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if b < 1024:
-                return f"{b:.1f} {unit}"
-            b /= 1024
-        return f"{b:.1f} PB"
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "info_hash": self.info_hash,
-            "seeders": self.seeders,
-            "leechers": self.leechers,
-            "size_bytes": self.size_bytes,
-            "size_human": self.size_human,
-            "added_ts": self.added_ts,
-            "category": self.category,
-            "source": self.source,
-            "imdb_id": self.imdb_id,
-            "uploader": self.uploader,
-            "magnet_url": self.magnet_url,
-        }
-
-
 # ─── Downloads ───────────────────────────────────────────────────────────────
 
 @dataclass
@@ -351,6 +307,8 @@ class LibraryItem:
 
 
 # ─── Requests ────────────────────────────────────────────────────────────────
+# Retired v2 requests and curator goals. Nothing creates or updates them now;
+# the model remains so installed history still migrates and loads.
 
 @dataclass
 class MediaRequest:
@@ -388,19 +346,6 @@ class MediaRequest:
     next_check_at: float = 0.0   # curator cooldown; 0 = check ASAP
     check_interval: float = 0.0  # current backoff interval in seconds
     paused: bool = False         # user paused the goal
-
-    def tried_hashes(self) -> set[str]:
-        return {a.get("info_hash", "").lower() for a in self.attempts if a.get("info_hash")}
-
-    def record_attempt(self, info_hash: str, name: str, outcome: str, note: str = "") -> None:
-        self.attempts.append({
-            "ts": time.time(),
-            "info_hash": (info_hash or "").lower(),
-            "name": name,
-            "outcome": outcome,
-            "note": note,
-        })
-        self.attempts = self.attempts[-200:]
 
     def to_dict(self) -> dict:
         return {
