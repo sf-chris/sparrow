@@ -3152,6 +3152,9 @@ button.link:hover {
 .crumbs [aria-current] {
   font-weight: 850;
 }
+.crumbs button {
+  text-align: left;
+}
 .picker-list {
   max-height: min(20rem, 38vh);
   overflow-y: auto;

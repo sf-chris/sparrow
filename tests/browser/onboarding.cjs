@@ -146,7 +146,10 @@ const out =
     const sheet = page.getByRole("dialog");
     const rows = sheet.locator(".picker-list button");
     await sheet.getByRole("button", { name: /^Incoming/ }).first().click();
+    const here = (name) =>
+      sheet.locator("[aria-current=location]").filter({ hasText: name }).waitFor();
     await rows.filter({ hasText: /^library$/ }).first().click();
+    await here(/^library$/);
     await sheet.getByRole("button", { name: "New folder", exact: true }).click();
     await sheet.getByLabel("New folder name").fill("bad/name");
     await sheet
@@ -154,7 +157,7 @@ const out =
       .waitFor();
     await sheet.getByLabel("New folder name").fill("nested");
     await sheet.getByRole("button", { name: "Create", exact: true }).click();
-    await sheet.locator("[aria-current=location]").filter({ hasText: "nested" }).waitFor();
+    await here(/^nested$/);
     await sheet.getByRole("button", { name: "Use this folder for Incoming" }).click();
     await sheet
       .getByRole("alert")
@@ -166,8 +169,11 @@ const out =
     );
     await audit("setup-folder-error");
     await sheet.locator(".crumbs button").last().click();
+    await here(/^library$/);
     await sheet.locator(".crumbs button").last().click();
+    await rows.filter({ hasText: /^incoming$/ }).first().waitFor();
     await rows.filter({ hasText: /^incoming$/ }).first().click();
+    await here(/^incoming$/);
     await sheet.getByRole("button", { name: "Use this folder for Incoming" }).click();
     await sheet.getByRole("button", { name: "Save folders", exact: true }).click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
