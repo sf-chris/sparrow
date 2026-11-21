@@ -143,7 +143,7 @@ export default function App() {
               />
               <Route path="/items/:itemId" element={<Title user={user} />} />
               <Route path="/watch/:assetId" element={<Watch />} />
-              <Route path="/activity" element={<Activity />} />
+              <Route path="/activity" element={<Activity user={user} />} />
               <Route path="/discover" element={<Discover />} />
               <Route
                 path="/settings"
