@@ -175,14 +175,12 @@ def _tail_log_lines(path: Path, n: int) -> list[str]:
 from .storage import Storage
 from .models import (
     Download, LibraryItem, SparrowConfig, TorrentClientConfig,
-    MediaType, Quality, DownloadStatus, TorrentClientType, MediaRequest,
-    RequestStatus, RequestStrategy
+    MediaType, Quality, DownloadStatus, TorrentClientType,
 )
 from .services import torrent_client as tc_svc
 from .services import search_engine
 from .services import metadata_service as meta_svc
 from .services import file_organizer
-from .services import request_service
 from .services import release_parser
 from .services.library_view import build_library_view
 from .agents.service import AgentService
@@ -427,7 +425,6 @@ async def download_progress_loop():
                             asyncio.create_task(auto_organize_download(dl.id))
 
                 await storage.update_download(dl.id, **updates)
-                await update_requests_for_download(dl.id)
                 await broadcast({"type": "download_update", "data": {**dl.to_dict(), **updates, "status": new_status.value}})
 
         except asyncio.CancelledError:
@@ -455,34 +452,6 @@ def _series_root(dst: Path) -> Path:
             if rel.parts:
                 return parent / rel.parts[0]
     return dst.parent
-
-
-async def update_requests_for_download(download_id: str):
-    """Refresh request progress when a linked download changes state."""
-    dl = storage.get_download(download_id)
-    if dl and dl.metadata.get("goal_id"):
-        # Retired curator goals are history only; their status is not recomputed.
-        return
-    for req in storage.get_requests():
-        if download_id not in req.download_ids:
-            continue
-        linked = [storage.get_download(dl_id) for dl_id in req.download_ids]
-        linked = [dl for dl in linked if dl]
-        if not linked:
-            continue
-        complete_states = {DownloadStatus.ORGANIZED, DownloadStatus.COMPLETED, DownloadStatus.SEEDING}
-        done = sum(1 for dl in linked if dl.status in complete_states)
-        if done == len(linked):
-            status = RequestStatus.COMPLETE if not req.missing_episodes else RequestStatus.PARTIAL
-        elif any(dl.status == DownloadStatus.ERROR for dl in linked):
-            status = RequestStatus.PARTIAL if done else RequestStatus.FAILED
-        elif any(dl.status == DownloadStatus.ORGANIZING for dl in linked):
-            status = RequestStatus.ORGANIZING
-        else:
-            status = RequestStatus.DOWNLOADING
-        refreshed = await storage.update_request(req.id, status=status, progress_found=done)
-        if refreshed:
-            await broadcast({"type": "request_update", "data": refreshed.to_dict()})
 
 
 async def enrich_download(download_id: str):
@@ -872,22 +841,6 @@ class OrganizeRequest(BaseModel):
     download_id: str
     media_type: Optional[str] = None
     tmdb_id: Optional[int] = None
-
-
-class CreateMediaRequest(BaseModel):
-    query: str
-    quality: Optional[str] = None
-
-
-class CreateSelectedMediaRequest(BaseModel):
-    query: str
-    quality: Optional[str] = None
-    resolved: dict = {}
-    selected: dict = {}
-    selected_items: list[dict] = []
-    strategy: str = "movie"
-    score: dict = {}
-    summary: str = ""
 
 
 # ─── Config routes ────────────────────────────────────────────────────────────
@@ -1371,168 +1324,6 @@ async def search_log(limit: int = 50):
         return list(reversed(entries[-limit:]))
     except Exception:
         return []
-
-
-# ─── Request routes ───────────────────────────────────────────────────────────
-
-@app.get("/api/requests")
-async def list_requests():
-    return [r.to_dict() for r in storage.get_requests()]
-
-
-@app.post("/api/requests")
-async def create_request(req: CreateMediaRequest):
-    query = req.query.strip()
-    if not query:
-        raise HTTPException(400, "Request query is required")
-    config = storage.get_config()
-    quality = req.quality or config.quality_preference.value
-    media_request = MediaRequest(
-        id=str(uuid.uuid4()),
-        query=query,
-        quality=quality,
-    )
-    await storage.add_request(media_request)
-    await broadcast({"type": "request_added", "data": media_request.to_dict()})
-    asyncio.create_task(request_service.process_request(storage, media_request.id, DATA_DIR, broadcast))
-    return media_request.to_dict()
-
-
-@app.post("/api/requests/selected")
-async def create_selected_request(req: CreateSelectedMediaRequest):
-    query = req.query.strip()
-    if not query:
-        raise HTTPException(400, "Request query is required")
-    selected_items = req.selected_items or ([req.selected] if req.selected else [])
-    selected_items = [item for item in selected_items if item and item.get("magnet_url")]
-    if not selected_items:
-        raise HTTPException(400, "Selected release is missing a magnet URL")
-    selected = selected_items[0]
-
-    config = storage.get_config()
-    if config.torrent_client.type == TorrentClientType.NONE:
-        raise HTTPException(400, "No torrent client configured.")
-    if not config.staging_dir:
-        raise HTTPException(400, "No staging directory configured.")
-
-    resolved = req.resolved or {}
-    media_type = MediaType(resolved.get("media_type") or selected.get("media_type") or "unknown")
-    tmdb_id = resolved.get("tmdb_id")
-    try:
-        season = int(resolved.get("season")) if resolved.get("season") is not None else None
-    except Exception:
-        season = None
-    try:
-        episode_count = int(resolved.get("episode_count")) if resolved.get("episode_count") is not None else None
-    except Exception:
-        episode_count = None
-
-    strategy_value = req.strategy if req.strategy in RequestStrategy._value2member_map_ else ("season_pack" if media_type == MediaType.TV else "movie")
-    media_request = MediaRequest(
-        id=str(uuid.uuid4()),
-        query=query,
-        quality=req.quality or resolved.get("quality") or config.quality_preference.value,
-        title=resolved.get("title") or query,
-        media_type=media_type,
-        season=season,
-        episode_count=episode_count,
-        tmdb_id=tmdb_id,
-        status=RequestStatus.EVALUATING,
-        strategy=RequestStrategy(strategy_value),
-        decision_summary=req.summary or f"User selected release: {selected.get('name', 'torrent')}",
-        evaluation={
-            "selected": selected,
-            "score": req.score,
-            "strategy": strategy_value,
-            "selection_method": "user_confirmed",
-            "reason": req.summary,
-        },
-        progress_total=len(selected_items) or episode_count or 1,
-    )
-    await storage.add_request(media_request)
-    await broadcast({"type": "request_added", "data": media_request.to_dict()})
-
-    try:
-        manager = tc_svc.TorrentManager(config.torrent_client)
-        queued: list[Download] = []
-        for item in selected_items:
-            torrent_hash = await manager.add_magnet(item["magnet_url"], config.staging_dir)
-            dl = Download(
-                id=str(uuid.uuid4()),
-                name=item.get("name") or "Selected release",
-                magnet_url=item["magnet_url"],
-                media_type=media_type,
-                status=DownloadStatus.QUEUED,
-                torrent_hash=torrent_hash or item.get("info_hash", ""),
-                tmdb_id=tmdb_id,
-                size_bytes=int(item.get("size_bytes") or 0),
-            )
-            await storage.add_download(dl)
-            await storage.link_request_download(media_request.id, dl.id)
-            queued.append(dl)
-        await storage.update_request(
-            media_request.id,
-            status=RequestStatus.DOWNLOADING,
-            progress_found=len(queued),
-            download_ids=[dl.id for dl in queued],
-        )
-        for dl in queued:
-            await broadcast({"type": "download_added", "data": dl.to_dict()})
-        refreshed = storage.get_request(media_request.id)
-        if refreshed:
-            await broadcast({"type": "request_update", "data": refreshed.to_dict()})
-            return refreshed.to_dict()
-        return media_request.to_dict()
-    except Exception as exc:
-        await storage.update_request(media_request.id, status=RequestStatus.FAILED, error_message=str(exc))
-        refreshed = storage.get_request(media_request.id)
-        if refreshed:
-            await broadcast({"type": "request_update", "data": refreshed.to_dict()})
-            return refreshed.to_dict()
-        raise
-
-
-@app.post("/api/requests/preview")
-async def preview_request(req: CreateMediaRequest):
-    query = req.query.strip()
-    if not query:
-        raise HTTPException(400, "Request query is required")
-    config = storage.get_config()
-    quality = req.quality or config.quality_preference.value
-    return await request_service.preview_request_plan(query, quality, config, DATA_DIR)
-
-
-@app.get("/api/requests/{request_id}")
-async def get_request(request_id: str):
-    req = storage.get_request(request_id)
-    if not req:
-        raise HTTPException(404, "Request not found")
-    return req.to_dict()
-
-
-@app.post("/api/requests/{request_id}/retry")
-async def retry_request(request_id: str):
-    req = storage.get_request(request_id)
-    if not req:
-        raise HTTPException(404, "Request not found")
-    refreshed = await storage.update_request(
-        request_id,
-        status=RequestStatus.PENDING,
-        error_message="",
-        decision_summary="Retry queued",
-    )
-    await broadcast({"type": "request_update", "data": refreshed.to_dict()})
-    asyncio.create_task(request_service.process_request(storage, request_id, DATA_DIR, broadcast))
-    return refreshed.to_dict()
-
-
-@app.delete("/api/requests/{request_id}")
-async def delete_request(request_id: str):
-    ok = await storage.delete_request(request_id)
-    if not ok:
-        raise HTTPException(404, "Request not found")
-    await broadcast({"type": "request_removed", "data": {"id": request_id}})
-    return {"success": True}
 
 
 # ─── Activity ──────────────────────────────────────────────────────────────────

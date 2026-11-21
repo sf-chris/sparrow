@@ -210,44 +210,6 @@ def rank_results(
     return sorted(scored, key=lambda pair: pair[1]["score"], reverse=True)
 
 
-def choose_season_strategy(
-    pack_results: list[SearchResult],
-    episode_results: list[SearchResult],
-    quality: Quality = Quality.Q_1080P,
-    query: str = "",
-    title: str = "",
-    media_type: MediaType = MediaType.TV,
-    season: int | None = None,
-    episode_count: int = 0,
-    prefer_smaller: bool = False,
-    prefer_season_packs: bool = True,
-    season_pack_size_limit_gb: float = 0.0,
-    year: int | None = None,
-    tmdb_id: int | None = None,
-    imdb_id: str | None = None,
-    aliases: list[str] | None = None,
-) -> dict:
-    """Choose a season pack when it is good enough; otherwise fall back to episodes."""
-    from .release_decision_engine import ReleaseContext, choose_season_release
-
-    context = ReleaseContext(
-        query=query or title,
-        title=title or query,
-        media_type=media_type,
-        quality=quality,
-        season=season,
-        episode_count=episode_count,
-        year=year,
-        tmdb_id=tmdb_id,
-        imdb_id=imdb_id,
-        aliases=aliases or [],
-        prefer_smaller=prefer_smaller,
-        prefer_season_packs=prefer_season_packs,
-        season_pack_size_limit_gb=season_pack_size_limit_gb,
-    )
-    return choose_season_release(pack_results, episode_results, context)
-
-
 # ─── Library / download pre-check ────────────────────────────────────────────
 
 def _fuzzy_match(a: str, b: str) -> bool:
