@@ -134,7 +134,8 @@ What it sets up:
   download. ffmpeg enables media checks. The command prints how to add either.
 
 Folders can only be chosen inside the computer's own places: its home, drives
-and mounted disks (in Docker, the mounted folders). Choose **Change folders** on
+and mounted disks (in Docker, the mounted folders). For this server, set
+`SPARROW_FOLDER_ROOTS` (paths separated by `:`) to offer other places instead. Choose **Change folders** on
 its card to move them later; other library disks keep their place. Reconnect
 runs the same command with a fresh code and keeps the chosen folders.
 

@@ -142,23 +142,34 @@ const out =
     await page
       .getByRole("button", { name: /^(Choose|Change) folders$/ })
       .click();
-    await page
-      .getByLabel("Library folder", { exact: true })
-      .fill(path.join(process.env.SPARROW_BROWSER_STATE, "library"));
-    await page
-      .getByLabel("Incoming folder", { exact: true })
-      .fill(path.join(process.env.SPARROW_BROWSER_STATE, "library", "nested"));
-    await page
-      .getByRole("button", { name: "Save folders", exact: true })
-      .click();
-    await page.getByRole("dialog").getByRole("alert").waitFor();
+    // Folders are chosen by browsing this server's places (the fixture's state).
+    const sheet = page.getByRole("dialog");
+    const rows = sheet.locator(".picker-list button");
+    await sheet.getByRole("button", { name: /^Incoming/ }).first().click();
+    await rows.filter({ hasText: /^library$/ }).first().click();
+    await sheet.getByRole("button", { name: "New folder", exact: true }).click();
+    await sheet.getByLabel("New folder name").fill("bad/name");
+    await sheet
+      .getByText('Folder names can’t contain / \\ : * ? " < > |', { exact: true })
+      .waitFor();
+    await sheet.getByLabel("New folder name").fill("nested");
+    await sheet.getByRole("button", { name: "Create", exact: true }).click();
+    await sheet.locator("[aria-current=location]").filter({ hasText: "nested" }).waitFor();
+    await sheet.getByRole("button", { name: "Use this folder for Incoming" }).click();
+    await sheet
+      .getByRole("alert")
+      .filter({ hasText: "Incoming can’t be inside Library" })
+      .waitFor();
+    assert.equal(
+      await sheet.getByRole("button", { name: "Save folders", exact: true }).isDisabled(),
+      true,
+    );
     await audit("setup-folder-error");
-    await page
-      .getByLabel("Incoming folder", { exact: true })
-      .fill(path.join(process.env.SPARROW_BROWSER_STATE, "incoming"));
-    await page
-      .getByRole("button", { name: "Save folders", exact: true })
-      .click();
+    await sheet.locator(".crumbs button").last().click();
+    await sheet.locator(".crumbs button").last().click();
+    await rows.filter({ hasText: /^incoming$/ }).first().click();
+    await sheet.getByRole("button", { name: "Use this folder for Incoming" }).click();
+    await sheet.getByRole("button", { name: "Save folders", exact: true }).click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page

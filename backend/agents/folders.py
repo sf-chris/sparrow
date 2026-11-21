@@ -103,7 +103,8 @@ def starting_points(configured=None, exclude=()) -> list[Path]:
         else:
             candidates += [Path(p) for p in ("/media", "/mnt", "/srv")]
             candidates += _linux_disks()
-    excluded = [Path(p).resolve() for p in exclude if p]
+    # Places someone set are used as given; found ones never include Sparrow's state.
+    excluded = [] if configured else [Path(p).resolve() for p in exclude if p]
     points: list[Path] = []
     for candidate in candidates:
         try:

@@ -49,7 +49,9 @@
     $app = Join-Path $dir 'app'
     Invoke-WebRequest -UseBasicParsing -Uri "$Server/api/v1/node/setup/$Code/package.zip" -OutFile $archive
     if (Test-Path $fresh) { Remove-Item -Recurse -Force $fresh }
-    Expand-Archive -Path $archive -DestinationPath $fresh -Force
+    # .NET's own unzip: Windows PowerShell 5.1's Expand-Archive is unreliable.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($archive, $fresh)
     Remove-Item -Force $archive
     if (Test-Path $app) { Remove-Item -Recurse -Force $app }
     Move-Item $fresh $app
@@ -125,5 +127,8 @@
     Write-Host ''
     $message = if ($why) { $why } else { $_.Exception.Message }
     Write-Host $message -ForegroundColor Red
+    if ($why -and $_.Exception.Message -ne $why) {
+      Write-Host "($($_.Exception.Message))" -ForegroundColor DarkGray
+    }
   }
 }
