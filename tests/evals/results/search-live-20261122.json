@@ -1,0 +1,699 @@
+{
+ "version": 1,
+ "mode": "live",
+ "batch": "search-20261122-193144",
+ "revision": "8b25fb85ef4a4a870f7220f6a5d2e9338470299b",
+ "state": "",
+ "seconds": 1899,
+ "models": {
+  "fetch": "gpt-6-luna",
+  "smart": "gpt-6-sol"
+ },
+ "targets": {
+  "search_median": 0.02,
+  "search_p90": 0.1,
+  "escalation_rate": 0.15,
+  "subtitles_per_title": 1.0
+ },
+ "stats": {
+  "titles": 28,
+  "search_total": 0.4271,
+  "search_median": 0.0036,
+  "search_p90": 0.0648,
+  "search_mean": 0.0153,
+  "escalated": 3,
+  "escalation_rate": 0.107,
+  "search_by_phase": {
+   "escalated_search": 0.3262,
+   "pick_review": 0.0682,
+   "scout_pick": 0.0327
+  },
+  "live_searches": 120,
+  "cached_searches": 26,
+  "rate_limited": 0,
+  "model_errors": 0,
+  "reviews": {
+   "reviews": 27,
+   "approved": 21,
+   "reviewer_chose": 4,
+   "vetoed": 2,
+   "approved_then_abandoned": 0,
+   "vetoed_then_chosen": 2,
+   "false_vetoes": 0,
+   "cost": 0.06822
+  }
+ },
+ "met": {
+  "search_median": true,
+  "search_p90": true,
+  "escalation_rate": true
+ },
+ "titles": [
+  {
+   "key": "naruto",
+   "set": "anime",
+   "title": "Naruto",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00298,
+   "phases": {
+    "scout_pick": 0.0013,
+    "pick_review": 0.00167
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 5,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 42
+  },
+  {
+   "key": "one-piece",
+   "set": "anime",
+   "title": "One Piece",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.0036,
+   "phases": {
+    "scout_pick": 0.00148,
+    "pick_review": 0.00212
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 5,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 42
+  },
+  {
+   "key": "cowboy-bebop",
+   "set": "anime",
+   "title": "Cowboy Bebop",
+   "wanted": "S01E05",
+   "outcome": "chosen",
+   "search_cost": 0.06475,
+   "phases": {
+    "scout_pick": 0.0019,
+    "pick_review": 0.00286,
+    "escalated_search": 0.05999
+   },
+   "model_calls": 15,
+   "escalated": true,
+   "searches": 10,
+   "cached_searches": 4,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 0,
+    "vetoed": 1
+   },
+   "seconds_to_choice": 643
+  },
+  {
+   "key": "samurai-champloo",
+   "set": "anime",
+   "title": "Samurai Champloo",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.0044,
+   "phases": {
+    "scout_pick": 0.00129,
+    "pick_review": 0.00311
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 2,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 0,
+    "vetoed": 1
+   },
+   "seconds_to_choice": 35
+  },
+  {
+   "key": "tokyo-ghoul",
+   "set": "anime",
+   "title": "Tokyo Ghoul",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00338,
+   "phases": {
+    "scout_pick": 0.00098,
+    "pick_review": 0.00239
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 6,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 40
+  },
+  {
+   "key": "psycho-pass",
+   "set": "anime",
+   "title": "Psycho-Pass",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00325,
+   "phases": {
+    "scout_pick": 0.00119,
+    "pick_review": 0.00206
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 3,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 34
+  },
+  {
+   "key": "parasyte",
+   "set": "anime",
+   "title": "Parasyte -the maxim-",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00456,
+   "phases": {
+    "scout_pick": 0.0011,
+    "pick_review": 0.00346
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 2,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 0,
+    "vetoed": 1
+   },
+   "seconds_to_choice": 28
+  },
+  {
+   "key": "steins-gate",
+   "set": "anime",
+   "title": "Steins;Gate",
+   "wanted": "S01E03",
+   "outcome": "chosen",
+   "search_cost": 0.00461,
+   "phases": {
+    "scout_pick": 0.00136,
+    "pick_review": 0.00325
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 5,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 0,
+    "vetoed": 1
+   },
+   "seconds_to_choice": 592
+  },
+  {
+   "key": "hunter-x-hunter",
+   "set": "anime",
+   "title": "Hunter x Hunter",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00372,
+   "phases": {
+    "scout_pick": 0.00148,
+    "pick_review": 0.00224
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 6,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 608
+  },
+  {
+   "key": "chainsaw-man",
+   "set": "anime",
+   "title": "Chainsaw Man",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00391,
+   "phases": {
+    "scout_pick": 0.00144,
+    "pick_review": 0.00247
+   },
+   "model_calls": 7,
+   "escalated": false,
+   "searches": 5,
+   "cached_searches": 2,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 583
+  },
+  {
+   "key": "mob-psycho-100",
+   "set": "anime",
+   "title": "Mob Psycho 100",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.16708,
+   "phases": {
+    "scout_pick": 0.00133,
+    "escalated_search": 0.16575
+   },
+   "model_calls": 11,
+   "escalated": true,
+   "searches": 14,
+   "cached_searches": 8,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 0,
+    "approved": 0,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 1731
+  },
+  {
+   "key": "violet-evergarden",
+   "set": "anime",
+   "title": "Violet Evergarden",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.10414,
+   "phases": {
+    "scout_pick": 0.00166,
+    "pick_review": 0.00203,
+    "escalated_search": 0.10045
+   },
+   "model_calls": 14,
+   "escalated": true,
+   "searches": 21,
+   "cached_searches": 12,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 0,
+    "vetoed": 1
+   },
+   "seconds_to_choice": 1227
+  },
+  {
+   "key": "my-hero-academia",
+   "set": "anime",
+   "title": "My Hero Academia",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.0033,
+   "phases": {
+    "scout_pick": 0.00136,
+    "pick_review": 0.00194
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 2,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 83
+  },
+  {
+   "key": "erased",
+   "set": "anime",
+   "title": "ERASED",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00366,
+   "phases": {
+    "scout_pick": 0.00163,
+    "pick_review": 0.00204
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 6,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 601
+  },
+  {
+   "key": "oshi-no-ko",
+   "set": "anime",
+   "title": "【OSHI NO KO】",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00313,
+   "phases": {
+    "scout_pick": 0.00115,
+    "pick_review": 0.00198
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 6,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 598
+  },
+  {
+   "key": "dragon-ball-z",
+   "set": "anime",
+   "title": "Dragon Ball Z",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00403,
+   "phases": {
+    "scout_pick": 0.0018,
+    "pick_review": 0.00223
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 6,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 537
+  },
+  {
+   "key": "spirited-away",
+   "set": "films",
+   "title": "Spirited Away",
+   "wanted": "2001",
+   "outcome": "chosen",
+   "search_cost": 0.0033,
+   "phases": {
+    "scout_pick": 0.0009,
+    "pick_review": 0.0024
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 1,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 545
+  },
+  {
+   "key": "parasite",
+   "set": "films",
+   "title": "Parasite",
+   "wanted": "2019",
+   "outcome": "chosen",
+   "search_cost": 0.00342,
+   "phases": {
+    "scout_pick": 0.00094,
+    "pick_review": 0.00248
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 1,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 544
+  },
+  {
+   "key": "oldboy",
+   "set": "films",
+   "title": "Oldboy",
+   "wanted": "2003",
+   "outcome": "chosen",
+   "search_cost": 0.00451,
+   "phases": {
+    "scout_pick": 0.00098,
+    "pick_review": 0.00353
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 1,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 544
+  },
+  {
+   "key": "dune",
+   "set": "films",
+   "title": "Dune",
+   "wanted": "2021",
+   "outcome": "chosen",
+   "search_cost": 0.00324,
+   "phases": {
+    "scout_pick": 0.00065,
+    "pick_review": 0.00259
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 1,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 12
+  },
+  {
+   "key": "amelie",
+   "set": "films",
+   "title": "Amélie",
+   "wanted": "2001",
+   "outcome": "chosen",
+   "search_cost": 0.00352,
+   "phases": {
+    "scout_pick": 0.00069,
+    "pick_review": 0.00283
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 1,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 16
+  },
+  {
+   "key": "the-thing",
+   "set": "films",
+   "title": "The Thing",
+   "wanted": "1982",
+   "outcome": "chosen",
+   "search_cost": 0.00353,
+   "phases": {
+    "scout_pick": 0.00084,
+    "pick_review": 0.00269
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 1,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 0,
+    "vetoed": 1
+   },
+   "seconds_to_choice": 21
+  },
+  {
+   "key": "breaking-bad",
+   "set": "tv",
+   "title": "Breaking Bad",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.0038,
+   "phases": {
+    "scout_pick": 0.00079,
+    "pick_review": 0.003
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 2,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 27
+  },
+  {
+   "key": "the-office",
+   "set": "tv",
+   "title": "The Office",
+   "wanted": "S02E01",
+   "outcome": "chosen",
+   "search_cost": 0.00339,
+   "phases": {
+    "scout_pick": 0.00087,
+    "pick_review": 0.00252
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 2,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 23
+  },
+  {
+   "key": "fleabag",
+   "set": "tv",
+   "title": "Fleabag",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00308,
+   "phases": {
+    "scout_pick": 0.0007,
+    "pick_review": 0.00238
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 2,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 19
+  },
+  {
+   "key": "severance",
+   "set": "tv",
+   "title": "Severance",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00376,
+   "phases": {
+    "scout_pick": 0.0011,
+    "pick_review": 0.00266
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 1,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 16
+  },
+  {
+   "key": "shogun",
+   "set": "tv",
+   "title": "Shōgun",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.00348,
+   "phases": {
+    "scout_pick": 0.00101,
+    "pick_review": 0.00247
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 1,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 20
+  },
+  {
+   "key": "doctor-who",
+   "set": "tv",
+   "title": "Doctor Who",
+   "wanted": "S01E02",
+   "outcome": "chosen",
+   "search_cost": 0.0036,
+   "phases": {
+    "scout_pick": 0.00078,
+    "pick_review": 0.00283
+   },
+   "model_calls": 6,
+   "escalated": false,
+   "searches": 2,
+   "cached_searches": 0,
+   "rate_limited": 0,
+   "picks": {
+    "proposed": 1,
+    "approved": 1,
+    "vetoed": 0
+   },
+   "seconds_to_choice": 23
+  }
+ ]
+}
