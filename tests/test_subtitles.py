@@ -570,6 +570,33 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         listed = self.subtitles.tracks(self.owner, self.asset)
         self.assertEqual([t["state"] for t in listed if t["source"] == "embedded"], ["rejected"])
 
+    async def test_a_source_already_set_aside_is_not_tried_again(self):
+        await self.manager(review=True)
+        (self.library / "fixture.en.srt").write_text(srt([t + LATE for t in VOICE]))
+        lines, captions = self.checked_review()
+        calls = [
+            response("use_source", {"source": "sidecar:fixture.en.srt"}),
+            response("use_source", {"source": "embedded:3"}),  # set aside a moment ago
+            response("gloss", {"page": 1, "lines": lines}),
+            response("judge", {"page": 1, "captions": captions, "missing": []}),
+            response("verdict", {"approved": True, "reason": "The sidecar matches throughout."}),
+        ]
+        body = {"audio_index": self.facts["audio_tracks"][1]["index"], "verify": True}
+        task = await self.request(body, calls=calls)
+        self.assertEqual(task["state"], "ready", task["data"]["message"])
+        outcomes = [(a["source_id"], a["outcome"]) for a in task["data"]["attempts"]]
+        self.assertIn(("embedded:3", "set_aside"), outcomes)
+        self.assertNotIn(("embedded:3", "failed"), outcomes)
+        session = self.service.store.get_session(task["data"]["review_session"])
+        errors = [
+            block["content"]
+            for message in session.messages
+            if message["role"] == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("is_error")
+        ]
+        self.assertTrue(any("already checked and set aside" in e for e in errors), errors)
+
     async def test_a_human_made_track_is_verified_never_edited(self):
         await self.manager(review=True)
         lines, captions = self.checked_review()
