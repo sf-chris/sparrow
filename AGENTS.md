@@ -48,7 +48,12 @@ Everything new lives in `backend/agents/`:
 - `evidence.py` — immutable oversized tool observations, atomic with invocation
   receipts; private session retrieval/listing and serialized storage quotas.
 - `ledger.py` — the cost ledger: every model and tool call with its trigger,
-  cost and facts; reports, timelines, exports, backfill and a model audit.
+  cost, facts and profile, plus every guardrail that acted; reports, timelines,
+  exports, backfill and a model audit.
+- `profiles.py` — one versioned profile per agent role: model, the effort
+  actually sent, call/output bounds and prompt/tool versions.
+  `python -m backend.agents.profiles` lists them.
+- `escalation.py` — the escalated Fetch search's per-wave allowance.
 - `scout.py`, `acquisition_review.py`, `release_match.py` — code search, judging
   and ranking of releases; the smart model's review of the cheap model's pick.
 - `discovery.py` — persistent, scoped Discovery tool loop with inspected title
@@ -82,9 +87,11 @@ Everything new lives in `backend/agents/`:
   indexer allowance (no model turns) and repeats come from a cache. A TV
   transfer downloads only the wanted episodes and their subtitle files, by
   name once the torrent's list is known. Hard searches escalate the session
-  to the smart model with the raw search tools. Handles stalls (removing a
-  transfer deletes its unfinished files) and reconciles inventory. Woken by
-  events; hibernates between.
+  to the smart model with the raw search tools, in waves with a small allowance
+  each: a new wave needs a genuinely new candidate or a recorded identity
+  conflict, and a request's repeated searches come from the cache. Handles
+  stalls (removing a transfer deletes its unfinished files) and reconciles
+  inventory. Woken by events; hibernates between.
 - **Media Agent** (cheap tier, self-escalates, one session per landed
   download): probes every file with ffprobe, matches durations against TMDB
   runtimes, detects samples/fakes, names and places files, updates
@@ -138,6 +145,14 @@ Everything new lives in `backend/agents/`:
   including timing measurement and correction for foreign dialogue, is built in
   and makes no model call; no setup-agent implementation is planned now.
   Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
+  These defaults are the role profiles in `profiles.py`; sessions and ledger
+  rows record the profile id and version they ran under. Effort is sent only
+  where a model accepts it (never to Haiku 4.5). `SPARROW_PROFILES` (JSON per
+  role) overrides fields for evaluations. Escalated Fetch searching gets $0.02
+  of smart-model calls per wave, up to three waves; two note-only turns make
+  later timer wakes back off. Spend counts per request or subscription across
+  every session and profile, so neither a new profile nor a new session resets
+  an allowance.
 - Agent-managed downloads carry `metadata.agent_managed` — the legacy download
   poller and its metadata enrichment must skip them (the Media Agent owns landing).
 
