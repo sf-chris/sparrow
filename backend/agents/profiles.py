@@ -58,7 +58,7 @@ OPENAI_REASONING = re.compile(r"^(gpt-[56]|o[134])")
 
 # Fields an operator may override per role in SPARROW_PROFILES.
 OVERRIDABLE = {"model": str, "effort": str, "max_steps": int, "max_tokens": int, "max_dollars": float,
-               "wave_dollars": float, "waves": int}
+               "note_only_limit": int, "idle_backoff": float, "wave_dollars": float, "waves": int}
 
 
 @dataclass(frozen=True)
@@ -74,6 +74,8 @@ class Role:
     max_tokens: int = 4096  # 0: the provider's own limit (nothing sent)
     max_dollars: float = 0.0  # allowance per budget scope; 0 is the household policy
     cache: bool = False
+    note_only_limit: int = 0  # idle turns before timer wakes back off; 0 never
+    idle_backoff: float = 0.0  # seconds of the first back-off, doubling
     wave_dollars: float = 0.0  # smart-model search allowance per escalation wave; 0 unbounded
     waves: int = 0  # escalation waves a request may open without the person asking
     prompt: tuple = ()  # module:attribute sources of the standing prompt
@@ -99,6 +101,7 @@ ROLES: dict[str, Role] = {
         prompt=("backend.agents.discovery:Discovery.register",), tools=("backend.agents.discovery:Discovery.tools",)),
     "fetch_scout": Role(
         "fetch", "fetch", "Fetch: the cheap model reads the scout's short list and proposes one row",
+        note_only_limit=2, idle_backoff=3600,
         prompt=("backend.agents.prompts:fetch_system", "backend.agents.prompts:SCOUT_WORKFLOW",
                 "backend.agents.prompts:SHARED_RULES"), tools=_FETCH_TOOLS),
     "fetch_review": Role(
@@ -108,14 +111,16 @@ ROLES: dict[str, Role] = {
         tools=("backend.agents.acquisition_review:REVIEW_SCHEMA", "backend.agents.acquisition_review:review")),
     "fetch_escalation": Role(
         "fetch", "smart", "Fetch: the smart model searches with the raw tools after the scout gave up",
-        wave_dollars=0.02, waves=3,
+        note_only_limit=2, idle_backoff=3600, wave_dollars=0.02, waves=3,
         prompt=("backend.agents.prompts:fetch_system", "backend.agents.prompts:MANUAL_WORKFLOW",
                 "backend.agents.prompts:SHARED_RULES"), tools=_FETCH_TOOLS),
     "media": Role(
         "media", "cheap", "Media: probes, names, places and records a landed download",
+        note_only_limit=2, idle_backoff=3600,
         prompt=("backend.agents.prompts:media_system", "backend.agents.prompts:SHARED_RULES"), tools=_MEDIA_TOOLS),
     "media_escalation": Role(
         "media", "smart", "Media after escalate_model: conflicting evidence or ambiguous numbering",
+        note_only_limit=2, idle_backoff=3600,
         prompt=("backend.agents.prompts:media_system", "backend.agents.prompts:SHARED_RULES"), tools=_MEDIA_TOOLS),
     "librarian": Role(
         "librarian", "cheap", "Librarian: one person's subscription, eligible gaps and opted-in upgrades",
@@ -157,6 +162,8 @@ class Profile:
     max_tokens: int
     max_dollars: float
     cache: bool
+    note_only_limit: int
+    idle_backoff: float
     wave_dollars: float
     waves: int
     prompt: str  # version of the standing prompt's source
@@ -284,6 +291,7 @@ def resolve(role: str, cfg=None, model: str = "") -> Profile:
         effort = custom["effort"]
     fields = {
         "max_steps": spec.max_steps, "max_tokens": spec.max_tokens, "max_dollars": _max_dollars(spec),
+        "note_only_limit": spec.note_only_limit, "idle_backoff": spec.idle_backoff,
         "wave_dollars": spec.wave_dollars, "waves": spec.waves,
     }
     fields.update({k: v for k, v in custom.items() if k in fields})
@@ -339,7 +347,7 @@ def from_spec(spec, model: str = "") -> Profile:
     return _versioned(Profile(
         id=spec.kind, kind=spec.kind, tier="spec", model=model, effort=spec.effort,
         effort_sent=effort_for(model, spec.effort), max_steps=spec.max_steps, max_tokens=spec.max_tokens,
-        max_dollars=spec.max_dollars, cache=spec.cache, wave_dollars=0.0, waves=0,
+        max_dollars=spec.max_dollars, cache=spec.cache, note_only_limit=0, idle_backoff=0.0, wave_dollars=0.0, waves=0,
         prompt="", tools="",
     ))
 
@@ -395,6 +403,8 @@ def table(profiles: list[Profile]) -> str:
             bounds.append(f"${p.max_dollars:g} allowance")
         if p.wave_dollars:
             bounds.append(f"${p.wave_dollars:g}/wave × {p.waves}")
+        if p.note_only_limit:
+            bounds.append(f"idle after {p.note_only_limit}")
         effort = "-" if not p.model else p.effort_sent or (f"none ({p.effort} not accepted)" if p.effort else "none (default)")
         lines.append(f"| {p.id} | {p.model or '(off)'} | {effort} | {p.max_steps} | {p.max_tokens or 'default'} | "
                      f"{', '.join(bounds) or '-'} | {p.prompt} | {p.tools} | {p.version} |")

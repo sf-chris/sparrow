@@ -220,5 +220,60 @@ class QueryDedupeTests(Fixture):
         self.assertGreaterEqual(dedupe["detail"]["age"], 3600)
 
 
+class IdleTurnTests(Fixture):
+    async def test_note_only_turns_back_off_timer_wakes_until_something_happens(self):
+        replies = []
+        self.runtime._call_api = AsyncMock(side_effect=lambda *_: replies.pop(0))
+
+        async def timer():
+            self.session = self.service.store.get_session(self.session.id)
+            await self.runtime.wake(self.session.id, Event(kind="timer", session_id=self.session.id))
+            return self.service.store.get_session(self.session.id)
+
+        idle = [("memory_write", {"scope": "show", "content": "Still nothing."}),
+                ("wake_me", {"minutes": 5, "reason": "Checking again soon."})]
+        for _ in range(2):
+            replies.append(answer(*idle, tokens=500))
+            session = await timer()
+        self.assertEqual(session.controls["idle_turns"], 2)
+        self.assertEqual(self.runtime._call_api.await_count, 2)
+
+        before = time.time()
+        session = await timer()  # the third idle wake: no model call
+        self.assertEqual(self.runtime._call_api.await_count, 2)
+        self.assertAlmostEqual(session.wake_at - before, 3600, delta=5)
+        self.assertEqual(session.status, SessionStatus.HIBERNATING)
+        self.assertIn("Looking again in about 1 hour", session.wake_reason)
+        self.assertAlmostEqual(self.service.store.get_job(self.job.id).next_wake_at, session.wake_at, delta=1)
+        self.assertEqual(self.service.store.pending_events(session.id), [])
+
+        replies.append(answer(*idle, tokens=500))
+        session = await timer()  # the deferred check itself runs, so nothing waits forever
+        self.assertEqual(self.runtime._call_api.await_count, 3)
+        before = time.time()
+        session = await timer()  # still idle: the next check backs off further
+        self.assertEqual(self.runtime._call_api.await_count, 3)
+        self.assertAlmostEqual(session.wake_at - before, 7200, delta=5)
+
+        # Any other event wakes it at once; progress resets the count.
+        replies.append(answer(("inventory_read", {}), ("wake_me", {"reason": "Waiting for the download."}), tokens=500))
+        await self.runtime.wake(self.session.id, Event(kind="nudge", session_id=self.session.id))
+        session = self.service.store.get_session(self.session.id)
+        self.assertEqual(self.runtime._call_api.await_count, 4)
+        self.assertNotIn("idle_turns", session.controls)
+        self.assertNotIn("deferred", session.controls)
+
+        rows = ledger.load_enforcements(self.service.store)
+        self.assertEqual([(r["rule"], r["detail"]["deferred"]) for r in rows], [("note_only_suppressed", 1),
+                                                                                ("note_only_suppressed", 2)])
+        self.assertEqual(rows[0]["profile"], "fetch_scout")
+
+    async def test_kinds_without_a_limit_are_never_deferred(self):
+        session = AgentSession(agent=AgentKind.LIBRARIAN, model="gpt-6-luna", controls={"idle_turns": 9})
+        spec = self.runtime._specs["librarian"]
+        self.assertEqual(profiles.for_session(session).note_only_limit, 0)
+        self.assertFalse(self.runtime._defer_idle_wake(session, spec, [Event(kind="timer")]))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -144,6 +144,10 @@ MAX_STEPS_PER_WAKE = 40  # safety net, not a leash
 MAX_TOKENS = 4096
 HISTORY_TRIM_AT = 120  # messages; trim down to…
 HISTORY_TRIM_TO = 80
+# Tools that only take notes, read notes or sleep: a turn of nothing else
+# made no progress (the ledger flags runs of them as waste).
+NO_PROGRESS_TOOLS = frozenset(ledger.HOUSEKEEPING | {"evidence_read", "evidence_list"})
+IDLE_BACKOFF_CAP = 24 * 3600
 
 
 @dataclass
@@ -375,6 +379,9 @@ class AgentRuntime:
             return
         if not self.authority_valid(session, session.job_revision):
             return
+        if self._defer_idle_wake(session, spec, events):
+            await self._notify(session)
+            return
         session.status = SessionStatus.RUNNING
         session.outcome = CaseState.ACTIVE
         session.wake_at = 0.0
@@ -438,6 +445,42 @@ class AgentRuntime:
             session.messages.append({"role": "user", "content": results})
             self.store.save_session(session)
 
+    def _defer_idle_wake(self, session: AgentSession, spec: AgentSpec, events: list[Event]) -> bool:
+        """Suppress a timer wake after consecutive turns that only took notes and
+        slept: the model is not called, the next check backs off (an hour,
+        doubling up to a day) and any other event wakes it at once. One deferred
+        check then runs, so a request waiting on a date is late, never lost."""
+        profile = self.profile_for(session, spec)
+        limit = getattr(profile, "note_only_limit", 0)
+        controls = session.controls
+        idle = int(controls.get("idle_turns") or 0)
+        if not limit or idle < limit or not events or any(e.kind != "timer" for e in events):
+            return False
+        if controls.pop("wake_allowed", False):
+            return False
+        deferred = int(controls.get("deferred") or 0) + 1
+        delay = min(IDLE_BACKOFF_CAP, (profile.idle_backoff or 3600) * 2 ** (deferred - 1))
+        controls.update(deferred=deferred, wake_allowed=True)
+        self.store.acknowledge_events(session, events)
+        session.status = SessionStatus.HIBERNATING
+        session.outcome = CaseState.WAITING
+        session.wake_at = time.time() + delay
+        hours = round(delay / 3600)
+        session.wake_reason = (
+            f"Nothing changed on the last {idle} checks. Looking again in about "
+            + (f"{hours} hour{'s' if hours != 1 else ''}." if hours >= 1 else f"{round(delay / 60)} minutes.")
+        )
+        self.store.save_session(session)
+        job = self.store.get_job(session.job_id) if session.job_id else None
+        if job and job.status == JobStatus.ACTIVE:
+            job.next_wake_at = session.wake_at
+            self.store.save_job(job)
+        self.enforce(session, "note_only_suppressed", {
+            "idle_turns": idle, "deferred": deferred, "next_check_in": round(delay),
+            "events": [e.kind for e in events],
+        }, profile=profile)
+        return True
+
     def _completion_outcome(self, session):
         job = self.store.get_job(session.job_id) if session.job_id else None
         return (
@@ -472,11 +515,13 @@ class AgentRuntime:
     ) -> None:
         ctx = ToolCtx(session=session, runtime=self)
 
+        session.controls.pop("wake_allowed", None)
         self._set_trigger(session, events)
         self._woken(session, spec, events)
         _append_user(session, self._wake_text(session, events))
         self.store.acknowledge_events(session, events)
         steps = 0
+        progress = False
 
         while True:
             if not self.authority_valid(session, ctx.job_revision):
@@ -556,6 +601,8 @@ class AgentRuntime:
             results = []
             for tu in tool_uses:
                 results.append(await self._run_tool(ctx, tool_map, tu))
+                if tu.name not in NO_PROGRESS_TOOLS and not results[-1].get("is_error"):
+                    progress = True
             session.messages.append({"role": "user", "content": results})
             if not self.authority_valid(
                 session, ctx.job_revision, completing=ctx.close
@@ -590,6 +637,14 @@ class AgentRuntime:
         session.status = SessionStatus.HIBERNATING
         if session.outcome == CaseState.ACTIVE:
             session.outcome = CaseState.WAITING
+        if steps:
+            # Consecutive turns that only took notes and slept back off their
+            # timer wakes (_defer_idle_wake); any progress resets the count.
+            if progress:
+                for key in ("idle_turns", "deferred"):
+                    session.controls.pop(key, None)
+            else:
+                session.controls["idle_turns"] = int(session.controls.get("idle_turns") or 0) + 1
         session.spend.turns += 1
         if session.wake_at == 0.0 and not session.wake_reason:
             session.wake_reason = "Waiting for an update."
