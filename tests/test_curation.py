@@ -83,7 +83,8 @@ class CurationTests(unittest.IsolatedAsyncioTestCase):
     async def test_evidence_offers_the_exact_request_and_acquire_reads_season_words(self):
         row = self.follow()
         facts = await self.care.evidence(row)
-        self.assertEqual(facts["ready_requests"], {"missing": {"1": [1, 2]}})
+        self.assertEqual(facts["request_missing"], {"1": [1, 2]})
+        self.assertNotIn("request_upgrades", facts)
         self.service.runtime._call_api = AsyncMock(
             side_effect=[
                 response("evidence", {}),
@@ -101,6 +102,8 @@ class CurationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(episode_identities({"first season": [1]}))
         self.assertIsNone(episode_identities({"1": "1,2"}))
+        # Copied with its kind still around it, it is the same request.
+        self.assertEqual(episode_identities({"missing": {"Season 4": [4]}}), {(4, 4)})
         row = self.follow()
         self.service.runtime._call_api = AsyncMock(
             side_effect=[
