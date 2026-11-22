@@ -45,7 +45,7 @@ from .tools import (
     wake_tool,
 )
 
-from .node_tools import acquisition_tools, storage_tools, components
+from .node_tools import acquisition_tools, storage_tools, components, landing_notes
 
 logger = logging.getLogger("sparrow.agents")
 
@@ -1149,13 +1149,14 @@ class AgentService:
                 }
 
                 if progress >= 1.0 and not dl.metadata.get("landed_emitted"):
+                    notes = landing_notes(dl.metadata)
                     landing = Event(
                         kind="files_landed",
                         job_id=dl.metadata.get("job_id", ""),
                         download_id=dl.id,
                         payload={
                             "description": f'Download finished: "{dl.name}". '
-                            "Files are in staging."
+                            "Files are in staging." + (f" {notes}" if notes else "")
                         },
                     )
                     self.store.enqueue_event(landing)

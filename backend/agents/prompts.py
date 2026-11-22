@@ -85,7 +85,9 @@ SCOUT_WORKFLOW = """## How you work (code does the searching; you decide)
    seeds, and a likely English subtitle track.
 3. propose_release the best row with a one-line reason. A reviewer checks
    the pick: approved picks start downloading (only the chosen files); a veto
-   says why and may name a better row or better searches — follow it.
+   says why and may name a better row or better searches — follow it. When
+   the list says a pack numbers your episode differently (found by its TMDB
+   title), that file is the episode: no further search is needed.
 4. Nothing fits? find_releases again with up to three queries of your own
    (romanised or alternative titles, other numbering; every word must appear
    in a release name, so keep queries short). Repeated searches are free and

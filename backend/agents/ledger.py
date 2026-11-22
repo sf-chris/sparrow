@@ -92,6 +92,7 @@ RULES = {
     "identity_conflict": "an identity conflict recorded during an escalated search",
     "query_dedupe": "a repeated search served from the cache instead of the indexer",
     "note_only_suppressed": "a timer wake deferred after turns that only took notes",
+    "episode_order": "code found a wanted episode by its TMDB title in a pack numbered differently",
 }
 
 # Per-title search targets (issue #15) and the subtitle allowance a title
