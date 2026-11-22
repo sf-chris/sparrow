@@ -9,15 +9,33 @@ def episode_in(filename: str, season: int, episode: int) -> bool:
     """Whether a release file is this episode: S01E02, 1x02 or an absolute
     " - 02" / " 02 " number, in season one or under a tag naming the season
     ("Show S2 - 05", "Show Season 2 - 05"), as fansubs number seasons apart."""
+    tagged, seasons, numbers = _numbering(filename)
+    if tagged:
+        return tagged == (season, episode)
+    if (seasons and season not in seasons) or (not seasons and season != 1):
+        return False
+    return bool(numbers) and numbers[0] == episode
+
+
+def numbered(filename: str):
+    """The number a file name gives its episode, as "S01E09" or "09" (no
+    season named), or "" when it gives none: evidence for people, not a match."""
+    tagged, seasons, numbers = _numbering(filename)
+    if tagged:
+        return f"S{tagged[0]:02d}E{tagged[1]:02d}"
+    if not numbers:
+        return ""
+    return f"S{min(seasons):02d}E{numbers[0]:02d}" if seasons else f"{numbers[0]:02d}"
+
+
+def _numbering(filename: str):
+    """(the tagged (season, episode) or None, the seasons named, the episode
+    numbers in the order that counts)."""
     name = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", filename)
     tagged = re.search(r"(?i)\bS(\d{1,2})\s*E(\d{1,3})\b|\b(\d{1,2})x(\d{2,3})\b", name)
     if tagged:
-        found_season = int(tagged.group(1) or tagged.group(3))
-        found_episode = int(tagged.group(2) or tagged.group(4))
-        return (found_season, found_episode) == (season, episode)
+        return (int(tagged.group(1) or tagged.group(3)), int(tagged.group(2) or tagged.group(4))), set(), []
     seasons = {int(next(g for g in m.groups() if g)) for m in SEASON_TAG.finditer(name)}
-    if (seasons and season not in seasons) or (not seasons and season != 1):
-        return False
     # The episode number is the one marked as such (" - 14", "E14", "Ep 14"),
     # else the first standalone number: "part 2" or "Season 2" later in a
     # name is not episode 2.
@@ -25,8 +43,7 @@ def episode_in(filename: str, season: int, episode: int) -> bool:
     marked = re.findall(r"(?i)(?:[\s_]-[\s_]+|\b(?:ep|episode|e)[\s._]?|#)(\d{1,4})(?:v\d)?(?![\d])", stem)
     numbers = marked or re.findall(r"(?:^|[\s_\-.])(\d{1,4})(?:v\d)?(?=[\s_\-.]|$)", stem)
     numbers = numbers or re.findall(r"\[(\d{1,4})(?:v\d)?\]", filename)  # "[Group][Show][02]"
-    numbers = [int(n) for n in numbers if not 1900 <= int(n) <= 2100]
-    return bool(numbers) and numbers[0] == episode
+    return None, seasons, [int(n) for n in numbers if not 1900 <= int(n) <= 2100]
 
 
 SEASON_TAG = re.compile(r"(?i)\bS(\d{1,2})\b(?!\s*E\d)|\bseason\s*(\d{1,2})\b|\b(\d{1,2})(?:st|nd|rd|th)\s+season\b")

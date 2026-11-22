@@ -42,6 +42,28 @@ class OfflineReplayTests(unittest.TestCase):
         self.assertIn("Before → after", report)
         self.assertIn("| anime | Naruto | S01E02 |", report)
 
+    def test_the_live_runs_numbering_dispute_is_settled_by_title_without_escalating(self):
+        """Cowboy Bebop S01E05 is "Jamming with Edward" on TMDB and 09 in the packs:
+        by number the scout chose the packs' 05 (another episode) and the live run
+        escalated; read by title, the 09 file is chosen and nothing escalates."""
+        sets = bench.title_sets()
+        title = next(t for t in bench.chosen_titles(sets) if t["key"] == "cowboy-bebop")
+        cassette = bench.load_cassettes(sets=sets)["cowboy-bebop"]
+        with patch("httpx.AsyncClient", no_network):
+            settled = asyncio.run(bench.replay_title(title, cassette))
+            with patch.dict(os.environ, {"SPARROW_PROFILES": json.dumps({"fetch_scout": {"title_letters": 0}})}):
+                by_number = asyncio.run(bench.replay_title(title, cassette))
+        self.assertEqual((by_number["why"], by_number["would_escalate"]), ("right copy listed with the wrong file", True))
+        self.assertEqual((settled["why"], settled["would_escalate"]), ("right copy first", False))
+        self.assertEqual(settled["short_list"][0]["chosen"], ["Cowboy Bebop - 09 - Jamming with Edward.mkv"])
+        self.assertEqual([(o["target"], o["how"], o["numbered"]) for o in settled["order"]],
+                         [("S01E05", "title", "09"), ("S01E05", "title", "S01E09")])
+        self.assertEqual([r.get("disputed") for r in settled["short_list"][2:]], [["S01E05"], ["S01E05"]])
+        self.assertEqual(settled["searches"], by_number["searches"])  # the same searches, read differently
+        # Another title shares the name and the file was found under another number: the review stays.
+        self.assertEqual(settled["review"], "kept")
+        self.assertIn("other titles share this name", settled["review_doubts"])
+
     def test_the_committed_baseline_reads_and_compares(self):
         baseline = json.loads((bench.RESULTS / "search-offline.json").read_text())
         self.assertEqual(baseline["mode"], "offline")
@@ -122,10 +144,14 @@ class LiveHarnessTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(added, [])
             stats = result["stats"]
             self.assertEqual(stats["titles"], 3)
-            self.assertEqual(stats["reviews"]["approved"], 2)
+            # Chainsaw Man's pack file is verified on every point (its TMDB title is in
+            # the listed file name), so only Spirited Away's single release is reviewed.
+            self.assertEqual((stats["reviews"]["approved"], stats["reviews"]["skipped"]), (1, 1))
             self.assertGreater(stats["search_total"], 0)
             chainsaw = next(t for t in result["titles"] if t["key"] == "chainsaw-man")
-            self.assertEqual(set(chainsaw["phases"]), {"scout_pick", "pick_review"})
+            self.assertEqual(set(chainsaw["phases"]), {"scout_pick"})
+            spirited = next(t for t in result["titles"] if t["key"] == "spirited-away")
+            self.assertEqual(set(spirited["phases"]), {"scout_pick", "pick_review"})
             self.assertFalse(chainsaw["escalated"])
             self.assertIsNotNone(chainsaw["seconds_to_choice"])
             self.assertTrue(chainsaw["private"]["chosen"])

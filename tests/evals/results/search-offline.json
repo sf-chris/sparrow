@@ -1,10 +1,10 @@
 {
  "version": 1,
  "mode": "offline",
- "revision": "02742d127def6a3c625e5120a7fa0680f95b00df",
- "working_tree_changed": true,
- "scout_sha256": "e42dc2f212b56abf6da50af4b81b2a517d21ef754b8dc1317d4fb905a2544161",
- "cassettes_sha256": "2e0a1358e792d2f11bd387d5a55b929d836bae894e54f74898242dff9623ca7b",
+ "revision": "a5528b6bb6c68f216bc09f87196fca61415140df",
+ "working_tree_changed": false,
+ "scout_sha256": "5e68044484407951db83a7dab0db5af34483f5e222f10fa4b5bc5a98a0283b3b",
+ "cassettes_sha256": "60d4d9fda82441a2a54fc99b2c8ac2e91427e32b56aa59060c8f40c5f299ac09",
  "model_calls": 0,
  "cost_usd": 0,
  "sources": [
@@ -20,7 +20,9 @@
   "searches_median": 6.0,
   "searches_max": 6,
   "peeks": 22,
-  "simulated_queries": 134
+  "simulated_queries": 134,
+  "review_skipped": 8,
+  "order_resolved": 1
  },
  "by_set": {
   "anime": {
@@ -33,7 +35,9 @@
    "searches_median": 6.0,
    "searches_max": 6,
    "peeks": 16,
-   "simulated_queries": 92
+   "simulated_queries": 92,
+   "review_skipped": 7,
+   "order_resolved": 1
   },
   "films": {
    "titles": 6,
@@ -45,7 +49,9 @@
    "searches_median": 2.0,
    "searches_max": 3,
    "peeks": 0,
-   "simulated_queries": 14
+   "simulated_queries": 14,
+   "review_skipped": 0,
+   "order_resolved": 0
   },
   "tv": {
    "titles": 6,
@@ -57,7 +63,9 @@
    "searches_median": 6.0,
    "searches_max": 6,
    "peeks": 6,
-   "simulated_queries": 28
+   "simulated_queries": 28,
+   "review_skipped": 1,
+   "order_resolved": 0
   }
  },
  "missing_cassettes": [],
@@ -91,6 +99,9 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "skipped",
+   "review_doubts": [],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -98,7 +109,10 @@
      "seeders": 151,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Naruto - 002 - My Name is Konohamaru!.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -106,7 +120,10 @@
      "seeders": 38,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "[Judas] Naruto - S01E02.mkv"
+     ]
     },
     {
      "rid": "r3",
@@ -149,6 +166,12 @@
     "The Man in the Straw Hat"
    ],
    "namesakes": "ONE PIECE (2023, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name",
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -164,7 +187,10 @@
      "seeders": 25,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "One Piece - 002.mkv"
+     ]
     },
     {
      "rid": "r3",
@@ -189,8 +215,8 @@
    "searches": 6,
    "cached": 0,
    "peeks": 2,
-   "kept": 2,
-   "dropped": 1,
+   "kept": 4,
+   "dropped": 0,
    "queries": [
     "Cowboy Bebop S01E05",
     "Cowboy Bebop",
@@ -204,26 +230,73 @@
     "Cowboy Bebop",
     "Kauboi Bibappu"
    ],
-   "excluded": [
-    "Ballad of Fallen Angels"
-   ],
+   "excluded": [],
    "namesakes": "Cowboy Bebop (2021, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name",
+    "its file was found by the episode's title under another number"
+   ],
+   "order": [
+    {
+     "rid": "r1",
+     "target": "S01E05",
+     "how": "title",
+     "numbered": "09",
+     "file": "Cowboy Bebop - 09 - Jamming with Edward.mkv"
+    },
+    {
+     "rid": "r2",
+     "target": "S01E05",
+     "how": "title",
+     "numbered": "S01E09",
+     "file": "Cowboy Bebop (1998) - S01E09 - Jamming with Edward [BD 1080p].mkv"
+    }
+   ],
    "short_list": [
     {
      "rid": "r1",
+     "name": "Cowboy Bebop Complete Series + Movie [BD 1080p] [Dual Audio]",
+     "seeders": 140,
+     "quality": "1080p",
+     "coverage": "pack",
+     "right": true,
+     "chosen": [
+      "Cowboy Bebop - 09 - Jamming with Edward.mkv"
+     ]
+    },
+    {
+     "rid": "r2",
      "name": "Cowboy Bebop (1998) S01 [BD 1080p] [Dual Audio]",
      "seeders": 90,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Cowboy Bebop (1998) - S01E09 - Jamming with Edward [BD 1080p].mkv"
+     ]
     },
     {
-     "rid": "r2",
+     "rid": "r3",
      "name": "[Group] Cowboy Bebop - 05 [BD 1080p][Dual Audio]",
      "seeders": 12,
      "quality": "1080p",
      "coverage": "single",
-     "right": true
+     "right": false,
+     "disputed": [
+      "S01E05"
+     ]
+    },
+    {
+     "rid": "r4",
+     "name": "Cowboy Bebop - 05 - Ballad of Fallen Angels [BD 1080p]",
+     "seeders": 4,
+     "quality": "1080p",
+     "coverage": "single",
+     "right": false,
+     "disputed": [
+      "S01E05"
+     ]
     }
    ]
   },
@@ -256,6 +329,12 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "kept",
+   "review_doubts": [
+    "the pack's files are not listed",
+    "its name does not show the original audio"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -263,7 +342,10 @@
      "seeders": 64,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "episode:S01E02"
+     ]
     },
     {
      "rid": "r2",
@@ -271,7 +353,10 @@
      "seeders": 64,
      "quality": "1080p",
      "coverage": "pack",
-     "right": false
+     "right": false,
+     "chosen": [
+      "episode:S01E02"
+     ]
     },
     {
      "rid": "r3",
@@ -315,6 +400,9 @@
     "Tokyo Ghoul:re"
    ],
    "namesakes": "",
+   "review": "skipped",
+   "review_doubts": [],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -322,7 +410,10 @@
      "seeders": 70,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Tokyo Ghoul - S01E02.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -363,6 +454,12 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "kept",
+   "review_doubts": [
+    "its file list could not be read",
+    "it has 9 seeds, under 10"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -386,7 +483,10 @@
      "seeders": 22,
      "quality": "unknown",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "[Coalgirls]_Psycho-Pass_02_(1920x1080_Blu-ray_FLAC)_[B2C3D4E5].mkv"
+     ]
     }
    ]
   },
@@ -420,6 +520,9 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "skipped",
+   "review_doubts": [],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -427,7 +530,10 @@
      "seeders": 40,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Parasyte The Maxim - S01E02.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -476,6 +582,9 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "skipped",
+   "review_doubts": [],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -483,7 +592,10 @@
      "seeders": 33,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Steins;Gate - 03 - Parallel Process Paranoia.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -534,6 +646,11 @@
     "Test of Tests"
    ],
    "namesakes": "Hunter x Hunter (1999, original language ja)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -541,7 +658,10 @@
      "seeders": 95,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Hunter x Hunter (2011) - 002 [BD 1080p].mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -586,6 +706,9 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "skipped",
+   "review_doubts": [],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -593,7 +716,10 @@
      "seeders": 60,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Chainsaw Man - S01E02 - Arrival in Tokyo.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -658,6 +784,13 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "kept",
+   "review_doubts": [
+    "its file list could not be read",
+    "its name does not show the original audio",
+    "it has 2 seeds, under 10"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -698,6 +831,9 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": null,
+   "review_doubts": [],
+   "order": [],
    "short_list": []
   },
   {
@@ -730,6 +866,12 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "kept",
+   "review_doubts": [
+    "its file list could not be read",
+    "its name does not show the original audio"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -753,7 +895,10 @@
      "seeders": 55,
      "quality": "unknown",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "My Hero Academia - S01E02 - What It Takes to Be a Hero.mkv"
+     ]
     }
    ]
   },
@@ -787,6 +932,13 @@
    ],
    "excluded": [],
    "namesakes": "ERASED (2017, original language ja)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name",
+    "its file list could not be read",
+    "its name does not show the original audio"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -835,6 +987,9 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "skipped",
+   "review_doubts": [],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -842,7 +997,10 @@
      "seeders": 40,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Oshi no Ko - S01E02 - Third Option.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -891,6 +1049,9 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "skipped",
+   "review_doubts": [],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -898,7 +1059,10 @@
      "seeders": 120,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Dragon Ball Z - 002.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -937,6 +1101,11 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "kept",
+   "review_doubts": [
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -989,6 +1158,12 @@
    ],
    "excluded": [],
    "namesakes": "Parasite (1982, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name",
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1041,6 +1216,12 @@
    ],
    "excluded": [],
    "namesakes": "Oldboy (2013, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name",
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1085,6 +1266,12 @@
    ],
    "excluded": [],
    "namesakes": "Dune (1984, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name",
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1129,6 +1316,11 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "kept",
+   "review_doubts": [
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1167,6 +1359,12 @@
    ],
    "excluded": [],
    "namesakes": "The Thing (2011, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name",
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1219,6 +1417,9 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "skipped",
+   "review_doubts": [],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1226,7 +1427,10 @@
      "seeders": 240,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Breaking.Bad.S01E02.1080p.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -1234,7 +1438,10 @@
      "seeders": 80,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Breaking.Bad.S01E02.1080p.BluRay.mkv"
+     ]
     },
     {
      "rid": "r3",
@@ -1279,6 +1486,11 @@
    ],
    "excluded": [],
    "namesakes": "The Office (2001, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1286,7 +1498,10 @@
      "seeders": 70,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "The.Office.US.S02E01.The.Dundies.mkv"
+     ]
     },
     {
      "rid": "r2",
@@ -1343,6 +1558,11 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "kept",
+   "review_doubts": [
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1358,7 +1578,10 @@
      "seeders": 25,
      "quality": "720p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Fleabag.S01E02.720p.mkv"
+     ]
     }
    ]
   },
@@ -1391,6 +1614,11 @@
    ],
    "excluded": [],
    "namesakes": "",
+   "review": "kept",
+   "review_doubts": [
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1406,7 +1634,10 @@
      "seeders": 90,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Severance.S01E02.Half.Loop.mkv"
+     ]
     },
     {
      "rid": "r3",
@@ -1449,6 +1680,12 @@
     "Toranaga's Decision"
    ],
    "namesakes": "Shōgun (1980, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name",
+    "its file list could not be read"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1508,6 +1745,11 @@
     "The Devil's Chord"
    ],
    "namesakes": "Doctor Who (1963, original language en); Doctor Who (2023, original language en)",
+   "review": "kept",
+   "review_doubts": [
+    "other titles share this name"
+   ],
+   "order": [],
    "short_list": [
     {
      "rid": "r1",
@@ -1515,7 +1757,10 @@
      "seeders": 50,
      "quality": "1080p",
      "coverage": "pack",
-     "right": true
+     "right": true,
+     "chosen": [
+      "Doctor.Who.2005.S01E02.The.End.of.the.World.mkv"
+     ]
     },
     {
      "rid": "r2",

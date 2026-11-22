@@ -92,6 +92,10 @@ RULES = {
     "identity_conflict": "an identity conflict recorded during an escalated search",
     "query_dedupe": "a repeated search served from the cache instead of the indexer",
     "note_only_suppressed": "a timer wake deferred after turns that only took notes",
+    "episode_order": "code found a wanted episode by its TMDB title in a pack numbered differently",
+    "review_skipped": "a pick code verified on every point downloaded without the smart review",
+    "check_download": "a veto only for unverified quality or audio became one download to measure",
+    "check_download_refused": "a veto for unverified quality or audio stood: code could not verify the copy, or none left",
 }
 
 # Per-title search targets (issue #15) and the subtitle allowance a title
@@ -385,11 +389,14 @@ def _same_release(download, facts):
 
 
 def decisions(tools, downloads) -> list:
-    """Each reviewed pick and what came of it: the cheap model's pick and
-    reason, the reviewer's verdict, reason and cost, and the result (the
-    chosen download's outcome; "replaced" when it was abandoned and another
-    copy reached the library; for a veto, whether the same release was
-    downloaded anyway later and how that went)."""
+    """Each pick and what came of it: the cheap model's pick and reason, the
+    reviewer's verdict, reason and cost, and the result (the chosen
+    download's outcome; "replaced" when it was abandoned and another copy
+    reached the library; for a veto, whether the same release was downloaded
+    anyway later and how that went). Verdicts: approved, reviewer_chose,
+    vetoed, skipped (code verified it, no review) and checked (vetoed only
+    for unverified quality or audio, downloaded once to be measured: its
+    result says whether that verified the copy or merely deferred the doubt)."""
     by_id = {d.get("id"): d for d in downloads}
     by_job = defaultdict(list)
     for download in downloads:
@@ -399,7 +406,8 @@ def decisions(tools, downloads) -> list:
         facts = tool.get("facts") or {}
         if tool["name"] != "propose_release" or "pick" not in facts:
             continue
-        verdict = "reviewer_chose" if facts.get("chosen_by_reviewer") else "approved" if facts.get("approved") else "vetoed"
+        verdict = ("skipped" if facts.get("review_skipped") else "checked" if facts.get("check_download")
+                   else "reviewer_chose" if facts.get("chosen_by_reviewer") else "approved" if facts.get("approved") else "vetoed")
         record = {
             "ts": tool["ts"], "job_id": tool.get("job_id", ""), "pick": facts.get("pick", ""), "name": facts.get("name", ""),
             "picker_reason": (facts.get("args") or {}).get("reason", ""), "verdict": verdict,
@@ -425,18 +433,29 @@ def decisions(tools, downloads) -> list:
 
 def _review_stats(records):
     """Reviewer accuracy: approvals later abandoned, vetoes later chosen
-    anyway (and reaching the library: a false veto), and what reviews cost."""
+    anyway (and reaching the library: a false veto), and what reviews cost;
+    picks that skipped the review and whether they held up; check downloads
+    and whether they verified the copy."""
     counts = Counter()
     for record in records:
+        verdict = record["verdict"]
+        counts[verdict] += 1
+        if verdict == "skipped":
+            counts["skipped_then_abandoned"] += record["result"] in ("abandoned", "replaced")
+            continue
         counts["reviews"] += 1
-        counts[record["verdict"]] += 1
-        if record["verdict"] != "vetoed" and record["result"] in ("abandoned", "replaced"):
+        if verdict == "checked":
+            counts["checked_verified"] += record["result"] == "library"
+            counts["checked_failed"] += record["result"] in ("abandoned", "replaced")
+            continue
+        if verdict != "vetoed" and record["result"] in ("abandoned", "replaced"):
             counts["approved_then_abandoned"] += 1
-        if record["verdict"] == "vetoed" and record["later_chosen"]:
+        if verdict == "vetoed" and record["later_chosen"]:
             counts["vetoed_then_chosen"] += 1
             counts["false_vetoes"] += record["result"] == "library"
     return {**{k: counts.get(k, 0) for k in ("reviews", "approved", "reviewer_chose", "vetoed", "approved_then_abandoned",
-                                             "vetoed_then_chosen", "false_vetoes")},
+                                             "vetoed_then_chosen", "false_vetoes", "skipped", "skipped_then_abandoned",
+                                             "checked", "checked_verified", "checked_failed")},
             "cost": round(sum(r["review_cost"] for r in records), 5)}
 
 
@@ -616,6 +635,10 @@ def _flags(title, tools, calls):
     review = _review_stats(title["decisions"])
     if review["approved_then_abandoned"]:
         flags.append(f"{review['approved_then_abandoned']} approved picks were later abandoned: the review missed it")
+    if review["skipped_then_abandoned"]:
+        flags.append(f"{review['skipped_then_abandoned']} picks that skipped the review were later abandoned")
+    if review["checked_failed"]:
+        flags.append(f"{review['checked_failed']} check downloads did not meet the request when measured")
     if review["false_vetoes"]:
         flags.append(f"{review['false_vetoes']} vetoed picks were downloaded anyway and reached the library: a false veto")
     elif review["vetoed_then_chosen"]:
@@ -715,7 +738,11 @@ def report(summary) -> str:
             + (" · includes backfilled rows (no triggers or tool facts)" if stats["backfilled"] else ""),
             f"Reviews: {review['reviews']} (${review['cost']:.4f}) · approved {review['approved']} · reviewer chose another row "
             f"{review['reviewer_chose']} · vetoed {review['vetoed']} · approved then abandoned {review['approved_then_abandoned']} · "
-            f"vetoed then chosen anyway {review['vetoed_then_chosen']} (false vetoes {review['false_vetoes']})",
+            f"vetoed then chosen anyway {review['vetoed_then_chosen']} (false vetoes {review['false_vetoes']})"
+            + (f" · skipped (code verified) {review['skipped']}, later abandoned {review['skipped_then_abandoned']}"
+               if review.get("skipped") else "")
+            + (f" · check downloads {review['checked']}: verified {review['checked_verified']}, failed {review['checked_failed']}"
+               if review.get("checked") else ""),
         ]
         if stats.get("enforcements"):
             lines.append("Guardrails: " + ", ".join(f"{rule} {count}" for rule, count in sorted(stats["enforcements"].items())))

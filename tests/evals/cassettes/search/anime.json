@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "synthetic: release names modelled on those met in the 2026-10-01/02 anime field test and ledger runs (fansub and scene naming, packs, raws, dubs, dead swarms, sequels, spin-offs and same-named live-action series). Not live recordings: seeders, sizes and some episode titles are illustrative. A live run records real cassettes with `search_bench.py live --record DIR`.",
-  "row_format": "rows: [id, name, seeders, size GB, files]; series: one row per number; listings: {id: [[path, MB]]}; correct: the ids a careful person would accept (right show, episode, language and quality); expect 'nothing' when no usable copy exists",
+  "row_format": "rows: [id, name, seeders, size GB, files]; series: one row per number; listings: {id: [[path, MB]]}; correct: the ids a careful person would accept (right show, episode, language and quality); correct_files: {id: file name} when only that file of a pack is right; expect 'nothing' when no usable copy exists",
   "titles": [
     {
       "key": "naruto",
@@ -49,24 +49,26 @@
     },
     {
       "key": "cowboy-bebop",
+      "note": "The numbering dispute of the 2026-11-22 live run, with synthetic names and an illustrative order: TMDB numbers this season in broadcast order (S01E05 is \"Jamming with Edward\"); the packs use the disc order, where it is 09 and their 05 is another episode.",
       "alternatives": [["JP", "Cowboy Bebop", ""], ["JP", "Kauboi Bibappu", ""]],
-      "episode_names": {"1": {"5": "Ballad of Fallen Angels"}},
-      "namesakes": [{"id": 90200, "name": "Cowboy Bebop", "year": 2021, "language": "en", "episodes": {"1": {"5": "Ballad of Fallen Angels"}}}],
+      "episode_names": {"1": {"1": "Stray Dog Strut", "2": "Honky Tonk Women", "3": "Gateway Shuffle", "4": "Sympathy for the Devil", "5": "Jamming with Edward", "6": "Ganymede Elegy", "7": "Toys in the Attic", "8": "Asteroid Blues", "9": "Ballad of Fallen Angels"}},
+      "namesakes": [{"id": 90200, "name": "Cowboy Bebop", "year": 2021, "language": "en"}],
       "rows": [
         ["1301", "Cowboy.Bebop.2021.S01E05.1080p.NF.WEB-DL.DDP5.1.x264", 75, 2.1, 1],
         ["1302", "Cowboy Bebop Complete Series + Movie [BD 1080p] [Dual Audio]", 140, 70.0, 27],
         ["1303", "Cowboy Bebop (1998) S01 [BD 1080p] [Dual Audio]", 90, 52.0, 26],
         ["1304", "[Group] Cowboy Bebop - 05 [BD 1080p][Dual Audio]", 12, 1.6, 1],
-        ["1305", "Cowboy Bebop - 05 - Ballad of Fallen Angels [BD 1080p]", 9, 1.6, 1],
+        ["1305", "Cowboy Bebop - 05 - Ballad of Fallen Angels [BD 1080p]", 4, 1.6, 1],
         ["1306", "Cowboy Bebop S01E05 English Dubbed 1080p", 15, 1.2, 1],
         ["1307", "Cowboy Bebop The Movie 2001 1080p BluRay", 60, 6.0, 1],
         ["1308", "LEGO Cowboy Bebop S01E05 1080p", 2, 0.3, 1]
       ],
       "listings": {
-        "1302": [["Cowboy Bebop/Cowboy Bebop - 04 - Gateway Shuffle.mkv", 2000], ["Cowboy Bebop/Cowboy Bebop - 05 - Ballad of Fallen Angels.mkv", 2010], ["Cowboy Bebop/Movie/Cowboy Bebop The Movie.mkv", 6000]],
-        "1303": [["Cowboy Bebop S01/Cowboy Bebop - S01E04.mkv", 2000], ["Cowboy Bebop S01/Cowboy Bebop - S01E05.mkv", 2010], ["Cowboy Bebop S01/Cowboy Bebop - S01E06.mkv", 1990]]
+        "1302": [["Cowboy Bebop/Cowboy Bebop - 04 - Gateway Shuffle.mkv", 2000], ["Cowboy Bebop/Cowboy Bebop - 05 - Ballad of Fallen Angels.mkv", 2010], ["Cowboy Bebop/Cowboy Bebop - 09 - Jamming with Edward.mkv", 1995], ["Cowboy Bebop/Movie/Cowboy Bebop The Movie.mkv", 6000]],
+        "1303": [["Cowboy Bebop S01/Cowboy Bebop (1998) - S01E04 - Gateway Shuffle [BD 1080p].mkv", 2000], ["Cowboy Bebop S01/Cowboy Bebop (1998) - S01E05 - Ballad of Fallen Angels [BD 1080p].mkv", 2010], ["Cowboy Bebop S01/Cowboy Bebop (1998) - S01E09 - Jamming with Edward [BD 1080p].mkv", 1995]]
       },
-      "correct": ["1302", "1303", "1304", "1305"]
+      "correct": ["1302", "1303"],
+      "correct_files": {"1302": "Cowboy Bebop - 09 - Jamming with Edward.mkv", "1303": "Cowboy Bebop (1998) - S01E09 - Jamming with Edward [BD 1080p].mkv"}
     },
     {
       "key": "samurai-champloo",
