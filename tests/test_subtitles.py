@@ -261,9 +261,11 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         session = self.service.store.get_session(task["data"]["review_session"])
         self.assertEqual(session.model, DEFAULT_REVIEW_MODEL)
         self.assertEqual(session.status, SessionStatus.CLOSED)
-        spec = self.service.runtime._specs["subtitle"]
-        self.assertTrue(spec.cache)
-        self.assertGreaterEqual(spec.max_tokens, 16000)
+        profile = self.service.runtime.profile_for(session)
+        self.assertEqual((profile.id, profile.effort_sent), ("subtitle_manager", "medium"))
+        self.assertTrue(profile.cache)
+        self.assertGreaterEqual(profile.max_tokens, 16000)
+        self.assertEqual(session.profile, "subtitle_manager")
         results = [
             block
             for message in session.messages

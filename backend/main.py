@@ -1009,6 +1009,7 @@ async def list_agent_sessions(open_only: bool = True):
             "id": s.id, "agent": s.agent.value, "job_id": s.job_id,
             "job_title": job.title if job else "",
             "download_id": s.download_id, "model": s.model,
+            "profile": s.profile, "profile_version": s.profile_version,
             "status": s.status.value, "outcome": s.outcome.value, "wake_at": s.wake_at,
             "wake_reason": s.wake_reason, "spend": spend_snapshot(s),
             "created_at": s.created_at, "updated_at": s.updated_at,

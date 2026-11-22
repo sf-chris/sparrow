@@ -26,7 +26,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..configuration import effective_altprovider_key
-from . import altprovider_loop, subtitle_archive, subtitle_contract
+from . import altprovider_loop, profiles, subtitle_archive, subtitle_contract
 from . import subtitle_review as pages_
 from .account_api import administrator
 from .media_state import language_code
@@ -140,10 +140,12 @@ class Subtitles:
             model,
             self.get_service().runtime._api_key_getter(),
             effective_altprovider_key(),
-            os.getenv("SPARROW_SUBTITLE_CONTRACTOR_EFFORT", ""),
+            profiles.resolve("subtitle_checker").bind(model).effort_sent,
         )
         # Reads picture subtitles (Blu-ray, DVD) with the cheap vision model.
-        self.picture_reader = lambda model: subtitle_contract.altprovider_reader(effective_altprovider_key(), model)
+        self.picture_reader = lambda model: subtitle_contract.altprovider_reader(
+            effective_altprovider_key(), model, profiles.resolve("subtitle_reader").bind(model).effort_sent
+        )
         with accounts.connect() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS subtitle_tasks(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,asset_id TEXT NOT NULL,state TEXT NOT NULL,data TEXT NOT NULL,updated REAL NOT NULL);
@@ -1238,11 +1240,15 @@ class Subtitles:
                 ledger.spend.turns += spend.get("calls", 0)
                 ledger.spend.dollars = round(ledger.spend.dollars + spend["dollars"], 6)
                 ledger.spend.entries.append({"model": spend.get("model", ""), "calls": spend.get("calls", 0), "dollars": spend["dollars"]})
+                phase = spend.get("phase") or "subtitle_check"
+                profile = profiles.resolve(profiles.SUBTITLE_PHASE_ROLES.get(phase, "subtitle_checker")).bind(
+                    spend.get("model", ""))
                 cost_ledger.record_call(
                     service.store, session_id=ledger.id, job_id=ledger.job_id, user_id=ledger.user_id, agent="subtitle",
-                    phase=spend.get("phase") or "subtitle_check", model=spend.get("model", ""), cost=spend["dollars"],
+                    phase=phase, model=spend.get("model", ""), cost=spend["dollars"], effort=profile.effort_sent,
                     trigger={"kinds": ["subtitle_task"], "about": task["id"], "calls": spend.get("calls", 0),
                              "failures": (spend.get("failures") or [])[:5]},
+                    profile=profile.id, profile_version=profile.version,
                 )
         service.store.save_session(ledger)
         state["checker_session"] = ledger.id
@@ -2185,11 +2191,9 @@ class Subtitles:
                 review_model,
                 system,
                 toolset,
-                max_steps=40,
-                max_tokens=16000,
-                cache=True,
-                effort=os.getenv("SPARROW_SUBTITLE_EFFORT") or "medium",
-                max_dollars=float(os.getenv("SPARROW_SUBTITLE_BUDGET") or 0),  # 0: the household policy.
+                # subtitle_manager: 40 calls, 16,000 output tokens, cached, medium
+                # effort and the per-title allowance (SPARROW_SUBTITLE_*).
+                profile=service.session_profile,
             )
         )
 

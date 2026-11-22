@@ -19,7 +19,7 @@ from typing import Callable, Optional
 from ..models import DownloadStatus, MediaType, TorrentClientType
 from ..storage import Storage
 from ..services.torrent_client import TorrentManager, start_configured_client
-from . import prompts
+from . import profiles, prompts
 from .models import (
     AgentKind,
     CaseState,
@@ -49,8 +49,8 @@ from .node_tools import acquisition_tools, storage_tools, components
 
 logger = logging.getLogger("sparrow.agents")
 
-DEFAULT_SMART_MODEL = "assistant-medium"
-DEFAULT_CHEAP_MODEL = "assistant-small"
+DEFAULT_SMART_MODEL = profiles.DEFAULT_SMART_MODEL
+DEFAULT_CHEAP_MODEL = profiles.DEFAULT_CHEAP_MODEL
 
 POLL_INTERVAL = 15.0  # plumbing poll cadence (seconds)
 STALL_AFTER = 15 * 60  # no progress for this long = stalled
@@ -155,25 +155,29 @@ class AgentService:
     # ─── Specs ───────────────────────────────────────────────────────────
 
     def smart_model(self) -> str:
-        cfg = self.storage.get_config()
-        return (
-            os.getenv("SPARROW_SMART_MODEL") or cfg.smart_model or DEFAULT_SMART_MODEL
-        )
+        return profiles.tier_model("smart", self.storage.get_config())
 
     def fetch_model(self) -> str:
         """The Fetch Agent starts on the cheap model, working through the scout
         with its picks reviewed by the smart model, and escalates itself to the
         smart model for hard searches. SPARROW_FETCH_SCOUT=off restores the
         smart model throughout."""
-        if os.getenv("SPARROW_FETCH_SCOUT", "").lower() == "off":
-            return self.smart_model()
-        return self.cheap_model()
+        return self.profile("fetch_scout").model
 
     def cheap_model(self) -> str:
-        cfg = self.storage.get_config()
-        return (
-            os.getenv("SPARROW_CHEAP_MODEL") or cfg.cheap_model or DEFAULT_CHEAP_MODEL
-        )
+        return profiles.tier_model("cheap", self.storage.get_config())
+
+    def profile(self, role: str) -> "profiles.Profile":
+        """A role's versioned profile as it runs now (profiles.py)."""
+        return profiles.resolve(role, self.storage.get_config())
+
+    def session_profile(self, session: AgentSession) -> "profiles.Profile":
+        return profiles.for_session(session, self.storage.get_config())
+
+    def searches_directly(self, session: AgentSession) -> bool:
+        """A Fetch session on the smart model (escalated, or with the scout
+        off) searches with the raw tools; the cheap one works through the scout."""
+        return session.model == self.smart_model() or self.session_profile(session).id == "fetch_escalation"
 
     def _register_specs(self) -> None:
         tb = self.toolbox
@@ -182,7 +186,7 @@ class AgentService:
             job = self.store.get_job(session.job_id)
             return (
                 prompts.fetch_system(
-                    session, job, "", cfg=self.storage.get_config(), scouting=session.model != self.smart_model()
+                    session, job, "", cfg=self.storage.get_config(), scouting=not self.searches_directly(session),
                 )
                 + "\nEffective request settings (authoritative):\n"
                 + json.dumps(job.preferences if job else {}, sort_keys=True)
@@ -209,7 +213,7 @@ class AgentService:
                 *tmdb_tools(tb),
                 *acquisition_tools(tb),
             ]
-            if session.model == self.smart_model():
+            if self.searches_directly(session):
                 # The smart model searches and adds directly; nothing reviews it.
                 hidden = {"propose_release", "escalate_model"}
             else:
@@ -223,7 +227,7 @@ class AgentService:
             # raw tools (escalated, or with the scout off); the cheap one picks.
             if "download_stalled" in (trigger.get("kinds") or []):
                 return "stall"
-            return "escalated_search" if session.model == self.smart_model() else "scout_pick"
+            return "escalated_search" if self.searches_directly(session) else "scout_pick"
 
         self.runtime.register(
             AgentSpec(
@@ -232,12 +236,14 @@ class AgentService:
                 system=fetch_system,
                 tools=fetch_tools_for,
                 phase=fetch_phase,
+                profile=self.session_profile,
             )
         )
         self.runtime.register(
             AgentSpec(
                 kind=AgentKind.MEDIA.value,
-                model=self.cheap_model,
+                model=lambda: self.profile("media").model,
+                profile=self.session_profile,
                 system=media_system,
                 tools=lambda s: [
                     journal_tool(tb, "media"),
@@ -358,10 +364,10 @@ class AgentService:
             agent=AgentKind.FETCH, job_id=job.id, model=self.fetch_model()
         )
         media_session = AgentSession(
-            agent=AgentKind.MEDIA, job_id=job.id, model=self.cheap_model()
+            agent=AgentKind.MEDIA, job_id=job.id, model=self.profile("media").model
         )
         librarian_session = AgentSession(
-            agent=AgentKind.LIBRARIAN, model=self.cheap_model()
+            agent=AgentKind.LIBRARIAN, model=self.profile("librarian").model
         )
         toolsets = {
             "fetch": self.runtime.tools_for(fetch_session),
@@ -377,17 +383,19 @@ class AgentService:
                 "agent": "fetch",
                 "label": "Fetch Agent",
                 "model": self.fetch_model(),
+                "profile": self.session_profile(fetch_session).to_dict(),
                 "context": f"Rendered with the latest job contract: {job.title}",
                 "prompt": prompts.fetch_system(
                     fetch_session, job, "", cfg=self.storage.get_config(),
-                    scouting=fetch_session.model != self.smart_model(),
+                    scouting=not self.searches_directly(fetch_session),
                 ),
                 "tools": tools_for("fetch"),
             },
             {
                 "agent": "media",
                 "label": "Media Agent",
-                "model": self.cheap_model(),
+                "model": media_session.model,
+                "profile": self.session_profile(media_session).to_dict(),
                 "context": "Rendered with current staging/library paths and a placeholder landed file.",
                 "prompt": prompts.media_system(
                     media_session,
@@ -401,7 +409,8 @@ class AgentService:
             {
                 "agent": "librarian",
                 "label": "Librarian",
-                "model": self.cheap_model(),
+                "model": librarian_session.model,
+                "profile": self.session_profile(librarian_session).to_dict(),
                 "context": "Standing prompt for one person and one subscription.",
                 "prompt": self.curation.system_prompt(),
                 "tools": tools_for("librarian"),
@@ -621,7 +630,7 @@ class AgentService:
             job_id=event.job_id,
             job_revision=job.revision if job else 1,
             download_id=event.download_id,
-            model=self.cheap_model(),
+            model=self.profile("media").model,
         )
         self.store.save_session(session)
         self._wake_soon(session.id, event)
