@@ -596,7 +596,6 @@ class ConfigUpdate(BaseModel):
     anthropic_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     onboarding_complete: Optional[bool] = None
-    auto_organize: Optional[bool] = None
     seeding_ratio_limit: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
     seeding_time_hours: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
     prefer_smaller_files: Optional[bool] = None

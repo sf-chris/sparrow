@@ -274,7 +274,6 @@ def apply_config_update(
 
     scalar_fields = (
         "onboarding_complete",
-        "auto_organize",
         "seeding_ratio_limit",
         "seeding_time_hours",
         "prefer_smaller_files",

@@ -577,8 +577,9 @@ forced, hearing-impaired preference, and synchronization confidence.
   Do not replace media inspection with a model approving tool exit codes.
 - [ ] Record measured checks and agent review separately, including sample
   coverage and pending review when the provider is unavailable.
-- [ ] Evaluate ffsubsync and alass against the actual audio and labelled fixtures;
+- [x] Evaluate ffsubsync and alass against the actual audio and labelled fixtures;
   do not equate speech-activity correlation with correct dialogue/episode identity.
+  Built-in measured sync (`subtitle_sync.py`) replaced FFsubsync, now removed.
 - [ ] Associate confidence and timing derivatives with the exact file version,
   edition and audio track; invalidate evidence after replacing the media copy.
 - [ ] Preserve originals and good timing; validate proposed changes before

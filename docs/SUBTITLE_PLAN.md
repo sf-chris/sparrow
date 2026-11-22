@@ -211,11 +211,10 @@ local discontinuity. Wrong cuts may require another candidate. Sparse forced
 subtitles must anchor to the actual foreign utterances rather than the film's
 overall speech activity.
 
-Retain FFsubsync as an optional proposal tool, not a verifier. Sparrow pins
-0.5.1; current upstream describes additional experimental piecewise behaviour,
-which must not be assumed present in that pin. Consider alass only if a measured
-failure justifies another dependency. [FFsubsync](https://github.com/smacke/ffsubsync),
-[alass](https://github.com/kaegi/alass).
+FFsubsync is no longer a dependency: `subtitle_sync.py` measures offset, drift
+and consistency against whole-soundtrack speech evidence and corrects timing
+itself (see `agentic-audit/SUBTITLE_EVIDENCE.md`). Consider alass only if a
+measured failure justifies another dependency. [alass](https://github.com/kaegi/alass).
 
 Recheck the final derivative against the independently obtained source words
 and their acoustic evidence. Increasing agreement with the same fitting score

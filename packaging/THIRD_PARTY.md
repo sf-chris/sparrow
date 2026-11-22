@@ -5,7 +5,7 @@ licences and notices continue to apply; Sparrow does not claim ownership of them
   executables. Exact source archives, licences and the build script are included
   under `sources` in the package; the release workflow keeps them with binaries.
   https://ffmpeg.org/ and https://code.videolan.org/videolan/x264
-- FFsubsync 0.5.1: MIT. https://github.com/smacke/ffsubsync
+- pysubs2: MIT. https://github.com/tkarabela/pysubs2
 - faster-whisper 1.2.1: MIT. https://github.com/SYSTRAN/faster-whisper
 - Whisper base speech model: MIT, converted by SYSTRAN from OpenAI Whisper.
   Pinned model revision is in `sources.json`; source/model information:
