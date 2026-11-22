@@ -54,7 +54,7 @@ ARTIFACTS = HERE / "artifacts"
 VERSION = 1
 # The code whose behaviour the offline replay measures.
 SCOUT_SOURCES = ("backend/agents/scout.py", "backend/agents/release_match.py", "backend/services/release_parser.py",
-                 "backend/agents/profiles.py")
+                 "backend/agents/acquisition_review.py", "backend/agents/profiles.py")
 NO_RESULTS = {"id": "0", "name": "No results returned", "info_hash": "0" * 40, "seeders": "0", "leechers": "0",
               "num_files": "0", "size": "0", "username": "", "added": "0", "category": "0"}
 
@@ -258,8 +258,10 @@ def _right(row, cassette) -> bool:
 
 async def replay_title(title, cassette, values=None) -> dict:
     """The scout's short list for one title, as find_releases builds it, scored
-    against the copies a careful person would accept."""
-    from backend.agents import profiles
+    against the copies a careful person would accept, and whether code would
+    let the first row download without the smart review (the cheap model
+    proposing r1, as it usually does)."""
+    from backend.agents import acquisition_review, profiles
     from backend.agents.models import Job
 
     values = values or default_values()
@@ -271,13 +273,19 @@ async def replay_title(title, cassette, values=None) -> dict:
     targets = _wanted(title)[:12]
     season = targets[0][0] if targets else 1
     tb, searches, peeks = Replay([cassette]), [], []
-    scouting = profiles.resolve("fetch_scout")
+    gate, scouting = profiles.resolve("fetch_review"), profiles.resolve("fetch_scout")
     with tb.patched():
         names, exclude, namesakes = await scout.titles_for(tb, job, season, targets)
         episode_names = await scout.episode_names(tb, job, targets) if job.media_type == "tv" else {}
         rows, searched, dropped, failing = await scout.scout(tb, job, targets, names, (), exclude=exclude, log=searches,
                                                              peek_log=peeks, names=episode_names,
                                                              letters=scouting.title_letters)
+        doubts = None
+        if rows:
+            first = rows[0]
+            listing = await tb.listing(first["apibay_id"]) if first["coverage"] == "single" else None
+            doubts = acquisition_review.doubts(job, first, rows, targets=targets, namesakes=namesakes, listing=listing,
+                                               titles=names, exclude=exclude, min_seeds=gate.skip_seeds)
     correct = set(cassette.correct)
     nothing = cassette.expect == "nothing"
     scored = bool(correct) or nothing
@@ -305,6 +313,10 @@ async def replay_title(title, cassette, values=None) -> dict:
         "cached": sum(1 for s in searches if s.get("cached")), "peeks": len(peeks), "kept": len(rows), "dropped": dropped,
         "queries": searched, "simulated_queries": len(tb.simulated), "search_titles": names, "excluded": exclude,
         "namesakes": namesakes,
+        # Projection: the review of r1 is skipped when code doubts nothing (a
+        # single release's file list must be in the cassette to be read).
+        "review": None if doubts is None else "skipped" if gate.skip_review and not doubts else "kept",
+        "review_doubts": [words for _, words in doubts or []],
         "order": [{"rid": r["rid"], **{k: e.get(k) for k in ("target", "how", "numbered", "file")}}
                   for r in rows for e in r.get("matched") or [] if e["how"] in ("title", "contradicted")],
         "short_list": [{"rid": r["rid"], "name": r["name"], "seeders": r["seeders"], "quality": r["quality"],
@@ -327,6 +339,7 @@ def _stats(results):
         "searches_max": max(searches) if searches else None,
         "peeks": sum(r["peeks"] for r in results),
         "simulated_queries": sum(r["simulated_queries"] for r in results),
+        "review_skipped": sum(1 for r in results if r.get("review") == "skipped"),
         "order_resolved": sum(1 for r in results if any(o["how"] == "title" for o in r.get("order") or [])),
     }
 
@@ -375,14 +388,18 @@ def offline_report(result, before=None) -> str:
         f"**Offline replay: {s['titles']} titles, no model calls** · right copy first {s['right_first']}/{s['scored']} · "
         f"would escalate {s['would_escalate']} ({s['escalation_rate']:.0%}) · searches median {s['searches_median']}, "
         f"max {s['searches_max']} · peeks {s['peeks']} · searches answered from a corpus (not a recording) {s['simulated_queries']}"
-        + (f" · episode order settled by title {s['order_resolved']}" if "order_resolved" in s else ""),
+        + (f" · r1 review skipped {s['review_skipped']} · episode order settled by title {s['order_resolved']}"
+           if "review_skipped" in s else ""),
         "",
-        "| Set | Title | Wanted | Result | Escalate | Searches | Peeks | Short list |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Set | Title | Wanted | Result | Escalate | Searches | Peeks | Short list | r1 review |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in result["results"]:
+        review = r.get("review") or "-"
+        if review == "kept" and r.get("review_doubts"):
+            review += f" ({r['review_doubts'][0]})"
         lines.append(f"| {r['set']} | {r['title']} | {r['wanted']} | {r['why']} | {'yes' if r['would_escalate'] else 'no'} | "
-                     f"{r['searches']} | {r['peeks']} | {r['kept']} |")
+                     f"{r['searches']} | {r['peeks']} | {r['kept']} | {review} |")
     if result.get("missing_cassettes"):
         lines += ["", "No cassette: " + ", ".join(result["missing_cassettes"])]
     if before:
@@ -390,6 +407,8 @@ def offline_report(result, before=None) -> str:
         lines += ["", f"**Before → after**: right first {b['right_first']}/{b['scored']} → {s['right_first']}/{s['scored']} · "
                       f"would escalate {b['would_escalate']} → {s['would_escalate']} · searches median "
                       f"{b['searches_median']} → {s['searches_median']}"]
+        if "review_skipped" in b:
+            lines[-1] += f" · r1 review skipped {b['review_skipped']} → {s['review_skipped']}"
         old = {r["key"]: r for r in before["results"]}
         for r in result["results"]:
             was = old.get(r["key"])

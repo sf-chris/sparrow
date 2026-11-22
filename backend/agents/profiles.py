@@ -59,10 +59,10 @@ ALTPROVIDER_REASONING = re.compile(r"^(model-[56]|o[134])")
 # Fields an operator may override per role in SPARROW_PROFILES.
 OVERRIDABLE = {"model": str, "effort": str, "max_steps": int, "max_tokens": int, "max_dollars": float,
                "note_only_limit": int, "idle_backoff": float, "wave_dollars": float, "wave_calls": int,
-               "waves": int, "title_letters": int}
+               "waves": int, "skip_review": int, "skip_seeds": int, "check_downloads": int, "title_letters": int}
 # Bounds added after versions were first recorded: left out of a version's
 # hash while zero, so roles that never use them keep the version they had.
-LATER_BOUNDS = ("title_letters",)
+LATER_BOUNDS = ("skip_review", "skip_seeds", "check_downloads", "title_letters")
 
 
 @dataclass(frozen=True)
@@ -83,6 +83,9 @@ class Role:
     wave_dollars: float = 0.0  # smart-model dollars per escalation wave (a ceiling); 0 unbounded
     wave_calls: int = 0  # smart-model calls per escalation wave, the same on any provider; 0 unbounded
     waves: int = 0  # escalation waves a request may open without the person asking
+    skip_review: int = 0  # 1: a pick code verified on every point skips the smart review
+    skip_seeds: int = 0  # the fewest seeders such a pick needs
+    check_downloads: int = 0  # vetoes only for unverified quality/audio that may download to be measured, per request
     title_letters: int = 0  # the shortest TMDB episode title (letters) matched against pack file names; 0 off
     prompt: tuple = ()  # module:attribute sources of the standing prompt
     tools: tuple = ()  # and of the tools
@@ -112,9 +115,12 @@ ROLES: dict[str, Role] = {
                 "backend.agents.prompts:SHARED_RULES"), tools=_FETCH_TOOLS),
     "fetch_review": Role(
         "fetch", "smart", "Fetch: the smart model approves or vetoes the proposed row in one structured call",
-        effort="low", max_steps=1, max_tokens=8000,
+        # Skipped for picks code verified on every point it checks; a veto whose
+        # only doubt is unverified quality or audio may download once to be measured.
+        effort="low", max_steps=1, max_tokens=8000, skip_review=1, skip_seeds=10, check_downloads=1,
         prompt=("backend.agents.acquisition_review:REVIEW_SYSTEM", "backend.agents.acquisition_review:record"),
-        tools=("backend.agents.acquisition_review:REVIEW_SCHEMA", "backend.agents.acquisition_review:review")),
+        tools=("backend.agents.acquisition_review:REVIEW_SCHEMA", "backend.agents.acquisition_review:review",
+               "backend.agents.acquisition_review:doubts", "backend.agents.acquisition_review:check_allowed")),
     "fetch_escalation": Role(
         "fetch", "smart", "Fetch: the smart model searches with the raw tools after the scout gave up",
         # Calls bound a wave on any provider (a long context made one Medium call
@@ -177,6 +183,9 @@ class Profile:
     waves: int
     prompt: str  # version of the standing prompt's source
     tools: str  # version of the tools' source
+    skip_review: int = 0
+    skip_seeds: int = 0
+    check_downloads: int = 0
     title_letters: int = 0
     version: str = ""
 
@@ -421,6 +430,10 @@ def table(profiles: list[Profile]) -> str:
             bounds.append(f"{per} per wave × {p.waves}")
         if p.note_only_limit:
             bounds.append(f"idle after {p.note_only_limit}")
+        if p.skip_review:
+            bounds.append(f"skipped for verified picks with {p.skip_seeds}+ seeds")
+        if p.check_downloads:
+            bounds.append(f"{p.check_downloads} check download{'s' if p.check_downloads != 1 else ''} per request")
         if p.title_letters:
             bounds.append(f"episode titles of {p.title_letters}+ letters matched in pack files")
         effort = "-" if not p.model else p.effort_sent or (f"none ({p.effort} not accepted)" if p.effort else "none (default)")
