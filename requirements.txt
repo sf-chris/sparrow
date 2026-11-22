@@ -7,6 +7,8 @@ python-dotenv==1.2.2
 websockets==16.0
 Pillow==12.2.0
 
-# Bundled subtitle alignment and local speech inspection; no separate subtitle service.
-ffsubsync==0.5.1
+# Subtitle files, their text encodings and local speech inspection.
+pysubs2==1.8.1 ; python_version < "3.12"
+pysubs2==1.9.0 ; python_version >= "3.12"
+charset-normalizer==3.5.1
 faster-whisper==1.2.1

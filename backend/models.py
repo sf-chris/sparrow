@@ -114,7 +114,6 @@ class SparrowConfig:
     onboarding_deferred: bool = False
     onboarding_mode: str = "autopilot"
     onboarding_step: str = "start"
-    auto_organize: bool = True
     preferred_search_engines: list[str] = field(default_factory=lambda: ["apibay"])
     seeding_ratio_limit: float = 2.0   # stop seeding at this ratio (0 = no limit)
     seeding_time_hours: float = 0.0    # stop seeding after N hours (0 = no limit)
@@ -139,7 +138,6 @@ class SparrowConfig:
             "onboarding_deferred": self.onboarding_deferred,
             "onboarding_mode": self.onboarding_mode,
             "onboarding_step": self.onboarding_step,
-            "auto_organize": self.auto_organize,
             "preferred_search_engines": self.preferred_search_engines,
             "seeding_ratio_limit": self.seeding_ratio_limit,
             "seeding_time_hours": self.seeding_time_hours,
@@ -154,6 +152,8 @@ class SparrowConfig:
     @classmethod
     def from_dict(cls, d: dict) -> "SparrowConfig":
         d = dict(d)
+        # Retired with the old auto-organiser; saved configs may still carry it.
+        d.pop("auto_organize", None)
         if "torrent_client" in d and isinstance(d["torrent_client"], dict):
             d["torrent_client"] = TorrentClientConfig.from_dict(d["torrent_client"])
         if "quality_preference" in d:
