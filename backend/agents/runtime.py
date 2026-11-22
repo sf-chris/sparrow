@@ -22,7 +22,7 @@ from typing import Any, Awaitable, Callable, Optional
 import provider
 
 from ..configuration import effective_altprovider_key
-from . import ledger, altprovider_loop
+from . import ledger, altprovider_loop, profiles
 from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
 from .errors import ToolError  # noqa: F401  (tools import it from here)
@@ -144,6 +144,10 @@ MAX_STEPS_PER_WAKE = 40  # safety net, not a leash
 MAX_TOKENS = 4096
 HISTORY_TRIM_AT = 120  # messages; trim down to…
 HISTORY_TRIM_TO = 80
+# Tools that only take notes, read notes or sleep: a turn of nothing else
+# made no progress (the ledger flags runs of them as waste).
+NO_PROGRESS_TOOLS = frozenset(ledger.HOUSEKEEPING | {"evidence_read", "evidence_list"})
+IDLE_BACKOFF_CAP = 24 * 3600
 
 
 @dataclass
@@ -201,6 +205,13 @@ class AgentSpec:
     # The cost ledger's phase for a model call: (session, trigger) -> name.
     # Unset, the ledger's default for the agent kind applies.
     phase: Optional[Callable[[AgentSession, dict], str]] = None
+    # The versioned profile a session runs under (profiles.py). When set, its
+    # effort, bounds and allowance replace the fields above; unset, a profile
+    # is derived from those fields.
+    profile: Optional[Callable[[AgentSession], "profiles.Profile"]] = None
+    # Called with each wake's events before the model sees them; returns
+    # guardrail records for the ledger (an escalation's new search wave).
+    on_wake: Optional[Callable[[AgentSession, list], list]] = None
 
 
 class AgentRuntime:
@@ -254,6 +265,33 @@ class AgentRuntime:
 
     def register(self, spec: AgentSpec) -> None:
         self._specs[spec.kind] = spec
+
+    def profile_for(self, session: AgentSession, spec: Optional[AgentSpec] = None):
+        """The profile this session runs under now, bound to its actual model."""
+        spec = spec or self._specs.get(session.agent.value)
+        if spec is None:
+            return None
+        if spec.profile:
+            try:
+                return spec.profile(session).bind(session.model)
+            except Exception:
+                logger.exception("profile for %s session %s not resolved; using its spec", session.agent.value, session.id)
+        return profiles.from_spec(spec, session.model)
+
+    @staticmethod
+    def _note_profile(session: AgentSession, profile) -> None:
+        if profile and (session.profile, session.profile_version) != (profile.id, profile.version):
+            session.profile, session.profile_version = profile.id, profile.version
+            session.profiles.append({"id": profile.id, "version": profile.version, "since": time.time()})
+
+    def enforce(self, session: AgentSession, rule: str, detail: Optional[dict] = None, tool: str = "",
+                profile=None) -> None:
+        """Record one guardrail that acted, for the ledger's audit."""
+        profile = profile or self.profile_for(session)
+        ledger.record_enforcement(
+            self.store, session_id=session.id, job_id=session.job_id, rule=rule, detail=detail, tool=tool,
+            profile=getattr(profile, "id", ""), profile_version=getattr(profile, "version", ""),
+        )
 
     def tools_for(self, session: AgentSession) -> list[ToolDef]:
         from .evidence import PAGE_CHARS
@@ -341,6 +379,9 @@ class AgentRuntime:
             return
         if not self.authority_valid(session, session.job_revision):
             return
+        if self._defer_idle_wake(session, spec, events):
+            await self._notify(session)
+            return
         session.status = SessionStatus.RUNNING
         session.outcome = CaseState.ACTIVE
         session.wake_at = 0.0
@@ -404,6 +445,42 @@ class AgentRuntime:
             session.messages.append({"role": "user", "content": results})
             self.store.save_session(session)
 
+    def _defer_idle_wake(self, session: AgentSession, spec: AgentSpec, events: list[Event]) -> bool:
+        """Suppress a timer wake after consecutive turns that only took notes and
+        slept: the model is not called, the next check backs off (an hour,
+        doubling up to a day) and any other event wakes it at once. One deferred
+        check then runs, so a request waiting on a date is late, never lost."""
+        profile = self.profile_for(session, spec)
+        limit = getattr(profile, "note_only_limit", 0)
+        controls = session.controls
+        idle = int(controls.get("idle_turns") or 0)
+        if not limit or idle < limit or not events or any(e.kind != "timer" for e in events):
+            return False
+        if controls.pop("wake_allowed", False):
+            return False
+        deferred = int(controls.get("deferred") or 0) + 1
+        delay = min(IDLE_BACKOFF_CAP, (profile.idle_backoff or 3600) * 2 ** (deferred - 1))
+        controls.update(deferred=deferred, wake_allowed=True)
+        self.store.acknowledge_events(session, events)
+        session.status = SessionStatus.HIBERNATING
+        session.outcome = CaseState.WAITING
+        session.wake_at = time.time() + delay
+        hours = round(delay / 3600)
+        session.wake_reason = (
+            f"Nothing changed on the last {idle} checks. Looking again in about "
+            + (f"{hours} hour{'s' if hours != 1 else ''}." if hours >= 1 else f"{round(delay / 60)} minutes.")
+        )
+        self.store.save_session(session)
+        job = self.store.get_job(session.job_id) if session.job_id else None
+        if job and job.status == JobStatus.ACTIVE:
+            job.next_wake_at = session.wake_at
+            self.store.save_job(job)
+        self.enforce(session, "note_only_suppressed", {
+            "idle_turns": idle, "deferred": deferred, "next_check_in": round(delay),
+            "events": [e.kind for e in events],
+        }, profile=profile)
+        return True
+
     def _completion_outcome(self, session):
         job = self.store.get_job(session.job_id) if session.job_id else None
         return (
@@ -438,16 +515,23 @@ class AgentRuntime:
     ) -> None:
         ctx = ToolCtx(session=session, runtime=self)
 
+        session.controls.pop("wake_allowed", None)
         self._set_trigger(session, events)
+        self._woken(session, spec, events)
         _append_user(session, self._wake_text(session, events))
         self.store.acknowledge_events(session, events)
         steps = 0
+        progress = False
 
         while True:
             if not self.authority_valid(session, ctx.job_revision):
                 return
             policy = self.policy_getter()
-            allowance = spec.max_dollars or policy["max_agent_dollars"]
+            profile = self.profile_for(session, spec)
+            self._note_profile(session, profile)
+            # The allowance belongs to the request or subscription (every
+            # session and profile in its budget scope), never to a profile.
+            allowance = profile.max_dollars or policy["max_agent_dollars"]
             sessions = self._budget_sessions(session)
             dollars = (
                 sum(s.spend.dollars for s in sessions if s.id != session.id)
@@ -455,7 +539,7 @@ class AgentRuntime:
             )
             if (
                 steps
-                >= min(MAX_STEPS_PER_WAKE, spec.max_steps, policy["max_agent_calls"])
+                >= min(MAX_STEPS_PER_WAKE, profile.max_steps, policy["max_agent_calls"])
                 or dollars >= allowance
             ):
                 session.outcome = (
@@ -517,6 +601,8 @@ class AgentRuntime:
             results = []
             for tu in tool_uses:
                 results.append(await self._run_tool(ctx, tool_map, tu))
+                if tu.name not in NO_PROGRESS_TOOLS and not results[-1].get("is_error"):
+                    progress = True
             session.messages.append({"role": "user", "content": results})
             if not self.authority_valid(
                 session, ctx.job_revision, completing=ctx.close
@@ -542,6 +628,7 @@ class AgentRuntime:
                 if fresh:
                     ctx.hibernate = False
                     self._set_trigger(session, fresh)
+                    self._woken(session, spec, fresh)
                     _append_user(session, self._wake_text(session, fresh))
                     self.store.acknowledge_events(session, fresh)
                     continue
@@ -550,6 +637,14 @@ class AgentRuntime:
         session.status = SessionStatus.HIBERNATING
         if session.outcome == CaseState.ACTIVE:
             session.outcome = CaseState.WAITING
+        if steps:
+            # Consecutive turns that only took notes and slept back off their
+            # timer wakes (_defer_idle_wake); any progress resets the count.
+            if progress:
+                for key in ("idle_turns", "deferred"):
+                    session.controls.pop(key, None)
+            else:
+                session.controls["idle_turns"] = int(session.controls.get("idle_turns") or 0) + 1
         session.spend.turns += 1
         if session.wake_at == 0.0 and not session.wake_reason:
             session.wake_reason = "Waiting for an update."
@@ -558,6 +653,15 @@ class AgentRuntime:
         # Events that arrived at the very end: run again.
         if self.store.pending_events(session.id):
             await self._run(session.id)
+
+    def _woken(self, session: AgentSession, spec: AgentSpec, events: list[Event]) -> None:
+        if not spec.on_wake:
+            return
+        try:
+            for item in spec.on_wake(session, events) or []:
+                self.enforce(session, item["rule"], item.get("detail"))
+        except Exception:
+            logger.exception("wake hook failed (session %s)", session.id)
 
     async def _run_tool(self, ctx: ToolCtx, tool_map: dict[str, ToolDef], tu) -> dict:
         args = tu.input or {}
@@ -643,6 +747,7 @@ class AgentRuntime:
             outcome=ledger.tool_outcome(content, is_error, ctx.facts), call_id=self._current_call.get(ctx.session.id, ""),
             job_id=ctx.session.job_id, ts=started, duration=round(time.time() - started, 3), facts={**({"args": args} if args else {}), **ctx.facts} or None,
         )
+        self._record_enforcements(ctx, tu)
         await self._notify_tool(
             ctx.session,
             tu.name,
@@ -652,6 +757,21 @@ class AgentRuntime:
             is_error,
         )
         return result
+
+    def _record_enforcements(self, ctx: ToolCtx, tu) -> None:
+        """Guardrails a tool applied (ctx.facts["enforced"]) and repeated
+        searches served from the cache instead of the indexer."""
+        found = list(ctx.facts.get("enforced") or [])
+        for search in ctx.facts.get("searches") or []:
+            if isinstance(search, dict) and search.get("dedupe"):
+                found.append({"rule": "query_dedupe",
+                              "detail": {"query": search.get("query"), "age": search.get("age"), "rows": search.get("rows")}})
+        if not found:
+            return
+        profile = self.profile_for(ctx.session)
+        for item in found:
+            self.enforce(ctx.session, item["rule"], {**(item.get("detail") or {}), "tool_id": tu.id}, tool=tu.name,
+                         profile=profile)
 
     async def _notify_tool(
         self,
@@ -701,15 +821,16 @@ class AgentRuntime:
             tokens = len(wire.encode("utf8")) + 1024 * (
                 len(session.messages) + len(tools) + 1
             )
+            profile = self.profile_for(session, spec)
             rates = rates_for_model(session.model)
             # A cached loop re-reads its earlier prefix at the cache-read rate and
             # writes only the new turn; without caching everything is written.
             inbound = (
                 tokens * rates["cache_read"] + min(tokens, 40_000) * rates["cache_write"]
-                if spec.cache
+                if profile.cache
                 else tokens * rates["cache_write"]
             )
-            estimate = 3 * (inbound + spec.max_tokens * rates["output"]) / 1_000_000
+            estimate = 3 * (inbound + profile.max_tokens * rates["output"]) / 1_000_000
             identity = secrets.token_hex(16)
             with self.store._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
@@ -720,7 +841,7 @@ class AgentRuntime:
                     + ")",
                     scopes,
                 ).fetchone()[0]
-                allowance = spec.max_dollars or self.policy_getter()["max_agent_dollars"]
+                allowance = profile.max_dollars or self.policy_getter()["max_agent_dollars"]
                 if spent + held + estimate > allowance:
                     return None, True
                 db.execute(
@@ -762,17 +883,18 @@ class AgentRuntime:
         client = self._client()
         try:
             delay = 2.0
-            spec = self._specs[session.agent.value]
+            profile = self.profile_for(session)
             options = {}
-            if spec.cache:
+            if profile.cache:
                 options["cache_control"] = {"type": "ephemeral"}
-            if spec.effort:
-                options["output_config"] = {"effort": spec.effort}
+            if profile.effort_sent:
+                # Only an effort the model accepts (profiles.effort_for).
+                options["output_config"] = {"effort": profile.effort_sent}
             for attempt in range(3):
                 try:
                     return await client.create_message(
                         model=session.model,
-                        max_tokens=spec.max_tokens,
+                        max_tokens=profile.max_tokens,
                         system=system,
                         tools=[t.to_api() for t in tools],
                         messages=altprovider_loop.provider_messages(session.messages),
@@ -794,7 +916,7 @@ class AgentRuntime:
         """The same call through the AltProvider API (see altprovider_loop)."""
         import httpx
 
-        spec = self._specs[session.agent.value]
+        profile = self.profile_for(session)
         key = self._altprovider_key_getter()
         if not key:
             # A missing key is not an outage: say so instead of retrying.
@@ -808,8 +930,8 @@ class AgentRuntime:
                     system,
                     [t.to_api() for t in tools],
                     session.messages,
-                    max_tokens=spec.max_tokens,
-                    effort=spec.effort,
+                    max_tokens=profile.max_tokens,
+                    effort=profile.effort_sent,
                     cache_key=session.id,
                 )
             except (altprovider_loop.AltProviderStatusError, httpx.TransportError) as e:
@@ -847,12 +969,14 @@ class AgentRuntime:
         except Exception:
             logger.exception("ledger: no phase for this call")
             phase = session.agent.value
+        profile = self.profile_for(session, spec)
         self._current_call[session.id] = ledger.record_call(
             self.store, session_id=session.id, job_id=session.job_id, user_id=session.user_id,
             agent=session.agent.value, phase=phase, model=session.model, usage=entry,
             cost=float(entry.get("cost") or 0), latency=round(time.time() - started, 3),
-            trigger=dict(trigger), tools=tools, error=error[:500], effort=spec.effort if spec else "",
+            trigger=dict(trigger), tools=tools, error=error[:500], effort=getattr(profile, "effort_sent", ""),
             rates=entry.get("rates"), error_class=error_class,
+            profile=getattr(profile, "id", ""), profile_version=getattr(profile, "version", ""),
         )
         trigger["step"] += 1
 

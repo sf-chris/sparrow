@@ -138,7 +138,7 @@ retrieval contract, measured regression cases and remaining evidence boundaries.
 | P1 | Code cleanup (C) delivered for the listed legacy paths: curator, requests/goals, planners, old search and organiser routes and the one-shot Small/description calls they made are gone; galleries audited and retained. The inert `auto_organize` field and the orphaned `ffsubsync` dependency followed. Retained with stated consumers and retirement conditions: the administrator-only routes/poller and the old Librarian helpers that scope-guardrail cases still use. Issues #15–#17 were dispositioned on GitHub (2026-11-21) |
 | P2 | Current Librarian live fixture and 30-case controlled baseline delivered. Add full live fixtures for the other roles, separate unseen holdout, real-model/provider repetitions and full measured outcome costs |
 | P3 | Core event/result persistence and recovery delivered with controlled crash tests. Extend combined restart/revision/provider chaos scenarios in the final acceptance pilot; conservative uncertain effects still require receipt investigation |
-| P4 | Oversized tool observations now have complete saved artifacts, explicit previews, bounded retrieval/listing and serialized storage quotas. Versioned provider profiles/effort, bounded escalation, structured checkpoints/recoverable compaction, cross-session handoffs, retention policy and fuller source pagination remain |
+| P4 | Oversized tool observations have complete saved artifacts, explicit previews, bounded retrieval/listing and serialized storage quotas. [Versioned role profiles and bounded escalation](#profiles-and-bounded-escalation--23-november-2026) delivered (23 Nov 2026): sessions and ledger rows record profile and version; escalated searches, repeated searches and idle wakes are bounded in the tools/runtime. A paid evaluation of profile choices (effort, wave allowance), structured checkpoints/recoverable compaction, cross-session handoffs, retention policy and fuller source pagination remain |
 | P5 | Rich Discovery intent/edition constraints, complete acquisition candidate evidence, targeted missing-episode investigation and structured Fetch/Media results remain |
 | P6 | Structured rejected/missing-file results, optional import investigation and richer subtitle samples/candidate/repair tools remain |
 | P7 | Durable review and shared allowance foundation delivered; scoped evidence-backed lessons, useful policy windows/renewal and complete standing-care quality gates remain |
@@ -224,3 +224,70 @@ FFsubsync path and old benchmark were retired. The
 [evidence record](SUBTITLE_EVIDENCE.md) reports the 91 ms detector onset lag,
 three professional-track baselines (one consistently 220 ms late), model
 comparison, heuristics, tests and the end-to-end Haibane run.
+
+## Profiles and bounded escalation — 23 November 2026
+
+`backend/agents/profiles.py` is now the one place that says how each agent role
+runs. `python -m backend.agents.profiles` prints the resolved table, including
+each profile's version: a short hash of its model, effort, bounds and the source
+of its prompt and tools. Defaults (no environment overrides, no AltProvider key):
+
+| Role | Model | Effort sent | Calls / output | Bounds |
+| --- | --- | --- | --- | --- |
+| discovery | cheap (Small 4.5) | none | 8 / 1,400 | |
+| fetch_scout | cheap | none | 40 / 4,096 | idle wakes back off after 2 |
+| fetch_review | smart (Medium 5) | low | 1 / 8,000 | |
+| fetch_escalation | smart | none (provider default) | 40 / 4,096 | 4 searching calls per wave ($0.25 ceiling), 3 waves; idle back-off |
+| media, media_escalation | cheap, smart | none | 40 / 4,096 | idle back-off |
+| librarian | cheap | none | 6 / 1,400 | |
+| subtitle_manager | Large 5.5 (the smart model with an AltProvider key) | medium | 40 / 16,000, cached | per-title allowance |
+| subtitle_checker / _verifier / _reader | off without an AltProvider key (the cheap model / Smart / Cheap) | low on AltProvider | 1 per check | per-title allowance |
+
+These are the values that ran before; no production model or effort changed.
+Effort is sent only where the model accepts it (Small 4.5 and Medium 4.5 take
+none; checked against the provider's effort page). Overrides, most specific
+first: `SPARROW_PROFILES` (JSON per role and field, for evaluations), the
+existing `SPARROW_FETCH_SCOUT` and `SPARROW_SUBTITLE_*` variables,
+`SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`, then saved config. Sessions keep
+the current profile id and version plus each one they used; ledger calls
+(including pick reviews and subtitle checkers) record them (export schema 3).
+Spend still counts per request or subscription across every session and
+profile: a test shows neither a new profile version, a new session nor an
+escalation resets the allowance.
+
+The audit's recommendations 1, 2 and 5 are enforced in code:
+
+- **Escalation waves** (`escalation.py`, `node_tools.py` `tpb_search`): an
+  escalated search may make 4 smart-model searching calls per wave, within a
+  $0.25 ceiling (soft caps, checked before each search). Calls keep the bound
+  the same on any provider: one long-context Medium call costs about what a
+  dollar cap sized on the smart model would allow per wave. Another wave needs a genuinely new candidate (a
+  plausible copy the scout and earlier waves had not seen) or an identity
+  conflict recorded with the new `record_identity_conflict` tool; a stalled
+  download or Media report opens one too, at most three without the person.
+  Past the allowance a search is refused with a `ToolError` saying why and what
+  to do instead; a second refused call ends the turn as needs-input. A nudge or
+  resume starts the count again. With the scout off, there is no wave bound.
+- **Repeated searches** (`Toolbox.index_search`): a request repeating its own
+  search (same words, case and spacing ignored) is served from the cache for six
+  hours, across the scout and the escalated session, after the shared cache
+  would have gone stale. The cache is in memory: a restart forgets it.
+- **Idle wakes** (`runtime._defer_idle_wake`): after two turns that only took
+  notes and slept, a timer wake costs no call; the next check backs off one
+  hour, doubling to a day. One deferred check then runs and any other event
+  wakes at once, so a request waiting on a date is late, never lost. The
+  standing prompt also asks for note, journal and wake_me in one reply.
+
+Each enforcement is a `ledger_enforcements` row (`escalation_wave`,
+`escalation_bound`, `identity_conflict`, `query_dedupe`,
+`note_only_suppressed`) with its profile; the report adds a guardrail count
+line, timelines show GUARDRAIL lines and the export adds `enforcement` rows.
+
+Evidence: the full suite passes (378 tests, 3 skipped; 18 new). The offline
+search benchmark is unchanged: right copy first 28/28, would escalate 1 (4%),
+searches median 6, peeks 22. No paid model, indexer or torrent traffic was used,
+so the savings are not yet measured. A first $0.02 wave sized on the smart model
+prices allowed about one Medium call, so waves are bounded by calls instead;
+the next live benchmark should check that escalated titles still reach a
+download. The 30-case contract runner still lists five subtitle tests that were
+renamed earlier; those cases fail to load at `main` as they do here.
