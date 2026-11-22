@@ -17,6 +17,7 @@ import json
 import secrets
 import time
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Optional
 
 import anthropic
@@ -760,7 +761,9 @@ class AgentRuntime:
 
     def _record_enforcements(self, ctx: ToolCtx, tu) -> None:
         """Guardrails a tool applied (ctx.facts["enforced"]) and repeated
-        searches served from the cache instead of the indexer."""
+        searches served from the cache instead of the indexer. An item may
+        name the profile whose thresholds decided it (the pick review's
+        skips and check downloads are the fetch_review profile's)."""
         found = list(ctx.facts.get("enforced") or [])
         for search in ctx.facts.get("searches") or []:
             if isinstance(search, dict) and search.get("dedupe"):
@@ -770,8 +773,10 @@ class AgentRuntime:
             return
         profile = self.profile_for(ctx.session)
         for item in found:
+            decided = SimpleNamespace(id=item["profile"], version=item.get("profile_version", "")) \
+                if item.get("profile") else profile
             self.enforce(ctx.session, item["rule"], {**(item.get("detail") or {}), "tool_id": tu.id}, tool=tu.name,
-                         profile=profile)
+                         profile=decided)
 
     async def _notify_tool(
         self,

@@ -60,6 +60,9 @@ class OfflineReplayTests(unittest.TestCase):
                          [("S01E05", "title", "09"), ("S01E05", "title", "S01E09")])
         self.assertEqual([r.get("disputed") for r in settled["short_list"][2:]], [["S01E05"], ["S01E05"]])
         self.assertEqual(settled["searches"], by_number["searches"])  # the same searches, read differently
+        # Another title shares the name and the file was found under another number: the review stays.
+        self.assertEqual(settled["review"], "kept")
+        self.assertIn("other titles share this name", settled["review_doubts"])
 
     def test_the_committed_baseline_reads_and_compares(self):
         baseline = json.loads((bench.RESULTS / "search-offline.json").read_text())
@@ -141,10 +144,14 @@ class LiveHarnessTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(added, [])
             stats = result["stats"]
             self.assertEqual(stats["titles"], 3)
-            self.assertEqual(stats["reviews"]["approved"], 2)
+            # Chainsaw Man's pack file is verified on every point (its TMDB title is in
+            # the listed file name), so only Spirited Away's single release is reviewed.
+            self.assertEqual((stats["reviews"]["approved"], stats["reviews"]["skipped"]), (1, 1))
             self.assertGreater(stats["search_total"], 0)
             chainsaw = next(t for t in result["titles"] if t["key"] == "chainsaw-man")
-            self.assertEqual(set(chainsaw["phases"]), {"scout_pick", "pick_review"})
+            self.assertEqual(set(chainsaw["phases"]), {"scout_pick"})
+            spirited = next(t for t in result["titles"] if t["key"] == "spirited-away")
+            self.assertEqual(set(spirited["phases"]), {"scout_pick", "pick_review"})
             self.assertFalse(chainsaw["escalated"])
             self.assertIsNotNone(chainsaw["seconds_to_choice"])
             self.assertTrue(chainsaw["private"]["chosen"])
