@@ -59,7 +59,10 @@ ALTPROVIDER_REASONING = re.compile(r"^(model-[56]|o[134])")
 # Fields an operator may override per role in SPARROW_PROFILES.
 OVERRIDABLE = {"model": str, "effort": str, "max_steps": int, "max_tokens": int, "max_dollars": float,
                "note_only_limit": int, "idle_backoff": float, "wave_dollars": float, "wave_calls": int,
-               "waves": int}
+               "waves": int, "title_letters": int}
+# Bounds added after versions were first recorded: left out of a version's
+# hash while zero, so roles that never use them keep the version they had.
+LATER_BOUNDS = ("title_letters",)
 
 
 @dataclass(frozen=True)
@@ -80,6 +83,7 @@ class Role:
     wave_dollars: float = 0.0  # smart-model dollars per escalation wave (a ceiling); 0 unbounded
     wave_calls: int = 0  # smart-model calls per escalation wave, the same on any provider; 0 unbounded
     waves: int = 0  # escalation waves a request may open without the person asking
+    title_letters: int = 0  # the shortest TMDB episode title (letters) matched against pack file names; 0 off
     prompt: tuple = ()  # module:attribute sources of the standing prompt
     tools: tuple = ()  # and of the tools
 
@@ -103,7 +107,7 @@ ROLES: dict[str, Role] = {
         prompt=("backend.agents.discovery:Discovery.register",), tools=("backend.agents.discovery:Discovery.tools",)),
     "fetch_scout": Role(
         "fetch", "fetch", "Fetch: the cheap model reads the scout's short list and proposes one row",
-        note_only_limit=2, idle_backoff=3600,
+        note_only_limit=2, idle_backoff=3600, title_letters=8,
         prompt=("backend.agents.prompts:fetch_system", "backend.agents.prompts:SCOUT_WORKFLOW",
                 "backend.agents.prompts:SHARED_RULES"), tools=_FETCH_TOOLS),
     "fetch_review": Role(
@@ -173,11 +177,15 @@ class Profile:
     waves: int
     prompt: str  # version of the standing prompt's source
     tools: str  # version of the tools' source
+    title_letters: int = 0
     version: str = ""
 
     def contents(self) -> dict:
         data = asdict(self)
         data.pop("version")
+        for name in LATER_BOUNDS:
+            if not data.get(name):
+                data.pop(name, None)
         return data
 
     def to_dict(self) -> dict:
@@ -298,6 +306,7 @@ def resolve(role: str, cfg=None, model: str = "") -> Profile:
         "max_steps": spec.max_steps, "max_tokens": spec.max_tokens, "max_dollars": _max_dollars(spec),
         "note_only_limit": spec.note_only_limit, "idle_backoff": spec.idle_backoff,
         "wave_dollars": spec.wave_dollars, "wave_calls": spec.wave_calls, "waves": spec.waves,
+        **{name: getattr(spec, name) for name in LATER_BOUNDS},
     }
     fields.update({k: v for k, v in custom.items() if k in fields})
     return _versioned(Profile(
@@ -412,6 +421,8 @@ def table(profiles: list[Profile]) -> str:
             bounds.append(f"{per} per wave × {p.waves}")
         if p.note_only_limit:
             bounds.append(f"idle after {p.note_only_limit}")
+        if p.title_letters:
+            bounds.append(f"episode titles of {p.title_letters}+ letters matched in pack files")
         effort = "-" if not p.model else p.effort_sent or (f"none ({p.effort} not accepted)" if p.effort else "none (default)")
         lines.append(f"| {p.id} | {p.model or '(off)'} | {effort} | {p.max_steps} | {p.max_tokens or 'default'} | "
                      f"{', '.join(bounds) or '-'} | {p.prompt} | {p.tools} | {p.version} |")

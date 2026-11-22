@@ -33,8 +33,9 @@ REVIEW_SCHEMA = {
 }
 
 
-def record(job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
-    """The decision in a few hundred tokens."""
+def record(job, wanted, rows, pick, reason, episode_titles=None, namesakes="", note=""):
+    """The decision in a few hundred tokens. note: how code settled the
+    episode order from TMDB's titles and the real file lists (scout.order_note)."""
     values = (job.preferences or {}).get("values") or {}
     if job.media_type == "movie":
         what = f"the film {job.title} ({job.year})"
@@ -52,10 +53,11 @@ def record(job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
     )
     chosen = next(row for row in rows if row["rid"] == pick)
     files = "\n".join(f"  chosen file: {name}" for name in (chosen.get("chosen") or []) if not name.startswith("episode:"))
-    return f"{wants}\nRows:\n{table(rows)}\nPicked {pick}: {reason[:300]}" + (f"\n{files}" if files else "")
+    return (f"{wants}\nRows:\n{table(rows)}\nPicked {pick}: {reason[:300]}" + (f"\n{files}" if files else "")
+            + (f"\n{note}" if note else ""))
 
 
-async def review(tb, job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
+async def review(tb, job, wanted, rows, pick, reason, episode_titles=None, namesakes="", note=""):
     """The smart model's decision and what it cost: (decision, dollars, model, usage).
     It runs under the fetch_review profile (low effort where the model takes one)."""
     from . import subtitle_contract
@@ -66,7 +68,8 @@ async def review(tb, job, wanted, rows, pick, reason, episode_titles=None, names
     caller = subtitle_contract.caller_for(
         model, effective_provider_key(tb.cfg()), effective_altprovider_key(tb.cfg()), profile.effort_sent
     )
-    data, usage = await caller(REVIEW_SYSTEM, record(job, wanted, rows, pick, reason, episode_titles, namesakes), REVIEW_SCHEMA)
+    data, usage = await caller(REVIEW_SYSTEM, record(job, wanted, rows, pick, reason, episode_titles, namesakes, note),
+                               REVIEW_SCHEMA)
     return data, subtitle_contract.cost(model, usage), model, usage
 
 

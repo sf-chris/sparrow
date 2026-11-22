@@ -53,7 +53,8 @@ RESULTS = HERE / "results"
 ARTIFACTS = HERE / "artifacts"
 VERSION = 1
 # The code whose behaviour the offline replay measures.
-SCOUT_SOURCES = ("backend/agents/scout.py", "backend/agents/release_match.py", "backend/services/release_parser.py")
+SCOUT_SOURCES = ("backend/agents/scout.py", "backend/agents/release_match.py", "backend/services/release_parser.py",
+                 "backend/agents/profiles.py")
 NO_RESULTS = {"id": "0", "name": "No results returned", "info_hash": "0" * 40, "seeders": "0", "leechers": "0",
               "num_files": "0", "size": "0", "username": "", "added": "0", "category": "0"}
 
@@ -115,6 +116,9 @@ class Cassette:
         self.corpus = list(corpus.values())
         self.listings = {str(k): [(name, int(float(mb) * 1e6)) for name, mb in v] for k, v in (entry.get("listings") or {}).items()}
         self.correct = [str(c) for c in entry.get("correct") or []]
+        # A right copy whose right file is named: the row counts only when that
+        # file is the one chosen (a pack numbering the season differently).
+        self.correct_files = {str(k): str(v) for k, v in (entry.get("correct_files") or {}).items()}
         self.expect = entry.get("expect", "")
         self.entry = entry
         self.tmdb = self._tmdb(entry) if self.title else {}
@@ -244,9 +248,18 @@ def _wanted_text(title):
 # ─── Offline replay ───────────────────────────────────────────────────────
 
 
+def _right(row, cassette) -> bool:
+    """A row is a right copy, and when the cassette names its right file, that file is the one chosen."""
+    if row["apibay_id"] not in cassette.correct:
+        return False
+    wanted = cassette.correct_files.get(row["apibay_id"])
+    return not wanted or any(str(name).rsplit("/", 1)[-1] == wanted for name in row.get("chosen") or [])
+
+
 async def replay_title(title, cassette, values=None) -> dict:
     """The scout's short list for one title, as find_releases builds it, scored
     against the copies a careful person would accept."""
+    from backend.agents import profiles
     from backend.agents.models import Job
 
     values = values or default_values()
@@ -258,14 +271,17 @@ async def replay_title(title, cassette, values=None) -> dict:
     targets = _wanted(title)[:12]
     season = targets[0][0] if targets else 1
     tb, searches, peeks = Replay([cassette]), [], []
+    scouting = profiles.resolve("fetch_scout")
     with tb.patched():
         names, exclude, namesakes = await scout.titles_for(tb, job, season, targets)
+        episode_names = await scout.episode_names(tb, job, targets) if job.media_type == "tv" else {}
         rows, searched, dropped, failing = await scout.scout(tb, job, targets, names, (), exclude=exclude, log=searches,
-                                                             peek_log=peeks)
+                                                             peek_log=peeks, names=episode_names,
+                                                             letters=scouting.title_letters)
     correct = set(cassette.correct)
     nothing = cassette.expect == "nothing"
     scored = bool(correct) or nothing
-    rank = next((n for n, row in enumerate(rows, 1) if row["apibay_id"] in correct), None)
+    rank = next((n for n, row in enumerate(rows, 1) if _right(row, cassette)), None)
     right = (not rows) if nothing else rank == 1
     if failing:
         why = "the index failed"
@@ -277,6 +293,8 @@ async def replay_title(title, cassette, values=None) -> dict:
         why = "right copy first"
     elif rank:
         why = f"right copy at r{rank}"
+    elif any(row["apibay_id"] in correct for row in rows):
+        why = "right copy listed with the wrong file"
     else:
         why = "no right copy listed" if scored else "unscored"
     return {
@@ -287,8 +305,12 @@ async def replay_title(title, cassette, values=None) -> dict:
         "cached": sum(1 for s in searches if s.get("cached")), "peeks": len(peeks), "kept": len(rows), "dropped": dropped,
         "queries": searched, "simulated_queries": len(tb.simulated), "search_titles": names, "excluded": exclude,
         "namesakes": namesakes,
+        "order": [{"rid": r["rid"], **{k: e.get(k) for k in ("target", "how", "numbered", "file")}}
+                  for r in rows for e in r.get("matched") or [] if e["how"] in ("title", "contradicted")],
         "short_list": [{"rid": r["rid"], "name": r["name"], "seeders": r["seeders"], "quality": r["quality"],
-                        "coverage": r["coverage"], "right": r["apibay_id"] in correct} for r in rows],
+                        "coverage": r["coverage"], "right": _right(r, cassette),
+                        **({"chosen": [str(n).rsplit("/", 1)[-1] for n in r["chosen"]]} if r.get("chosen") else {}),
+                        **({"disputed": r["disputed"]} if r.get("disputed") else {})} for r in rows],
     }
 
 
@@ -305,6 +327,7 @@ def _stats(results):
         "searches_max": max(searches) if searches else None,
         "peeks": sum(r["peeks"] for r in results),
         "simulated_queries": sum(r["simulated_queries"] for r in results),
+        "order_resolved": sum(1 for r in results if any(o["how"] == "title" for o in r.get("order") or [])),
     }
 
 
@@ -351,7 +374,8 @@ def offline_report(result, before=None) -> str:
     lines = [
         f"**Offline replay: {s['titles']} titles, no model calls** · right copy first {s['right_first']}/{s['scored']} · "
         f"would escalate {s['would_escalate']} ({s['escalation_rate']:.0%}) · searches median {s['searches_median']}, "
-        f"max {s['searches_max']} · peeks {s['peeks']} · searches answered from a corpus (not a recording) {s['simulated_queries']}",
+        f"max {s['searches_max']} · peeks {s['peeks']} · searches answered from a corpus (not a recording) {s['simulated_queries']}"
+        + (f" · episode order settled by title {s['order_resolved']}" if "order_resolved" in s else ""),
         "",
         "| Set | Title | Wanted | Result | Escalate | Searches | Peeks | Short list |",
         "|---|---|---|---|---|---|---|---|",

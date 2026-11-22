@@ -166,6 +166,22 @@ def unsuitable(job, facts):
     return reasons
 
 
+# Download metadata code establishes before a transfer, for the Media Agent.
+NOTES = ("episode_map",)
+
+
+def landing_notes(metadata) -> str:
+    """What code established before a download landed, for the Media Agent:
+    files found by their TMDB episode title under another number."""
+    out = []
+    for entry in (metadata or {}).get("episode_map") or []:
+        base = str(entry.get("file", "")).rsplit("/", 1)[-1]
+        out.append(f'"{base}" is {entry.get("episode")} "{entry.get("title")}" by its TMDB episode title (the pack '
+                   f'numbers it {entry.get("numbered") or "differently"}): record it as {entry.get("episode")} if its '
+                   "measured runtime agrees.")
+    return " ".join(out)
+
+
 def acquisition_tools(tb):
     nodes, _ = components(tb)
 
@@ -186,7 +202,10 @@ def acquisition_tools(tb):
             for a in scoped_assets(tb, job)
         ]
 
-    async def add(ctx, args):
+    async def add(ctx, args, *, notes=None):
+        """notes: what code established for the Media Agent: files found by
+        their TMDB episode title. The model's own client_add cannot set them;
+        for a copy the scout listed, the scout's own evidence is kept."""
         async with tb.transfer_lock:
             job = tb.require_authority(ctx)
             node_id = job.node_id or "local"
@@ -195,6 +214,11 @@ def acquisition_tools(tb):
                 c not in "0123456789abcdef" for c in info_hash
             ):
                 raise ToolError("Use a valid content hash.")
+            if notes is None:
+                listed = ((tb.scouted.get(ctx.session.id) or {}).get("rows") or {}).values()
+                row = next((r for r in listed if str(r.get("info_hash", "")).lower() == info_hash), None)
+                notes = notes_for(row, [str(f) for f in args.get("files") or []]) if row else {}
+            notes = {k: v for k, v in notes.items() if v}
             identity = (
                 "dl-"
                 + hashlib.sha256((node_id + ":" + info_hash).encode()).hexdigest()[:32]
@@ -246,6 +270,7 @@ def acquisition_tools(tb):
                         "desired_control": "",
                         **({"wanted_files": wanted_files} if wanted_files else {}),
                         **({"wanted_titles": [str(t) for t in args.get("titles") or [job.title]][:3]}),
+                        **notes,
                     },
                 )
                 await tb.storage.add_download(existing)
@@ -262,6 +287,9 @@ def acquisition_tools(tb):
                 )
                 existing.metadata.pop("selection", None)
                 existing.metadata.pop("wanted_files", None)
+                for key in NOTES:
+                    existing.metadata.pop(key, None)
+                existing.metadata.update(notes)
                 if wanted_files:
                     existing.metadata["wanted_files"] = wanted_files
                 await tb.storage.update_download(
@@ -452,6 +480,7 @@ def acquisition_tools(tb):
 
     async def find_releases(ctx, args):
         from . import scout
+        from .profiles import resolve
 
         job = tb.require_authority(ctx)
         targets = wanted(job)[:12]
@@ -460,10 +489,15 @@ def acquisition_tools(tb):
         season = targets[0][0] if targets else 1
         titles, exclude, namesakes = await scout.titles_for(tb, job, season, targets)
         extra = [str(q)[:120] for q in (args.get("queries") or []) if str(q).strip()][:3]
+        # TMDB's episode names: packs are read by title too, so a season the
+        # packs number differently is settled here, not by a smart-model search.
+        names = await scout.episode_names(tb, job, targets) if job.media_type == "tv" else {}
+        peeks = ctx.facts.setdefault("peeks", [])
         rows, searched, dropped, failing = await scout.scout(
             tb, job, targets, titles, extra, exclude=exclude, log=ctx.facts.setdefault("searches", []),
-            peek_log=ctx.facts.setdefault("peeks", []),
+            peek_log=peeks, names=names, letters=resolve("fetch_scout", tb.cfg()).title_letters,
         )
+        note = scout.order_note(rows, peeks)
         # Copies this request already abandoned (stalled, crawling, wrong)
         # go last and say so: neither picker nor reviewer should choose them again.
         abandoned = {
@@ -476,15 +510,23 @@ def acquisition_tools(tb):
         rows.sort(key=lambda row: row["abandoned"])
         for number, row in enumerate(rows, 1):
             row["rid"] = f"r{number}"
+        order = [{"rid": row["rid"], **e} for row in rows for e in row.get("matched") or [] if e["how"] == "title"]
+        order += [e for peek in peeks for e in peek.get("order") or [] if e["how"] == "contradicted"]
         ctx.facts.update(
             kept=len(rows), dropped=dropped, failing=failing, namesakes=namesakes,
-            rows=[{k: row.get(k) for k in ("rid", "name", "seeders", "quality", "coverage", "episode_size", "unlisted")} for row in rows],
+            rows=[{k: row.get(k) for k in ("rid", "name", "seeders", "quality", "coverage", "episode_size", "unlisted", "disputed")}
+                  for row in rows],
+            **({"order": order} if order else {}),
         )
+        if any(e["how"] == "title" for e in order):
+            ctx.facts.setdefault("enforced", []).append({"rule": "episode_order", "detail": {
+                "mapped": [{k: e.get(k) for k in ("rid", "target", "title", "numbered", "file")} for e in order if e["how"] == "title"],
+                "not_chosen": [{k: e.get(k) for k in ("target", "file", "is_episode")} for e in order if e["how"] == "contradicted"],
+                "disputed": [row["rid"] for row in rows if row.get("disputed")]}})
         ctx.session.spend.searches += len(searched)
         memo = tb.scouted.setdefault(ctx.session.id, {"vetoes": 0})
         memo.update(rows={row["rid"]: row for row in rows}, order=[row["rid"] for row in rows], targets=targets,
-                    namesakes=namesakes, titles=titles, exclude=exclude)
-        names = await episode_titles(job, targets) if job.media_type == "tv" else {}
+                    namesakes=namesakes, titles=titles, exclude=exclude, names=names, note=note)
         wanted_text = ", ".join(
             f"S{s:02d}E{e:02d}" + (f' "{names[(s, e)]}"' if names.get((s, e)) else "") for s, e in targets
         ) or f"{job.title} ({job.year})"
@@ -503,6 +545,7 @@ def acquisition_tools(tb):
             )
         return (
             f"Wanted {wanted_text}. Searched: {'; '.join(searched)}. {dropped} other results did not fit.{same}\n"
+            + (note + "\n" if note else "")
             + scout.table(rows)
             + "\nPropose the best row with propose_release (one-line reason); a reviewer approves it before it downloads."
         )
@@ -526,10 +569,17 @@ def acquisition_tools(tb):
         if memo.get("vetoes", 0) >= 2:
             raise ToolError("Two picks were vetoed. Use escalate_model for a full search.")
         rows = [memo["rows"][rid] for rid in memo["order"]]
-        titles = await episode_titles(job, memo.get("targets") or [])
+        targets = memo.get("targets") or []
+
+        def files_of(chosen):
+            return {"info_hash": chosen["info_hash"], "name": chosen["name"][:200], "files": chosen.get("chosen") or [],
+                    "titles": memo.get("titles") or []}
+
+        names = memo.get("names") or (await scout.episode_names(tb, job, targets) if job.media_type == "tv" else {})
         try:
             decision, dollars, model, usage = await acquisition_review.review(
-                tb, job, memo.get("targets") or [], rows, pick, str(args.get("reason", "")), titles, memo.get("namesakes", "")
+                tb, job, targets, rows, pick, str(args.get("reason", "")), names, memo.get("namesakes", ""),
+                memo.get("note", ""),
             )
         except Exception as exc:
             raise ToolError(f"The reviewer could not be reached ({str(exc)[:120]}); try again shortly.") from exc
@@ -556,25 +606,25 @@ def acquisition_tools(tb):
             return "Vetoed. " + advice
         row = memo["rows"][pick]
         ctx.facts["approved"] = not ctx.facts.get("chosen_by_reviewer")
-        result = await add(ctx, {"info_hash": row["info_hash"], "name": row["name"][:200], "files": row.get("chosen") or [],
-                                 "titles": memo.get("titles") or []})
+        result = await add(ctx, files_of(row), notes=notes_for(row))
         memo["vetoes"] = 0
         approved = decision.get("reason", "")
         if ctx.facts.get("chosen_by_reviewer"):
             approved = f"The reviewer chose {pick} instead, and it is downloading: {approved}"
         return {"approved": approved, **(result if isinstance(result, dict) else {"result": result})}
 
-    async def episode_titles(job, targets):
-        """TMDB names of the wanted episodes, for the reviewer to match."""
-        names = {}
-        for season in sorted({s for s, _ in targets}):
-            try:
-                data = await tb.tmdb_get(f"/tv/{job.tmdb_id}/season/{season}")
-            except Exception:
+    def notes_for(row, files=None):
+        """Files found by their TMDB episode title, for the Media Agent's
+        landing note (only those among files, when the files are named)."""
+        mapped = []
+        for e in row.get("matched") or []:
+            if e.get("how") != "title":
                 continue
-            for e in data.get("episodes") or []:
-                names[(season, e.get("episode_number"))] = e.get("name") or ""
-        return names
+            path = next((n for n in row.get("chosen") or [] if n.rsplit("/", 1)[-1][:160] == e.get("file")), e.get("file"))
+            if files is not None and path not in files:
+                continue
+            mapped.append({"file": path, "episode": e["target"], "title": e.get("title", ""), "numbered": e.get("numbered", "")})
+        return {"episode_map": mapped}
 
     async def escalate(ctx, args):
         from .profiles import resolve
