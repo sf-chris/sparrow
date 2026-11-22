@@ -533,7 +533,7 @@ def acquisition_tools(tb):
         except Exception as exc:
             raise ToolError(f"The reviewer could not be reached ({str(exc)[:120]}); try again shortly.") from exc
         acquisition_review.charge(ctx.session, model, usage, dollars, tb.store,
-                                  requested_by=ctx.runtime.current_call(ctx.session.id))
+                                  requested_by=ctx.runtime.current_call(ctx.session.id), cfg=tb.cfg())
         ctx.facts.update(
             pick=pick, name=memo["rows"][pick]["name"], info_hash=memo["rows"][pick]["info_hash"],
             approved=bool(decision.get("approve")),
@@ -576,7 +576,9 @@ def acquisition_tools(tb):
         return names
 
     async def escalate(ctx, args):
-        smart = tb.smart_model()
+        from .profiles import resolve
+
+        smart = resolve("fetch_escalation", tb.cfg()).model
         if ctx.session.model == smart:
             return "Already on the smart tier with the full search tools."
         ctx.session.model = smart

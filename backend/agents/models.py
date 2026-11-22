@@ -298,6 +298,11 @@ class AgentSession:
     close_reason: str = ""
     outcome: CaseState = CaseState.WAITING
     budget_scope: str = ""  # stable across replacement subscription sessions
+    # The versioned profile (profiles.py) the latest model call ran under, and
+    # each one the session has used: [{"id", "version", "since"}].
+    profile: str = ""
+    profile_version: str = ""
+    profiles: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -319,6 +324,9 @@ class AgentSession:
             "close_reason": self.close_reason,
             "outcome": self.outcome.value,
             "budget_scope": self.budget_scope,
+            "profile": self.profile,
+            "profile_version": self.profile_version,
+            "profiles": self.profiles,
         }
 
     @classmethod

@@ -2,11 +2,12 @@
 what it cost and what came of it (issue #15).
 
 Model calls are written by the runtime and by the structured one-shot calls
-(the pick reviewer, subtitle page checkers, the picture reader); tool calls
-by the runtime, with facts the tools note on their context (searches run or
-served from cache, seconds waited for the indexer allowance, rows kept, packs
-peeked, the reviewer's verdict). Reports, exports and audits read only these
-tables, so "what did this cost, and why?" is one command:
+(the pick reviewer, subtitle page checkers, the picture reader), each with
+the versioned profile it ran under (profiles.py); tool calls by the runtime,
+with facts the tools note on their context (searches run or served from
+cache, seconds waited for the indexer allowance, rows kept, packs peeked, the
+reviewer's verdict). Reports, exports and audits read only these tables, so
+"what did this cost, and why?" is one command:
 
     python -m backend.agents.ledger report --data data/run/state [--batch NAME]
     python -m backend.agents.ledger export --data data/run/state [--format csv] > ledger.jsonl
@@ -57,7 +58,7 @@ CREATE TABLE IF NOT EXISTS ledger_batches(
     batch TEXT NOT NULL, job_id TEXT NOT NULL, ts REAL NOT NULL, PRIMARY KEY(batch, job_id));
 """
 # Columns added after the first runs were recorded: older ledgers gain them.
-ADDED_COLUMNS = {"effort": "TEXT", "error_class": "TEXT", "rates": "TEXT"}
+ADDED_COLUMNS = {"effort": "TEXT", "error_class": "TEXT", "rates": "TEXT", "profile": "TEXT", "profile_version": "TEXT"}
 
 # What a model call paid for. "fetch" is the Fetch Agent's calls recorded
 # before its phases were told apart.
@@ -85,10 +86,10 @@ TOOL_OK = ("ok", "cached", "waited")  # outcomes of a tool call that worked
 # only once it has MIN_RUN titles: one title is not a distribution.
 TARGETS = {"search_median": 0.02, "search_p90": 0.10, "escalation_rate": 0.15, "subtitles_per_title": 1.00}
 MIN_RUN = 5
-EXPORT_SCHEMA = 2
+EXPORT_SCHEMA = 3
 CALL_FIELDS = ("id", "ts", "session_id", "job_id", "user_id", "agent", "phase", "model", "effort", "input_tokens",
                "cached_tokens", "cache_write_tokens", "output_tokens", "cost", "rates", "latency", "trigger", "tools",
-               "error", "error_class", "source")
+               "error", "error_class", "source", "profile", "profile_version")
 TOOL_FIELDS = ("session_id", "tool_id", "call_id", "job_id", "ts", "duration", "name", "outcome", "facts")
 
 
@@ -136,7 +137,7 @@ def error_class(exc) -> str:
 
 def record_call(store, *, session_id, phase, model="", usage=None, cost=0.0, job_id="", user_id="",
                 agent="", latency=None, trigger=None, tools=None, error="", source="live", ts=None,
-                effort="", rates=None, error_class="") -> str:
+                effort="", rates=None, error_class="", profile="", profile_version="") -> str:
     """One model call. Never raises: the ledger must not break the work it records."""
     usage = usage or {}
     identity = secrets.token_hex(8)
@@ -151,6 +152,7 @@ def record_call(store, *, session_id, phase, model="", usage=None, cost=0.0, job
             "trigger": json.dumps(_clip(trigger)) if trigger else None, "tools": json.dumps(tools) if tools else None,
             "error": (error or "")[:500], "source": source, "effort": effort or "",
             "error_class": error_class or ("error" if error else ""), "rates": json.dumps(rates) if rates else None,
+            "profile": profile or "", "profile_version": profile_version or "",
         }
         with _db(store) as db:
             db.execute(f"INSERT INTO ledger_calls({','.join(row)}) VALUES({','.join('?' * len(row))})",
@@ -412,6 +414,7 @@ def summarize(store, since=0.0, job=None, batch=None) -> dict:
             "peeks": {"listed": 0, "unlisted": 0},
             "picks": {"proposed": 0, "approved": 0, "vetoed": 0}, "escalations": [], "downloads": [], "search_models": [],
             "decisions": [], "first_download": None, "library": None, "flags": [],
+            "profiles": Counter(),
         }
     for call in calls:
         title = titles.get(call.get("job_id"))
@@ -422,6 +425,8 @@ def summarize(store, since=0.0, job=None, batch=None) -> dict:
         title["phases"][call["phase"]] += call["cost"]
         title["by_model"][f"{group}:{call['model']}"] += call["cost"]
         title["calls"][group] += 1
+        if call.get("profile"):
+            title["profiles"][f"{call['profile']}@{call.get('profile_version') or '?'}"] += 1
         title["errors"] += 1 if call.get("error") else 0
         if call["phase"] in FETCH_PHASES and call["model"] not in title["search_models"]:
             title["search_models"].append(call["model"])
@@ -508,6 +513,7 @@ def summarize(store, since=0.0, job=None, batch=None) -> dict:
             "rate_limited": sum(t["searches"]["rate_limited"] for t in searched),
             "model_errors": sum(t["errors"] for t in titles.values()),
             "reviews": _review_stats([r for r in records if r["job_id"] in titles]),
+            "profiles": dict(sum((t["profiles"] for t in titles.values()), Counter())),
             "time_to_download_median": round(statistics.median(waits)) if waits else None,
             "backfilled": any(c.get("source") == "backfill" for c in calls),
         }
@@ -661,8 +667,10 @@ def report(summary) -> str:
             f"Reviews: {review['reviews']} (${review['cost']:.4f}) · approved {review['approved']} · reviewer chose another row "
             f"{review['reviewer_chose']} · vetoed {review['vetoed']} · approved then abandoned {review['approved_then_abandoned']} · "
             f"vetoed then chosen anyway {review['vetoed_then_chosen']} (false vetoes {review['false_vetoes']})",
-            "",
         ]
+        if stats.get("profiles"):
+            lines.append("Profiles (calls): " + ", ".join(f"{name} {count}" for name, count in sorted(stats["profiles"].items())))
+        lines.append("")
     lines += ["| Title | Search $ | Subtitles $ | Calls (search) | Searches live/cached | Picks ok/vetoed | Escalated | "
               "To download | To library | Status |",
               "|---|---|---|---|---|---|---|---|---|---|"]
@@ -748,7 +756,9 @@ def timelines(store, since=0.0, job=None, limit=60, batch=None) -> str:
         for call in [c for c in calls if c["job_id"] == job_id][:limit]:
             trigger = call.get("trigger") or {}
             about = ",".join(trigger.get("kinds") or []) if not trigger.get("step") else "continuing"
-            line = f"- {time.strftime('%H:%M:%S', time.localtime(call['ts']))} {call['phase']} {call['model']} ${call['cost']:.4f} [{about}]"
+            line = (f"- {time.strftime('%H:%M:%S', time.localtime(call['ts']))} {call['phase']} {call['model']} "
+                    f"${call['cost']:.4f} [{about}]" + (f" profile {call['profile']}@{call.get('profile_version')}"
+                                                       if call.get("profile") else ""))
             if call.get("error"):
                 line += f" ERROR({call.get('error_class') or 'error'}) {call['error'][:80]}"
             parts = []

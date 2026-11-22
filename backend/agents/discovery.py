@@ -69,11 +69,10 @@ class Discovery:
         service.runtime.register(
             AgentSpec(
                 kind=AgentKind.DISCOVERY.value,
-                model=service.cheap_model,
+                model=lambda: service.profile("discovery").model,
                 system=system,
                 tools=lambda _: self.tools(),
-                max_steps=8,
-                max_tokens=1400,
+                profile=service.session_profile,  # eight calls, 1,400 output tokens
             )
         )
         return service
@@ -315,7 +314,7 @@ def install_discovery(app, accounts, catalogue, get_service):
             session = AgentSession(
                 agent=AgentKind.DISCOVERY,
                 user_id=request.state.user["id"],
-                model=service.cheap_model(),
+                model=service.profile("discovery").model,
             )
             with accounts.connect() as db:
                 db.execute(

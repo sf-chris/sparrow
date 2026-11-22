@@ -165,8 +165,9 @@ class Toolbox:
         return TorrentManager(self.cfg().torrent_client)
 
     def smart_model(self) -> str:
-        return (os.getenv("SPARROW_SMART_MODEL") or self.cfg().smart_model
-                or "claude-sonnet-5")
+        from .profiles import tier_model
+
+        return tier_model("smart", self.cfg())
 
     async def apply_file_selection(self, download) -> Optional[dict]:
         """Download only the files the agent chose from a pack.
@@ -1285,7 +1286,9 @@ def media_tools(tb: Toolbox) -> list[ToolDef]:
         return "Reported to the Fetch Agent."
 
     async def escalate(ctx: ToolCtx, args: dict):
-        smart = tb.smart_model()
+        from .profiles import resolve
+
+        smart = resolve("media_escalation", tb.cfg()).model
         if ctx.session.model == smart:
             return "Already on the smart tier."
         ctx.session.model = smart

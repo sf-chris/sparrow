@@ -22,7 +22,7 @@ from typing import Any, Awaitable, Callable, Optional
 import anthropic
 
 from ..configuration import effective_openai_key
-from . import ledger, openai_loop
+from . import ledger, openai_loop, profiles
 from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
 from .errors import ToolError  # noqa: F401  (tools import it from here)
@@ -201,6 +201,10 @@ class AgentSpec:
     # The cost ledger's phase for a model call: (session, trigger) -> name.
     # Unset, the ledger's default for the agent kind applies.
     phase: Optional[Callable[[AgentSession, dict], str]] = None
+    # The versioned profile a session runs under (profiles.py). When set, its
+    # effort, bounds and allowance replace the fields above; unset, a profile
+    # is derived from those fields.
+    profile: Optional[Callable[[AgentSession], "profiles.Profile"]] = None
 
 
 class AgentRuntime:
@@ -254,6 +258,24 @@ class AgentRuntime:
 
     def register(self, spec: AgentSpec) -> None:
         self._specs[spec.kind] = spec
+
+    def profile_for(self, session: AgentSession, spec: Optional[AgentSpec] = None):
+        """The profile this session runs under now, bound to its actual model."""
+        spec = spec or self._specs.get(session.agent.value)
+        if spec is None:
+            return None
+        if spec.profile:
+            try:
+                return spec.profile(session).bind(session.model)
+            except Exception:
+                logger.exception("profile for %s session %s not resolved; using its spec", session.agent.value, session.id)
+        return profiles.from_spec(spec, session.model)
+
+    @staticmethod
+    def _note_profile(session: AgentSession, profile) -> None:
+        if profile and (session.profile, session.profile_version) != (profile.id, profile.version):
+            session.profile, session.profile_version = profile.id, profile.version
+            session.profiles.append({"id": profile.id, "version": profile.version, "since": time.time()})
 
     def tools_for(self, session: AgentSession) -> list[ToolDef]:
         from .evidence import PAGE_CHARS
@@ -447,7 +469,11 @@ class AgentRuntime:
             if not self.authority_valid(session, ctx.job_revision):
                 return
             policy = self.policy_getter()
-            allowance = spec.max_dollars or policy["max_agent_dollars"]
+            profile = self.profile_for(session, spec)
+            self._note_profile(session, profile)
+            # The allowance belongs to the request or subscription (every
+            # session and profile in its budget scope), never to a profile.
+            allowance = profile.max_dollars or policy["max_agent_dollars"]
             sessions = self._budget_sessions(session)
             dollars = (
                 sum(s.spend.dollars for s in sessions if s.id != session.id)
@@ -455,7 +481,7 @@ class AgentRuntime:
             )
             if (
                 steps
-                >= min(MAX_STEPS_PER_WAKE, spec.max_steps, policy["max_agent_calls"])
+                >= min(MAX_STEPS_PER_WAKE, profile.max_steps, policy["max_agent_calls"])
                 or dollars >= allowance
             ):
                 session.outcome = (
@@ -701,15 +727,16 @@ class AgentRuntime:
             tokens = len(wire.encode("utf8")) + 1024 * (
                 len(session.messages) + len(tools) + 1
             )
+            profile = self.profile_for(session, spec)
             rates = rates_for_model(session.model)
             # A cached loop re-reads its earlier prefix at the cache-read rate and
             # writes only the new turn; without caching everything is written.
             inbound = (
                 tokens * rates["cache_read"] + min(tokens, 40_000) * rates["cache_write"]
-                if spec.cache
+                if profile.cache
                 else tokens * rates["cache_write"]
             )
-            estimate = 3 * (inbound + spec.max_tokens * rates["output"]) / 1_000_000
+            estimate = 3 * (inbound + profile.max_tokens * rates["output"]) / 1_000_000
             identity = secrets.token_hex(16)
             with self.store._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
@@ -720,7 +747,7 @@ class AgentRuntime:
                     + ")",
                     scopes,
                 ).fetchone()[0]
-                allowance = spec.max_dollars or self.policy_getter()["max_agent_dollars"]
+                allowance = profile.max_dollars or self.policy_getter()["max_agent_dollars"]
                 if spent + held + estimate > allowance:
                     return None, True
                 db.execute(
@@ -762,17 +789,18 @@ class AgentRuntime:
         client = self._client()
         try:
             delay = 2.0
-            spec = self._specs[session.agent.value]
+            profile = self.profile_for(session)
             options = {}
-            if spec.cache:
+            if profile.cache:
                 options["cache_control"] = {"type": "ephemeral"}
-            if spec.effort:
-                options["output_config"] = {"effort": spec.effort}
+            if profile.effort_sent:
+                # Only an effort the model accepts (profiles.effort_for).
+                options["output_config"] = {"effort": profile.effort_sent}
             for attempt in range(3):
                 try:
                     return await client.messages.create(
                         model=session.model,
-                        max_tokens=spec.max_tokens,
+                        max_tokens=profile.max_tokens,
                         system=system,
                         tools=[t.to_api() for t in tools],
                         messages=openai_loop.anthropic_messages(session.messages),
@@ -794,7 +822,7 @@ class AgentRuntime:
         """The same call through the OpenAI Responses API (see openai_loop)."""
         import httpx
 
-        spec = self._specs[session.agent.value]
+        profile = self.profile_for(session)
         key = self._openai_key_getter()
         if not key:
             # A missing key is not an outage: say so instead of retrying.
@@ -808,8 +836,8 @@ class AgentRuntime:
                     system,
                     [t.to_api() for t in tools],
                     session.messages,
-                    max_tokens=spec.max_tokens,
-                    effort=spec.effort,
+                    max_tokens=profile.max_tokens,
+                    effort=profile.effort_sent,
                     cache_key=session.id,
                 )
             except (openai_loop.OpenAIStatusError, httpx.TransportError) as e:
@@ -847,12 +875,14 @@ class AgentRuntime:
         except Exception:
             logger.exception("ledger: no phase for this call")
             phase = session.agent.value
+        profile = self.profile_for(session, spec)
         self._current_call[session.id] = ledger.record_call(
             self.store, session_id=session.id, job_id=session.job_id, user_id=session.user_id,
             agent=session.agent.value, phase=phase, model=session.model, usage=entry,
             cost=float(entry.get("cost") or 0), latency=round(time.time() - started, 3),
-            trigger=dict(trigger), tools=tools, error=error[:500], effort=spec.effort if spec else "",
+            trigger=dict(trigger), tools=tools, error=error[:500], effort=getattr(profile, "effort_sent", ""),
             rates=entry.get("rates"), error_class=error_class,
+            profile=getattr(profile, "id", ""), profile_version=getattr(profile, "version", ""),
         )
         trigger["step"] += 1
 
