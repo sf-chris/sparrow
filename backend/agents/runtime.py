@@ -331,6 +331,12 @@ class AgentRuntime:
             }, "additionalProperties": False}, listing,
         )]
 
+    def provider_ready(self, model: str) -> bool:
+        """Whether the provider this model runs on has a key."""
+        if altprovider_loop.is_altprovider_model(model):
+            return bool(self._altprovider_key_getter())
+        return bool(self._api_key_getter())
+
     def _client(self) -> provider.AsyncProvider:
         return provider.AsyncProvider(
             api_key=self._api_key_getter(), timeout=45, max_retries=0
