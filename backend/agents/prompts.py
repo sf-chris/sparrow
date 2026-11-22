@@ -45,7 +45,9 @@ SHARED_RULES = """
 - **Ending a turn.** Always end by calling wake_me (with a timer and/or a
   plain-language reason) — or by closing when you're truly done. If you
   just stop talking you'll sleep until the next event, with no message for
-  the user; prefer an explicit wake_me.
+  the user; prefer an explicit wake_me. Wrap up in one reply: memory_write,
+  journal_write and wake_me can go together. Waking only to take notes and
+  sleep again makes later timer checks back off.
 """
 
 

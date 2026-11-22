@@ -60,6 +60,7 @@ class ResolutionTests(unittest.TestCase):
         escalation = by_role["fetch_escalation"]
         self.assertEqual((escalation.wave_dollars, escalation.waves), (0.02, 3))
         self.assertEqual(by_role["fetch_scout"].wave_dollars, 0)
+        self.assertEqual(by_role["fetch_scout"].note_only_limit, 2)
         # Without an AltProvider key the subtitle checkers are off, as before.
         self.assertEqual(by_role["subtitle_checker"].model, "")
 
