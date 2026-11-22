@@ -187,6 +187,7 @@ class Replay:
     def __init__(self, cassettes):
         self.cassettes = list(cassettes)
         self._search_cache = {}
+        self._search_scopes = {}
         self.simulated = []  # queries no recording answered: served from a corpus
         self.searched = []
         self.tmdb, self.listings, self.recorded, self.corpus = {}, {}, {}, []

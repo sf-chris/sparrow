@@ -529,7 +529,7 @@ class ScoutJudgementTests(unittest.TestCase):
             def __init__(self, answer):
                 self.answer, self.calls = answer, 0
 
-            async def index_search(self, query, wait=0, log=None):
+            async def index_search(self, query, wait=0, log=None, scope=""):
                 self.calls += 1
                 if isinstance(self.answer, Exception):
                     raise self.answer

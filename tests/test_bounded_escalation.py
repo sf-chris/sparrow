@@ -15,6 +15,7 @@ from backend.agents import escalation, ledger, profiles
 from backend.agents.models import AgentKind, AgentSession, CaseState, Event, Job, SessionStatus
 from backend.agents.runtime import ToolCtx, ToolError
 from backend.agents.service import AgentService
+from backend.agents.tools import SEARCH_REPEAT_TTL, search_key
 from backend.models import SparrowConfig
 from backend.storage import Storage
 from test_discovery import Block
@@ -173,6 +174,50 @@ class EscalationBoundTests(Fixture):
                 self.paid(0.05, f"c{n}")
                 await self.tool("tpb_search")(ctx, {"query": f"Fixture Show {n}"})
         self.assertNotIn("escalation", self.session.controls)
+
+
+class QueryDedupeTests(Fixture):
+    async def test_a_request_repeating_its_own_search_is_served_from_the_cache(self):
+        log = []
+        await self.tb.index_search("Fixture Show S01E02", log=log, scope=self.job.id)
+        key = search_key("  fixture show   s01e02 ")
+        self.assertEqual(key, "fixture show s01e02")
+        stamp, rows = self.tb._search_cache[key]
+        self.tb._search_cache[key] = (stamp - 7200, rows)  # stale for everyone else
+        found, cached = await self.tb.index_search("FIXTURE SHOW s01e02", log=log, scope=self.job.id)
+        self.assertEqual((found, cached), (rows, True))
+        self.assertTrue(log[-1]["dedupe"])
+        self.assertEqual(self.index.await_count, 1)
+        await self.tb.index_search("Fixture Show S01E02", log=log, scope="another-request")
+        self.assertEqual(self.index.await_count, 2)  # another request gets a fresh answer
+        self.tb._search_cache[key] = (time.time() - SEARCH_REPEAT_TTL - 1, rows)
+        await self.tb.index_search("Fixture Show S01E02", log=log, scope=self.job.id)
+        self.assertEqual(self.index.await_count, 3)  # not forever
+        self.assertEqual(search_key("Fixture:  Punctuation"), "fixture: punctuation")  # the index reads it
+
+    async def test_the_escalated_session_reuses_the_scouts_search(self):
+        from backend.agents import scout
+
+        await scout.scout(self.tb, self.job, [(1, 2)], ["Fixture Show"], searches=1)
+        first = self.index.await_args_list[0].args[0]
+        stamp, rows = self.tb._search_cache[search_key(first)]
+        self.tb._search_cache[search_key(first)] = (stamp - 3600, rows)
+        self.session.model = "gpt-6-sol"
+        self.service.store.save_session(self.session)
+        replies = iter([answer(("tpb_search", {"query": first.upper()}), tokens=500),
+                        answer(("wake_me", {"reason": "Waiting."}), tokens=500)])
+        self.runtime._call_api = AsyncMock(side_effect=lambda *_: next(replies))
+        await self.runtime.wake(self.session.id, Event(kind="timer"))
+
+        self.assertEqual(self.index.await_count, 1)
+        _, tools, _, _ = ledger.load(self.service.store)
+        search = next(t for t in tools if t["name"] == "tpb_search")
+        self.assertEqual(search["outcome"], "cached")
+        rows = ledger.load_enforcements(self.service.store)
+        self.assertEqual([r["rule"] for r in rows if r["rule"] == "query_dedupe"], ["query_dedupe"])
+        dedupe = next(r for r in rows if r["rule"] == "query_dedupe")
+        self.assertEqual((dedupe["tool"], dedupe["detail"]["query"]), ("tpb_search", first.upper()))
+        self.assertGreaterEqual(dedupe["detail"]["age"], 3600)
 
 
 if __name__ == "__main__":
