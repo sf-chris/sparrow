@@ -1,0 +1,36 @@
+name: Browser journeys in WebKit (Safari's engine)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - frontend/**
+      - tests/browser/**
+      - .github/workflows/browser-webkit.yml
+permissions:
+  contents: read
+jobs:
+  webkit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: python -m venv .venv
+      - run: .venv/bin/pip install --require-hashes -r requirements.lock
+      - run: npm ci && npx playwright install --with-deps webkit && npx vite build
+        working-directory: frontend
+      - name: Every journey in WebKit
+        run: SPARROW_PLAYWRIGHT=$PWD/tests/browser/webkit.cjs tests/browser/ci.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webkit-evidence
+          path: tests/browser/artifacts

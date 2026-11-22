@@ -2636,8 +2636,13 @@ a.tonight-art:hover .still img {
   display: grid;
   gap: 2.25rem;
 }
+/* A block, not a grid: WebKit (Safari) keeps a floated legend's 100% width
+   from a wider layout when a grid narrows, and the page scrolls sideways. */
 .preference-group {
-  display: grid;
+  display: flow-root;
+}
+.preference-group > legend + * {
+  clear: both;
 }
 .preference-group > legend {
   font-family: var(--font-display);
