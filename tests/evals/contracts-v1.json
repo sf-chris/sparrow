@@ -1,5 +1,5 @@
 {
-  "version": "agent-contracts-1",
+  "version": "agent-contracts-1.1",
   "mode": "controlled_contract",
   "cases": [
     {
@@ -137,32 +137,42 @@
     {
       "id": "subtitle-01",
       "role": "subtitle",
-      "test": "test_subtitles.SubtitleTests.test_measured_track_waits_for_review_then_becomes_playable_with_personal_offset",
-      "layer": "controlled_contract"
+      "test": "test_subtitles.SubtitleTests.test_checked_review_reads_speech_before_captions_and_gate_holds",
+      "layer": "controlled_contract",
+      "previous_test": "test_subtitles.SubtitleTests.test_measured_track_waits_for_review_then_becomes_playable_with_personal_offset",
+      "intent": "A measured track waits for its review gate, then plays as checked; the personal delay on a corrected copy is asserted in test_foreign_dialogue_is_measured_and_retimed_without_ai."
     },
     {
       "id": "subtitle-02",
       "role": "subtitle",
-      "test": "test_subtitles.SubtitleTests.test_model_outage_keeps_measured_subtitles_pending_without_blocking_video",
-      "layer": "controlled_contract"
+      "test": "test_subtitles.SubtitleTests.test_missing_key_leaves_subtitles_playable_and_pending",
+      "layer": "controlled_contract",
+      "previous_test": "test_subtitles.SubtitleTests.test_model_outage_keeps_measured_subtitles_pending_without_blocking_video",
+      "intent": "No reachable reviewer keeps measured subtitles pending (warning, not checked) without blocking playback."
     },
     {
       "id": "subtitle-03",
       "role": "subtitle",
-      "test": "test_subtitles.SubtitleTests.test_cancel_during_preparation_discards_late_track_and_review",
-      "layer": "controlled_contract"
+      "test": "test_subtitles.SubtitleTests.test_cancel_during_preparation_discards_the_late_track",
+      "layer": "controlled_contract",
+      "previous_test": "test_subtitles.SubtitleTests.test_cancel_during_preparation_discards_late_track_and_review",
+      "intent": "Cancelling during preparation discards the late track."
     },
     {
       "id": "subtitle-04",
       "role": "subtitle",
-      "test": "test_subtitles.SubtitleEvidenceTests.test_plain_caption_sanitization_and_invalid_timing",
-      "layer": "controlled_contract"
+      "test": "test_subtitles.CaptionTextTests.test_plain_caption_sanitization_and_invalid_timing",
+      "layer": "controlled_contract",
+      "previous_test": "test_subtitles.SubtitleEvidenceTests.test_plain_caption_sanitization_and_invalid_timing",
+      "intent": "Unsafe caption markup is removed and invalid timing is refused."
     },
     {
       "id": "subtitle-05",
       "role": "subtitle",
-      "test": "test_subtitles.SubtitleEvidenceTests.test_wrong_text_and_missing_dialogue_are_never_quality_passes",
-      "layer": "controlled_contract"
+      "test": "test_subtitles.VerificationTests.test_match_and_coverage_decide_a_human_track",
+      "layer": "controlled_contract",
+      "previous_test": "test_subtitles.SubtitleEvidenceTests.test_wrong_text_and_missing_dialogue_are_never_quality_passes",
+      "intent": "Wrong text and missing dialogue never pass the verification gate."
     },
     {
       "id": "media-04",
@@ -182,5 +192,8 @@
       "test": "test_node_acquisition.NodeAcquisitionTests.test_inventory_cannot_claim_other_title_or_unpublished_file",
       "layer": "controlled_contract"
     }
+  ],
+  "changes": [
+    "1.1: subtitle-01..05 point at the tests that replaced them when subtitle review moved to measured timing and page-by-page checks (bc1a95d); each case keeps its outcome."
   ]
 }
