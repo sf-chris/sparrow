@@ -171,20 +171,22 @@ RestartSec=10"
     printf '%s\nUser=%s\n\n[Install]\nWantedBy=multi-user.target\n' "$unit" "$owner" > /etc/systemd/system/sparrow-node.service
     systemctl daemon-reload && systemctl enable --now sparrow-node >/dev/null 2>&1 && started=systemd
   elif systemctl --user show-environment >/dev/null 2>&1; then
-    mkdir -p "$home/.config/systemd/user"
-    printf '%s\n\n[Install]\nWantedBy=default.target\n' "$unit" > "$home/.config/systemd/user/sparrow-node.service"
-    systemctl --user daemon-reload && systemctl --user enable --now sparrow-node >/dev/null 2>&1 && started=systemd-user
-    # Keep it running when nobody is signed in.
+    # A user service stops when its owner signs out, unless they "linger".
     loginctl enable-linger "$owner" >/dev/null 2>&1 || true
-    if [ "$(loginctl show-user "$owner" -p Linger --value 2>/dev/null)" != yes ]; then
-      say "To keep Sparrow Node running after you sign out, run: sudo loginctl enable-linger $owner"
+    if [ "$(loginctl show-user "$owner" -p Linger --value 2>/dev/null)" = yes ]; then
+      mkdir -p "$home/.config/systemd/user"
+      printf '%s\n\n[Install]\nWantedBy=default.target\n' "$unit" > "$home/.config/systemd/user/sparrow-node.service"
+      systemctl --user daemon-reload && systemctl --user enable --now sparrow-node >/dev/null 2>&1 && started=systemd-user
+    else
+      systemctl --user disable --now sparrow-node >/dev/null 2>&1 || true
+      say "(For a systemd service instead, run: sudo loginctl enable-linger $owner, then this command again.)"
     fi
   fi
 fi
 if [ -z "$started" ]; then
   # No service manager: start it now and again at every restart.
   mkdir -p "$dir/logs"
-  (cd "$dir/app" && nohup "$python" "$run" --config "$dir/node.json" run >>"$dir/logs/node.log" 2>&1 &)
+  (cd "$dir/app" && nohup "$python" "$run" --config "$dir/node.json" run </dev/null >>"$dir/logs/node.log" 2>&1 &)
   if has crontab; then
     line="@reboot cd '$dir/app' && '$python' '$run' --config '$dir/node.json' run >>'$dir/logs/node.log' 2>&1"
     { crontab -l 2>/dev/null | grep -v 'sparrow-node.py' || true; echo "$line"; } | crontab - && started=cron
