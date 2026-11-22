@@ -45,8 +45,11 @@ Offline replay runs the real scout over cassettes in `cassettes/search/` with no
 model call and reports whether the right copy ranks first, searches and peeks
 used, and how often the cheap path would have to escalate. The bundled cassettes
 are synthetic (realistic naming, illustrative seeders), so their numbers are a
-projection about the scout, not a cost. `results/search-offline.json` is the
-current baseline; regenerate it with each scout change and compare:
+projection about the scout, not a cost. It also projects whether code would let
+the first row skip the pick review, and counts seasons whose episode order was
+settled by title; a cassette may name the one right file of a pack
+(`correct_files`). `results/search-offline.json` is the current baseline;
+regenerate it with each scout change and compare:
 
 ```sh
 .venv/bin/python tests/evals/search_bench.py offline --compare tests/evals/results/search-offline.json
