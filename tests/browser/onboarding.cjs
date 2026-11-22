@@ -1,6 +1,7 @@
 /* Full owner setup against disposable state; no live provider calls. */
 const { chromium } = require(
-  require.resolve("playwright", { paths: [process.cwd() + "/frontend"] }),
+  process.env.SPARROW_PLAYWRIGHT ||
+    require.resolve("playwright", { paths: [process.cwd() + "/frontend"] }),
 );
 const AxeBuilder = require(
   require.resolve("@axe-core/playwright", {
