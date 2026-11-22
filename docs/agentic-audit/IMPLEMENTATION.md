@@ -139,7 +139,7 @@ retrieval contract, measured regression cases and remaining evidence boundaries.
 | P2 | Current Librarian live fixture and 30-case controlled baseline delivered. Add full live fixtures for the other roles, separate unseen holdout, real-model/provider repetitions and full measured outcome costs |
 | P3 | Core event/result persistence and recovery delivered with controlled crash tests. Extend combined restart/revision/provider chaos scenarios in the final acceptance pilot; conservative uncertain effects still require receipt investigation |
 | P4 | Oversized tool observations have complete saved artifacts, explicit previews, bounded retrieval/listing and serialized storage quotas. [Versioned role profiles and bounded escalation](#profiles-and-bounded-escalation--23-november-2026) delivered (23 Nov 2026): sessions and ledger rows record profile and version; escalated searches, repeated searches and idle wakes are bounded in the tools/runtime. A paid evaluation of profile choices (effort, wave allowance), structured checkpoints/recoverable compaction, cross-session handoffs, retention policy and fuller source pagination remain |
-| P5 | Rich Discovery intent/edition constraints, complete acquisition candidate evidence, targeted missing-episode investigation and structured Fetch/Media results remain |
+| P5 | [The ledger audit's remaining Fetch recommendations](#episode-order-and-a-conditional-pick-review--23-november-2026) delivered (23 Nov 2026): episode-order disputes are settled from TMDB titles and real file lists, the pick review is skipped only for picks code verified on every point, and a veto only for unverified quality or audio becomes one check download. Not yet measured live. Rich Discovery intent/edition constraints, complete acquisition candidate evidence, targeted missing-episode investigation and structured Fetch/Media results remain |
 | P6 | Structured rejected/missing-file results, optional import investigation and richer subtitle samples/candidate/repair tools remain |
 | P7 | Durable review and shared allowance foundation delivered; scoped evidence-backed lessons, useful policy windows/renewal and complete standing-care quality gates remain |
 | P8 | Existing runtime retained during recovery implementation. This is not the requested same-model SDK comparison or a final framework decision |
@@ -291,3 +291,67 @@ prices allowed about one Medium call, so waves are bounded by calls instead;
 the next live benchmark should check that escalated titles still reach a
 download. The 30-case contract runner still lists five subtitle tests that were
 renamed earlier; those cases fail to load at `main` as they do here.
+
+## Episode order and a conditional pick review — 23 November 2026
+
+The [live search audit](SEARCH_LIVE_2026-11-22.md)'s remaining Fetch
+recommendations (3, 4 and the first half of 2) are enforced in code. No paid
+model, indexer or torrent traffic was used, so the savings are not yet measured.
+
+- **Episode order** (`scout.match`, `node_tools` `find_releases`). Each pack
+  the scout looks inside is read by TMDB's episode titles as well as by number.
+  A file carrying the wanted title is chosen whatever number the pack gives it;
+  a file numbered as the episode whose title says it is another one is not.
+  Titles are matched only when distinctive (8 letters or more, not "Episode 5",
+  not part of the show's name or another title that season). Other copies of a
+  disputed number are marked and ranked down. The short list, the reviewer's
+  record and the Media Agent's landing note say which file is which episode;
+  each mapping is an `episode_order` ledger row. Such a pick is still reviewed,
+  but no search is needed to settle it.
+- **Conditional review** (`acquisition_review.doubts`, `propose_release`). The
+  smart-model review is skipped only when code finds nothing in doubt: the exact
+  year (films) or episode, the wanted files in the real file list (a single
+  release's list is read once), no other title with the same name, no other
+  season, sequel, cut or disputed number, a known quality in the window, the
+  requested audio named, not raw, subtitles named when required, at least 10
+  seeds and code's own first row. A skip is a `review_skipped` row; a kept
+  review notes its reasons in the tool's facts.
+- **Check downloads** (`acquisition_review.check_allowed`, `propose_release`).
+  The reviewer now names its main concern. A veto only for quality or audio the
+  name cannot show, on a copy with no doubt about its title, episode or files,
+  downloads once marked as a check instead of leading to a smart-model search.
+  The Media Agent is told; its probe and inventory checks decide. One per
+  request; past that the veto stands. `check_download` and
+  `check_download_refused` rows; the ledger report says whether checks
+  verified the copy or failed.
+
+The thresholds are profile fields, versioned and overridable with
+`SPARROW_PROFILES`; a field left at zero stays out of a role's version.
+
+| Role | Field | Default | Meaning |
+| --- | --- | --- | --- |
+| fetch_review | `skip_review` | 1 | 0 reviews every pick |
+| fetch_review | `skip_seeds` | 10 | fewest seeders for a skip |
+| fetch_review | `check_downloads` | 1 | check downloads per request; 0 off |
+| fetch_scout | `title_letters` | 8 | shortest episode title matched; 0 off |
+
+Evidence: the full suite passes (398 tests, 3 skipped; 20 new). The Cowboy
+Bebop cassette now models the live run's dispute with synthetic names (TMDB's
+S01E05 is the packs' 09) and the benchmark scores the chosen file. Offline:
+
+| Run | Right first | Would escalate | Searches median | Peeks | r1 review skipped |
+| --- | --- | --- | --- | --- | --- |
+| Before (`fa64dd2`, old cassette) | 28/28 | 1 | 6 | 22 | — |
+| Title matching off, new cassette | 27/28 | 2 | 6 | 22 | 0 (skips off) |
+| After | 28/28 | 1 | 6 | 22 | 8 |
+
+Cowboy Bebop: by number, both right packs offer their 05 (another episode) and
+the title would escalate; read by title, their 09 file is chosen in the same 6
+searches and 2 peeks, and the two copies numbered 05 are marked disputed. Its
+review stays (another title shares the name). The 8 projected skips are
+listed packs; single releases need their file list, which the cassettes lack.
+
+Not done: a single release named for the wanted title under another number is
+still dropped as another episode; a pack the indexer cannot list still picks
+its file by number when it starts (it is marked disputed when a dispute is
+known); the escalated model's own adds are never check downloads.
