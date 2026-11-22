@@ -346,16 +346,8 @@ fs.mkdirSync(out, { recursive: true });
     path.join(out, "reimagined-results.json"),
     JSON.stringify(result, null, 2),
   );
-  const engine = browser.browserType().name();
   await browser.close();
-  // WebKit reports requests cancelled by a page navigation as page errors
-  // ("… due to access control checks"); the app catches them. Others are real.
-  assert.deepEqual(
-    errors.filter(
-      (message) => !(engine === "webkit" && /due to access control checks\.$/.test(message)),
-    ),
-    [],
-  );
+  assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
       passed: true,
