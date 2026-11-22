@@ -1,9 +1,10 @@
 """The escalated Fetch search's bounded allowance.
 
 Once the cheap scout hands a request to the smart model, its searching comes
-in waves. A wave may spend the Fetch escalation profile's ``wave_dollars`` on
-smart-model calls: a soft cap, checked before each search, so the call that
-crosses it is never cut short. Another wave opens only for
+in waves. A wave may make the Fetch escalation profile's ``wave_calls``
+smart-model calls (the same on any provider), within ``wave_dollars`` as a
+ceiling: soft caps, checked before each search, so the call that crosses one
+is never cut short. Another wave opens only for
 
 - a genuinely new candidate: a plausible copy (by the scout's own judge) that
   neither the scout nor an earlier wave had seen,
@@ -37,7 +38,8 @@ def bound(runtime, session):
     """The session's profile when it carries an escalation allowance, else None."""
     profile_for = getattr(runtime, "profile_for", None)
     profile = profile_for(session) if profile_for else None
-    return profile if profile is not None and getattr(profile, "wave_dollars", 0) > 0 else None
+    limited = profile is not None and (getattr(profile, "wave_dollars", 0) > 0 or getattr(profile, "wave_calls", 0) > 0)
+    return profile if limited else None
 
 
 def _fresh(session, memo, reason) -> dict:
@@ -77,6 +79,13 @@ def spent(session, state, asking=True) -> float:
     return max(0.0, total)
 
 
+def calls(session, state, asking=True) -> int:
+    """Smart-model calls this wave, not counting the one whose tool is running."""
+    opened = float(state.get("opened") or 0)
+    made = [e for e in session.spend.entries if not e.get("purpose") and float(e.get("ts") or 0) >= opened]
+    return max(0, len(made) - (1 if asking and made else 0))
+
+
 def _open(session, state, reason, used, cap) -> dict:
     state["known"] = sorted(set(state["known"]) | set(state["found"]))
     state.update(wave=int(state["wave"]) + 1, opened=time.time(), spent_at=session.spend.dollars, reason=reason,
@@ -92,7 +101,8 @@ async def guard(tb, ctx):
         return None
     state = current(ctx.session, tb.scouted.get(ctx.session.id))
     cap, used = profile.wave_dollars, spent(ctx.session, state)
-    if used < cap:
+    limit, made = profile.wave_calls, calls(ctx.session, state)
+    if (not cap or used < cap) and (not limit or made < limit):
         return state
     pending = next((c for c in state["conflicts"] if not c.get("used")), None)
     reason = "new_candidate" if state["found"] else "identity_conflict" if pending else ""
@@ -107,7 +117,8 @@ async def guard(tb, ctx):
         state["refused_calls"].append(call)
     stop = len(state["refused_calls"]) >= TURN_ENDS_AFTER
     ctx.facts.setdefault("enforced", []).append({"rule": "escalation_bound", "detail": {
-        "wave": state["wave"], "waves": profile.waves, "spent": round(used, 5), "cap": cap, "ended_turn": stop}})
+        "wave": state["wave"], "waves": profile.waves, "spent": round(used, 5), "cap": cap,
+        "calls": made, "call_limit": limit, "ended_turn": stop}})
     if stop:
         await _pause(tb, ctx)
     if state["wave"] >= profile.waves:
@@ -119,8 +130,10 @@ async def guard(tb, ctx):
         options = ("Another wave needs a genuinely new candidate or an identity conflict you record with "
                    "record_identity_conflict. Otherwise add the best copy already found with client_add (the Media Agent "
                    "verifies what lands), wake_me to wait, or job_close as abandoned with a plain note.")
+    allowance = (f"made {made} of its {limit} searching calls" if limit and made >= limit
+                 else f"spent ${used:.3f} of its ${cap:.2f} allowance")
     raise ToolError(
-        f"Search refused: this escalated search wave has spent ${used:.3f} of its ${cap:.2f} allowance{why} {options}"
+        f"Search refused: this escalated search wave has {allowance}{why} {options}"
         + (" This turn has ended; the request waits for news or the person's check." if stop else "")
     )
 

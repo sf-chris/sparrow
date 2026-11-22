@@ -58,7 +58,8 @@ class ResolutionTests(unittest.TestCase):
             self.assertTrue(p.prompt and p.tools, role)
         self.assertTrue(by_role["subtitle_manager"].cache)
         escalation = by_role["fetch_escalation"]
-        self.assertEqual((escalation.wave_dollars, escalation.waves), (0.02, 3))
+        # Calls bound a wave on any provider; dollars are a ceiling.
+        self.assertEqual((escalation.wave_calls, escalation.wave_dollars, escalation.waves), (4, 0.25, 3))
         self.assertEqual(by_role["fetch_scout"].wave_dollars, 0)
         self.assertEqual(by_role["fetch_scout"].note_only_limit, 2)
         # Without an AltProvider key the subtitle checkers are off, as before.

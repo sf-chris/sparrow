@@ -588,8 +588,10 @@ def acquisition_tools(tb):
         if profile:
             ctx.facts.setdefault("enforced", []).append(
                 escalation.begin(ctx.session, profile, tb.scouted.get(ctx.session.id)))
+            per = (f"{profile.wave_calls} searching calls per wave" if profile.wave_calls
+                   else f"${profile.wave_dollars:.2f} of smart-model calls per wave")
             allowance = (
-                f" Searching has ${profile.wave_dollars:.2f} of smart-model calls per wave, up to {profile.waves} waves: "
+                f" Searching has {per}, up to {profile.waves} waves: "
                 "a new wave needs a genuinely new candidate or an identity conflict you record with "
                 "record_identity_conflict. Repeated searches come from the cache."
             )

@@ -36,7 +36,9 @@ class Fixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.env = environment(SPARROW_SMART_MODEL="smart-model", SPARROW_CHEAP_MODEL="cheap-model")
+        # These cases measure a dollar-bounded wave; the call-bounded default has its own test.
+        self.env = environment(SPARROW_SMART_MODEL="smart-model", SPARROW_CHEAP_MODEL="cheap-model",
+                               SPARROW_PROFILES='{"fetch_escalation": {"wave_calls": 0, "wave_dollars": 0.02}}')
         self.env.__enter__()
         self.addCleanup(self.env.__exit__, None, None, None)
         self.storage = Storage(self.temp.name)
@@ -277,3 +279,25 @@ class IdleTurnTests(Fixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CallBoundedWaveTests(Fixture):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self.env.__exit__(None, None, None)
+        # The default profile: a wave is four searching calls on any provider.
+        self.env = environment(SPARROW_SMART_MODEL="smart-model", SPARROW_CHEAP_MODEL="cheap-model")
+        self.env.__enter__()
+
+    async def test_a_wave_is_four_searching_calls_however_cheap(self):
+        self.tb.scouted[self.session.id] = {"rows": {}, "titles": ["Fixture Show"], "exclude": []}
+        ctx = ToolCtx(self.session, self.runtime)
+        text = await self.tool("escalate_model")(ctx, {"reason": "Nothing usable."})
+        self.assertIn("4 searching calls per wave", text)
+        search = self.tool("tpb_search")
+        for n in range(1, 5):
+            self.paid(0.0005, f"c{n}")
+            await search(ctx, {"query": f"Fixture Show query {n}"})
+        self.paid(0.0005, "c5")
+        with self.assertRaisesRegex(ToolError, r"made 4 of its 4 searching calls and found no new candidate"):
+            await search(ctx, {"query": "Fixture Show query 5"})

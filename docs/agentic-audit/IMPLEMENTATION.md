@@ -237,7 +237,7 @@ of its prompt and tools. Defaults (no environment overrides, no AltProvider key)
 | discovery | cheap (Small 4.5) | none | 8 / 1,400 | |
 | fetch_scout | cheap | none | 40 / 4,096 | idle wakes back off after 2 |
 | fetch_review | smart (Medium 5) | low | 1 / 8,000 | |
-| fetch_escalation | smart | none (provider default) | 40 / 4,096 | $0.02 per wave, 3 waves; idle back-off |
+| fetch_escalation | smart | none (provider default) | 40 / 4,096 | 4 searching calls per wave ($0.25 ceiling), 3 waves; idle back-off |
 | media, media_escalation | cheap, smart | none | 40 / 4,096 | idle back-off |
 | librarian | cheap | none | 6 / 1,400 | |
 | subtitle_manager | Large 5.5 (the smart model with an AltProvider key) | medium | 40 / 16,000, cached | per-title allowance |
@@ -258,8 +258,10 @@ escalation resets the allowance.
 The audit's recommendations 1, 2 and 5 are enforced in code:
 
 - **Escalation waves** (`escalation.py`, `node_tools.py` `tpb_search`): an
-  escalated search may spend $0.02 of smart-model calls per wave (a soft cap,
-  checked before each search). Another wave needs a genuinely new candidate (a
+  escalated search may make 4 smart-model searching calls per wave, within a
+  $0.25 ceiling (soft caps, checked before each search). Calls keep the bound
+  the same on any provider: one long-context Medium call costs about what a
+  dollar cap sized on the smart model would allow per wave. Another wave needs a genuinely new candidate (a
   plausible copy the scout and earlier waves had not seen) or an identity
   conflict recorded with the new `record_identity_conflict` tool; a stalled
   download or Media report opens one too, at most three without the person.
@@ -281,11 +283,11 @@ Each enforcement is a `ledger_enforcements` row (`escalation_wave`,
 `note_only_suppressed`) with its profile; the report adds a guardrail count
 line, timelines show GUARDRAIL lines and the export adds `enforcement` rows.
 
-Evidence: the full suite passes (377 tests, 3 skipped; 17 new). The offline
+Evidence: the full suite passes (378 tests, 3 skipped; 18 new). The offline
 search benchmark is unchanged: right copy first 28/28, would escalate 1 (4%),
 searches median 6, peeks 22. No paid model, indexer or torrent traffic was used,
-so the savings are not yet measured: the $0.02 wave was sized on the smart model
-(about 1.5¢ a call); at Medium 5 prices it allows about one searching call, and
+so the savings are not yet measured. A first $0.02 wave sized on the smart model
+prices allowed about one Medium call, so waves are bounded by calls instead;
 the next live benchmark should check that escalated titles still reach a
 download. The 30-case contract runner still lists five subtitle tests that were
 renamed earlier; those cases fail to load at `main` as they do here.

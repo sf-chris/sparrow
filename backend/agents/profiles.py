@@ -58,7 +58,8 @@ ALTPROVIDER_REASONING = re.compile(r"^(model-[56]|o[134])")
 
 # Fields an operator may override per role in SPARROW_PROFILES.
 OVERRIDABLE = {"model": str, "effort": str, "max_steps": int, "max_tokens": int, "max_dollars": float,
-               "note_only_limit": int, "idle_backoff": float, "wave_dollars": float, "waves": int}
+               "note_only_limit": int, "idle_backoff": float, "wave_dollars": float, "wave_calls": int,
+               "waves": int}
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,8 @@ class Role:
     cache: bool = False
     note_only_limit: int = 0  # idle turns before timer wakes back off; 0 never
     idle_backoff: float = 0.0  # seconds of the first back-off, doubling
-    wave_dollars: float = 0.0  # smart-model search allowance per escalation wave; 0 unbounded
+    wave_dollars: float = 0.0  # smart-model dollars per escalation wave (a ceiling); 0 unbounded
+    wave_calls: int = 0  # smart-model calls per escalation wave, the same on any provider; 0 unbounded
     waves: int = 0  # escalation waves a request may open without the person asking
     prompt: tuple = ()  # module:attribute sources of the standing prompt
     tools: tuple = ()  # and of the tools
@@ -111,7 +113,9 @@ ROLES: dict[str, Role] = {
         tools=("backend.agents.acquisition_review:REVIEW_SCHEMA", "backend.agents.acquisition_review:review")),
     "fetch_escalation": Role(
         "fetch", "smart", "Fetch: the smart model searches with the raw tools after the scout gave up",
-        note_only_limit=2, idle_backoff=3600, wave_dollars=0.02, waves=3,
+        # Calls bound a wave on any provider (a long context made one Medium call
+        # cost about the old $0.02 cap); dollars are only a ceiling for huge contexts.
+        note_only_limit=2, idle_backoff=3600, wave_calls=4, wave_dollars=0.25, waves=3,
         prompt=("backend.agents.prompts:fetch_system", "backend.agents.prompts:MANUAL_WORKFLOW",
                 "backend.agents.prompts:SHARED_RULES"), tools=_FETCH_TOOLS),
     "media": Role(
@@ -165,6 +169,7 @@ class Profile:
     note_only_limit: int
     idle_backoff: float
     wave_dollars: float
+    wave_calls: int
     waves: int
     prompt: str  # version of the standing prompt's source
     tools: str  # version of the tools' source
@@ -292,7 +297,7 @@ def resolve(role: str, cfg=None, model: str = "") -> Profile:
     fields = {
         "max_steps": spec.max_steps, "max_tokens": spec.max_tokens, "max_dollars": _max_dollars(spec),
         "note_only_limit": spec.note_only_limit, "idle_backoff": spec.idle_backoff,
-        "wave_dollars": spec.wave_dollars, "waves": spec.waves,
+        "wave_dollars": spec.wave_dollars, "wave_calls": spec.wave_calls, "waves": spec.waves,
     }
     fields.update({k: v for k, v in custom.items() if k in fields})
     return _versioned(Profile(
@@ -347,7 +352,7 @@ def from_spec(spec, model: str = "") -> Profile:
     return _versioned(Profile(
         id=spec.kind, kind=spec.kind, tier="spec", model=model, effort=spec.effort,
         effort_sent=effort_for(model, spec.effort), max_steps=spec.max_steps, max_tokens=spec.max_tokens,
-        max_dollars=spec.max_dollars, cache=spec.cache, note_only_limit=0, idle_backoff=0.0, wave_dollars=0.0, waves=0,
+        max_dollars=spec.max_dollars, cache=spec.cache, note_only_limit=0, idle_backoff=0.0, wave_dollars=0.0, wave_calls=0, waves=0,
         prompt="", tools="",
     ))
 
@@ -401,8 +406,10 @@ def table(profiles: list[Profile]) -> str:
         bounds = []
         if p.max_dollars:
             bounds.append(f"${p.max_dollars:g} allowance")
-        if p.wave_dollars:
-            bounds.append(f"${p.wave_dollars:g}/wave × {p.waves}")
+        if p.wave_calls or p.wave_dollars:
+            per = " and ".join(x for x in (f"{p.wave_calls} calls" if p.wave_calls else "",
+                                            f"${p.wave_dollars:g}" if p.wave_dollars else "") if x)
+            bounds.append(f"{per} per wave × {p.waves}")
         if p.note_only_limit:
             bounds.append(f"idle after {p.note_only_limit}")
         effort = "-" if not p.model else p.effort_sent or (f"none ({p.effort} not accepted)" if p.effort else "none (default)")
