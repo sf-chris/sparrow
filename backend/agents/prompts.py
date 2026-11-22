@@ -101,7 +101,7 @@ SCOUT_WORKFLOW = """## How you work (code does the searching; you decide)
 
 
 def fetch_system(session: AgentSession, job: Job, inventory_hint: str,
-                 cfg=None, scouting: bool = False) -> str:
+                 cfg=None, scouting: bool = False, allowance=None) -> str:
     contract = {
         "title": job.title, "year": job.year, "tmdb_id": job.tmdb_id,
         "media_type": job.media_type,
@@ -130,6 +130,19 @@ The user's app-wide preferences. Follow them unless the contract above
 explicitly says otherwise — the contract always wins on conflict.
 {json.dumps(settings, indent=2)}"""
     workflow = SCOUT_WORKFLOW if scouting else MANUAL_WORKFLOW
+    if allowance and not scouting:
+        dollars, waves = allowance
+        workflow += f"""
+
+## Search allowance (the tools enforce it)
+The scout already ran the usual searches; copies it listed are not new. Each
+wave of your searching may spend ${dollars:.2f} of model calls, up to {waves} waves. A
+new wave opens only for a genuinely new candidate or an identity conflict you
+record with record_identity_conflict (what disagrees, and the evidence).
+Repeated searches come from the cache. Search with purpose and batch searches
+in one reply. A plausible copy you cannot verify from its name or listing is
+worth adding: the Media Agent verifies what lands, and a wrong copy is removed
+and replaced."""
     return f"""You are Sparrow's Fetch Agent — a careful, resourceful librarian's
 buyer. You own ONE job from creation until the library provably matches its
 spec. It is {_now()}.

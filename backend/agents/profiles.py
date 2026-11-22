@@ -57,7 +57,8 @@ ALTPROVIDER_EFFORT = ("low", "medium", "high")
 ALTPROVIDER_REASONING = re.compile(r"^(model-[56]|o[134])")
 
 # Fields an operator may override per role in SPARROW_PROFILES.
-OVERRIDABLE = {"model": str, "effort": str, "max_steps": int, "max_tokens": int, "max_dollars": float}
+OVERRIDABLE = {"model": str, "effort": str, "max_steps": int, "max_tokens": int, "max_dollars": float,
+               "wave_dollars": float, "waves": int}
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,8 @@ class Role:
     max_tokens: int = 4096  # 0: the provider's own limit (nothing sent)
     max_dollars: float = 0.0  # allowance per budget scope; 0 is the household policy
     cache: bool = False
+    wave_dollars: float = 0.0  # smart-model search allowance per escalation wave; 0 unbounded
+    waves: int = 0  # escalation waves a request may open without the person asking
     prompt: tuple = ()  # module:attribute sources of the standing prompt
     tools: tuple = ()  # and of the tools
 
@@ -105,6 +108,7 @@ ROLES: dict[str, Role] = {
         tools=("backend.agents.acquisition_review:REVIEW_SCHEMA", "backend.agents.acquisition_review:review")),
     "fetch_escalation": Role(
         "fetch", "smart", "Fetch: the smart model searches with the raw tools after the scout gave up",
+        wave_dollars=0.02, waves=3,
         prompt=("backend.agents.prompts:fetch_system", "backend.agents.prompts:MANUAL_WORKFLOW",
                 "backend.agents.prompts:SHARED_RULES"), tools=_FETCH_TOOLS),
     "media": Role(
@@ -153,6 +157,8 @@ class Profile:
     max_tokens: int
     max_dollars: float
     cache: bool
+    wave_dollars: float
+    waves: int
     prompt: str  # version of the standing prompt's source
     tools: str  # version of the tools' source
     version: str = ""
@@ -278,6 +284,7 @@ def resolve(role: str, cfg=None, model: str = "") -> Profile:
         effort = custom["effort"]
     fields = {
         "max_steps": spec.max_steps, "max_tokens": spec.max_tokens, "max_dollars": _max_dollars(spec),
+        "wave_dollars": spec.wave_dollars, "waves": spec.waves,
     }
     fields.update({k: v for k, v in custom.items() if k in fields})
     return _versioned(Profile(
@@ -332,7 +339,7 @@ def from_spec(spec, model: str = "") -> Profile:
     return _versioned(Profile(
         id=spec.kind, kind=spec.kind, tier="spec", model=model, effort=spec.effort,
         effort_sent=effort_for(model, spec.effort), max_steps=spec.max_steps, max_tokens=spec.max_tokens,
-        max_dollars=spec.max_dollars, cache=spec.cache,
+        max_dollars=spec.max_dollars, cache=spec.cache, wave_dollars=0.0, waves=0,
         prompt="", tools="",
     ))
 
@@ -386,6 +393,8 @@ def table(profiles: list[Profile]) -> str:
         bounds = []
         if p.max_dollars:
             bounds.append(f"${p.max_dollars:g} allowance")
+        if p.wave_dollars:
+            bounds.append(f"${p.wave_dollars:g}/wave × {p.waves}")
         effort = "-" if not p.model else p.effort_sent or (f"none ({p.effort} not accepted)" if p.effort else "none (default)")
         lines.append(f"| {p.id} | {p.model or '(off)'} | {effort} | {p.max_steps} | {p.max_tokens or 'default'} | "
                      f"{', '.join(bounds) or '-'} | {p.prompt} | {p.tools} | {p.version} |")

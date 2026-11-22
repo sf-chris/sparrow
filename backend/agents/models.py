@@ -303,6 +303,8 @@ class AgentSession:
     profile: str = ""
     profile_version: str = ""
     profiles: list = field(default_factory=list)
+    # Guardrail state that must survive restarts: limits only, never authority.
+    controls: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -327,6 +329,7 @@ class AgentSession:
             "profile": self.profile,
             "profile_version": self.profile_version,
             "profiles": self.profiles,
+            "controls": self.controls,
         }
 
     @classmethod

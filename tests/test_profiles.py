@@ -57,6 +57,9 @@ class ResolutionTests(unittest.TestCase):
             self.assertRegex(p.version, r"^[0-9a-f]{12}$")
             self.assertTrue(p.prompt and p.tools, role)
         self.assertTrue(by_role["subtitle_manager"].cache)
+        escalation = by_role["fetch_escalation"]
+        self.assertEqual((escalation.wave_dollars, escalation.waves), (0.02, 3))
+        self.assertEqual(by_role["fetch_scout"].wave_dollars, 0)
         # Without an AltProvider key the subtitle checkers are off, as before.
         self.assertEqual(by_role["subtitle_checker"].model, "")
 
@@ -100,7 +103,7 @@ class ResolutionTests(unittest.TestCase):
             scout = profiles.resolve("fetch_scout")
             self.assertEqual(scout.model, "assistant-medium")  # smart throughout
             session = AgentSession(agent=AgentKind.FETCH, model="assistant-medium")
-            self.assertEqual(profiles.role_for(session), "fetch_scout")  # no escalation
+            self.assertEqual(profiles.role_for(session), "fetch_scout")  # no escalation, so no wave bound
         with environment(SPARROW_SUBTITLE_MODEL="smart-model", SPARROW_SUBTITLE_EFFORT="high",
                          SPARROW_SUBTITLE_BUDGET="0.8", ALTPROVIDER_API_KEY="fixture-not-sent"):
             manager = profiles.resolve("subtitle_manager")
