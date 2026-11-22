@@ -478,6 +478,15 @@ class ScoutJudgementTests(unittest.TestCase):
         self.assertTrue(runtime_matches(22.87 * 60, 28, approximate=True))
         self.assertFalse(runtime_matches(120, 28, approximate=True))  # a sample
         self.assertFalse(runtime_matches(46 * 60, 28, approximate=True))  # a double-length cut
+        # Short films run longer than listed by their credits; listings are whole minutes.
+        self.assertTrue(runtime_matches(596, 8))  # Big Buck Bunny: 9:56 against 8 minutes
+        self.assertTrue(runtime_matches(150, 3))  # 2:30 against a rounded 3 minutes
+        self.assertFalse(runtime_matches(16 * 60, 8))  # twice as long
+        self.assertFalse(runtime_matches(60, 8))  # a sample
+        # Features keep two minutes either way.
+        self.assertTrue(runtime_matches(91.9 * 60, 90))
+        self.assertFalse(runtime_matches(92.5 * 60, 90))
+        self.assertFalse(runtime_matches(87.5 * 60, 90))
         self.assertTrue(runtime_matches(23.5 * 60, 24))
         # A rejected copy says why.
         job = NS(preferences={"values": {"max_file_size_gb": 3}, "policy": {}}, audio_pref="original",
