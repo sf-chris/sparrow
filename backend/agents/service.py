@@ -19,7 +19,7 @@ from typing import Callable, Optional
 from ..models import DownloadStatus, MediaType, TorrentClientType
 from ..storage import Storage
 from ..services.torrent_client import TorrentManager, start_configured_client
-from . import profiles, prompts
+from . import escalation, profiles, prompts
 from .models import (
     AgentKind,
     CaseState,
@@ -83,6 +83,7 @@ TOOL_ACTIVITY_LABELS = {
     "inventory_write": "updating the library inventory",
     "report_to_fetch": "reporting the media result",
     "escalate_model": "escalating a difficult media decision",
+    "record_identity_conflict": "recording a disputed match",
     "session_done": "closing the media session",
     "library_overview": "reviewing the whole library",
     "spawn_job": "starting a library-maintenance job",
@@ -184,9 +185,11 @@ class AgentService:
 
         async def fetch_system(session: AgentSession) -> str:
             job = self.store.get_job(session.job_id)
+            profile = self.session_profile(session)
             return (
                 prompts.fetch_system(
                     session, job, "", cfg=self.storage.get_config(), scouting=not self.searches_directly(session),
+                    allowance=(profile.wave_dollars, profile.waves) if profile.wave_dollars else None,
                 )
                 + "\nEffective request settings (authoritative):\n"
                 + json.dumps(job.preferences if job else {}, sort_keys=True)
@@ -216,10 +219,12 @@ class AgentService:
             if self.searches_directly(session):
                 # The smart model searches and adds directly; nothing reviews it.
                 hidden = {"propose_release", "escalate_model"}
+                if not self.session_profile(session).wave_dollars:
+                    hidden.add("record_identity_conflict")  # only an escalation's allowance uses it
             else:
                 # The cheap model works through the scout, and its picks are
                 # reviewed before anything downloads.
-                hidden = {"tpb_search", "torrent_peek", "client_add", "triage_parse"}
+                hidden = {"tpb_search", "torrent_peek", "client_add", "triage_parse", "record_identity_conflict"}
             return [t for t in tools if t.name not in hidden]
 
         def fetch_phase(session, trigger):
@@ -237,6 +242,7 @@ class AgentService:
                 tools=fetch_tools_for,
                 phase=fetch_phase,
                 profile=self.session_profile,
+                on_wake=lambda session, events: escalation.woken(self.runtime, session, events),
             )
         )
         self.runtime.register(

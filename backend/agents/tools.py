@@ -804,6 +804,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
             raise ToolError('The acquisition source is unavailable. This is not an empty search result; wait for the source to recover before trying more queries.') from exc
         if not cached:
             ctx.session.spend.searches += 1
+        ctx.extra["index_rows"] = raw  # for the escalation allowance's new-candidate check
         out = []
         for r in raw:
             try:

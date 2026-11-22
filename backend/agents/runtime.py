@@ -205,6 +205,9 @@ class AgentSpec:
     # effort, bounds and allowance replace the fields above; unset, a profile
     # is derived from those fields.
     profile: Optional[Callable[[AgentSession], "profiles.Profile"]] = None
+    # Called with each wake's events before the model sees them; returns
+    # guardrail records for the ledger (an escalation's new search wave).
+    on_wake: Optional[Callable[[AgentSession, list], list]] = None
 
 
 class AgentRuntime:
@@ -276,6 +279,15 @@ class AgentRuntime:
         if profile and (session.profile, session.profile_version) != (profile.id, profile.version):
             session.profile, session.profile_version = profile.id, profile.version
             session.profiles.append({"id": profile.id, "version": profile.version, "since": time.time()})
+
+    def enforce(self, session: AgentSession, rule: str, detail: Optional[dict] = None, tool: str = "",
+                profile=None) -> None:
+        """Record one guardrail that acted, for the ledger's audit."""
+        profile = profile or self.profile_for(session)
+        ledger.record_enforcement(
+            self.store, session_id=session.id, job_id=session.job_id, rule=rule, detail=detail, tool=tool,
+            profile=getattr(profile, "id", ""), profile_version=getattr(profile, "version", ""),
+        )
 
     def tools_for(self, session: AgentSession) -> list[ToolDef]:
         from .evidence import PAGE_CHARS
@@ -461,6 +473,7 @@ class AgentRuntime:
         ctx = ToolCtx(session=session, runtime=self)
 
         self._set_trigger(session, events)
+        self._woken(session, spec, events)
         _append_user(session, self._wake_text(session, events))
         self.store.acknowledge_events(session, events)
         steps = 0
@@ -568,6 +581,7 @@ class AgentRuntime:
                 if fresh:
                     ctx.hibernate = False
                     self._set_trigger(session, fresh)
+                    self._woken(session, spec, fresh)
                     _append_user(session, self._wake_text(session, fresh))
                     self.store.acknowledge_events(session, fresh)
                     continue
@@ -584,6 +598,15 @@ class AgentRuntime:
         # Events that arrived at the very end: run again.
         if self.store.pending_events(session.id):
             await self._run(session.id)
+
+    def _woken(self, session: AgentSession, spec: AgentSpec, events: list[Event]) -> None:
+        if not spec.on_wake:
+            return
+        try:
+            for item in spec.on_wake(session, events) or []:
+                self.enforce(session, item["rule"], item.get("detail"))
+        except Exception:
+            logger.exception("wake hook failed (session %s)", session.id)
 
     async def _run_tool(self, ctx: ToolCtx, tool_map: dict[str, ToolDef], tu) -> dict:
         args = tu.input or {}
@@ -669,6 +692,7 @@ class AgentRuntime:
             outcome=ledger.tool_outcome(content, is_error, ctx.facts), call_id=self._current_call.get(ctx.session.id, ""),
             job_id=ctx.session.job_id, ts=started, duration=round(time.time() - started, 3), facts={**({"args": args} if args else {}), **ctx.facts} or None,
         )
+        self._record_enforcements(ctx, tu)
         await self._notify_tool(
             ctx.session,
             tu.name,
@@ -678,6 +702,16 @@ class AgentRuntime:
             is_error,
         )
         return result
+
+    def _record_enforcements(self, ctx: ToolCtx, tu) -> None:
+        """Guardrails a tool applied (ctx.facts["enforced"])."""
+        found = list(ctx.facts.get("enforced") or [])
+        if not found:
+            return
+        profile = self.profile_for(ctx.session)
+        for item in found:
+            self.enforce(ctx.session, item["rule"], {**(item.get("detail") or {}), "tool_id": tu.id}, tool=tu.name,
+                         profile=profile)
 
     async def _notify_tool(
         self,
