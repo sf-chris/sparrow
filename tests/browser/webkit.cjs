@@ -27,15 +27,18 @@ const webkit = {
     const browser = await playwright.webkit.launch({
       headless: options.headless !== false,
     });
+    // WebKit can't route requests a service worker makes (Chromium can), so
+    // pages run without one unless a journey asks for it.
     const newContext = browser.newContext.bind(browser);
-    browser.newContext = async (...args) => {
-      const context = await newContext(...args);
+    browser.newContext = async (options = {}) => {
+      const context = await newContext({ serviceWorkers: "block", ...options });
       const newPage = context.newPage.bind(context);
       context.newPage = async () => quiet(await newPage());
       return context;
     };
     const newPage = browser.newPage.bind(browser);
-    browser.newPage = async (...args) => quiet(await newPage(...args));
+    browser.newPage = async (options = {}) =>
+      quiet(await newPage({ serviceWorkers: "block", ...options }));
     return browser;
   },
 };
