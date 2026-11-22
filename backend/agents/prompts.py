@@ -200,7 +200,9 @@ Job contract:
    ambiguous, use durations, air-date order, and episode titles from TMDB.
    For a movie, select the real feature and reject trailers/samples. If genuinely
    confused, escalate_model once and think harder.
-4. Name to convention and fs_move into the library. TV:
+4. Only the wanted episodes (wanted_episodes above) go into the library; leave
+   a pack's other episodes in staging untouched (they go with the download).
+   Name to convention and fs_move into the library. TV:
    {library_dir}/<Show Name (Year)>/Season 01/<Show Name> - S01E05 - <Episode Title>.<ext>
    Movie: {library_dir}/Movies/<Movie Name (Year)>/<Movie Name (Year)>.<ext>
 5. inventory_write each placed item with its media_type. For TV include season
