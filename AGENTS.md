@@ -82,7 +82,11 @@ Everything new lives in `backend/agents/`:
   runs the usual searches, reads names, peeks inside packs for the wanted
   files and ranks a short list; the cheap model proposes one row and the
   smart model reviews that compact decision (`acquisition_review.py`) before
-  anything downloads. A release must open with the show's title followed
+  anything downloads, unless code finds nothing in doubt (exact match, wanted
+  files in the real listing, attributes known; skips are ledger rows). Episode
+  numbering disputes are settled from TMDB episode titles in pack listings, and
+  a veto only over unverified quality/audio downloads the copy once for the
+  Media Agent to check. A release must open with the show's title followed
   only by numbering/year/season/quality tags; searches queue for the shared
   indexer allowance (no model turns) and repeats come from a cache. A TV
   transfer downloads only the wanted episodes and their subtitle files, by
