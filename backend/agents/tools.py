@@ -37,6 +37,16 @@ from .media_state import media_state, file_version, audio_satisfies
 TMDB = "https://api.themoviedb.org/3"
 
 VIDEO_EXT = {".mkv", ".mp4", ".avi", ".m4v", ".ts", ".wmv", ".mov", ".webm"}
+# How long a search's answer stays fresh for everyone (with rows, without),
+# and how long one request's own repeat of it is answered from the cache.
+SEARCH_FRESH, SEARCH_EMPTY_FRESH = 1800, 600
+SEARCH_REPEAT_TTL = 6 * 3600
+
+
+def search_key(query: str) -> str:
+    """A query as the index reads it: case and spacing ignored. Punctuation
+    and word order are kept: the index treats them as part of the search."""
+    return " ".join(str(query).lower().split())
 
 
 def _apibay_indexed_value(value, default=None):
@@ -134,6 +144,7 @@ class Toolbox:
         self._search_turn = asyncio.Lock()      # searches waiting for a slot take turns
         self._search_waiting = 0
         self._search_cache: dict[str, tuple[float, list]] = {}
+        self._search_scopes: dict[str, set] = {}  # query -> the requests that ran it
         self.scouted: dict[str, dict] = {}       # each Fetch session's latest short list
 
     # ─── shared helpers ──────────────────────────────────────────────────
@@ -371,18 +382,30 @@ class Toolbox:
                 f"The next search frees in about {wait} minute{'s' if wait != 1 else ''}: "
                 f"write what you've learned to memory and wake_me in {wait} minutes.")
 
-    async def index_search(self, query: str, wait: float = 0, log: list | None = None) -> tuple[list, bool]:
+    async def index_search(self, query: str, wait: float = 0, log: list | None = None,
+                           scope: str = "") -> tuple[list, bool]:
         """Raw indexer rows for a query and whether they came from the cache.
 
-        Repeating a recent search is free: it uses no slot. Raises ToolError at
-        the rate limit and the source's own error when it is unreachable.
+        Repeating a recent search is free: it uses no slot. A request (scope:
+        its job id) that repeats its own search, from the scout or after
+        escalating, is answered from the cache for SEARCH_REPEAT_TTL even once
+        the answer is stale for others: the log marks it "dedupe" and the
+        runtime records the guardrail. Raises ToolError at the rate limit and
+        the source's own error when it is unreachable.
         log: the cost ledger's list of searches, appended to."""
-        key = " ".join(query.lower().split())
+        key = search_key(query)
         cached = self._search_cache.get(key)
-        if cached and time.time() - cached[0] < (1800 if cached[1] else 600):
-            if log is not None:
-                log.append({"query": query, "cached": True, "waited": 0, "rows": len(cached[1])})
-            return cached[1], True
+        if cached:
+            age = time.time() - cached[0]
+            fresh = age < (SEARCH_FRESH if cached[1] else SEARCH_EMPTY_FRESH)
+            repeat = bool(scope) and scope in self._search_scopes.get(key, ()) and age < SEARCH_REPEAT_TTL
+            if fresh or repeat:
+                if scope:
+                    self._search_scopes.setdefault(key, set()).add(scope)
+                if log is not None:
+                    log.append({"query": query, "cached": True, "waited": 0, "rows": len(cached[1]),
+                                **({"dedupe": True, "age": round(age)} if not fresh else {})})
+                return cached[1], True
         waited = await self.rate_limit_search(wait)
         try:
             rows = await apibay_query(query, strict=True)
@@ -393,9 +416,12 @@ class Toolbox:
         if log is not None:
             log.append({"query": query, "cached": False, "waited": waited, "rows": len(rows)})
         self._search_cache[key] = (time.time(), rows)
+        if scope:
+            self._search_scopes.setdefault(key, set()).add(scope)
         if len(self._search_cache) > 500:
             for stale in sorted(self._search_cache, key=lambda k: self._search_cache[k][0])[:100]:
                 self._search_cache.pop(stale, None)
+                self._search_scopes.pop(stale, None)
         return rows, False
 
     def library_item_for(self, tmdb_id: int,
@@ -797,7 +823,8 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
         if tb.cfg().preferred_search_engines != ['apibay']:
             raise ToolError('The configured acquisition source is not installed. Choose the built-in source in Server settings.')
         try:
-            raw, cached = await tb.index_search(args["query"], wait=SEARCH_QUEUE, log=ctx.facts.setdefault("searches", []))
+            raw, cached = await tb.index_search(args["query"], wait=SEARCH_QUEUE, log=ctx.facts.setdefault("searches", []),
+                                                scope=ctx.session.job_id)
         except ToolError:
             raise
         except Exception as exc:

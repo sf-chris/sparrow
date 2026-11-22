@@ -408,7 +408,8 @@ async def scout(tb, job, targets, titles, extra_queries=(), searches=6, exclude=
         try:
             # Queue for a slot while there is nothing usable to rank yet;
             # once there is, wait only briefly (other requests share slots).
-            raw, cached = await tb.index_search(query, wait=SHORT_WAIT if usable else WAIT, log=log)
+            raw, cached = await tb.index_search(query, wait=SHORT_WAIT if usable else WAIT, log=log,
+                                                scope=getattr(job, "id", ""))
         except ToolError:
             if searched:
                 break  # searches are rationed: rank what was found

@@ -704,8 +704,13 @@ class AgentRuntime:
         return result
 
     def _record_enforcements(self, ctx: ToolCtx, tu) -> None:
-        """Guardrails a tool applied (ctx.facts["enforced"])."""
+        """Guardrails a tool applied (ctx.facts["enforced"]) and repeated
+        searches served from the cache instead of the indexer."""
         found = list(ctx.facts.get("enforced") or [])
+        for search in ctx.facts.get("searches") or []:
+            if isinstance(search, dict) and search.get("dedupe"):
+                found.append({"rule": "query_dedupe",
+                              "detail": {"query": search.get("query"), "age": search.get("age"), "rows": search.get("rows")}})
         if not found:
             return
         profile = self.profile_for(ctx.session)

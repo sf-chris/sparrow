@@ -90,6 +90,7 @@ RULES = {
     "escalation_wave": "an escalated search opened a wave of its allowance",
     "escalation_bound": "a search refused: the escalation's wave allowance was used",
     "identity_conflict": "an identity conflict recorded during an escalated search",
+    "query_dedupe": "a repeated search served from the cache instead of the indexer",
 }
 
 # Per-title search targets (issue #15) and the subtitle allowance a title
