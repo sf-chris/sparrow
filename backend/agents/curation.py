@@ -418,11 +418,10 @@ class Curation:
         self.service.runtime.register(
             AgentSpec(
                 AgentKind.LIBRARIAN.value,
-                self.service.cheap_model,
+                lambda: self.service.profile("librarian").model,
                 system,
                 lambda _: definitions,
-                max_steps=6,
-                max_tokens=1400,
+                profile=self.service.session_profile,  # six calls, 1,400 output tokens
             )
         )
 
@@ -490,7 +489,7 @@ class Curation:
                         agent=AgentKind.LIBRARIAN,
                         user_id=row["user_id"],
                         download_id=identity,
-                        model=self.service.cheap_model(),
+                        model=self.service.profile("librarian").model,
                         budget_scope="subscription:" + identity,
                     )
                     self.service.store.save_session(session)

@@ -20,6 +20,7 @@ from .catalogue import Catalogue
 logger = logging.getLogger(__name__)
 from .node_executor import NodeError, canonical, is_library
 from .tools import fetch_tools, media_tools, quality_rank
+from . import escalation
 from ..models import Download, DownloadStatus, LibraryItem, MediaType
 from ..services.torrent_client import build_magnet
 
@@ -482,7 +483,7 @@ def acquisition_tools(tb):
         ctx.session.spend.searches += len(searched)
         memo = tb.scouted.setdefault(ctx.session.id, {"vetoes": 0})
         memo.update(rows={row["rid"]: row for row in rows}, order=[row["rid"] for row in rows], targets=targets,
-                    namesakes=namesakes, titles=titles)
+                    namesakes=namesakes, titles=titles, exclude=exclude)
         names = await episode_titles(job, targets) if job.media_type == "tv" else {}
         wanted_text = ", ".join(
             f"S{s:02d}E{e:02d}" + (f' "{names[(s, e)]}"' if names.get((s, e)) else "") for s, e in targets
@@ -533,7 +534,7 @@ def acquisition_tools(tb):
         except Exception as exc:
             raise ToolError(f"The reviewer could not be reached ({str(exc)[:120]}); try again shortly.") from exc
         acquisition_review.charge(ctx.session, model, usage, dollars, tb.store,
-                                  requested_by=ctx.runtime.current_call(ctx.session.id))
+                                  requested_by=ctx.runtime.current_call(ctx.session.id), cfg=tb.cfg())
         ctx.facts.update(
             pick=pick, name=memo["rows"][pick]["name"], info_hash=memo["rows"][pick]["info_hash"],
             approved=bool(decision.get("approve")),
@@ -576,16 +577,45 @@ def acquisition_tools(tb):
         return names
 
     async def escalate(ctx, args):
-        smart = tb.smart_model()
+        from .profiles import resolve
+
+        smart = resolve("fetch_escalation", tb.cfg()).model
         if ctx.session.model == smart:
             return "Already on the smart tier with the full search tools."
         ctx.session.model = smart
+        allowance = ""
+        profile = escalation.bound(ctx.runtime, ctx.session)
+        if profile:
+            ctx.facts.setdefault("enforced", []).append(
+                escalation.begin(ctx.session, profile, tb.scouted.get(ctx.session.id)))
+            per = (f"{profile.wave_calls} searching calls per wave" if profile.wave_calls
+                   else f"${profile.wave_dollars:.2f} of smart-model calls per wave")
+            allowance = (
+                f" Searching has {per}, up to {profile.waves} waves: "
+                "a new wave needs a genuinely new candidate or an identity conflict you record with "
+                "record_identity_conflict. Repeated searches come from the cache."
+            )
         return (
             f"Escalated to {smart}: you now search with tpb_search, peek with torrent_peek and add "
-            "directly with client_add (files= for packs). Reason noted: " + str(args.get("reason", ""))[:200]
+            "directly with client_add (files= for packs)." + allowance + " Reason noted: " + str(args.get("reason", ""))[:200]
         )
 
+    raw_search = next(t for t in fetch_tools(tb) if t.name == "tpb_search").handler
+
+    async def search(ctx, args):
+        # An escalated search spends from its wave's allowance (escalation.py).
+        state = await escalation.guard(tb, ctx)
+        result = await raw_search(ctx, args)
+        rows = ctx.extra.pop("index_rows", None)
+        if state is not None:
+            escalation.note(tb, ctx, state, rows)
+        return result
+
+    async def conflict(ctx, args):
+        return await escalation.record_conflict(tb, ctx, args)
+
     handlers = {
+        "tpb_search": search,
         "inventory_read": inventory,
         "client_add": add,
         "client_status": status,
@@ -618,6 +648,14 @@ def acquisition_tools(tb):
             "after other queries, or two picks were vetoed.",
             {"type": "object", "properties": {"reason": text}, "required": ["reason"]},
             escalate,
+        ),
+        ToolDef(
+            "record_identity_conflict",
+            "Record evidence that a copy's identity is disputed (TMDB's episode title or runtime against a release's "
+            "numbering, a pack that may be another season or cut). Opens another search wave once this one's "
+            "allowance is used. conflict: what disagrees; evidence: the rows, files or listings you saw.",
+            {"type": "object", "properties": {"conflict": text, "evidence": text}, "required": ["conflict", "evidence"]},
+            conflict,
         ),
     ]
 

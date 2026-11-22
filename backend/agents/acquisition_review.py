@@ -56,28 +56,34 @@ def record(job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
 
 
 async def review(tb, job, wanted, rows, pick, reason, episode_titles=None, namesakes=""):
-    """The smart model's decision and what it cost: (decision, dollars, model)."""
+    """The smart model's decision and what it cost: (decision, dollars, model, usage).
+    It runs under the fetch_review profile (low effort where the model takes one)."""
     from . import subtitle_contract
+    from .profiles import resolve
 
-    model = tb.smart_model()
+    profile = resolve("fetch_review", tb.cfg())
+    model = profile.model
     caller = subtitle_contract.caller_for(
-        model, effective_anthropic_key(tb.cfg()), effective_openai_key(tb.cfg()), "low"
+        model, effective_anthropic_key(tb.cfg()), effective_openai_key(tb.cfg()), profile.effort_sent
     )
     data, usage = await caller(REVIEW_SYSTEM, record(job, wanted, rows, pick, reason, episode_titles, namesakes), REVIEW_SCHEMA)
     return data, subtitle_contract.cost(model, usage), model, usage
 
 
-def charge(session, model, usage, dollars, store=None, requested_by=""):
+def charge(session, model, usage, dollars, store=None, requested_by="", cfg=None):
     """Record the review on the Fetch session's spend and the cost ledger.
 
     requested_by: the ledger id of the model call whose propose_release asked
     for this review."""
     if store is not None:
         from . import ledger
+        from .profiles import resolve
 
+        profile = resolve("fetch_review", cfg).bind(model)
         ledger.record_call(store, session_id=session.id, job_id=session.job_id, user_id=session.user_id,
                            agent=session.agent.value, phase="pick_review", model=model, usage=usage, cost=dollars,
-                           effort="low", trigger={"kinds": ["propose_release"], "call": requested_by})
+                           effort=profile.effort_sent, trigger={"kinds": ["propose_release"], "call": requested_by},
+                           profile=profile.id, profile_version=profile.version)
     spend = session.spend
     spend.input_tokens += usage.get("input_tokens", 0)
     spend.output_tokens += usage.get("output_tokens", 0)
