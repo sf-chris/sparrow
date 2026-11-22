@@ -12,8 +12,63 @@ ffprobe on PATH (or `SPARROW_FFMPEG` / `SPARROW_FFPROBE` set):
 
 This is a controlled contract baseline. Scripted tool choices are not evidence
 that a real model makes good decisions, and tool guardrail tests are not whole
-agent evaluations. Use it before changing runtime/tool contracts. It does not
-complete issue #3's live role suite, candidate comparisons or unseen holdout.
+agent evaluations. Use it before changing runtime/tool contracts. The live role
+suite and holdout are below.
+
+## Live role evaluation (issue #3, P2)
+
+`run_live.py` runs the same 30 cases (`live-v1.json`, same ids, roles and
+contracts) and a separate unseen holdout of 12 (`live-holdout-v1.json`) through
+the real Discovery, Fetch, Media, Librarian and subtitle agents, runtime, tools
+and cost ledger with a real model. Only the model provider is real: TMDB and the
+torrent index answer from each case's synthetic catalogue and index at the
+network boundary, the download app records transfers without starting them, and
+media files are placeholders whose probes return the case's facts (the subtitle
+cases use the packaged FFmpeg on a 24-second fixture video, so set
+`SPARROW_FFMPEG`/`SPARROW_FFPROBE` or they are skipped and listed). Any other
+network request fails the run. Acceptance reads outcomes (requests, transfers and
+the files they would fetch, recorded copies, subtitle tracks, sessions) and every
+attempted tool call: a forbidden attempt fails a run even when a tool blocked it.
+Prose is never judged.
+
+Each case runs three times by default, each on a fresh household. Spending is
+capped: once the cost ledger (or the provider meter at the network gate) reaches
+`--max-dollars`, no further paid request is sent, runs in flight are cancelled
+and nothing new starts; the summary lists every run that did not happen. Inside
+each run the household's per-request allowance is `--per-run-dollars` ($1).
+
+Free first, to check the harness and see the token estimate (scripted reference
+answers, the network refused):
+
+```sh
+.venv/bin/python tests/evals/run_live.py --dry-run
+```
+
+The paid run with the AltProvider models (the Provider key has no credit):
+
+```sh
+SPARROW_RUN_LIVE_EVALS=1 ALTPROVIDER_API_KEY=... SPARROW_CHEAP_MODEL=cheap-model SPARROW_SMART_MODEL=smart-model \
+  SPARROW_FFMPEG=... SPARROW_FFPROBE=... .venv/bin/python tests/evals/run_live.py --max-dollars 15 \
+  --output tests/evals/artifacts/live-$(date +%Y%m%d).json
+```
+
+The dry run projects about $1.30 for all 126 runs if each agent took the
+reference path (subtitles about $1.08 of it, mostly the the smart model manager; Fetch
+$0.09 with its smart pick reviews; Media $0.05; Librarian $0.03; Discovery $0.02).
+Real agents take more turns and reason longer, so expect roughly $3–6, well
+inside the cap.
+`SPARROW_PROFILES` overrides a role's model, effort or bounds for comparisons;
+`--cases`, `--roles` and `--set main|holdout` narrow a run, `--keep-state` keeps
+each run's state directory for `python -m backend.agents.ledger`.
+
+Output: a JSON result (default `tests/evals/artifacts/live-<time>.json`, ignored
+by git) with, per run, the outcome and each contract check, tool actions and
+refusals, guardrail enforcements, requested and served models, profile ids,
+versions and effort, calls, tokens, ledger cost and latency; and a markdown
+summary beside it per role: pass rate per case over the repetitions, holdout pass
+rate, cost per role and in total, median latency and each failure with the
+contract it broke. Neither contains keys, release or file names, or agent prose.
+Dry-run pass rates test the harness, not a model.
 
 The opt-in Librarian evaluation now uses real personal subscription authority,
 current tools and persisted jobs, with controlled catalogue/file observations.
