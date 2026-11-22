@@ -252,12 +252,13 @@ export function Cover({
   src?: string;
   className?: string;
 }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
+  // The address that failed: a new one tries again. (Resetting a flag in an
+  // effect lost failures Safari reports before effects run.)
+  const [failed, setFailed] = useState<string>();
   return (
     <span className={`cover ${className}`}>
-      {src && !failed ? (
-        <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
+      {src && failed !== src ? (
+        <img src={src} alt="" loading="lazy" onError={() => setFailed(src)} />
       ) : (
         <span className="cover-empty" aria-hidden="true">
           <span>{title}</span>

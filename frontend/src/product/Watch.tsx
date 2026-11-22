@@ -33,6 +33,20 @@ const stamp = (seconds: number) => {
     s = String(total % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 };
+/** Show the chosen subtitles. Tracks are matched by element, not position:
+ *  Safari also lists the text tracks inside the file, which shifts positions. */
+function showSubtitle(element: HTMLVideoElement | null, chosen: unknown) {
+  if (!element) return;
+  const own = new Set<TextTrack>();
+  element.querySelectorAll("track").forEach((el) => {
+    own.add(el.track);
+    el.track.mode = el.dataset.index === String(chosen) ? "showing" : "disabled";
+  });
+  for (let i = 0; i < element.textTracks.length; i++) {
+    if (!own.has(element.textTracks[i])) element.textTracks[i].mode = "disabled";
+  }
+}
+
 function trackLabel(
   track: { title?: string; language?: string },
   fallback: string,
@@ -276,11 +290,17 @@ function Player({
     };
   }, [session?.id]);
   useEffect(() => {
-    const tracks = video.current?.textTracks;
-    if (tracks)
-      for (let i = 0; i < tracks.length; i++)
-        tracks[i].mode =
-          session?.subtitles[i]?.index === subtitle ? "showing" : "disabled";
+    const element = video.current;
+    const apply = () => showSubtitle(element, subtitle);
+    apply();
+    // Safari picks tracks again when one loads or appears; choose again then.
+    const tracks = element ? [...element.querySelectorAll("track")] : [];
+    tracks.forEach((t) => t.addEventListener("load", apply));
+    element?.textTracks.addEventListener("addtrack", apply);
+    return () => {
+      tracks.forEach((t) => t.removeEventListener("load", apply));
+      element?.textTracks.removeEventListener("addtrack", apply);
+    };
   }, [subtitle, session]);
   return (
     <div className="player">
@@ -345,15 +365,7 @@ function Player({
               src={t.url}
               srcLang={t.language || "und"}
               label={trackLabel(t, "Subtitles")}
-              onLoad={() => {
-                const tracks = video.current?.textTracks;
-                if (tracks)
-                  for (let i = 0; i < tracks.length; i++)
-                    tracks[i].mode =
-                      session.subtitles[i]?.index === subtitle
-                        ? "showing"
-                        : "disabled";
-              }}
+              data-index={t.index}
             />
           ))}
         </video>

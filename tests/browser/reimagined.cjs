@@ -44,9 +44,13 @@ fs.mkdirSync(out, { recursive: true });
       );
       const layout = await page.evaluate(() => ({
         overflow: document.documentElement.scrollWidth > innerWidth,
-        brokenImages: [...document.images].filter(
-          (image) => !image.complete || !image.naturalWidth,
-        ).length,
+        // Broken: loaded with nothing to show, or still pending on screen.
+        // Lazy images further down aren't requested yet (WebKit defers more).
+        brokenImages: [...document.images].filter((image) => {
+          const box = image.getBoundingClientRect();
+          const onScreen = box.bottom > 0 && box.top < innerHeight;
+          return image.complete ? !image.naturalWidth : onScreen;
+        }).length,
         clipped: [
           ...document.querySelectorAll("input, select, textarea, button"),
         ]
@@ -156,8 +160,9 @@ fs.mkdirSync(out, { recursive: true });
 
   await go("/library");
   // A slow TV computer must show a choice at once and never drop typed letters.
-  const cpu = await page.context().newCDPSession(page);
-  await cpu.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+  // Chromium only: other engines (WebKit for Safari) run the same steps unthrottled.
+  const cpu = await page.context().newCDPSession(page).catch(() => null);
+  await cpu?.send("Emulation.setCPUThrottlingRate", { rate: 6 });
   const types = page.getByRole("group", { name: "Media type", exact: true });
   await types.getByLabel("Films", { exact: true }).check();
   await page.getByLabel("Sort titles", { exact: true }).selectOption("year");
@@ -166,7 +171,7 @@ fs.mkdirSync(out, { recursive: true });
     .pressSequentially("quiet", { delay: 20 });
   assert.equal(new URL(page.url()).searchParams.get("sort"), "year");
   assert.equal(new URL(page.url()).searchParams.get("type"), "movie");
-  await cpu.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  await cpu?.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   assert.equal(
     await page.getByLabel("Search the collection").inputValue(),
     "quiet",
@@ -341,8 +346,16 @@ fs.mkdirSync(out, { recursive: true });
     path.join(out, "reimagined-results.json"),
     JSON.stringify(result, null, 2),
   );
+  const engine = browser.browserType().name();
   await browser.close();
-  assert.deepEqual(errors, []);
+  // WebKit reports requests cancelled by a page navigation as page errors
+  // ("… due to access control checks"); the app catches them. Others are real.
+  assert.deepEqual(
+    errors.filter(
+      (message) => !(engine === "webkit" && /due to access control checks\.$/.test(message)),
+    ),
+    [],
+  );
   console.log(
     JSON.stringify({
       passed: true,
