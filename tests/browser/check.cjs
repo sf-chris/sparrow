@@ -50,7 +50,9 @@ await page.getByLabel('Audio',{exact:true}).selectOption({index:1});
 // Chrome may use native HLS or MediaSource. Both must load the converted audio.
 await page.waitForFunction(()=>{const v=document.querySelector('video');return v&&(/blob:|\/hls\//.test(v.src))&&v.readyState>=2},null,{timeout:25000});
 await page.locator('video').evaluate(v=>{v.pause();v.currentTime=18;});
-await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2&&!document.querySelector('video')?.seeking,{timeout:15000});
+// The segment at 18s is converted on demand; WebKit on Linux has no native HLS
+// and buffers through hls.js, which takes longer on a busy machine.
+await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2&&!document.querySelector('video')?.seeking,null,{timeout:45000});
 await page.screenshot({path:path.join(out,'player-converted-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:'Back to title'}).click();
 const saved=await page.request.get(url+'/api/v1/catalogue');const items=await saved.json();

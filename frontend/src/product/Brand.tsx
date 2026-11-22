@@ -75,16 +75,16 @@ export function Still({
   className?: string;
   lazy?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
+  // The address that failed: a new one tries again.
+  const [failed, setFailed] = useState<string>();
   return (
     <span className={`still ${className}`}>
-      {src && !failed ? (
+      {src && failed !== src ? (
         <img
           src={src}
           alt=""
           loading={lazy ? "lazy" : "eager"}
-          onError={() => setFailed(true)}
+          onError={() => setFailed(src)}
         />
       ) : (
         <span className="still-empty" aria-hidden="true">
