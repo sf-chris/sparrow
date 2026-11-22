@@ -1703,6 +1703,13 @@ class Subtitles:
             candidate = next((c for c in task["data"].get("candidates", []) if c["id"] == identity), None)
             if not candidate:
                 raise ToolError("Choose a source ID from sources.")
+            if any(
+                a.get("source_id") == identity and a.get("outcome") == "set_aside"
+                for a in task["data"].get("attempts", [])
+            ):
+                # Checked and failing already: trying it again only costs calls
+                # (and would relabel a set-aside upload as merely failed).
+                raise ToolError("That source was already checked and set aside. Choose another from sources.")
             asset = context["asset"]
             try:
                 text, format_name = await self.fetch_text(task, asset, candidate)
