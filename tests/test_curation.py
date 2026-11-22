@@ -80,6 +80,48 @@ class CurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(facts["candidates"]), 125)
         self.assertEqual(facts["candidates"][-1]["episode"], 125)
 
+    async def test_evidence_offers_the_exact_request_and_acquire_reads_season_words(self):
+        row = self.follow()
+        facts = await self.care.evidence(row)
+        self.assertEqual(facts["ready_requests"], {"missing": {"1": [1, 2]}})
+        self.service.runtime._call_api = AsyncMock(
+            side_effect=[
+                response("evidence", {}),
+                # Cheap models often write "Season 1" and "E02"; that is the same request.
+                response("acquire", {"wanted_episodes": {"Season 1": ["E01", 2]}}),
+                response("finish", {"message": "Requested the two aired episodes."}),
+            ]
+        )
+        await self.care.check(row["id"])
+        jobs = self.service.store.get_jobs()
+        self.assertEqual([j.wanted_episodes for j in jobs], [{"1": [1, 2]}])
+
+    async def test_an_unreadable_or_ineligible_request_says_what_is_eligible(self):
+        from backend.agents.curation import episode_identities
+
+        self.assertIsNone(episode_identities({"first season": [1]}))
+        self.assertIsNone(episode_identities({"1": "1,2"}))
+        row = self.follow()
+        self.service.runtime._call_api = AsyncMock(
+            side_effect=[
+                response("acquire", {"wanted_episodes": {"first season": [1]}}),
+                response("acquire", {"wanted_episodes": {"1": [3]}}),
+                response("finish", {"message": "Nothing eligible requested."}),
+            ]
+        )
+        await self.care.check(row["id"])
+        session = self.service.store.get_session(self.care.row(row["id"])["data"]["session_id"])
+        results = [
+            block.get("content", "")
+            for message in session.messages if message.get("role") == "user" and isinstance(message.get("content"), list)
+            for block in message["content"] if isinstance(block, dict) and block.get("type") == "tool_result"
+        ]
+        text = " ".join(str(r) for r in results)
+        self.assertIn("Use season numbers as keys", text)
+        self.assertIn("Choose only currently eligible", text)
+        self.assertIn("Eligible now, by kind", text)
+        self.assertEqual(self.service.store.get_jobs(), [])
+
     async def test_changed_facts_wake_agent_once_and_unchanged_idle_costs_no_calls(
         self,
     ):
