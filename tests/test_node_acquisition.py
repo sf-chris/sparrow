@@ -359,6 +359,118 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         await self.service.cancel_job(self.job.id)
         self.assertIn(("a" * 40, False), self.removed)
 
+    def second_request(self):
+        job = Job(
+            tmdb_id=42, media_type="movie", title="Fixture", user_id=self.owner["id"],
+            library_id=self.node_id, node_id=self.node_id, min_quality="any", audio_pref="en",
+            preferences=self.service.accounts.resolve(self.owner["id"], {"min_quality": "any"}),
+        )
+        self.service.store.save_job(job)
+        session = AgentSession(job_id=job.id, job_revision=job.revision, user_id=self.owner["id"])
+        self.service.store.save_session(session)
+        return job, ToolCtx(session, self.service.runtime)
+
+    async def test_a_new_request_takes_over_a_cancelled_requests_copy(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        partial = self.staging / first["download_id"] / "Fixture.mkv.part"
+        partial.parent.mkdir(exist_ok=True)
+        partial.write_bytes(b"fetched already")
+        await self.service.cancel_job(self.job.id)
+        self.assertNotIn("a" * 40, self.client_state)
+        again_job, ctx = self.second_request()
+        again = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"}, ctx)
+        self.assertEqual(again["download_id"], first["download_id"])
+        self.assertEqual(self.add_count, 2)
+        self.assertIn("a" * 40, self.client_state)
+        dl = self.storage.get_download(first["download_id"])
+        self.assertEqual(dl.metadata["job_id"], again_job.id)
+        self.assertEqual(dl.metadata["previous_job_id"], self.job.id)
+        # What the cancelled request fetched is resumed, not fetched again.
+        self.assertTrue(partial.exists())
+        # The new owner controls it; the ended one cannot.
+        await self.call("client_remove", {"download_id": dl.id}, ctx)
+        self.assertNotIn("a" * 40, self.client_state)
+
+    async def test_a_live_requests_copy_stays_with_it(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        _, ctx = self.second_request()
+        with self.assertRaisesRegex(ToolError, "Another live request"):
+            await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"}, ctx)
+        self.assertEqual(self.storage.get_download(first["download_id"]).metadata["job_id"], self.job.id)
+        self.assertEqual(self.add_count, 1)
+
+    async def test_a_copy_still_being_removed_is_not_taken_yet(self):
+        await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        with self.nodes.accounts.connect() as db:
+            db.execute("UPDATE nodes SET last_seen=0 WHERE id=?", (self.node_id,))
+        await self.service.cancel_job(self.job.id)
+        self.nodes.heartbeat(self.node_id, self.executor.capabilities())
+        _, ctx = self.second_request()
+        with self.assertRaisesRegex(ToolError, "still being removed"):
+            await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"}, ctx)
+
+    async def test_a_finished_requests_shared_copy_is_handed_over(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        await self.storage.update_download(first["download_id"], status=DownloadStatus.ORGANIZED)
+        self.job.status, self.job.closed_at = JobStatus.COMPLETE, time.time()
+        self.service.store.save_job(self.job)
+        again_job, ctx = self.second_request()
+        await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"}, ctx)
+        # Detached from the finished request (files kept), then added for the new one.
+        self.assertEqual(self.removed, [("a" * 40, False)])
+        self.assertEqual(self.add_count, 2)
+        dl = self.storage.get_download(first["download_id"])
+        self.assertEqual((dl.metadata["job_id"], dl.status), (again_job.id, DownloadStatus.DOWNLOADING))
+
+    async def test_an_ended_requests_leftovers_are_cleared_after_a_day(self):
+        from backend.agents.transfer_control import RELEASE_AFTER, release_finished
+
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        folder = self.staging / first["download_id"]
+        folder.mkdir(exist_ok=True)
+        (folder / "Fixture.mkv.part").write_bytes(b"partial")
+        kept = self.library / "Kept.mp4"
+        kept.write_bytes(b"in the library")
+        later = time.time() + RELEASE_AFTER + 60
+        await release_finished(self.service, now=later)  # a live request keeps everything
+        self.assertTrue(folder.exists())
+        await self.service.cancel_job(self.job.id)
+        await release_finished(self.service)  # within the day: kept for a repeat request
+        self.assertTrue(folder.exists())
+        await release_finished(self.service, now=later)
+        self.assertFalse(folder.exists())
+        self.assertTrue(kept.exists())
+        dl = self.storage.get_download(first["download_id"])
+        self.assertEqual(dl.metadata["released_at"], later)
+        self.assertEqual(dl.status, DownloadStatus.ERROR)
+        await release_finished(self.service, now=later + 60)  # done once
+        # A repeat request after the clear-up simply fetches it afresh.
+        _, ctx = self.second_request()
+        again = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"}, ctx)
+        self.assertEqual(again["download_id"], first["download_id"])
+        self.assertIn("a" * 40, self.client_state)
+        self.assertNotIn("released_at", self.storage.get_download(dl.id).metadata)
+
+    async def test_a_finished_copy_is_cleared_only_once_sharing_stops(self):
+        from backend.agents.transfer_control import RELEASE_AFTER, release_finished
+
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        folder = self.staging / first["download_id"]
+        folder.mkdir(exist_ok=True)
+        (folder / "Fixture.mp4").write_bytes(b"original of a placed copy")
+        await self.storage.update_download(first["download_id"], status=DownloadStatus.ORGANIZED)
+        self.job.status, self.job.closed_at = JobStatus.COMPLETE, time.time() - RELEASE_AFTER - 60
+        self.service.store.save_job(self.job)
+        await release_finished(self.service)
+        self.assertTrue(folder.exists())
+        self.assertIn("a" * 40, self.client_state)
+        dl = self.storage.get_download(first["download_id"])
+        await self.storage.update_download(dl.id, metadata={**dl.metadata, "seeding_stopped": True})
+        await release_finished(self.service)
+        self.assertFalse(folder.exists())
+        self.assertNotIn("a" * 40, self.client_state)
+        self.assertEqual(self.storage.get_download(dl.id).status, DownloadStatus.ORGANIZED)
+
     async def test_inventory_cannot_claim_other_title_or_unpublished_file(self):
         result = await self.call(
             "client_add", {"info_hash": "a" * 40, "name": "Fixture"}
