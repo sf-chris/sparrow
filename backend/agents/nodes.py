@@ -229,8 +229,11 @@ class Nodes:
         job = service.store.get_job(job_id) if service else None
         if not job or job.revision != command.get("revision"):
             return False
-        # Explicit control operations may revoke work after changing job status.
+        # Explicit control operations may revoke work after changing job status,
+        # and an ended request's own transfer folder may be cleared.
         if command["kind"] in ("download_stop", "download_remove"):
+            return True
+        if command["kind"] == "discard_staging" and job.status.value in ("complete", "abandoned"):
             return True
         if job.status.value != "active":
             return False

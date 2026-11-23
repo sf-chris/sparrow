@@ -95,7 +95,10 @@ Everything new lives in `backend/agents/`:
   each: a new wave needs a genuinely new candidate or a recorded identity
   conflict, and a request's repeated searches come from the cache. Handles
   stalls (removing a transfer deletes its unfinished files) and reconciles
-  inventory. Woken by events; hibernates between.
+  inventory. A copy left by an ended request is taken over by a new request
+  for it (resuming what was fetched); a live request's copy is never shared.
+  An ended request's leftover transfers are cleared a day after it ends, once
+  not seeding (`transfer_control.release_finished`); library files are never touched. Woken by events; hibernates between.
 - **Media Agent** (cheap tier, self-escalates, one session per landed
   download): probes every file with ffprobe, matches durations against TMDB
   runtimes, detects samples/fakes, names and places files, updates

@@ -988,11 +988,18 @@ class AgentService:
             try:
                 await asyncio.sleep(POLL_INTERVAL)
                 await self.reconcile_transfers()
+                await self.release_finished_transfers()
                 await self.offer_transfer_slots()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("plumbing loop error")
+
+    async def release_finished_transfers(self) -> None:
+        """Clear ended requests' leftover downloads once nothing will use them."""
+        from .transfer_control import release_finished
+
+        await release_finished(self)
 
     async def offer_transfer_slots(self) -> None:
         """Wake the longest-waiting requests when transfer slots free up."""
