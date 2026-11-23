@@ -218,6 +218,20 @@ class CurationTests(unittest.IsolatedAsyncioTestCase):
         await self.care.check(row["id"])
         self.assertEqual(self.service.runtime._call_api.call_count, 1)
 
+    async def test_an_openai_only_install_runs_the_librarian(self):
+        import os
+        from unittest import mock
+
+        row = self.follow()
+        self.service.runtime._api_key_getter = lambda: ""  # no Anthropic key at all
+        self.service.runtime._openai_key_getter = lambda: "fixture-openai-key"
+        self.service.runtime._call_api = AsyncMock(return_value=response("finish", {"message": "Reviewed."}))
+        with mock.patch.dict(os.environ, {"SPARROW_CHEAP_MODEL": "gpt-6-luna", "SPARROW_SMART_MODEL": "gpt-6-sol"}):
+            await self.care.check(row["id"])
+        self.assertEqual(self.service.runtime._call_api.call_count, 1)
+        self.assertTrue(self.service.runtime.provider_ready("gpt-6-luna"))
+        self.assertFalse(self.service.runtime.provider_ready("claude-haiku-4-5"))
+
     async def test_failed_review_keeps_successful_acquisition_receipt(self):
         row = self.follow()
         self.service.runtime._call_api = AsyncMock(

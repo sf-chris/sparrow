@@ -280,7 +280,9 @@ def install_discovery(app, accounts, catalogue, get_service):
     @router.post("")
     async def start(body: Input, request: Request):
         service = discovery.register()
-        if not service.runtime._api_key_getter():
+        from .profiles import resolve
+
+        if not service.runtime.provider_ready(resolve("discovery", service.storage.get_config()).model):
             raise HTTPException(
                 503,
                 "Connect a reasoning provider in Server settings to use assisted discovery. Title search still works independently.",
