@@ -89,6 +89,14 @@ class ProductCorrectnessTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(audio_satisfies({"audio_languages": ["jpn"]}, "original", "ja"))
         self.assertFalse(audio_satisfies({}, "original"))
 
+    def test_a_film_without_dialogue_takes_any_soundtrack(self):
+        from backend.agents.media_state import audio_satisfies
+
+        untagged = {"audio_languages": [""]}
+        self.assertTrue(audio_satisfies(untagged, "original", "zxx"))  # TMDB spoken language "xx"
+        self.assertFalse(audio_satisfies(untagged, "original", "en"))  # unverifiable dialogue stays refused
+        self.assertFalse(audio_satisfies(untagged, "en", "zxx"))  # an explicit language still needs evidence
+
     async def test_completion_refuses_wrong_audio_even_when_the_file_exists(self):
         path = self.root / "movie.mp4"
         path.write_bytes(b"fixture")
