@@ -213,6 +213,59 @@ def acquisition_tools(tb):
             for a in scoped_assets(tb, job)
         ]
 
+    async def take_over(ctx, job, node_id, existing, args):
+        """The same copy on the same storage, recorded under another request.
+        A live request keeps it. An ended one (cancelled, given up or done)
+        hands it over: still in the download app, it is detached from that
+        request first (files kept, so what was fetched is not fetched again);
+        then this request adds it as a new attempt with its own file choice.
+        Called under the transfer lock."""
+        owner = tb.store.get_job(existing.metadata.get("job_id", ""))
+        if owner and owner.status in (JobStatus.ACTIVE, JobStatus.PAUSED):
+            raise ToolError(
+                "Another live request is already downloading this exact copy to this storage. "
+                "Whatever it places shows in this request's inventory too: hibernate with a "
+                "timer and check inventory then, or choose a different copy."
+            )
+        if existing.metadata.get("desired_control"):
+            raise ToolError(
+                "This copy is still being removed after an earlier request ended. "
+                "Hibernate with a timer and try it again once storage confirms."
+            )
+        attempt = int(existing.metadata.get("attempt") or 0)
+        if existing.status != DownloadStatus.ERROR:
+            try:
+                await nodes.execute(
+                    node_id,
+                    "download_remove",
+                    {"hash": existing.torrent_hash},
+                    job=owner,
+                    operation_id=f"handover-{existing.id}-{attempt}",
+                    timeout=20,
+                )
+            except NodeError as exc:
+                raise ToolError(
+                    "This copy is still held by an earlier request on storage that is not answering. "
+                    + str(exc)
+                ) from exc
+        metadata = {
+            **existing.metadata,
+            "job_id": job.id,
+            "session_id": ctx.session.id,
+            "previous_job_id": existing.metadata.get("job_id", ""),
+            "wanted_titles": [str(t) for t in args.get("titles") or [job.title]][:3],
+        }
+        for key in ("released_at", "seeding_stopped", "control_confirmed_at"):
+            metadata.pop(key, None)
+        await tb.storage.update_download(
+            existing.id,
+            status=DownloadStatus.ERROR,
+            metadata=metadata,
+            tmdb_id=job.tmdb_id,
+            media_type=MediaType(job.media_type),
+        )
+        return tb.storage.get_download(existing.id)
+
     async def add(ctx, args, *, notes=None):
         """notes: what code established for the Media Agent: files found by
         their TMDB episode title, and a check download's unverified attributes.
@@ -237,9 +290,7 @@ def acquisition_tools(tb):
             )
             existing = tb.storage.get_download(identity)
             if existing and existing.metadata.get("job_id") != job.id:
-                raise ToolError(
-                    "This content already belongs to another request on this storage."
-                )
+                existing = await take_over(ctx, job, node_id, existing, args)
             if existing and existing.status not in (
                 DownloadStatus.ERROR,
                 DownloadStatus.QUEUED,
