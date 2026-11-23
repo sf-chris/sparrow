@@ -516,9 +516,12 @@ class Curation:
                     )
                     self.close_sessions(identity, CaseState.COMPLETED)
                     return
-                if not self.service.runtime._api_key_getter():
+                from .profiles import resolve
+
+                model = resolve("librarian", self.service.storage.get_config()).model
+                if not self.service.runtime.provider_ready(model):
                     raise ToolError(
-                        "Add an Provider key, then check again."
+                        f"Add a key for {model}'s provider in Settings → Connections, then check again."
                     )
                 if unfinished and not force:
                     if session.wake_at > time.time():
