@@ -67,6 +67,8 @@ def language_code(value: str) -> str:
 def audio_satisfies(record: dict, preference: str, original_language: str = "") -> bool:
     if not preference or preference == "any":
         return True
+    if preference == "original" and language_code(original_language) in ("zxx", "xx"):
+        return True  # No spoken language: any soundtrack is the original.
     wanted = language_code(
         original_language if preference == "original" else preference
     )

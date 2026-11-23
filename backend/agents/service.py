@@ -865,7 +865,12 @@ class AgentService:
             audio_pref=audio_pref,
             urgency=Urgency(urgency),
             origin=origin,
-            original_language=details.get("original_language", ""),
+            # No spoken language (TMDB "xx", e.g. Big Buck Bunny): audio language can't matter.
+            original_language=(
+                "zxx"
+                if [s.get("iso_639_1") for s in details.get("spoken_languages") or []] == ["xx"]
+                else details.get("original_language", "")
+            ),
             state_line="Starting…",
         )
         session = AgentSession(
