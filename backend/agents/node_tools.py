@@ -137,14 +137,21 @@ def missing_episodes(tb, job):
 
 
 def runtime_matches(duration, minutes, approximate=False):
-    """Whether a measured duration is the catalogue's runtime: within two
-    minutes (10% for short items), or a quarter either way when the figure
-    is a season-wide placeholder. Samples and double-length cuts never pass."""
+    """Whether a measured duration is the catalogue's runtime.
+
+    Shorter by up to two minutes or 10%; longer by up to two minutes or, for
+    short items, a quarter (credits can be a large part of a short film:
+    Big Buck Bunny runs 9:56 against TMDB's 8 minutes). Never less than a
+    minute either way, since catalogue runtimes are whole minutes. A quarter
+    either way when the figure is a season-wide placeholder. Samples and
+    double-length cuts never pass."""
     seconds = float(minutes or 0) * 60
-    tolerance = min(120, max(5, seconds * 0.1))
+    shorter = min(120, max(60, seconds * 0.1))
+    longer = min(120, max(60, seconds * 0.25))
     if approximate:
-        tolerance = max(tolerance, seconds * 0.25)
-    return bool(seconds) and abs(float(duration) - seconds) <= tolerance
+        shorter, longer = max(shorter, seconds * 0.25), max(longer, seconds * 0.25)
+    difference = float(duration) - seconds
+    return bool(seconds) and -shorter <= difference <= longer
 
 
 def unsuitable(job, facts):
