@@ -104,7 +104,7 @@ async def build(args, state):
     await storage.save_config(SparrowConfig(library_dir=str(video.parent), staging_dir=str(state / "staging"),
                                             onboarding_complete=True))
     service = AgentService(storage, str(state), AsyncMock())
-    service.runtime._api_key_getter = lambda: os.getenv("PROVIDER_API_KEY", "")
+    service.runtime._api_key_getter = lambda: os.getenv("ZAI_API_KEY", "")
     accounts = service.accounts
     if accounts.has_users():
         raise SystemExit(f"{state} already holds a household; use a new --state for each run.")

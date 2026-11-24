@@ -1,7 +1,7 @@
 """Run a private, opt-in audio/subtitle experiment without publishing a track.
 
 python -m backend.agents.subtitle_trial --help
-The optional Assistant review uses Sparrow's durable tool runtime and budget checks.
+The optional model review uses Sparrow's durable tool runtime and budget checks.
 It compares recognised text, not raw audio, and never marks a subtitle verified.
 """
 
@@ -268,7 +268,7 @@ def main(argv=None):
     parser.add_argument(
         "--review",
         action="store_true",
-        help="Send recognised text/captions to Assistant using PROVIDER_API_KEY (at most 8 turns/$0.50 estimated budget, including retry reservations).",
+        help="Send recognised text/captions to the model using ZAI_API_KEY (at most 8 turns/$0.50 estimated budget, including retry reservations).",
     )
     parser.add_argument(
         "--review-only",
@@ -276,19 +276,12 @@ def main(argv=None):
         help="Reuse a completed transcript and continue its saved review session.",
     )
     parser.add_argument(
-        "--assistant-cli",
-        action="store_true",
-        help="Use the existing Assistant CLI sign-in for this experimental review, with CLI tools disabled.",
-    )
-    parser.add_argument(
         "--reasoning-model",
-        default=os.getenv("SPARROW_CHEAP_MODEL", "assistant-small"),
+        default=os.getenv("SPARROW_CHEAP_MODEL", "glm-5.3-flash"),
     )
     args = parser.parse_args(argv)
     if args.review_only and not args.review:
         parser.error("--review-only requires --review")
-    if args.assistant_cli and not args.review:
-        parser.error("--assistant-cli requires --review")
     if not args.review_only:
         if not args.media or not args.model_path:
             parser.error("--media and --model-path are required for transcription")
@@ -324,26 +317,19 @@ def main(argv=None):
             save(args.output / "candidate.json", candidate)
             (args.output / "candidate.original").write_bytes(raw)
     if args.review:
-        key = os.getenv("PROVIDER_API_KEY", "")
-        if not key and not args.assistant_cli:
+        key = os.getenv("ZAI_API_KEY", "")
+        if not key:
             save(
                 args.output / "review-status.json",
                 {"state": "awaiting_api_key", "verified": False},
             )
             print(
-                "Transcription retained. Set PROVIDER_API_KEY and rerun with --review --review-only."
+                "Transcription retained. Set ZAI_API_KEY and rerun with --review --review-only."
             )
             return 2
         if not (args.output / "candidate.json").is_file():
-            parser.error("Assistant comparison needs a subtitle candidate.")
-        caller = None
-        if args.assistant_cli:
-            from .subtitle_cli_trial import cli_caller
-
-            caller = cli_caller(args.output)
-        status = asyncio.run(
-            review(args.output, key, args.reasoning_model, call_api=caller)
-        )
+            parser.error("The comparison needs a subtitle candidate.")
+        status = asyncio.run(review(args.output, key, args.reasoning_model))
         print(json.dumps(status, ensure_ascii=False))
         return (
             0

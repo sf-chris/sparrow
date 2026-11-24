@@ -851,7 +851,7 @@ def detect(cues, utterances):
     }
 
 
-# ─── Manager mode: cheap page checks, Large on what they flag ─────────────
+# ─── Manager mode: cheap page checks, the manager on what they flag ─────
 
 MANAGER_SYSTEM = """You are the subtitle editor for one episode or film, managing cheaper page checkers. Make its English subtitles right for a viewer: every line of dialogue captioned with what was actually said (natural translation is fine), on screen when the voice speaks. When a track is basically right, change as little as possible: keep its wording, names, terminology and line breaks, and fix only real errors. A professional translation is right by default: puns, jokes, names and idioms are often localised rather than literal, and recognition mishears exactly those words. Rewrite a professional line only when the transcript is clear and the meaning is plainly different; when the transcript looks garbled or the caption could be wordplay, keep the caption (settle it loose or unclear). Read a flagged caption's neighbours first: professional tracks split one spoken sentence across several captions, and a caption carrying its part of the sentence is right; never fold the whole sentence into one of them. Before rewriting a line of the release's own track, listen to its moment: the tool requires a second hearing first.
 

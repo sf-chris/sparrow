@@ -25,8 +25,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..configuration import effective_glm_key, effective_altprovider_key
-from . import profiles, providers, subtitle_archive, subtitle_contract, subtitle_promos
+from ..configuration import effective_glm_key
+from . import glm_loop, profiles, subtitle_archive, subtitle_contract, subtitle_promos
 from . import subtitle_review as pages_
 from .account_api import administrator
 from .media_state import language_code
@@ -43,14 +43,11 @@ from .subtitle_sync import (
 )
 
 ACTIVE = {"queued", "finding", "aligning", "measuring", "reviewing"}
-DEFAULT_REVIEW_MODEL = "assistant-large"
-DEFAULT_ALTPROVIDER_REVIEW_MODEL = "smart-model"
-DEFAULT_CONTRACTOR = "cheap-model"
-DEFAULT_VERIFIER = "smart-model"
-# With a Z.ai key (and no model named), GLM runs every subtitle role.
-GLM_REVIEW_MODEL = "glm-5.3"
-GLM_CONTRACTOR = "glm-5.3-flash"
-GLM_VERIFIER = "glm-5.3"
+# The subtitle roles: GLM 5.3 manages and gives second opinions; GLM 5.3 Flash
+# reads every page (and picture subtitles).
+DEFAULT_REVIEW_MODEL = "glm-5.3"
+DEFAULT_CONTRACTOR = "glm-5.3-flash"
+DEFAULT_VERIFIER = "glm-5.3"
 # Above this share of captions flagged wrong, the track is plainly mismatched:
 # skip verification and let the manager replace it.
 MISMATCH_SHARE = 0.3
@@ -66,54 +63,34 @@ REVIEW_WAKES = 6
 
 
 def review_model():
-    """The manager. the smart model when an AltProvider key is set: it made the same
-    corrections as Large on the benchmark episodes for about a third of the
-    cost. Otherwise Large."""
-    configured = os.getenv("SPARROW_SUBTITLE_MODEL")
-    if configured:
-        return configured
-    if effective_glm_key():
-        return GLM_REVIEW_MODEL
-    return DEFAULT_ALTPROVIDER_REVIEW_MODEL if effective_altprovider_key() else DEFAULT_REVIEW_MODEL
+    """The manager: reviews what the page checker flags and approves a track."""
+    return os.getenv("SPARROW_SUBTITLE_MODEL") or DEFAULT_REVIEW_MODEL
 
 
 def verifier_model():
-    """A stronger cheap model that re-checks only the checker's flags.
-
-    In the benchmark the smart model cleared every false alarm on correct tracks
-    while keeping wrong-episode tracks flagged, for about two cents an episode.
-    """
-    return configured_model("SPARROW_SUBTITLE_VERIFIER", DEFAULT_VERIFIER, GLM_VERIFIER)
+    """A stronger model that re-checks only the checker's flags."""
+    return configured_model("SPARROW_SUBTITLE_VERIFIER", DEFAULT_VERIFIER)
 
 
 def reader_model():
     """The vision model that reads picture subtitles (the page checker when
-    it reads images: the cheap model or GLM 5.3 Flash); empty without one."""
+    it reads images); empty without one."""
     model = contractor_model()
-    return model if providers.reads_images(model) else ""
+    return model if glm_loop.reads_images(model) else ""
 
 
 def contractor_model():
-    """The cheaper page checker the subtitle agent manages.
-
-    the cheap model caught 6 of Large's 7 flagged problems in the page-check
-    benchmark for under a cent per episode, so it is used whenever an AltProvider
-    key is present. Empty means Large reads every page itself.
-    """
-    return configured_model("SPARROW_SUBTITLE_CONTRACTOR", DEFAULT_CONTRACTOR, GLM_CONTRACTOR)
+    """The cheaper page checker the subtitle agent manages; empty ("off")
+    means the manager reads every page itself."""
+    return configured_model("SPARROW_SUBTITLE_CONTRACTOR", DEFAULT_CONTRACTOR)
 
 
-def configured_model(variable, default, glm_default=""):
-    """A named model, "off", or blank for the default: GLM's with a Z.ai key,
-    else AltProvider's with an AltProvider key, else none."""
+def configured_model(variable, default):
+    """A named model, "off" for none, or blank for the default."""
     configured = (os.getenv(variable) or "").strip()
     if configured.lower() == "off":
         return ""
-    if configured:
-        return configured
-    if glm_default and effective_glm_key():
-        return glm_default
-    return default if effective_altprovider_key() else ""
+    return configured or default
 
 
 def timing_summary(measured):
@@ -149,16 +126,11 @@ class Subtitles:
         self._measures = {}
         # Builds the page checker's model caller; tests and benchmarks replace it.
         self.contract_caller = lambda model: subtitle_contract.caller_for(
-            model,
-            self.get_service().runtime._api_key_getter(),
-            effective_altprovider_key(),
-            profiles.resolve("subtitle_checker").bind(model).effort_sent,
-            glm_key=effective_glm_key(),
+            model, effective_glm_key(), profiles.resolve("subtitle_checker").bind(model).effort_sent,
         )
         # Reads picture subtitles (Blu-ray, DVD) with the cheap vision model.
         self.picture_reader = lambda model: subtitle_contract.reader_for(
-            model, effective_altprovider_key(), effective_glm_key(),
-            profiles.resolve("subtitle_reader").bind(model).effort_sent,
+            model, effective_glm_key(), profiles.resolve("subtitle_reader").bind(model).effort_sent,
         )
         with accounts.connect() as db:
             db.executescript("""
@@ -1407,13 +1379,7 @@ class Subtitles:
         service = self.get_service()
         model = review_model()
         if not service or not service.runtime.provider_ready(model):
-            name = providers.NAMES[providers.provider_for(model)]
-            self.update(
-                task,
-                "review_pending",
-                f"Subtitles ready. Checking them needs {'an' if name[0] in 'AEIOU' else 'a'} {name} key. "
-                "Add one, then try again.",
-            )
+            self.update(task, "review_pending", "Subtitles ready. Checking them needs a Z.ai key. Add one, then try again.")
             return None
         _, asset = self.authority(task)
         context = await self.review_context(task, asset)

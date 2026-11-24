@@ -21,7 +21,7 @@ the external access wizard is deferred with stage 7.
 ## Philosophy
 
 **1. An agent is an LLM in a tool-use loop. Nothing else qualifies.**
-An agent, in this codebase, means what a coding assistant is: a model with a tool
+An agent, in this codebase, means a model with a tool
 belt that observes, reasons, acts, checks its own work, and iterates until the
 job meets spec — across hours or days, hibernating and waking on events.
 Deterministic workers, scoring functions, and "LLM escalation points" are not

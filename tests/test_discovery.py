@@ -46,7 +46,7 @@ class DiscoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.storage.load_all()
         await self.storage.save_config(
             SparrowConfig(
-                provider_api_key="fixture-not-sent", tmdb_api_key="fixture-not-sent"
+                glm_api_key="fixture-not-sent", tmdb_api_key="fixture-not-sent"
             )
         )
         self.service = AgentService(self.storage, self.temp.name, AsyncMock())

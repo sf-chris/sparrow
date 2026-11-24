@@ -32,7 +32,7 @@ def node(name="Library", **changes):
 class OnboardingTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.env = patch.dict(os.environ, {"TMDB_API_KEY": "", "PROVIDER_API_KEY": "", "ALTPROVIDER_API_KEY": "", "ZAI_API_KEY": ""})
+        self.env = patch.dict(os.environ, {"TMDB_API_KEY": "", "ZAI_API_KEY": ""})
         self.env.start()
         self.storage = Storage(self.temp.name)
         await self.storage.load_all()
@@ -77,7 +77,7 @@ class OnboardingTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_setup_is_admin_only_and_never_returns_keys(self):
         config = self.storage.get_config()
-        config.provider_api_key = "private-reasoning-key"
+        config.glm_api_key = "private-reasoning-key"
         config.tmdb_api_key = "private-title-key"
         await self.storage.save_config(config)
         response = await self.client.get("/api/v1/admin/onboarding")
@@ -147,7 +147,7 @@ class OnboardingTests(unittest.IsolatedAsyncioTestCase):
         )
         with patch.dict(
             os.environ,
-            {"TMDB_API_KEY": "env-title", "PROVIDER_API_KEY": "env-reasoning"},
+            {"TMDB_API_KEY": "env-title", "ZAI_API_KEY": "env-reasoning"},
         ):
             for change in (
                 "offline",

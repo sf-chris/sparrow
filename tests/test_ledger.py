@@ -44,7 +44,7 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
         self.store = AgentStore(self.temp.name)
         self.job = Job(title="Fixture Show", wanted_episodes={"1": [2]})
         self.store.save_job(self.job)
-        self.session = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model="cheap-model")
+        self.session = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model="glm-5.3-flash")
         self.store.save_session(self.session)
 
         async def search(ctx, args):
@@ -59,7 +59,7 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
             ctx.close = True
             return "Done."
 
-        self.spec = AgentSpec("fetch", lambda: "cheap-model", AsyncMock(return_value="Fixture"),
+        self.spec = AgentSpec("fetch", lambda: "glm-5.3-flash", AsyncMock(return_value="Fixture"),
                               lambda _: [ToolDef("tpb_search", "Search", {"type": "object"}, search),
                                          ToolDef("cached_search", "Search again", {"type": "object"}, again),
                                          ToolDef("job_close", "Finish", {"type": "object"}, finish)], effort="low")
@@ -79,7 +79,7 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(calls[0]["cost"], 0)
         self.assertEqual(calls[0]["input_tokens"], 1000)
         self.assertEqual(calls[0]["effort"], "low")
-        self.assertEqual(calls[0]["rates"]["input"], 0.10)  # the rate table the cost was priced at
+        self.assertEqual(calls[0]["rates"]["input"], 0.15)  # the rate table the cost was priced at
         self.assertEqual(calls[0]["tools"][0]["name"], "tpb_search")
         search = next(t for t in tools if t["name"] == "tpb_search")
         self.assertEqual(search["call_id"], calls[0]["id"])
@@ -91,11 +91,11 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(next(t for t in tools if t["name"] == "job_close")["outcome"], "ok")
 
     async def test_phases_tell_escalation_and_stalls_apart(self):
-        self.session.model = "smart-model"  # not the model it started on: escalated
+        self.session.model = "glm-5.3"  # not the model it started on: escalated
         self.store.save_session(self.session)
         self.runtime._call_api = AsyncMock(return_value=answer("job_close", {}))
         await self.runtime.wake(self.session.id, Event(kind="timer"))
-        stalled = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model="cheap-model")
+        stalled = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model="glm-5.3-flash")
         self.store.save_session(stalled)
         await self.runtime.wake(stalled.id, Event(kind="download_stalled"))
         calls, _, _, _ = ledger.load(self.store)
@@ -124,10 +124,10 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
         await storage.save_config(SparrowConfig())
         service = AgentService(storage, self.temp.name, AsyncMock())
         phase = service.runtime._specs["fetch"].phase
-        cheap = AgentSession(agent=AgentKind.FETCH, model="cheap-model")
-        smart = AgentSession(agent=AgentKind.FETCH, model="smart-model")
+        cheap = AgentSession(agent=AgentKind.FETCH, model="glm-5.3-flash")
+        smart = AgentSession(agent=AgentKind.FETCH, model="glm-5.3")
         # Other tests load a developer .env; the roles here are fixed.
-        with patch.dict(os.environ, {"SPARROW_SMART_MODEL": "smart-model", "SPARROW_CHEAP_MODEL": "cheap-model"}):
+        with patch.dict(os.environ, {"SPARROW_SMART_MODEL": "glm-5.3", "SPARROW_CHEAP_MODEL": "glm-5.3-flash"}):
             self.assertEqual(phase(cheap, {"kinds": ["job_created"]}), "scout_pick")
             self.assertEqual(phase(smart, {"kinds": ["timer"]}), "escalated_search")
             self.assertEqual(phase(smart, {"kinds": ["download_stalled"]}), "stall")
@@ -137,14 +137,14 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
         self.store.save_job(other)
         for job, cost in ((self.job, 0.12), (other, 0.004)):
             call = ledger.record_call(self.store, session_id=f"s-{job.id}", job_id=job.id, agent="fetch", phase="scout_pick",
-                                      model="cheap-model", cost=cost, trigger={"kinds": ["job_created"], "step": 0})
+                                      model="glm-5.3-flash", cost=cost, trigger={"kinds": ["job_created"], "step": 0})
             ledger.record_tool(self.store, session_id=f"s-{job.id}", tool_id="t1", call_id=call, job_id=job.id, name="find_releases",
                                outcome="ok", facts={"searches": [{"query": "Q", "cached": False, "waited": 0, "rows": 3}] * 2,
                                                     "peeks": [{"id": "1", "listed": True, "wanted": 1}, {"id": "2", "listed": False}]})
         ledger.record_call(self.store, session_id="sub", job_id=other.id, agent="subtitle", phase="subtitle_check",
-                           model="cheap-model", cost=0.02)
+                           model="glm-5.3-flash", cost=0.02)
         ledger.record_call(self.store, session_id=f"s-{self.job.id}", job_id=self.job.id, agent="fetch", phase="pick_review",
-                           model="smart-model", cost=0.003)
+                           model="glm-5.3", cost=0.003)
         ledger.record_tool(self.store, session_id=f"s-{self.job.id}", tool_id="t2", job_id=self.job.id, name="tpb_search",
                            outcome="rate_limited")
         ledger.record_tool(self.store, session_id=f"s-{self.job.id}", tool_id="t3", job_id=self.job.id, name="escalate_model",
@@ -181,7 +181,7 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
             ledger.record_call(self.store, session_id=job.id, job_id=job.id, agent="fetch", phase="scout_pick", cost=0.001, ts=ts)
             ledger.record_tool(self.store, session_id=job.id, tool_id=tool_id, job_id=job.id, name="propose_release", ts=ts,
                                outcome="ok", facts={"args": {"release": "r1", "reason": "best seeded"}, "pick": "r1",
-                                                    "reviewer": "smart-model", "review_cost": 0.002, **facts})
+                                                    "reviewer": "glm-5.3", "review_cost": 0.002, **facts})
 
         pick(approved, "a", now, name="Show 1 S01E01 1080p", info_hash="a" * 40, approved=True, download_id="dl-a")
         pick(replaced, "b", now, name="Show 2 S01E02 1080p", approved=True, download_id="dl-b")
@@ -238,7 +238,7 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
 
     def test_the_export_has_a_stable_schema_in_jsonl_and_csv(self):
         call = ledger.record_call(self.store, session_id="s", job_id=self.job.id, agent="fetch", phase="scout_pick",
-                                  model="cheap-model", cost=0.001, trigger={"kinds": ["timer"], "step": 0})
+                                  model="glm-5.3-flash", cost=0.001, trigger={"kinds": ["timer"], "step": 0})
         ledger.record_tool(self.store, session_id="s", tool_id="t", call_id=call, job_id=self.job.id, name="find_releases",
                            outcome="ok", facts={"kept": 3})
         rows = [json.loads(line) for line in ledger.export_text(self.store, "jsonl").splitlines()]
@@ -300,8 +300,8 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tools[0]["facts"]["note"], "used [redacted]")
 
     def test_old_runs_are_backfilled_from_their_spend_entries(self):
-        self.session.spend.entries = [{"ts": 1.0, "model": "smart-model", "cost": 0.03, "input_tokens": 9000},
-                                      {"ts": 2.0, "model": "smart-model", "cost": 0.002, "purpose": "pick review"}]
+        self.session.spend.entries = [{"ts": 1.0, "model": "glm-5.3", "cost": 0.03, "input_tokens": 9000},
+                                      {"ts": 2.0, "model": "glm-5.3", "cost": 0.002, "purpose": "pick review"}]
         self.store.save_session(self.session)
         self.assertEqual(ledger.backfill(self.store), 2)
         self.assertEqual(ledger.backfill(self.store), 0)  # once only
@@ -353,7 +353,7 @@ class LedgerApiTests(unittest.IsolatedAsyncioTestCase):
         job = Job(title="Costly Show", wanted_episodes={"1": [3]})
         self.store.save_job(job)
         ledger.record_call(self.store, session_id="s", job_id=job.id, agent="fetch", phase="escalated_search",
-                           model="smart-model", cost=0.21)
+                           model="glm-5.3", cost=0.21)
         ledger.record_tool(self.store, session_id="s", tool_id="t", job_id=job.id, name="propose_release", outcome="ok",
                            facts={"pick": "r1", "name": "Costly.Show.S01E03.1080p-GROUP", "approved": False})
 

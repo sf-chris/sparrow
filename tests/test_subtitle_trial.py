@@ -24,125 +24,6 @@ from backend.agents.subtitle_trial import review
 from test_discovery import response
 
 
-class SubtitleCLITrialTests(unittest.IsolatedAsyncioTestCase):
-    async def test_cancelled_cli_call_retains_unknown_usage_receipt(self):
-        from backend.agents.subtitle_cli_trial import cli_caller
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            process = SimpleNamespace(
-                pid=123456,
-                returncode=None,
-                communicate=AsyncMock(
-                    side_effect=[asyncio.CancelledError(), (b"partial", b"")]
-                ),
-            )
-            with (
-                patch(
-                    "backend.agents.subtitle_cli_trial.shutil.which",
-                    return_value="/fixture/assistant",
-                ),
-                patch(
-                    "backend.agents.subtitle_cli_trial.asyncio.create_subprocess_exec",
-                    return_value=process,
-                ),
-                patch("backend.agents.subtitle_cli_trial.os.killpg") as kill,
-            ):
-                with self.assertRaises(asyncio.CancelledError):
-                    await cli_caller(root)(
-                        SimpleNamespace(model="fixture", messages=[]), "fixture", []
-                    )
-            kill.assert_called_once()
-            receipt = json.loads(
-                next((root / "cli-calls").glob("*.receipt.json")).read_text()
-            )
-            self.assertEqual(receipt["state"], "interrupted")
-            self.assertIn("unknown", receipt["usage"])
-            self.assertEqual(receipt["stdout"], "partial")
-
-    async def test_cli_has_no_execution_tools_and_receipts_precede_tool_results(self):
-        from backend.agents.subtitle_cli_trial import cli_caller
-        from backend.agents.runtime import ToolDef
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            payload = {
-                "structured_output": {
-                    "actions": [{"name": "inspect", "arguments": {"kind": "summary"}}]
-                },
-                "usage": {"input_tokens": 12},
-            }
-            process = SimpleNamespace(
-                returncode=0,
-                communicate=AsyncMock(return_value=(json.dumps(payload).encode(), b"")),
-            )
-
-            async def spawn(*args, **kwargs):
-                self.assertEqual(
-                    len(list((root / "cli-calls").glob("*.request.json"))), 1
-                )
-                for flag in (
-                    "--safe-mode",
-                    "--restricted",
-                    "--strict-mcp-config",
-                    "--no-session-persistence",
-                ):
-                    self.assertIn(flag, args)
-                self.assertEqual(args[args.index("--tools") + 1], "")
-                self.assertEqual(args[args.index("--setting-sources") + 1], "")
-                self.assertNotIn(
-                    "--bare", args
-                )  # Existing login, never exported credentials.
-                return process
-
-            tool = ToolDef("inspect", "Read evidence", {"type": "object"}, AsyncMock())
-            with (
-                patch(
-                    "backend.agents.subtitle_cli_trial.shutil.which",
-                    return_value="/fixture/assistant",
-                ),
-                patch(
-                    "backend.agents.subtitle_cli_trial.asyncio.create_subprocess_exec",
-                    side_effect=spawn,
-                ),
-            ):
-                result = await cli_caller(root)(
-                    SimpleNamespace(model="fixture", messages=[]), "fixture", [tool]
-                )
-            self.assertEqual(result.content[0].name, "inspect")
-            self.assertEqual(result.usage.input_tokens, 12)
-            self.assertEqual(len(list((root / "cli-calls").glob("*.receipt.json"))), 1)
-            tool.handler.assert_not_called()  # The runtime, not the CLI, executes actions.
-
-    async def test_unregistered_cli_actions_are_rejected_with_saved_receipt(self):
-        from backend.agents.subtitle_cli_trial import cli_caller
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            payload = {
-                "structured_output": {"actions": [{"name": "publish", "arguments": {}}]}
-            }
-            process = SimpleNamespace(
-                returncode=0,
-                communicate=AsyncMock(return_value=(json.dumps(payload).encode(), b"")),
-            )
-            with (
-                patch(
-                    "backend.agents.subtitle_cli_trial.shutil.which",
-                    return_value="/fixture/assistant",
-                ),
-                patch(
-                    "backend.agents.subtitle_cli_trial.asyncio.create_subprocess_exec",
-                    return_value=process,
-                ),
-            ):
-                with self.assertRaisesRegex(ValueError, "invalid tool batch"):
-                    await cli_caller(root)(
-                        SimpleNamespace(model="fixture", messages=[]), "fixture", []
-                    )
-            self.assertEqual(len(list((root / "cli-calls").glob("*.receipt.json"))), 1)
-
-
 class SubtitleTrialTests(unittest.TestCase):
     def test_window_inventory_includes_silence_and_tail_independently_of_captions(self):
         spans = list(windows(17.5, 88.125))
@@ -352,7 +233,7 @@ class SubtitleTrialRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 ]
             )
             status = await review(
-                root, "fixture-never-sent", "assistant-small", call_api=call
+                root, "fixture-never-sent", "glm-5.3-flash", call_api=call
             )
             self.assertEqual(status["state"], "completed")
             self.assertFalse(status["verified"])
@@ -360,7 +241,7 @@ class SubtitleTrialRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["unreviewed_cue_ids"], ["c00001"])
             self.assertEqual(result["matches"][0]["start_delta_seconds"], 4)
             again = await review(
-                root, "fixture-never-sent", "assistant-small", call_api=call
+                root, "fixture-never-sent", "glm-5.3-flash", call_api=call
             )
             self.assertEqual(again["session_id"], status["session_id"])
             self.assertEqual(call.await_count, 4)
@@ -376,7 +257,7 @@ class SubtitleTrialRuntimeTests(unittest.IsolatedAsyncioTestCase):
             save(root / "candidate.json", {"language": "en", "cues": []})
             with self.assertRaisesRegex(ValueError, "changed"):
                 await review(
-                    root, "fixture-never-sent", "assistant-small", call_api=call
+                    root, "fixture-never-sent", "glm-5.3-flash", call_api=call
                 )
             self.assertEqual(call.await_count, 4)
 
@@ -389,7 +270,7 @@ class SubtitleTrialRuntimeTests(unittest.IsolatedAsyncioTestCase):
             result = await review(
                 root,
                 "fixture-never-sent",
-                "assistant-small",
+                "glm-5.3-flash",
                 max_dollars=0,
                 call_api=call,
             )

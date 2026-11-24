@@ -13,7 +13,7 @@ and why?" is one command:
     python -m backend.agents.ledger report --data data/run/state [--batch NAME]
     python -m backend.agents.ledger export --data data/run/state [--format csv] > ledger.jsonl
     python -m backend.agents.ledger timelines --data data/run/state --job JOB
-    python -m backend.agents.ledger audit  --data data/run/state --model smart-model
+    python -m backend.agents.ledger audit  --data data/run/state --model glm-5.3
     python -m backend.agents.ledger tag --data data/run/state --batch NAME --since 1790000000
     python -m backend.agents.ledger backfill --data data/old-run/state
 
@@ -861,8 +861,7 @@ async def audit(store, model, since=0.0, job=None, batch=None):
 
     summary = summarize(store, since, job, batch)
     body = report(summary) + "\n\n# Timelines\n" + timelines(store, since, job, batch=batch)
-    caller = subtitle_contract.caller_for(model, os.getenv("PROVIDER_API_KEY", ""), os.getenv("ALTPROVIDER_API_KEY", ""), "medium",
-                                          glm_key=os.getenv("ZAI_API_KEY", ""))
+    caller = subtitle_contract.caller_for(model, os.getenv("ZAI_API_KEY", ""), "high")
     data, usage = await caller(AUDIT_SYSTEM, body[:180_000], AUDIT_SCHEMA)
     return data, subtitle_contract.cost(model, usage)
 
@@ -941,7 +940,7 @@ def main(argv=None):
     parser.add_argument("--batch", default=None, help="a run tagged with `tag`: only its requests")
     parser.add_argument("--jobs", nargs="*", default=None, help="tag: these requests (default: every request since --since)")
     parser.add_argument("--format", choices=["jsonl", "csv"], default="jsonl", help="export: JSON lines or CSV")
-    parser.add_argument("--model", default="smart-model", help="audit: the model that reads the ledger")
+    parser.add_argument("--model", default="glm-5.3", help="audit: the model that reads the ledger")
     parser.add_argument("--json", action="store_true", help="report: the summary as JSON")
     args = parser.parse_args(argv)
     store = AgentStore(args.data)

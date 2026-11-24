@@ -12,7 +12,7 @@ DNS/HTTPS/sharing), TV/Emby/casting and the setup agent are excluded.
 | 2. Household accounts | Owner onboarding, invitations, roles/storage scope, central inherited preferences, explicit request overrides, session revocation and password changes | HTTP tests and actual Chrome household flows; no externally hosted deployment claim |
 | 3. Portable storage | Outbound pairing and credential rotation, durable commands/results, safe publication, import/correction, Linux container, Windows setup/service/installer workflow | Linux container and portable protocol/media tests pass; Windows FFmpeg binaries compile; native installer/service execution and physical Windows remain pending |
 | 4. Watching | Responsive collection/player, authenticated ranges, audio/captions, conversion, personal progress, PWA assets/install guidance | Real Chrome and generated-media HTTP checks, Linux container restart/resume; physical phone/Safari/iOS validation remains pending |
-| 5. Subtitle care | Included/local/provider candidates, whole-soundtrack speech evidence, measured timing correction, page-by-page Large review with a tool-enforced gate, repair/upload, personal delay, mandatory readiness | Onset calibration and three real anime tracks measured; controlled review-loop tests; see [the evidence record](agentic-audit/SUBTITLE_EVIDENCE.md). No live provider claim |
+| 5. Subtitle care | Included/local/provider candidates, whole-soundtrack speech evidence, measured timing correction, page-by-page model review with a tool-enforced gate, repair/upload, personal delay, mandatory readiness | Onset calibration and three real anime tracks measured; controlled review-loop tests; see [the evidence record](agentic-audit/SUBTITLE_EVIDENCE.md). No live provider claim |
 | 6. Discovery and care | Tool-using conversational Discovery, personal subscriptions, aired scope, gap filling, explicit upgrades, private memory and bounded reasoning | Tool-loop evidence, authority, revision, upgrade and zero-idle-call tests; no paid live-model quality evaluation |
 
 The shared visual contract is [PRODUCT_DESIGN.md](PRODUCT_DESIGN.md). Installation
@@ -135,9 +135,7 @@ than the provider's final invoice. Media conversion is bounded to two producers
 per node with free-space checks and cache retention; subtitle work is serialized
 per node with an isolated, timed worker.
 
-The existing scheduled Medium 5 price increase was removed after checking
-[Provider's current price table](https://retired-provider.invalid)
-on 2026-09-10. Historical usage entries retain the rates originally applied.
+Historical usage entries retain the rates originally applied.
 
 Local migration snapshots precede schema generation changes. SQLite is the
 established source of truth, JSON mirrors are atomic, malformed legacy state
@@ -318,7 +316,7 @@ Beautiful Soup dependency `soupsieve` were removed from the relevant manifests
 and lockfiles. Retained versions were unchanged. The old curator and coverage
 planner, v2 request/goal routes and planner, release decision engine, old
 search/suggestion routes, auto-organiser and filename rescan, the parser's
-Small tier and the one-shot description call behind `/api/resolve` were then
+cheap-model tier and the one-shot description call behind `/api/resolve` were then
 removed; the index query the Fetch tools use moved to `services/apibay.py`.
 Saved request/goal history still migrates and loads.
 Current artwork, fixture attribution, installed data and historical storage

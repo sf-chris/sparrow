@@ -627,7 +627,7 @@ async def investigate(
     session_folder = case.folder / "scenes" / scene_id
     session_folder.mkdir(mode=0o700, exist_ok=True)
     store = AgentStore(str(session_folder / "runtime"))
-    runtime = AgentRuntime(store, lambda: os.getenv("PROVIDER_API_KEY", ""))
+    runtime = AgentRuntime(store, lambda: os.getenv("ZAI_API_KEY", ""))
     runtime.policy_getter = lambda: {
         "max_agent_calls": max_calls,
         "max_agent_dollars": max_dollars,
@@ -921,20 +921,10 @@ def main():
     parser.add_argument("--case", required=True, type=Path)
     parser.add_argument("--scene", required=True)
     parser.add_argument(
-        "--model", default=os.getenv("SPARROW_SMART_MODEL", "assistant-medium")
+        "--model", default=os.getenv("SPARROW_SMART_MODEL", "glm-5.3")
     )
-    parser.add_argument("--assistant-cli", action="store_true")
     args = parser.parse_args()
-    caller = None
-    if args.assistant_cli:
-        from .subtitle_cli_trial import cli_caller
-
-        folder = args.case / "scenes" / args.scene
-        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
-        caller = cli_caller(folder, max_budget_usd=0.6, effort="medium")
-    status = asyncio.run(
-        investigate(args.case, args.scene, args.model, call_api=caller)
-    )
+    status = asyncio.run(investigate(args.case, args.scene, args.model))
     print(json.dumps(status))
     return 0 if status["state"] == "completed" else 2
 

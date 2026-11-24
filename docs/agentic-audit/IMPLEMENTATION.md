@@ -26,13 +26,13 @@ the parent issue remains the acceptance tracker. Unchecked work is not complete.
 | `release_decision_engine.py` | `request_service.py` and `search_engine.choose_season_strategy`, whose only caller was `request_service.py` | **Deleted** (`faafec3`). Nothing extracted: `triage_parse` uses only `parse_release_name`; Fetch ranking lives in `scout.py`/`release_match.py` |
 | `request_service.py` | `/api/requests`, `/selected`, `/preview`, `/{id}`, `/{id}/retry`, `DELETE` in `backend/main.py` and `update_requests_for_download`; no product, test, script or browser caller (frontend helpers were already deleted) | **Deleted** (`faafec3`) with those routes, the progress updater, `MediaRequest` curator helpers and the unused storage writers. **Retained readers:** `_load_requests[_sqlite]`, the `_save_requests_sqlite` JSON→SQLite migration and `get_requests` (health summary count); `test_retired_request_history_still_migrates_and_loads` covers them |
 | `file_organizer.py` | `auto_organize_download` (legacy poller), `/api/downloads/{id}/organize`, `/api/library/scan`; `test_filename_scan_is_never_verification`; dated `product-review/backend_reproductions.py` | **Deleted** (`69898d3`) with those paths and the test, which only exercised the retired filename scan. Existing folders enter through `catalogue.scan`/`confirm_import`, which probes every file (`test_nodes`). The inert `auto_organize` setting was later removed from the model, the allow-list and `PATCH /api/config`; saved configs that still carry it load without it. The reproduction script is dated evidence pinned to `b84450c` |
-| Old search/suggestion routes and `search_engine.py` | `/api/search`, `/stream`, `/deeper/stream`, `/season/stream` (queued downloads around the agents' tool guardrails), `/log`, `/suggest`, `/suggest/expand`, `/suggest/tv/{id}`; Small calls in `_small_title_expand` and `_ai_alt_queries_stream`. Only live import: `tools.py` `_query` | **Deleted** (`7ffefe7`). **Extracted:** the index query to `services/apibay.py`; `tools.apibay_query` keeps its name, so guardrail tests patch it unchanged. Orphaned `SearchResult` and `tmdb_tv_seasons` deleted |
-| Release parser Small tier and parse cache | `parse_releases`/`parse_one`/`_ai_parse_batch` and `Storage.get/put_parsed_release`, called only by the curator and organiser | **Deleted** (`94fb707`); new installs no longer create `parsed_releases`, existing tables are untouched. **Retained:** `parse_release_name`/`ParsedRelease` for `scout.py`, `triage_parse`, `catalogue.scan` and `main._classify_media_type`; output is identical on sample names |
+| Old search/suggestion routes and `search_engine.py` | `/api/search`, `/stream`, `/deeper/stream`, `/season/stream` (queued downloads around the agents' tool guardrails), `/log`, `/suggest`, `/suggest/expand`, `/suggest/tv/{id}`; cheap-model calls in the title-expansion and alternative-query helpers. Only live import: `tools.py` `_query` | **Deleted** (`7ffefe7`). **Extracted:** the index query to `services/apibay.py`; `tools.apibay_query` keeps its name, so guardrail tests patch it unchanged. Orphaned `SearchResult` and `tmdb_tv_seasons` deleted |
+| Release parser cheap-model tier and parse cache | `parse_releases`/`parse_one`/`_ai_parse_batch` and `Storage.get/put_parsed_release`, called only by the curator and organiser | **Deleted** (`94fb707`); new installs no longer create `parsed_releases`, existing tables are untouched. **Retained:** `parse_release_name`/`ParsedRelease` for `scout.py`, `triage_parse`, `catalogue.scan` and `main._classify_media_type`; output is identical on sample names |
 | Remaining non-`/api/v1` routes and loops in `backend/main.py` | Config, onboarding status, doctor, torrent clients, health/actions, activity, resolve, jobs/journal/sessions/usage/prompts/mandates, downloads, library, metadata, logs; the legacy download poller, artwork enrichment and seeding enforcer. No product caller; `identity_boundary` limits them to administrators. The poller tracks manual `POST /api/downloads` and saved non-agent transfers (`test_legacy_boundaries`); artwork/seeding loops cover every item and transfer | **Retained** as administrator diagnostics/plumbing outside this pass. Retire each when its `/api/v1` equivalent (admin config, imports, logs, jobs) is the accepted administrator API and the owner agrees to drop direct access; delete the poller together with `POST /api/downloads` |
 | Legacy Librarian registration and prompt | Registration was overwritten by `Curation.register`; diagnostic previews advertised a different tool set | **Deleted:** overwritten registration. Previews now use registered tool sets and the actual personal Librarian prompt. Old tool/prompt helpers still serve scope-guardrail regressions; migrate all retained cases before deleting them |
 | `resolution.py` | Only `/api/resolve`, which made a one-shot description call outside any agent session | **Deleted** (`af2e7b7`). The route calls `tmdb_quick_suggest` directly with the same key resolution, so direct lookup is unchanged; descriptions belong to Discovery |
 | Legacy frontend pages, layout, client | Only `App`/`main`/`product` are reachable; old pages imported only their old client/types/components | **Deleted:** seven pages, layout/UI helpers, client and types. Shared `useWebSocket` remains because current product screens use it. Removed unused cinema artwork/Instrument Serif font and its notice |
-| Python/JS/system packages | Import and dependency graph audit plus clean package validation | **Removed:** `clsx`; `aiofiles`, `aiosqlite`, `beautifulsoup4`, `lxml`, transitive `soupsieve`. Regenerated both locks; zero retained version changes. No system dependency removal was justified. The later route/model-call retirement orphaned no package (`provider` serves the runtime and subtitle contract, `httpx` the index and catalogue), so no lock changed. **Removed later:** `ffsubsync` (no code import since its alignment path was retired). `pysubs2` and `charset-normalizer` became direct requirements at their locked versions; regenerating the hashed lock dropped only `ffsubsync` and its own dependencies (`auditok`, `chardet`, `faust-cchardet`, `ffmpeg-python`, `future`, `markdown-it-py`, `mdurl`, `pygments`, `rich`, `srt`, `webrtcvad-wheels`) with no version changes. `node.spec` and `THIRD_PARTY.md` follow. A fresh environment from the new lock passes all 360 tests |
+| Python/JS/system packages | Import and dependency graph audit plus clean package validation | **Removed:** `clsx`; `aiofiles`, `aiosqlite`, `beautifulsoup4`, `lxml`, transitive `soupsieve`. Regenerated both locks; zero retained version changes. No system dependency removal was justified. The later route/model-call retirement orphaned no package (the model SDK served the runtime and subtitle contract, `httpx` the index and catalogue), so no lock changed. **Removed later:** `ffsubsync` (no code import since its alignment path was retired). `pysubs2` and `charset-normalizer` became direct requirements at their locked versions; regenerating the hashed lock dropped only `ffsubsync` and its own dependencies (`auditok`, `chardet`, `faust-cchardet`, `ffmpeg-python`, `future`, `markdown-it-py`, `mdurl`, `pygments`, `rich`, `srt`, `webrtcvad-wheels`) with no version changes. `node.spec` and `THIRD_PARTY.md` follow. A fresh environment from the new lock passes all 360 tests |
 
 ## Documentation inventory
 
@@ -135,7 +135,7 @@ retrieval contract, measured regression cases and remaining evidence boundaries.
 
 | Package | Current boundary and next acceptance |
 | --- | --- |
-| P1 | Code cleanup (C) delivered for the listed legacy paths: curator, requests/goals, planners, old search and organiser routes and the one-shot Small/description calls they made are gone; galleries audited and retained. The inert `auto_organize` field and the orphaned `ffsubsync` dependency followed. Retained with stated consumers and retirement conditions: the administrator-only routes/poller and the old Librarian helpers that scope-guardrail cases still use. Issues #15–#17 were dispositioned on GitHub (2026-11-21) |
+| P1 | Code cleanup (C) delivered for the listed legacy paths: curator, requests/goals, planners, old search and organiser routes and the one-shot cheap-model/description calls they made are gone; galleries audited and retained. The inert `auto_organize` field and the orphaned `ffsubsync` dependency followed. Retained with stated consumers and retirement conditions: the administrator-only routes/poller and the old Librarian helpers that scope-guardrail cases still use. Issues #15–#17 were dispositioned on GitHub (2026-11-21) |
 | P2 | Current Librarian live fixture and 30-case controlled baseline delivered. Add full live fixtures for the other roles, separate unseen holdout, real-model/provider repetitions and full measured outcome costs |
 | P3 | Core event/result persistence and recovery delivered with controlled crash tests. Extend combined restart/revision/provider chaos scenarios in the final acceptance pilot; conservative uncertain effects still require receipt investigation |
 | P4 | Oversized tool observations have complete saved artifacts, explicit previews, bounded retrieval/listing and serialized storage quotas. [Versioned role profiles and bounded escalation](#profiles-and-bounded-escalation--23-november-2026) delivered (23 Nov 2026): sessions and ledger rows record profile and version; escalated searches, repeated searches and idle wakes are bounded in the tools/runtime. A paid evaluation of profile choices (effort, wave allowance), structured checkpoints/recoverable compaction, cross-session handoffs, retention policy and fuller source pagination remain |
@@ -158,7 +158,7 @@ transcription/semantic-comparison harness and its actual English speech run.
 The initial 18 subtitle/provider/trial tests passed. The subsequent
 [Four Lions experiment](FOUR_LIONS_TRIAL.md) acquired the actual film using
 Sparrow's search/node downloader tools, sampled foreign dialogue with three local
-model configurations, reused the existing Assistant CLI sign-in for live reviews,
+model configurations, ran live model reviews,
 and checked native browser captions in isolated excerpts. It exposed missing
 translations, recognition failures and semantic-review problems. The opt-in CLI
 adapter adds no production provider or default change. No subtitle quality pass,
@@ -209,10 +209,10 @@ The additional-sampling branch has controlled coverage; the recorded live passes
 used their original sample sets. Installed rollout, live provider acceptance,
 physical mobile/Safari and an independent holdout remain separate gates.
 
-## Subtitle evidence, timing correction and Large review — 30 September 2026
+## Subtitle evidence, timing correction and model review — 30 September 2026
 
 The owner narrowed the subtitle target to foreign-language audio with English
-captions, reviewed by Large 5.5 over audio-timed evidence it can extend, with
+captions, reviewed by the subtitle manager model over audio-timed evidence it can extend, with
 caption sync measured to about ±50 ms and corrected automatically. The storage
 node now builds whole-soundtrack, caption-independent speech evidence
 (`subtitle_evidence.py`); `subtitle_sync.py` measures offset, drift and
@@ -230,22 +230,21 @@ comparison, heuristics, tests and the end-to-end Haibane run.
 `backend/agents/profiles.py` is now the one place that says how each agent role
 runs. `python -m backend.agents.profiles` prints the resolved table, including
 each profile's version: a short hash of its model, effort, bounds and the source
-of its prompt and tools. Defaults (no environment overrides, no AltProvider key):
+of its prompt and tools. Defaults at the time (no environment overrides):
 
 | Role | Model | Effort sent | Calls / output | Bounds |
 | --- | --- | --- | --- | --- |
-| discovery | cheap (Small 4.5) | none | 8 / 1,400 | |
+| discovery | cheap | none | 8 / 1,400 | |
 | fetch_scout | cheap | none | 40 / 4,096 | idle wakes back off after 2 |
-| fetch_review | smart (Medium 5) | low | 1 / 8,000 | |
+| fetch_review | smart | low | 1 / 8,000 | |
 | fetch_escalation | smart | none (provider default) | 40 / 4,096 | 4 searching calls per wave ($0.25 ceiling), 3 waves; idle back-off |
 | media, media_escalation | cheap, smart | none | 40 / 4,096 | idle back-off |
 | librarian | cheap | none | 6 / 1,400 | |
-| subtitle_manager | Large 5.5 (the smart model with an AltProvider key) | medium | 40 / 16,000, cached | per-title allowance |
-| subtitle_checker / _verifier / _reader | off without an AltProvider key (the cheap model / Smart / Cheap) | low on AltProvider | 1 per check | per-title allowance |
+| subtitle_manager | the previous subtitle manager | medium | 40 / 16,000, cached | per-title allowance |
+| subtitle_checker / _verifier / _reader | the previous page checker / second opinion / picture reader | low | 1 per check | per-title allowance |
 
 These are the values that ran before; no production model or effort changed.
-Effort is sent only where the model accepts it (Small 4.5 and Medium 4.5 take
-none; checked against the provider's effort page). Overrides, most specific
+Effort is sent only where the model accepts it. Overrides, most specific
 first: `SPARROW_PROFILES` (JSON per role and field, for evaluations), the
 existing `SPARROW_FETCH_SCOUT` and `SPARROW_SUBTITLE_*` variables,
 `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`, then saved config. Sessions keep
@@ -260,8 +259,8 @@ The audit's recommendations 1, 2 and 5 are enforced in code:
 - **Escalation waves** (`escalation.py`, `node_tools.py` `tpb_search`): an
   escalated search may make 4 smart-model searching calls per wave, within a
   $0.25 ceiling (soft caps, checked before each search). Calls keep the bound
-  the same on any provider: one long-context Medium call costs about what a
-  dollar cap sized on the smart model would allow per wave. Another wave needs a genuinely new candidate (a
+  the same on any model: one long-context smart-model call could cost a whole
+  small dollar cap. Another wave needs a genuinely new candidate (a
   plausible copy the scout and earlier waves had not seen) or an identity
   conflict recorded with the new `record_identity_conflict` tool; a stalled
   download or Media report opens one too, at most three without the person.
@@ -286,8 +285,8 @@ line, timelines show GUARDRAIL lines and the export adds `enforcement` rows.
 Evidence: the full suite passes (378 tests, 3 skipped; 18 new). The offline
 search benchmark is unchanged: right copy first 28/28, would escalate 1 (4%),
 searches median 6, peeks 22. No paid model, indexer or torrent traffic was used,
-so the savings are not yet measured. A first $0.02 wave sized on the smart model
-prices allowed about one Medium call, so waves are bounded by calls instead;
+so the savings are not yet measured. A first $0.02 wave allowed about one
+long-context smart-model call, so waves are bounded by calls instead;
 the next live benchmark should check that escalated titles still reach a
 download. The 30-case contract runner still lists five subtitle tests that were
 renamed earlier; those cases fail to load at `main` as they do here.

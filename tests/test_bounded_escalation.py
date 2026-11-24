@@ -37,7 +37,7 @@ class Fixture(unittest.IsolatedAsyncioTestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         # These cases measure a dollar-bounded wave; the call-bounded default has its own test.
-        self.env = environment(SPARROW_SMART_MODEL="smart-model", SPARROW_CHEAP_MODEL="cheap-model",
+        self.env = environment(SPARROW_SMART_MODEL="glm-5.3", SPARROW_CHEAP_MODEL="glm-5.3-flash",
                                SPARROW_PROFILES='{"fetch_escalation": {"wave_calls": 0, "wave_dollars": 0.02}}')
         self.env.__enter__()
         self.addCleanup(self.env.__exit__, None, None, None)
@@ -49,7 +49,7 @@ class Fixture(unittest.IsolatedAsyncioTestCase):
         self.tb.SEARCH_SPACING = 0
         self.tb.tmdb_get = AsyncMock(return_value={"episodes": [{"episode_number": 2, "name": "Two"}]})
         self.job = Job(tmdb_id=42, title="Fixture Show", year=2020, wanted_episodes={"1": [2]})
-        self.session = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model="cheap-model")
+        self.session = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model="glm-5.3-flash")
         self.job.session_id = self.session.id
         self.service.store.save_job(self.job)
         self.service.store.save_session(self.session)
@@ -73,7 +73,7 @@ class EscalationBoundTests(Fixture):
         self.tb.scouted[self.session.id] = {"rows": {"r1": {"info_hash": "a" * 40}}, "titles": ["Fixture Show"], "exclude": []}
         ctx = ToolCtx(self.session, self.runtime)
         text = await self.tool("escalate_model")(ctx, {"reason": "Nothing usable."})
-        self.assertEqual(self.session.model, "smart-model")
+        self.assertEqual(self.session.model, "glm-5.3")
         self.assertIn("$0.02 of smart-model calls per wave", text)
         state = self.session.controls["escalation"]
         self.assertEqual((state["wave"], state["known"]), (1, ["a" * 40]))
@@ -168,7 +168,7 @@ class EscalationBoundTests(Fixture):
 
     async def test_the_scout_off_mode_has_no_wave_bound(self):
         with patch.dict(os.environ, {"SPARROW_FETCH_SCOUT": "off"}):
-            self.session.model = "smart-model"
+            self.session.model = "glm-5.3"
             ctx = ToolCtx(self.session, self.runtime)
             self.assertIsNone(escalation.bound(self.runtime, self.session))
             self.assertNotIn("record_identity_conflict", {t.name for t in self.runtime.tools_for(self.session)})
@@ -204,7 +204,7 @@ class QueryDedupeTests(Fixture):
         first = self.index.await_args_list[0].args[0]
         stamp, rows = self.tb._search_cache[search_key(first)]
         self.tb._search_cache[search_key(first)] = (stamp - 3600, rows)
-        self.session.model = "smart-model"
+        self.session.model = "glm-5.3"
         self.service.store.save_session(self.session)
         replies = iter([answer(("tpb_search", {"query": first.upper()}), tokens=500),
                         answer(("wake_me", {"reason": "Waiting."}), tokens=500)])
@@ -271,7 +271,7 @@ class IdleTurnTests(Fixture):
         self.assertEqual(rows[0]["profile"], "fetch_scout")
 
     async def test_kinds_without_a_limit_are_never_deferred(self):
-        session = AgentSession(agent=AgentKind.LIBRARIAN, model="cheap-model", controls={"idle_turns": 9})
+        session = AgentSession(agent=AgentKind.LIBRARIAN, model="glm-5.3-flash", controls={"idle_turns": 9})
         spec = self.runtime._specs["librarian"]
         self.assertEqual(profiles.for_session(session).note_only_limit, 0)
         self.assertFalse(self.runtime._defer_idle_wake(session, spec, [Event(kind="timer")]))
@@ -286,7 +286,7 @@ class CallBoundedWaveTests(Fixture):
         await super().asyncSetUp()
         self.env.__exit__(None, None, None)
         # The default profile: a wave is four searching calls on any provider.
-        self.env = environment(SPARROW_SMART_MODEL="smart-model", SPARROW_CHEAP_MODEL="cheap-model")
+        self.env = environment(SPARROW_SMART_MODEL="glm-5.3", SPARROW_CHEAP_MODEL="glm-5.3-flash")
         self.env.__enter__()
 
     async def test_a_wave_is_four_searching_calls_however_cheap(self):

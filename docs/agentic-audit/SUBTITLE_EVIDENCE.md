@@ -4,7 +4,7 @@ The owner's current subtitle target is foreign-language audio with English
 captions. A reviewer should be able to act like a bilingual viewer: see what was
 said, when the voice starts, and which caption is on screen. Phase 1 builds the
 caption-independent evidence and the timing measurement; phases 2 and 3 put it
-into the product with page-by-page reviewer tools and an Large 5.5 reviewer
+into the product with page-by-page reviewer tools and a model reviewer
 ([below](#in-the-product)).
 
 ## What was built
@@ -99,12 +99,12 @@ A subtitle task now runs:
    it or the original is kept. An inconsistent track is set aside and the next
    candidate tried; without checking it remains as a fallback if nothing better
    is found.
-3. **The subtitle agent**, when the household switches it on and an Provider
-   key is set. Large 5.5 (effort medium, prompt caching) owns the outcome in
+3. **The subtitle agent**, when the household switches it on and a model
+   key is set. The manager model owns the outcome in
    Sparrow's persistent tool loop, within the household's per-case AI allowance
-   (`SPARROW_SUBTITLE_BUDGET` overrides it per title). With an AltProvider key it
-   manages cheap page checkers ([below](#cost-large-manages-cheap-page-checkers--1-october-2026));
-   without one it reads every page itself: it writes its own reading of each
+   (`SPARROW_SUBTITLE_BUDGET` overrides it per title). It manages cheap page
+   checkers ([below](#cost-a-manager-with-cheap-page-checkers--1-october-2026));
+   without them it reads every page itself: it writes its own reading of each
    page's recognised speech before that page's captions are revealed, then
    judges every caption, citing speech lines. Either way it can `retime` the
    track (a measured or given shift, measured drift, or each section to its
@@ -139,12 +139,12 @@ node and worker (retiming, gloss-before-captions, refused approval, next-source
 fallback, missing key, cancellation) and an end-to-end run on the real Haibane
 file: the 204-cue track was chosen over the 11-cue signs track, measured +217 ms,
 corrected, re-measured at 0 ms and listed in place of the embedded original. Live
-Large reviews are validated separately on the owner's installation.
+model reviews are validated separately on the owner's installation.
 
-## Cost: Large manages cheap page checkers — 1 October 2026
+## Cost: a manager with cheap page checkers — 1 October 2026
 
 The owner's target is under $1 per title, including a film written from
-scratch. Large reading every page cost $0.71–1.80 per episode, so the work is
+scratch. The strong model reading every page cost $0.71–1.80 per episode, so the work is
 split by difficulty:
 
 1. **Free detectors** flag OCR confusions ("l" for "I"), likely signs and clear
@@ -157,18 +157,18 @@ split by difficulty:
    anything left out. Lines it never answers for are reported as missing, never
    dropped. With no track, its translations become the written draft
    (fragments split at pauses are joined).
-3. **A second opinion** (the smart model) re-checks only captions flagged wrong and
+3. **A second opinion** (the mid-tier model) re-checks only captions flagged wrong and
    missing dialogue, skipped when over 30% is flagged (a mismatched track).
-4. **Large manages**: it reads a report of what still blocks approval (with
+4. **The strong model manages**: it reads a report of what still blocks approval (with
    each flagged item's speech and translation inline), audits two pages blind
    (misses escalate to more audits), settles or fixes flagged items and gives
    the verdict. Checker spend is recorded in the title's budget scope, so one
    allowance covers everything.
 
-Measured on the real API (Large via the CLI harness, list-price estimates with
+Measured on the real API (the strong model via a CLI harness, list-price estimates with
 caching), all approved:
 
-| Case | Large reads all | Manager, 30 Sep | Manager, 1 Oct |
+| Case | Strong model reads all | Manager, 30 Sep | Manager, 1 Oct |
 | --- | --- | --- | --- |
 | Episode, correct track kept | $1.01 | $0.44 | $0.23 |
 | Episode, wrong upload replaced and fixed | $1.80 | $0.49 | $0.39 |
@@ -177,8 +177,8 @@ caching), all approved:
 | 70-minute film, written from scratch | — | $0.18 | $0.19 |
 
 Written subtitles are graded against the professional translation by one fixed
-Large grader (same meaning = 1, close = ½): the episode draft scores 0.80–0.82
-(Large writing alone 0.84); the film scored 0.46 before the checker fixes (a
+strong-model grader (same meaning = 1, close = ½): the episode draft scores 0.80–0.82
+(the strong model writing alone 0.84); the film scored 0.46 before the checker fixes (a
 two-minute scene lost because the model quoted text instead of IDs, and lines
 under music dropped as "no voice detected") and 0.78 after. Its remaining 26
 uncaptioned professional lines are songs and overlapping children's shouting
@@ -186,26 +186,26 @@ that recognition never heard.
 
 The film run also exposed an over-strict gate: a professional caption often
 spans two lines the recogniser split, and the checker may cite only the second,
-so "starts over 1.5 s from its speech" fired on correct captions and Large merged
+so "starts over 1.5 s from its speech" fired on correct captions and the manager merged
 and rewrote a good track to satisfy it (39 text changes, 22 captions lost). The
 gate now asks only that a judged caption overlap its cited speech within 1.5 s;
 precise timing is the acoustic per-section measurement. A retime no longer
 forces re-reading pages whose captions are unchanged.
 
-## AltProvider models as the manager — 1 October 2026
+## Cheaper managers — 1 October 2026
 
-`altprovider_loop.py` lets any agent session run on an AltProvider model: the runtime
-keeps its one message format and translates each call to the API
-(function calls, results and encrypted reasoning carried across turns, `store`
-off), so receipts, crash repair, budgets and tools are unchanged. Set
-`SPARROW_SUBTITLE_MODEL=smart-model` to use it for subtitles. Subtitle tools now
+A second provider loop let any agent session run on another provider's models:
+the runtime keeps its one message format and translates each call at the
+boundary (function calls, results and reasoning carried across turns), so
+receipts, crash repair, budgets and tools are unchanged. `SPARROW_SUBTITLE_MODEL`
+chose the manager. Subtitle tools now
 resolve a quoted line or caption text to its ID when unambiguous, which cheap
 models otherwise got wrong repeatedly.
 
-Same five cases, real API spend for AltProvider (Large from the previous round),
+Same five cases, real API spend (the strong model from the previous round),
 total per title including checkers:
 
-| Case | Large 5.5 medium | the smart model medium | the smart model low | the cheap model medium | the cheap model high |
+| Case | Strong, medium | Mid-tier, medium | Mid-tier, low | Cheap, medium | Cheap, high |
 | --- | --- | --- | --- | --- | --- |
 | Episode, write | $0.131 | $0.044 | $0.035 | $0.008 | $0.005 |
 | Episode, keep | $0.226 | $0.062 | $0.077 | $0.041 | $0.038 |
@@ -215,25 +215,26 @@ total per title including checkers:
 
 All runs were approved and chose the right source. Written quality depends on
 the checker's draft, not the manager: 0.79–0.83 for every manager (one 0.58
-grade re-graded at 0.80; the grader varies by a few points). Edits differ: Large
-and Smart medium made the same corrections on the episodes with no regressions;
-on the film Smart medium, Smart low and Cheap medium each rewrote one correct
-caption to match a garbled transcript. Cheap made several such regressions and
-Cheap high also deleted a correct caption. Film keep checkers now dominate
-($0.15, mostly the Smart second opinion).
+grade re-graded at 0.80; the grader varies by a few points). Edits differ: the
+strong model and the mid-tier model at medium made the same corrections on the
+episodes with no regressions; on the film the mid-tier model at medium and low
+and the cheap model at medium each rewrote one correct caption to match a
+garbled transcript. The cheap model made several such regressions, and at high
+effort also deleted a correct caption. Film keep checkers now dominate ($0.15,
+mostly the second opinion).
 
 ## Field test: 20 anime episodes end to end — 1 October 2026
 
 A separate source instance requested one episode each of 20 popular series
-(1995–2023) and ran on its own: Fetch and Media agents on the smart model/Cheap
-through the AltProvider loop, Transmission, Whisper turbo on this 16-core CPU, the
-cascade with the smart model managing. Bugs were fixed as found; eight episodes that
+(1995–2023) and ran on its own: Fetch and Media agents on the mid-tier and
+cheap models, Transmission, Whisper turbo on this 16-core CPU, the cascade with
+the mid-tier model managing. Bugs were fixed as found; eight episodes that
 ran before their fix were re-run on a fresh instance.
 
 Result: 18 of 20 delivered with English subtitles (Mob Psycho 100: two dead
 torrents; Violet Evergarden: only sub-720p copies, re-search scheduled). Twelve
 kept the release's own professional track, checked and timed (two settled by
-the page checker alone, the rest with Smart changing a median of one line). Six
+the page checker alone, the rest with the manager changing a median of one line). Six
 were written by Sparrow: two releases carried English only as picture
 subtitles (DVD/Blu-ray), three had no English text track, and one ran before
 the fansub fixes. Delivered episodes cost $0.11–0.48 (median $0.24: $0.15

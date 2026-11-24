@@ -186,7 +186,7 @@ from .agents.models import JobStatus
 from .agents.runtime import PRICING_SOURCE, rates_for_model, spend_snapshot
 from . import __version__
 from .configuration import (
-    any_model_key, apply_config_update, effective_provider_key, effective_tmdb_key, public_config,
+    apply_config_update, effective_glm_key, effective_tmdb_key, public_config,
     repair_media_folders, track_saved_config,
 )
 from .doctor import build_report as build_doctor_report
@@ -605,8 +605,6 @@ class ConfigUpdate(BaseModel):
     torrent_client: Optional[dict] = None
     quality_preference: Optional[str] = None
     tmdb_api_key: Optional[str] = None
-    provider_api_key: Optional[str] = None
-    altprovider_api_key: Optional[str] = None
     glm_api_key: Optional[str] = None
     onboarding_complete: Optional[bool] = None
     seeding_ratio_limit: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
@@ -619,8 +617,6 @@ class ConfigUpdate(BaseModel):
     smart_model: Optional[str] = None
     cheap_model: Optional[str] = None
     clear_tmdb_api_key: bool = False
-    clear_provider_api_key: bool = False
-    clear_altprovider_api_key: bool = False
     clear_glm_api_key: bool = False
 
 
@@ -662,7 +658,7 @@ async def onboarding_status():
         "has_library": bool(config.library_dir),
         "has_torrent_client": config.torrent_client.type != TorrentClientType.NONE,
         "has_tmdb_key": bool(effective_tmdb_key(config)),
-        "has_provider_key": bool(effective_provider_key(config)),
+        "has_model_key": bool(effective_glm_key(config)),
     }
 
 
@@ -761,12 +757,12 @@ async def health_overview():
                 "actions": ["Add TMDB key"],
             })
 
-    if not any_model_key(config):
+    if not effective_glm_key(config):
         issues.append({
-            "id": "provider_missing",
+            "id": "model_key_missing",
             "title": "Reasoning key is missing",
-            "detail": "Fetch, Media, and Librarian agents need a model key (Provider, AltProvider or Z.ai).",
-            "actions": ["Add a model key"],
+            "detail": "Fetch, Media, and Librarian agents need a Z.ai API key.",
+            "actions": ["Add a Z.ai key"],
         })
 
     if not shutil.which("ffprobe"):

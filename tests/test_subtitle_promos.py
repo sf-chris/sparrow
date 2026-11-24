@@ -16,7 +16,7 @@ def caller(answer):
         seen["prompt"] = prompt
         return answer, {"input_tokens": 100, "output_tokens": 5}
 
-    call.model = "assistant-small"
+    call.model = "glm-5.3-flash"
     call.seen = seen
     return call
 

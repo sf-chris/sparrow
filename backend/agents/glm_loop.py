@@ -1,14 +1,14 @@
 """Z.ai GLM calls (Chat Completions) for Sparrow's agent loop.
 
-Like altprovider_loop, this translates the session's single message format (user
-and assistant turns with text, tool_use and tool_result blocks) into the
-provider's wire format for each call and translates the answer back, so
-receipts, crash repair, budgets and tools work unchanged.
+The runtime keeps every session in one message format (user and assistant
+turns with text, tool_use and tool_result blocks). This module translates that
+history into Chat Completions messages for each call and translates the answer
+back, so receipts, crash repair, budgets and tools work on it directly.
 
 GLM 5.3 always thinks. Its reasoning text is kept in the assistant turn as a
 ``glm_reasoning`` block and returned on later calls with ``clear_thinking``
-off, as Z.ai asks for multi-turn tool use; other providers never see it.
-Sparrow always sends ``reasoning_effort``: the provider's default is ``max``.
+off, as Z.ai asks for multi-turn tool use. Sparrow always sends
+``reasoning_effort``: the provider's default is ``max``.
 
 Structured single-turn calls (page checks, pick reviews, picture reading) use
 JSON mode: GLM has no schema mode, so the schema goes into the instructions and
@@ -21,13 +21,48 @@ import json
 import os
 from types import SimpleNamespace
 
-from .altprovider_loop import Block, _text
-
 DEFAULT_BASE = "https://api.z.ai/api/paas/v4"
 # Levels GLM 5.3 and 5.3-Flash accept; the provider's own default is max.
 EFFORTS = ("low", "high", "max")
 # Z.ai business error codes that are not worth retrying.
 NO_CREDIT = {"1113"}
+
+
+GLM_PREFIXES = ("glm-",)
+# GLM models that read images (Z.ai's vision request lists only the flash family).
+GLM_VISION = ("glm-5.3-flash", "glm-5.3-flashx")
+
+
+def is_glm_model(model: str) -> bool:
+    return (model or "").lower().startswith(GLM_PREFIXES)
+
+
+def reads_images(model: str) -> bool:
+    """Whether Sparrow can send this model a picture (Blu-ray/DVD subtitles)."""
+    return (model or "").lower() in GLM_VISION
+
+
+class Block:
+    """One assistant block: text, tool_use or glm_reasoning."""
+
+    def __init__(self, type: str, **fields):
+        self.type = type
+        self.__dict__.update(fields)
+
+    def to_dict(self) -> dict:
+        return dict(self.__dict__)
+
+
+def _text(content) -> str:
+    if isinstance(content, str):
+        return content
+    parts = []
+    for block in content or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            parts.append(block.get("text", ""))
+        elif isinstance(block, str):
+            parts.append(block)
+    return "\n".join(parts)
 
 
 def base_url() -> str:
@@ -158,18 +193,6 @@ def response_object(data: dict):
     finish = choice.get("finish_reason") or ""
     return SimpleNamespace(content=content, stop_reason=STOP.get(finish, finish),
                            usage=SimpleNamespace(**usage_of(data)))
-
-
-def other_provider_messages(messages: list[dict]) -> list[dict]:
-    """The history without GLM reasoning, for a session that moves to another provider."""
-    out = []
-    for message in messages:
-        content = message.get("content")
-        if isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "glm_reasoning" for b in content):
-            kept = [b for b in content if not (isinstance(b, dict) and b.get("type") == "glm_reasoning")]
-            message = {**message, "content": kept or "(continuing)"}
-        out.append(message)
-    return out
 
 
 # ─── Transport ────────────────────────────────────────────────────────────

@@ -134,7 +134,7 @@ class LiveHarnessTests(unittest.IsolatedAsyncioTestCase):
 
             with patch.object(bench.LiveBench, "POLL", 0.05), patch.object(bench.LiveBench, "TIMER", 0.05), \
                     patch("backend.agents.node_executor.Executor._download", downloader), \
-                    patch.dict(os.environ, {"SPARROW_SMART_MODEL": "smart-model", "SPARROW_CHEAP_MODEL": "cheap-model"}), \
+                    patch.dict(os.environ, {"SPARROW_SMART_MODEL": "glm-5.3", "SPARROW_CHEAP_MODEL": "glm-5.3-flash"}), \
                     patch("httpx.AsyncClient", no_network):
                 result = await bench.live(args, titles, replay=replay, model=bench.scripted_model())
             outcomes = {t["key"]: t["outcome"] for t in result["titles"]}

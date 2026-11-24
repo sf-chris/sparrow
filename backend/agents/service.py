@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+from ..configuration import effective_glm_key
 from ..models import DownloadStatus, MediaType, TorrentClientType
 from ..storage import Storage
 from ..services.torrent_client import TorrentManager, start_configured_client
@@ -117,10 +118,7 @@ class AgentService:
         self.toolbox = Toolbox(storage, self.store, self.emit, broadcast)
         self.runtime = AgentRuntime(
             self.store,
-            api_key_getter=lambda: (
-                storage.get_config().provider_api_key
-                or os.getenv("PROVIDER_API_KEY", "")
-            ),
+            api_key_getter=lambda: effective_glm_key(storage.get_config()),
             on_session_change=self._session_changed,
             on_tool_activity=self._tool_activity,
         )

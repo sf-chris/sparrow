@@ -7,7 +7,7 @@ licences and notices continue to apply; Sparrow does not claim ownership of them
   https://ffmpeg.org/ and https://code.videolan.org/videolan/x264
 - pysubs2: MIT. https://github.com/tkarabela/pysubs2
 - faster-whisper 1.2.1: MIT. https://github.com/SYSTRAN/faster-whisper
-- Whisper base speech model: MIT, converted by SYSTRAN from AltProvider Whisper.
+- Whisper base speech model: MIT, converted by SYSTRAN from the original Whisper model.
   Pinned model revision is in `sources.json`; source/model information:
   https://huggingface.co/Systran/faster-whisper-base
 - WinSW 2.12.0: MIT. https://github.com/winsw/winsw/tree/v2.12.0

@@ -30,8 +30,9 @@ Everything new lives in `backend/agents/`:
 - `models.py` — `Job` (a contract against TMDB: wanted episodes, quality
   window, audio, urgency), `AgentSession` (a persistent tool-loop with full
   message history), `JournalEntry`, `Event`, `Spend`.
-- `altprovider_loop.py` — runs a session on an AltProvider model through the same loop
-  (API translation at the call boundary).
+- `glm_loop.py` — runs a session on Z.ai's GLM models (Chat Completions
+  translation at the call boundary, preserved reasoning, JSON answers checked
+  against their schema).
 - `runtime.py` — the loop: wake on event → reason across tool calls →
   hibernate with a trigger or close. Handles persistence, crash repair,
   durable event acknowledgements/tool results, spend tracking and API retries.
@@ -133,12 +134,12 @@ Everything new lives in `backend/agents/`:
   policy. Pass relevant values to agents and use the same contract in UI/tools.
 - Current model defaults: Fetch cheap with smart review and escalation
   (`SPARROW_FETCH_SCOUT=off` keeps it smart throughout), Media cheap with self-escalation,
-  Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
-  (household switch) is managed by the smart model when an AltProvider key is set (Settings →
-  Connections, or `ALTPROVIDER_API_KEY`), else
-  Assistant Large at medium effort with prompt caching. Cheap page checkers
-  (the cheap model, the smart model second opinion when borderline) read every page; the
-  manager reads only what they flag plus audit pages. Sources are tried in order:
+  Librarian and Discovery cheap with bounded turns and spend. Cheap is
+  `glm-5.3-flash`, smart is `glm-5.3` (Z.ai key in Settings → Connections or
+  `ZAI_API_KEY`). The subtitle agent (household switch) is managed by `glm-5.3`
+  at high effort. Cheap page checkers (`glm-5.3-flash`, `glm-5.3` second opinion
+  when borderline) read every page; the manager reads only what they flag plus
+  audit pages. Sources are tried in order:
   the release's text tracks, its picture (Blu-ray/DVD) tracks read by the cheap
   vision model (only with the switch on, within the title's allowance), an
   archive track for the same episode, then writing. A
@@ -156,14 +157,11 @@ Everything new lives in `backend/agents/`:
   including timing measurement and correction for foreign dialogue, is built in
   and makes no model call; no setup-agent implementation is planned now.
   Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
-  Z.ai GLM models run through the same loop (`glm-` names; `glm_loop.py`, Chat
-  Completions; key in Settings or `ZAI_API_KEY`): `glm-5.3-flash` cheap,
-  `glm-5.3` smart, and with a Z.ai key the subtitle roles default to them.
-  GLM's default effort is max, so a GLM call always sends one. Compared with the
-  current setup in `docs/agentic-audit/GLM_BENCHMARK_2026-11-25.md`.
+  GLM's own default effort is max, so every call sends one (low, high or max).
+  The benchmark against the previous setup is
+  `docs/agentic-audit/GLM_BENCHMARK_2026-11-25.md`.
   These defaults are the role profiles in `profiles.py`; sessions and ledger
-  rows record the profile id and version they ran under. Effort is sent only
-  where a model accepts it (never to Small 4.5). `SPARROW_PROFILES` (JSON per
+  rows record the profile id and version they ran under. `SPARROW_PROFILES` (JSON per
   role) overrides fields for evaluations. Escalated Fetch searching gets $0.02
   of smart-model calls per wave, up to three waves; two note-only turns make
   later timer wakes back off. Spend counts per request or subscription across
@@ -194,7 +192,7 @@ Everything new lives in `backend/agents/`:
 
 - Dev: `./dev.sh` (backend :8888 + vite :3000)
 - Prod: `./start.sh` (builds frontend, serves from backend)
-- Env: `PROVIDER_API_KEY`, `TMDB_API_KEY` (or set both in Settings).
+- Env: `ZAI_API_KEY`, `TMDB_API_KEY` (or set both in Settings).
 
 ## Installation handoff
 

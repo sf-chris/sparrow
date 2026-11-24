@@ -12,7 +12,7 @@ os.environ["SPARROW_DATA_DIR"] = str(STATE)
 # The fixture's folders live in its state directory; offer it in the folder picker.
 os.environ["SPARROW_FOLDER_ROOTS"] = str(STATE)
 # Blank rather than unset: main's load_dotenv() would refill unset keys from .env.
-for _key in ("PROVIDER_API_KEY", "ALTPROVIDER_API_KEY", "TMDB_API_KEY"):
+for _key in ("ZAI_API_KEY", "TMDB_API_KEY"):
     os.environ[_key] = ""
 from backend import main as m
 from backend.agents.service import AgentService

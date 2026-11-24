@@ -74,7 +74,7 @@ class DryRunTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(record["profiles"] and all(p["version"] for p in record["profiles"]))
             self.assertTrue(record["actions"])
             self.assertGreater(record["latency_seconds"], 0)
-        self.assertEqual(runs["fetch-01"]["models"]["requested"], ["cheap-model", "smart-model"])  # pick and review
+        self.assertEqual(runs["fetch-01"]["models"]["requested"], ["glm-5.3", "glm-5.3-flash"])  # pick and review
         self.assertIn("pick_review", runs["fetch-01"]["calls"]["ledger_by_phase"])
         self.assertEqual(result["unattributed_network_violations"], 0)
         summary = result["summary"]

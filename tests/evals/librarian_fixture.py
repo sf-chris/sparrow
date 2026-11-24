@@ -32,7 +32,7 @@ class LibrarianFixture:
             SparrowConfig(
                 library_dir=str(self.root / "library"),
                 staging_dir=str(self.root / "staging"),
-                provider_api_key=api_key,
+                glm_api_key=api_key,
                 tmdb_api_key="fixture-never-sent",
             )
         )

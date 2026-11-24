@@ -2,7 +2,7 @@
 becomes a fixture, at the boundary where Sparrow meets the outside world.
 
 - Network. Every httpx request passes through Gate. The model providers
-  (https://retired-provider.invalid, api.provider.com, api.z.ai) reach the real network in a live run
+  (api.z.ai) reach the real network in a live run
   and ScriptedProvider in a dry run; TMDB and the torrent index answer from
   the case's catalogue and index; anything else is refused and recorded as a
   violation, which fails the run. A dry run also refuses raw socket
@@ -42,7 +42,7 @@ import httpx
 from backend.agents import runtime as runtime_module
 
 CURRENT: contextvars.ContextVar = contextvars.ContextVar("sparrow_live_world", default=None)
-PROVIDERS = {"https://retired-provider.invalid": "altprovider", "api.provider.com": "provider", "api.z.ai": "glm"}
+PROVIDERS = {"api.z.ai": "glm"}
 MARKER = b"SPARROW-FIXTURE:"
 # The real transport: only a live run's provider requests ever reach it.
 _ORIGINAL_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
@@ -375,18 +375,9 @@ def usage_of(kind: str, data: dict) -> dict:
     """Tokens from a provider answer, as {input, cached, cache_write, output}
     (input counts every prompt token, cached ones included)."""
     usage = data.get("usage") or {}
-    if kind == "glm":
-        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
-        return {"input": usage.get("prompt_tokens", 0) or 0, "cached": cached, "cache_write": 0,
-                "output": usage.get("completion_tokens", 0) or 0}
-    if kind == "altprovider":
-        cached = (usage.get("input_tokens_details") or {}).get("cached_tokens", 0) or 0
-        return {"input": usage.get("input_tokens", 0) or 0, "cached": cached, "cache_write": 0,
-                "output": usage.get("output_tokens", 0) or 0}
-    cached = usage.get("cache_read_input_tokens", 0) or 0
-    written = usage.get("cache_creation_input_tokens", 0) or 0
-    return {"input": (usage.get("input_tokens", 0) or 0) + cached + written, "cached": cached,
-            "cache_write": written, "output": usage.get("output_tokens", 0) or 0}
+    cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
+    return {"input": usage.get("prompt_tokens", 0) or 0, "cached": cached, "cache_write": 0,
+            "output": usage.get("completion_tokens", 0) or 0}
 
 
 def cost_of(model: str, tokens: dict) -> float:
@@ -729,9 +720,8 @@ class World:
         ))
         self.service = AgentService(self.storage, str(self.state_dir), _quiet)
         self.store = self.service.store
-        # Keys come from the environment (never the run's state); a run on
-        # AltProvider or GLM models needs no Provider key.
-        self.service.runtime._api_key_getter = lambda: os.getenv("PROVIDER_API_KEY", "")
+        # The key comes from the environment, never the run's state.
+        self.service.runtime._api_key_getter = lambda: os.getenv("ZAI_API_KEY", "")
         accounts = self.service.accounts
         settings = accounts.server_settings()
         accounts.set_defaults(settings["defaults"], {**settings["policy"],
@@ -883,61 +873,6 @@ class Transcript:
         self.system = ""
 
     @classmethod
-    def from_altprovider(cls, body):
-        t = cls()
-        t.system = body.get("instructions") or ""
-        t.tools = {tool.get("name") for tool in body.get("tools") or []}
-        by_id = {}
-        for item in body.get("input") or []:
-            kind = item.get("type")
-            if kind == "function_call":
-                try:
-                    args = json.loads(item.get("arguments") or "{}")
-                except ValueError:
-                    args = {}
-                entry = {"id": item.get("call_id"), "name": item.get("name"), "args": args, "output": None,
-                         "error": False}
-                t.calls.append(entry)
-                by_id[entry["id"]] = entry
-            elif kind == "function_call_output":
-                entry = by_id.get(item.get("call_id"))
-                if entry is not None:
-                    output = str(item.get("output") or "")
-                    entry["error"] = output.startswith("Error: ")
-                    entry["output"] = output[7:] if entry["error"] else output
-            elif item.get("role") == "user":
-                t.texts.append(str(item.get("content") or ""))
-        return t
-
-    @classmethod
-    def from_provider(cls, body):
-        t = cls()
-        system = body.get("system") or ""
-        t.system = system if isinstance(system, str) else " ".join(b.get("text", "") for b in system)
-        t.tools = {tool.get("name") for tool in body.get("tools") or []}
-        by_id = {}
-        for message in body.get("messages") or []:
-            content = message.get("content")
-            if isinstance(content, str):
-                if message.get("role") == "user":
-                    t.texts.append(content)
-                continue
-            for block in content or []:
-                if block.get("type") == "tool_use":
-                    entry = {"id": block.get("id"), "name": block.get("name"), "args": block.get("input") or {},
-                             "output": None, "error": False}
-                    t.calls.append(entry)
-                    by_id[entry["id"]] = entry
-                elif block.get("type") == "tool_result" and block.get("tool_use_id") in by_id:
-                    output = block.get("content")
-                    if isinstance(output, list):
-                        output = " ".join(str(b.get("text", "")) for b in output if isinstance(b, dict))
-                    by_id[block["tool_use_id"]].update(output=str(output or ""), error=bool(block.get("is_error")))
-                elif block.get("type") == "text" and message.get("role") == "user":
-                    t.texts.append(block.get("text", ""))
-        return t
-
-    @classmethod
     def from_glm(cls, body):
         t = cls()
         t.tools = {(tool.get("function") or {}).get("name") for tool in body.get("tools") or []}
@@ -1004,46 +939,7 @@ class ScriptedProvider:
         self.previous: dict[str, int] = {}
 
     def answer(self, kind, body, world):
-        if kind == "glm":
-            return self._glm_answer(body, world)
-        if kind == "altprovider":
-            if body.get("tools"):
-                output = self._altprovider_calls(world.policy(Transcript.from_altprovider(body)))
-            else:
-                system, prompt = "", ""
-                for item in body.get("input") or []:
-                    if item.get("role") == "system":
-                        system = str(item.get("content"))
-                    elif item.get("role") == "user":
-                        prompt = str(item.get("content"))
-                schema = ((body.get("text") or {}).get("format") or {}).get("schema") or {}
-                text = json.dumps(world.structured(system, prompt, schema))
-                output = [{"type": "message", "role": "assistant", "status": "completed",
-                           "content": [{"type": "output_text", "text": text, "annotations": []}]}]
-            effort = (body.get("reasoning") or {}).get("effort", "")
-            used, cached, produced = self._usage(body, output, effort,
-                                                 body.get("prompt_cache_key") or str(body.get("input", ""))[:200])
-            return {"id": "resp_dry_" + uuid.uuid4().hex[:12], "object": "response", "status": "completed",
-                    "model": body.get("model", ""), "output": output,
-                    "usage": {"input_tokens": used, "input_tokens_details": {"cached_tokens": cached},
-                              "output_tokens": produced, "total_tokens": used + produced}}
-        if body.get("tools"):
-            content = self._provider_calls(world.policy(Transcript.from_provider(body)))
-        else:
-            system = body.get("system")
-            system = system if isinstance(system, str) else " ".join(b.get("text", "") for b in system or [])
-            messages = body.get("messages") or [{}]
-            schema = (((body.get("output_config") or {}).get("format")) or {}).get("schema") or {}
-            content = [{"type": "text", "text": json.dumps(world.structured(system, str(messages[-1].get("content", "")),
-                                                                            schema))}]
-        effort = (body.get("output_config") or {}).get("effort", "none")
-        used, cached, produced = self._usage(body, content, effort, json.dumps(body.get("system", ""))[:200])
-        return {"id": "msg_dry_" + uuid.uuid4().hex[:12], "type": "message", "role": "assistant",
-                "model": body.get("model", ""), "content": content,
-                "stop_reason": "tool_use" if any(b["type"] == "tool_use" for b in content) else "end_turn",
-                "stop_sequence": None,
-                "usage": {"input_tokens": used - cached, "output_tokens": produced, "cache_read_input_tokens": cached,
-                          "cache_creation_input_tokens": 0}}
+        return self._glm_answer(body, world)
 
     def _glm_answer(self, body, world):
         message = {"role": "assistant", "content": ""}
@@ -1081,20 +977,6 @@ class ScriptedProvider:
         if isinstance(decision, dict):
             return [decision]
         return list(decision or [])
-
-    def _altprovider_calls(self, decision):
-        if isinstance(decision, str):
-            return [{"type": "message", "role": "assistant", "status": "completed",
-                     "content": [{"type": "output_text", "text": decision, "annotations": []}]}]
-        return [{"type": "function_call", "id": "fc_" + uuid.uuid4().hex[:12], "call_id": "call_" + uuid.uuid4().hex[:16],
-                 "name": d["name"], "arguments": json.dumps(d.get("args") or {}), "status": "completed"}
-                for d in self._decisions(decision)]
-
-    def _provider_calls(self, decision):
-        if isinstance(decision, str):
-            return [{"type": "text", "text": decision}]
-        return [{"type": "tool_use", "id": "toolu_" + uuid.uuid4().hex[:20], "name": d["name"],
-                 "input": d.get("args") or {}} for d in self._decisions(decision)]
 
     def _usage(self, body, output, effort, cache_key):
         prompt = estimate_tokens(json.dumps({k: v for k, v in body.items() if k != "model"}, ensure_ascii=False))

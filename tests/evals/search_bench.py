@@ -472,7 +472,7 @@ class LiveBench:
         (self.state / "staging").mkdir(exist_ok=True)
         self.storage = Storage(str(self.state))
         await self.storage.load_all()
-        # Keys come from the environment (PROVIDER_API_KEY, ALTPROVIDER_API_KEY,
+        # Keys come from the environment (ZAI_API_KEY,
         # TMDB_API_KEY) and are never written into the run's state.
         await self.storage.save_config(SparrowConfig(
             staging_dir=str(self.state / "staging"), max_active_transfers=10_000, onboarding_complete=True,

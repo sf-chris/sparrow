@@ -15,7 +15,6 @@ type Setup = {
   step: Step;
   tmdb_configured: boolean;
   reasoning_configured: boolean;
-  altprovider_configured: boolean;
   libraries: string[];
   download_destinations: string[];
   can_finish: boolean;
@@ -99,7 +98,7 @@ export default function Onboarding({
           step: "providers" as Step,
         },
         {
-          label: "Model key",
+          label: "Z.ai key",
           ok: state.reasoning_configured,
           value: keyState(state.reasoning_configured, true),
           step: "providers" as Step,
@@ -175,7 +174,7 @@ export default function Onboarding({
                 >
                   <strong>Find and download for me</strong>
                   <span id="choice-autopilot" aria-hidden="true">
-                    Needs a TMDB key, a model key, storage and a download app.
+                    Needs a TMDB key, a Z.ai key, storage and a download app.
                   </span>
                 </button>
                 <button
@@ -391,9 +390,7 @@ function KeysStep({
               value={draft[spec.name] || ""}
               error={
                 missing.includes(spec.name) && !draft[spec.name]?.trim()
-                  ? spec.group
-                    ? "One model key is needed to find and download."
-                    : "Needed to find and download."
+                  ? "Needed to find and download."
                   : undefined
               }
               onChange={(value) => setDraft({ ...draft, [spec.name]: value })}

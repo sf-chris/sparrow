@@ -288,7 +288,7 @@ class AgentSession:
     download_id: str = ""  # media agent: the landed download
     model: str = ""  # current model (media agent can self-escalate)
     status: SessionStatus = SessionStatus.HIBERNATING
-    messages: list = field(default_factory=list)  # Provider message dicts
+    messages: list = field(default_factory=list)  # user/assistant turns of text, tool_use and tool_result blocks
     wake_at: float = 0.0  # 0 = no timer; woken by events only
     wake_reason: str = ""  # plain language: why/when it expects to wake
     spend: Spend = field(default_factory=Spend)

@@ -6,8 +6,8 @@ TMDB, the torrent index, the download app and file probes are fixtures.
     .venv/bin/python tests/evals/run_live.py --dry-run
 
     # paid: real model calls, capped
-    SPARROW_RUN_LIVE_EVALS=1 ALTPROVIDER_API_KEY=... SPARROW_CHEAP_MODEL=cheap-model \\
-      SPARROW_SMART_MODEL=smart-model .venv/bin/python tests/evals/run_live.py --max-dollars 15
+    SPARROW_RUN_LIVE_EVALS=1 ZAI_API_KEY=... SPARROW_CHEAP_MODEL=glm-5.3-flash \\
+      SPARROW_SMART_MODEL=glm-5.3 .venv/bin/python tests/evals/run_live.py --max-dollars 15
 
 Each case runs --runs times (default 3) on a fresh household. Acceptance
 judges outcomes (requests, transfers, recorded copies, subtitle tracks and
@@ -47,9 +47,8 @@ HERE = Path(__file__).resolve().parent
 MANIFESTS = {"main": HERE / "live-v1.json", "holdout": HERE / "live-holdout-v1.json"}
 ARTIFACTS = HERE / "artifacts"
 VERSION = 1
-DRY_MODELS = {"SPARROW_CHEAP_MODEL": "cheap-model", "SPARROW_SMART_MODEL": "smart-model"}
-DRY_KEYS = {"ALTPROVIDER_API_KEY": "dry-run-not-a-key", "PROVIDER_API_KEY": "dry-run-not-a-key",
-            "ZAI_API_KEY": "dry-run-not-a-key"}
+DRY_MODELS = {"SPARROW_CHEAP_MODEL": "glm-5.3-flash", "SPARROW_SMART_MODEL": "glm-5.3"}
+DRY_KEYS = {"ZAI_API_KEY": "dry-run-not-a-key"}
 # Hermetic for every run: no online subtitle archive (it would be refused).
 HERMETIC = {"SPARROW_SUBTITLE_ARCHIVE": "off"}
 STATUSES = ("passed", "failed", "error", "timeout", "cancelled_at_cap", "not_run", "skipped")

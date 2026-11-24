@@ -2,7 +2,7 @@
 Sparrow data models — the domain objects that flow through the system.
 """
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from enum import Enum
 from typing import Optional, Any
 import json
@@ -108,8 +108,6 @@ class SparrowConfig:
     torrent_client: TorrentClientConfig = field(default_factory=TorrentClientConfig)
     quality_preference: Quality = Quality.Q_1080P
     tmdb_api_key: str = ""
-    provider_api_key: str = ""
-    altprovider_api_key: str = ""
     glm_api_key: str = ""
     onboarding_complete: bool = False
     onboarding_deferred: bool = False
@@ -122,8 +120,8 @@ class SparrowConfig:
     prefer_season_packs: bool = True    # prefer full-season packs when they score well
     season_pack_size_limit_gb: float = 0.0  # 0 = automatic size sanity by quality/episode count
     max_active_transfers: int = 3       # hard cap on concurrent agent-managed transfers
-    smart_model: str = "assistant-medium"
-    cheap_model: str = "assistant-small"
+    smart_model: str = "glm-5.3"
+    cheap_model: str = "glm-5.3-flash"
 
     def to_dict(self) -> dict:
         return {
@@ -133,8 +131,6 @@ class SparrowConfig:
             "torrent_client": self.torrent_client.to_dict(),
             "quality_preference": self.quality_preference.value,
             "tmdb_api_key": self.tmdb_api_key,
-            "provider_api_key": self.provider_api_key,
-            "altprovider_api_key": self.altprovider_api_key,
             "glm_api_key": self.glm_api_key,
             "onboarding_complete": self.onboarding_complete,
             "onboarding_deferred": self.onboarding_deferred,
@@ -167,9 +163,9 @@ class SparrowConfig:
         d.setdefault("season_pack_size_limit_gb", 0.0)
         d.setdefault("max_active_transfers", 3)
         d.setdefault("extra_library_dirs", [])
-        d.setdefault("smart_model", "assistant-medium")
-        d.setdefault("cheap_model", "assistant-small")
-        return cls(**d)
+        # Settings saved by an older release may hold fields this one no longer has.
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})
 
 
 # ─── Downloads ───────────────────────────────────────────────────────────────

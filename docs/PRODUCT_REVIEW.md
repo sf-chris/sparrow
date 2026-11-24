@@ -100,7 +100,7 @@ Several preference contracts also need correction. “Organize silently” is co
 
 **Success:** Saved means the value persisted; Paused means the agreed work has stopped; Cancelled work cannot restart through an in-flight action; every exposed setting has one documented effect in the current workflow.
 
-Evidence: [ignored saved setting](product-review/settings-ignored-save.png), `config_patch`, `settings_save`, `concurrent_limit`, `add_after_pause`, `add_after_cancel`; [main.py](../backend/main.py), [service.py](../backend/agents/service.py), [runtime.py](../backend/agents/runtime.py), [tools.py](../backend/agents/tools.py).
+Evidence: ignored saved setting, `config_patch`, `settings_save`, `concurrent_limit`, `add_after_pause`, `add_after_cancel`; [main.py](../backend/main.py), [service.py](../backend/agents/service.py), [runtime.py](../backend/agents/runtime.py), [tools.py](../backend/agents/tools.py).
 
 **6. Make failures legible and recoverable. — Essential**
 
@@ -112,7 +112,7 @@ Replace vague recovery with concrete actions: reconnect the downloader, change a
 
 **Success:** a temporary outage does not masquerade as an empty collection, a spelling error or a new installation. Returning after a disconnect produces a consistent, current view.
 
-Evidence: [outage presented as no results](product-review/search-outage-as-no-results.png), [invisible validation failure](product-review/settings-invalid-no-feedback.png), `bootstrap_outage`, `settings_outage_text`, `initial_sockets`, `settings_sockets`; [App.tsx](../frontend/src/App.tsx), [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), [useWebSocket.ts](../frontend/src/hooks/useWebSocket.ts).
+Evidence: [outage presented as no results](product-review/search-outage-as-no-results.png), invisible validation failure, `bootstrap_outage`, `settings_outage_text`, `initial_sockets`, `settings_sockets`; [App.tsx](../frontend/src/App.tsx), [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), [useWebSocket.ts](../frontend/src/hooks/useWebSocket.ts).
 
 **7. Make setup prove the first useful outcome. — Daily use**
 
@@ -160,7 +160,7 @@ Use Activity as the place to understand active and blocked requests: title, requ
 
 **Success:** a user knows where to watch, where to find owned media and where to fix a request. Normal use does not require reading session types or token tables.
 
-Evidence: [Home](product-review/home-desktop.png), [Library](product-review/library-desktop.png), [Activity](product-review/activity-desktop.png), [release browser](product-review/release-browser-desktop.png).
+Evidence: [Home](product-review/home-desktop.png), [Library](product-review/library-desktop.png), Activity, [release browser](product-review/release-browser-desktop.png).
 
 **11. Make preferences coherent, persistent and easy to change. — Daily use**
 
@@ -170,7 +170,7 @@ Define global defaults, title overrides and request-specific choices. Show inher
 
 **Success:** a user sets a preference once, sees where it applies, and can predict the effect of changing it. Models and prompts do not have to be understood to manage a collection.
 
-Evidence: `quality_before`, `quality_after`; [title preferences](product-review/show-preferences-desktop.png), [mobile Settings](product-review/settings-mobile.png); [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx).
+Evidence: `quality_before`, `quality_after`; [title preferences](product-review/show-preferences-desktop.png), mobile Settings; [Settings.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Settings.tsx), [Show.tsx](https://github.com/sf-chris/sparrow/blob/b84450c/frontend/src/pages/Show.tsx).
 
 **12. Make artwork, navigation and accessibility reliable. — Daily use**
 
@@ -229,7 +229,7 @@ For multiple storage machines, display human names, availability, capacity and w
 
 | Surface | Most important change | Evidence capture |
 |---|---|---|
-| Onboarding | Shorten the path to imported media or a first request; make readiness an actual capability check | [Desktop](product-review/onboarding-desktop.png), [phone](product-review/onboarding-mobile.png) |
+| Onboarding | Shorten the path to imported media or a first request; make readiness an actual capability check | Desktop, [phone](product-review/onboarding-mobile.png) |
 | Discover/Home | Prioritise returning-viewer actions; retain prominent search and useful discovery | [Desktop](product-review/home-desktop.png), [phone](product-review/home-mobile.png) |
 | Search result cards | Show ownership/request state; accept explicit scope and retain query intent | [Request state](product-review/search-active-mobile.png), [Get](product-review/search-scope-before-get.png) |
 | Title / Watch | Play, Resume or a precise request as the main action; informative episode rows | [Movie](product-review/movie-ready-desktop.png), [TV](product-review/show-active-desktop.png), [episodes](product-review/show-episodes-mobile.png) |
@@ -237,8 +237,8 @@ For multiple storage machines, display human names, availability, capacity and w
 | Title / Preferences | Persist overrides, show inherited defaults, separate acquisition scope from future monitoring | [Desktop](product-review/show-preferences-desktop.png), [phone](product-review/show-preferences-mobile.png) |
 | Library | Correct artwork and state; improve findability, import and collection actions | [Desktop](product-review/library-desktop.png), [phone](product-review/library-mobile.png), [empty](product-review/library-empty.png) |
 | Library drawer | Make it accessible; focus it on copy/file details that supplement the title page | [Phone](product-review/library-drawer-mobile.png) |
-| Activity | Lead with active/blocked requests; let users expand journal, cost and execution detail | [Desktop](product-review/activity-desktop.png), [phone](product-review/activity-mobile.png) |
-| Settings | Make saves truthful; organise defaults, connections and advanced diagnostics | [Desktop](product-review/settings-desktop.png), [phone](product-review/settings-mobile.png) |
+| Activity | Lead with active/blocked requests; let users expand journal, cost and execution detail | Desktop, phone |
+| Settings | Make saves truthful; organise defaults, connections and advanced diagnostics | Desktop, phone |
 | Manual release browser | Keep expert selection optional; correct obsolete navigation copy and connect actions to title/request context | [Desktop](product-review/release-browser-desktop.png), [phone](product-review/release-browser-mobile.png) |
 
 **What to prioritise in the product discussion.** First establish the complete request-to-watch experience and make its labels and controls trustworthy: findings 1–6 and the unattended limits in 13. Then make importing, following shows, preferences, navigation, accessibility and feedback work well enough for everyday use. Collection location/capacity becomes essential as the storage-node experience arrives. This is a dependency judgement about user value, not a proposed delivery schedule.

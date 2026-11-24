@@ -60,15 +60,15 @@ SPARROW_GALLERY_OUT=docs/redesign/after node tests/browser/gallery.cjs
 
 | Before | After |
 | --- | --- |
-| ![Server setup, before](before/server-setup-desktop.png) | ![Server setup: how to start, after](after/server-setup-desktop.png) |
-| <img src="before/server-setup-mobile.png" width="260" alt="Server setup on a phone, before" /> | <img src="after/server-setup-mobile.png" width="260" alt="Server setup: how to start on a phone, after" /> |
+| ![Server setup, before](before/server-setup-desktop.png) |  |
+| <img src="before/server-setup-mobile.png" width="260" alt="Server setup on a phone, before" /> |  |
 
 ## Server setup: check
 
 | Before | After |
 | --- | --- |
-| ![Setup review, before](before/server-setup-review-desktop.png) | ![Server setup: check, after](after/server-setup-review-desktop.png) |
-| <img src="before/server-setup-review-mobile.png" width="260" alt="Setup review on a phone, before" /> | <img src="after/server-setup-review-mobile.png" width="260" alt="Server setup: check on a phone, after" /> |
+| ![Setup review, before](before/server-setup-review-desktop.png) |  |
+| <img src="before/server-setup-review-mobile.png" width="260" alt="Setup review on a phone, before" /> |  |
 
 ## Guide (home and library in one)
 
@@ -183,11 +183,6 @@ SPARROW_GALLERY_OUT=docs/redesign/after node tests/browser/gallery.cjs
 | <img src="before/defaults-mobile.png" width="260" alt="Defaults on a phone, before" /> | <img src="after/defaults-mobile.png" width="260" alt="Household defaults on a phone, after" /> |
 
 ## Connections
-
-| Before | After |
-| --- | --- |
-| ![Server settings, before](before/server-desktop.png) | ![Connections, after](after/server-desktop.png) |
-| <img src="before/server-mobile.png" width="260" alt="Server settings on a phone, before" /> | <img src="after/server-mobile.png" width="260" alt="Connections on a phone, after" /> |
 
 ## Themes
 

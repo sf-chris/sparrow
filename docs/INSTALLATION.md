@@ -17,7 +17,7 @@ The second command prints a link that fills the setup code automatically, and
 the code for manual entry. Open the link and choose **Create administrator account**,
 then choose household defaults. This is a one-time first-account setup, entirely
 on your server. The setup code stops working after the account is made.
-The server setup flow then guides you through TMDB, Provider and optional AltProvider
+The server setup flow then guides you through the TMDB and Z.ai
 keys, local or paired storage, a download app and a setup summary. Each key field
 says whether the server already has that key; a blank box keeps it. The download
 step looks for Transmission or qBittorrent by itself (this server, and the Docker
@@ -55,23 +55,22 @@ The application runs as UID 10001 without root capabilities and with one
 coordinator process. `docker compose logs --tail=100 sparrow` shows startup errors.
 
 Subtitle inclusion is on by default; **Check subtitle sync** is a separate,
-optional preference that uses the Provider key in Settings. Compose also accepts
+optional preference that uses the Z.ai key in Settings. Compose also accepts
 `SPARROW_SMART_MODEL`, `SPARROW_CHEAP_MODEL` and `SPARROW_TRANSCRIPTION_MODEL`
 from `.env`. The image bundles Whisper base. To use a different compatible local
 speech model, first put its files in the persistent volume or a mounted directory,
 then set its **container path**, for example `/data/models/whisper-medium`, and
 recreate the container. The recorded Japanese/English anime trial used Whisper
-medium, Small 4.5 and Medium 4.6; it does not establish equivalent results for base.
+medium; it does not establish equivalent results for base.
 Subtitle timing uses whole-episode dialogue evidence built on the storage node. It
 uses Whisper large-v3-turbo when present at `/data/models/whisper-large-v3-turbo`,
 then medium at `/data/models/whisper-medium`, then the bundled base model, or the
 directory in `SPARROW_EVIDENCE_MODEL`. `python packaging/fetch_model.py DESTINATION
 whisper_evidence` fetches the pinned turbo revision (about 1.6 GB). The optional
-subtitle agent (Preferences → Subtitle agent) needs an Provider key in Settings
-and uses Assistant Large. Add an AltProvider key in **Settings → Connections** (or
-`ALTPROVIDER_API_KEY` in `.env`; a saved key wins) so Large manages cheap
-page checkers (the cheap model, with the smart model re-checking flags) instead of reading
-every page itself; measured costs are under $1 per episode or film.
+subtitle agent (Preferences → Subtitle agent) uses the Z.ai key in **Settings →
+Connections** (or `ZAI_API_KEY` in `.env`; a saved key wins): `glm-5.3` manages
+cheap `glm-5.3-flash` page checkers, with `glm-5.3` re-checking flags; measured
+costs are under $1 per episode or film.
 `SPARROW_SUBTITLE_MODEL`, `SPARROW_SUBTITLE_EFFORT`, `SPARROW_SUBTITLE_CONTRACTOR`,
 `SPARROW_SUBTITLE_VERIFIER` and `SPARROW_SUBTITLE_BUDGET` (dollars per title;
 default: the household's per-case AI allowance in Defaults) adjust it.

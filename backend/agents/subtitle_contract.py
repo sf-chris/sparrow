@@ -181,24 +181,8 @@ def compare_prompt(page, utterances, cues, translations, deltas, hints):
     return "\n".join(lines)
 
 
-# AltProvider list prices per million tokens (input, cached input, output), as
-# published on https://retired-provider.invalid on 30 September 2026.
-ALTPROVIDER_PRICES = {
-    "cheap-model": (0.10, 0.01, 0.50),
-    "cheap-model": (0.20, 0.02, 1.20),
-    "smart-model": (2.00, 0.20, 10.00),
-    "smart-model": (10.00, 1.00, 50.00),
-    "smart-model": (2.00, 0.20, 12.00),
-}
-
-
 def cost(model, usage):
-    if model in ALTPROVIDER_PRICES:
-        fresh, cached, output = ALTPROVIDER_PRICES[model]
-        hit = usage.get("cache_read_input_tokens", 0)
-        return (
-            (usage.get("input_tokens", 0) - hit) * fresh + hit * cached + usage.get("output_tokens", 0) * output
-        ) / 1_000_000
+    """Dollars for one call's usage (input excludes cache reads)."""
     rates = rates_for_model(model)
     return (
         usage.get("input_tokens", 0) * rates["input"]
@@ -208,101 +192,13 @@ def cost(model, usage):
     ) / 1_000_000
 
 
-def provider_caller(api_key, model, effort=""):
-    """Structured single-turn calls with the fixed instructions cached."""
-    import provider
+def caller_for(model, key, effort=""):
+    """A structured single-turn caller (page checks, pick reviews, audits)."""
+    from . import glm_loop
 
-    async def call(system, prompt, schema):
-        client = provider.AsyncProvider(api_key=api_key)
-        options = {"output_config": {"format": {"type": "json_schema", "schema": schema}}}
-        if effort:
-            options["output_config"]["effort"] = effort
-        try:
-            response = await client.create_message(
-                model=model,
-                max_tokens=8000,
-                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-                messages=[{"role": "user", "content": prompt}],
-                **options,
-            )
-        finally:
-            await client.close()
-        if response.stop_reason in ("refusal", "max_tokens"):
-            raise ValueError(f"The page check stopped early ({response.stop_reason}).")
-        text = next(b.text for b in response.content if b.type == "text")
-        usage = response.usage
-        return json.loads(text), {
-            "input_tokens": usage.input_tokens or 0,
-            "output_tokens": usage.output_tokens or 0,
-            "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
-            "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
-        }
-
-    call.model = model
-    return call
-
-
-def altprovider_caller(api_key, model, effort="low"):
-    """Structured single-turn calls through the AltProvider API."""
-    import httpx
-
-    async def call(system, prompt, schema):
-        body = {
-            "model": model,
-            "input": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            "text": {"format": {"type": "json_schema", "name": "page_check", "schema": schema, "strict": True}},
-        }
-        if effort:
-            body["reasoning"] = {"effort": effort}
-        async with httpx.AsyncClient(timeout=180) as client:
-            response = await client.post(
-                "https://retired-provider.invalid",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json=body,
-            )
-        if response.status_code != 200:
-            raise ValueError(f"The page checker returned HTTP {response.status_code}.")
-        data = response.json()
-        text = next(
-            (
-                part.get("text", "")
-                for item in data.get("output", [])
-                if item.get("type") == "message"
-                for part in item.get("content", [])
-                if part.get("type") == "output_text"
-            ),
-            None,
-        )
-        if text is None:
-            raise ValueError("The page checker returned no answer.")
-        usage = data.get("usage", {})
-        return json.loads(text), {
-            "input_tokens": usage.get("input_tokens", 0),
-            "output_tokens": usage.get("output_tokens", 0),
-            "cache_read_input_tokens": (usage.get("input_tokens_details") or {}).get("cached_tokens", 0),
-        }
-
-    call.model = model
-    return call
-
-
-def caller_for(model, provider_key, altprovider_key, effort="", glm_key=""):
-    """A structured single-turn caller on the model's own provider."""
-    from . import glm_loop, providers
-
-    provider = providers.provider_for(model)
-    if provider == providers.ALTPROVIDER:
-        if not altprovider_key:
-            raise ValueError("The AltProvider page checker needs ALTPROVIDER_API_KEY.")
-        return altprovider_caller(altprovider_key, model, effort or "low")
-    if provider == providers.GLM:
-        if not glm_key:
-            raise ValueError(f"{model} needs a Z.ai key (Settings → Connections or ZAI_API_KEY).")
-        return glm_loop.caller(glm_key, model, effort or "low")
-    return provider_caller(provider_key, model, effort)
+    if not key:
+        raise ValueError(f"{model} needs a Z.ai key (Settings → Connections or ZAI_API_KEY).")
+    return glm_loop.caller(key, model, effort or "low")
 
 
 async def check_pages(caller, pages, utterances, cues, deltas, language, translations=None, *, parallel=4, compare=True):
@@ -518,63 +414,13 @@ READ_SCHEMA = {
 }
 
 
-def altprovider_reader(api_key, model, effort="low"):
-    """A vision call: one sheet image in, its rows' text out."""
-    import httpx
+def reader_for(model, key, effort="low"):
+    """The picture reader: one sheet image in, its rows' text out."""
+    from . import glm_loop
 
-    async def read(image_b64, numbers):
-        body = {
-            "model": model,
-            "input": [
-                {"role": "system", "content": READ_SYSTEM},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": f"Transcribe rows {numbers[0]}–{numbers[-1]}."},
-                        {"type": "input_image", "image_url": "data:image/png;base64," + image_b64},
-                    ],
-                },
-            ],
-            "text": {"format": {"type": "json_schema", "name": "subtitle_rows", "schema": READ_SCHEMA, "strict": True}},
-        }
-        if effort:
-            body["reasoning"] = {"effort": effort}
-        async with httpx.AsyncClient(timeout=180) as client:
-            response = await client.post(
-                "https://retired-provider.invalid",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json=body,
-            )
-        if response.status_code != 200:
-            raise ValueError(f"The subtitle reader returned HTTP {response.status_code}.")
-        data = response.json()
-        text = next(
-            (p.get("text", "") for item in data.get("output", []) if item.get("type") == "message"
-             for p in item.get("content", []) if p.get("type") == "output_text"),
-            None,
-        )
-        if text is None:
-            raise ValueError("The subtitle reader returned no answer.")
-        usage = data.get("usage", {})
-        return json.loads(text), {
-            "input_tokens": usage.get("input_tokens", 0),
-            "output_tokens": usage.get("output_tokens", 0),
-            "cache_read_input_tokens": (usage.get("input_tokens_details") or {}).get("cached_tokens", 0),
-        }
-
-    read.model = model
-    return read
-
-
-def reader_for(model, altprovider_key, glm_key, effort="low"):
-    """The picture reader on the model's own provider (the cheap model or GLM 5.3 Flash)."""
-    from . import glm_loop, providers
-
-    if providers.provider_for(model) == providers.GLM:
-        if not glm_key:
-            raise ValueError(f"{model} needs a Z.ai key (Settings → Connections or ZAI_API_KEY).")
-        return glm_loop.reader(glm_key, model, READ_SYSTEM, READ_SCHEMA, effort or "low")
-    return altprovider_reader(altprovider_key, model, effort)
+    if not key:
+        raise ValueError(f"{model} needs a Z.ai key (Settings → Connections or ZAI_API_KEY).")
+    return glm_loop.reader(key, model, READ_SYSTEM, READ_SCHEMA, effort or "low")
 
 
 async def read_pictures(reader, rendered, *, parallel=4, max_dollars=0.0):

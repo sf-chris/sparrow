@@ -1,23 +1,23 @@
-# GLM 5.3 against the current setup, 25 November 2026
+# GLM 5.3 against the previous setup, 25 November 2026
 
-The owner asked to replace the Assistant and AltProvider models with Z.ai's GLM 5.3 and
-GLM 5.3 Flash, tested on *Four Lions* subtitles and against the current setup.
+The owner asked to replace the previous models with Z.ai's GLM 5.3 and
+GLM 5.3 Flash, tested on *Four Lions* subtitles and against the previous setup.
 
-| Role | Current (live) | GLM |
+| Role | Previous setup | GLM |
 |---|---|---|
-| Discovery, Fetch first pick, Media, Librarian | assistant-small | glm-5.3-flash (low) |
-| Pick review | assistant-medium (low) | glm-5.3 (low) |
-| Fetch and Media escalation | assistant-medium | glm-5.3 (high) |
-| Subtitle page checker | cheap-model | glm-5.3-flash (low) |
-| Second opinion | smart-model | glm-5.3 (low) |
-| Subtitle manager | smart-model (medium) | glm-5.3 (high) |
-| Picture subtitles | cheap-model | glm-5.3-flash |
+| Discovery, Fetch first pick, Media, Librarian | previous cheap model | glm-5.3-flash (low) |
+| Pick review | previous smart model (low) | glm-5.3 (low) |
+| Fetch and Media escalation | previous smart model | glm-5.3 (high) |
+| Subtitle page checker | previous page checker | glm-5.3-flash (low) |
+| Second opinion | previous manager | glm-5.3 (low) |
+| Subtitle manager | previous manager (medium) | glm-5.3 (high) |
+| Picture subtitles | previous page checker | glm-5.3-flash |
 
 Same code, fixtures, titles and speech evidence for both; only the models differ.
 
 ## Results
 
-| Benchmark | Current | GLM |
+| Benchmark | Previous | GLM |
 |---|---|---|
 | Role evaluation, 42 cases × 3 (`run_live.py`) | 121/126 · $2.28 | 121/126 · $0.46 |
 | …Fetch, with the guardrail below | 24/24 · $0.60 | 24/24 · $0.08 |
@@ -28,7 +28,7 @@ Same code, fixtures, titles and speech evidence for both; only the models differ
 
 Role evaluation by role (first full run):
 
-| Role | Current pass · cost · median s | GLM pass · cost · median s |
+| Role | Previous pass · cost · median s | GLM pass · cost · median s |
 |---|---|---|
 | Discovery | 16/18 · $0.153 · 11 | 18/18 · $0.011 · 18 |
 | Fetch | 24/24 · $0.541 · 19 | 21/24 · $0.111 · 35 (24/24 with the guardrail) |
@@ -36,23 +36,24 @@ Role evaluation by role (first full run):
 | Librarian | 39/39 · $0.211 · 12 | 38/39 · $0.016 · 20 |
 | Subtitles | 21/21 · $0.288 · 24 | 21/21 · $0.225 · 27 |
 
-- Current failures: Discovery proposed nothing or an uninspected title (2);
-  Small recorded a fake file on holdout-media-02 in all three runs, at up to
+- Previous failures: Discovery proposed nothing or an uninspected title (2);
+  the previous cheap model recorded a fake file on holdout-media-02 in all three runs, at up to
   $1.46 a run.
 - GLM failures: Flash removed a finished download it was asked to mark done
   (fetch-02, 3 runs); one out-of-scope Librarian request (refused by the tool);
   one attempt to record a rejected file (refused).
 - Search: the same release on 22 of 28 titles. Of the six differences GLM kept
-  original audio where Assistant took an English dub (Mob Psycho 100), and took
-  720p where Assistant found 1080p (Samurai Champloo); the rest are equivalent.
-- Your live *Four Lions* request on the current models cost $0.66 (escalated
-  Medium search $0.25, file checks $0.30).
+  original audio where the previous setup took an English dub (Mob Psycho 100),
+  and took 720p where it found 1080p (Samurai Champloo); the rest are equivalent.
+- The owner's live *Four Lions* request on the previous models cost $0.66
+  (escalated smart-model search $0.25, file checks $0.30).
 - *Four Lions* written track against the human YIFY track: 96.6–96.9% of its
   captions overlapped, word recall 0.85–0.86 for both setups. With
   `SPARROW_SUBTITLE_MODEL=glm-5.3-flash` the manager cost $0.007 (track $0.04)
   with the same scores; it was not run on the role suite, so 5.3 stays manager.
 - GLM is slower per step (1.5–2× median latency). The cheap checker on the
-  verified track: Flash flagged 0 captions wrong, Cheap 120–128 (Smart cleared them).
+  verified track: Flash flagged 0 captions wrong, the previous page checker
+  120–128 (the previous manager cleared them).
 
 ## Found and fixed on the way
 
@@ -66,7 +67,7 @@ Role evaluation by role (first full run):
    ($1.24) realigning, and two other settings ran out of turns. Identical
    simultaneous captions now merge, and citations match by time and words.
 3. The dry-run review fixture lacked the `concern` field; GLM's local schema
-   check found it (AltProvider and Provider enforce schemas server-side).
+   check found it (the previous providers enforced schemas server-side).
 
 ## GLM facts that shaped the code
 
@@ -77,4 +78,4 @@ with one retry. Only the flash family reads images. List prices per million
 tokens: 5.3 $1.40 / $0.26 cached / $4.40 out; Flash $0.15 / $0.03 / $0.50.
 
 Spend: GLM $4.07 (of it $3.18 on *Four Lions* incl. the diagnosis runs),
-current setup $5.29. Results, logs and states: `data/glm-bench/` (not in git).
+previous setup $5.29. Results, logs and states: `data/glm-bench/` (not in git).

@@ -40,7 +40,7 @@ Sources: [startup and legacy routes](../backend/main.py),
 
 | Area | Implemented behavior | Gap to address |
 | --- | --- | --- |
-| Agent runtime | Persistent Provider model/tool loops; authority and revision checks; per-wake step limits and durable cost reservations | Explicit model/effort profiles, durable event delivery, complete evidence and stronger recovery |
+| Agent runtime | Persistent model/tool loops; authority and revision checks; per-wake step limits and durable cost reservations | Explicit model/effort profiles, durable event delivery, complete evidence and stronger recovery |
 | Discovery | Cheap model, up to eight calls; search/details/library tools; inspected title proposals; no acquisition authority | Difficult descriptions and multi-constraint requests need evaluated escalation; interrupted searches currently need user refinement |
 | Fetch | Smart model, up to 40 calls per wake within policy; source search/inspection and recovery; owns the requested result | Better structured candidate evidence, bounded investigation and recovery; evaluate cheaper ordinary cases before lowering its default |
 | Media | Cheap model; node tools inspect, publish and record files; can escalate to the smart model for the remaining session | Structured results for rejected/missing files and difficult identity/edition decisions; assisted import needs a deliberate extension |
@@ -49,9 +49,9 @@ Sources: [startup and legacy routes](../backend/main.py),
 | Import | Filename suggestions, owner-selected identity and deterministic inspection/publication | Optional Media assistance for ambiguous matching, preserving explicit import authority and stable file identity |
 | Playback, accounts and nodes | Deterministic playback, authorisation, conversion, measurements and durable node operations | Complete physical-device/provider acceptance; these operations do not need a reasoning call |
 
-Current code defaults are `assistant-medium` for smart and `assistant-small`
-for cheap; configuration and environment can override them. Only Media exposes
-`escalate_model`. The runtime does not explicitly configure effort or thinking.
+Current code defaults are `glm-5.3` for smart and `glm-5.3-flash` for cheap;
+configuration and environment can override them. Only Media exposes
+`escalate_model`. Each role's profile sends an explicit reasoning effort.
 Step limits and maximum output tokens are separate controls
 from reasoning effort.
 
@@ -119,7 +119,7 @@ examined here have no differences between those revisions.
 
 Mogged's initial production runs delivered artifacts but failed quality review.
 Its record identifies a local/production mismatch in CLI version, model and
-reasoning effort. The correction pinned assistant 0.153.4, `smart-model`, medium
+reasoning effort. The correction pinned the CLI version, the model, medium
 effort and updated instructions; three fresh runs then passed independent
 acceptance. This is evidence for explicit configuration and outcome review,
 not a controlled comparison proving which model caused each improvement.
@@ -151,29 +151,20 @@ Choose the cheapest profile that meets each role's quality and latency target.
 | Work | Initial profile | Escalation or exit |
 | --- | --- | --- |
 | Exact-title autocomplete, airing checks, polling, file probing, conversion, subtitle alignment, permissions and progress | No LLM | Failed operations return typed facts; uncertain interpretation wakes the responsible agent |
-| Routine Discovery, clear Media identification, ordinary authorised collection care, clear subtitle samples | Small 4.5, bounded tool loop, thinking disabled | Escalate when evidence conflicts or the task needs a more capable investigation |
-| Fetch ownership; difficult Discovery; ambiguous episode numbering, editions or subtitle repair | Medium 5, explicit medium effort as the evaluation candidate | Compare against Medium high; retain the stronger configuration where medium loses outcome quality |
-| Unresolved cases with sufficient evidence and meaningful consequences | Medium high, then a bounded Large 5 high profile if it improves results | Stop with a precise blocker if evidence or authority is missing; never buy more reasoning to invent it |
+| Routine Discovery, clear Media identification, ordinary authorised collection care, clear subtitle samples | `glm-5.3-flash`, bounded tool loop, low effort | Escalate when evidence conflicts or the task needs a more capable investigation |
+| Fetch ownership; difficult Discovery; ambiguous episode numbering, editions or subtitle repair | `glm-5.3`, low effort for reviews and high for escalated work | Compare low against high; retain the stronger configuration where low loses outcome quality |
+| Unresolved cases with sufficient evidence and meaningful consequences | `glm-5.3` high, then a bounded max-effort profile if it improves results | Stop with a precise blocker if evidence or authority is missing; never buy more reasoning to invent it |
 
-Small 4.5 does not support the effort parameter. Medium 5 and Large 5 do; their
-documented default is high. Effort is not a hard spending limit. The adapter
-must validate model capabilities and configure thinking, effort and output
-allowance together. [Model capabilities](https://retired-provider.invalid),
-[effort documentation](https://retired-provider.invalid).
+GLM 5.3 and 5.3 Flash always think; they accept low, high or max effort and
+default to max. Effort is not a hard spending limit. The adapter must
+configure effort and output allowance together.
 
-Mogged's `smart-model` at medium is a useful alternative candidate for the hard
-case set if an AltProvider adapter is evaluated. Its successful research use does
-not establish a need for it on every Sparrow task. AltProvider documents text/image
-input and configurable reasoning effort for this model; direct audio input is
-not supported. [model-6 Astra](https://retired-provider.invalid).
-
-For scale only, standard uncached input/output prices per million tokens at the
-audit date are Small 4.5 **$1/$5**, Medium 5 **$2/$10**, Large 5 **$5/$25**, and
-model-6 Astra **$10/$50**. A hypothetical 10,000-input/1,000-output-token call costs
-about **$0.015 / $0.030 / $0.075 / $0.150**, respectively. This excludes additional
+For scale only, list input/cached/output prices per million tokens on
+25 November 2026 are `glm-5.3-flash` **$0.15/$0.03/$0.50** and `glm-5.3`
+**$1.40/$0.26/$4.40**. A hypothetical 10,000-input/1,000-output-token call costs
+about **$0.002 / $0.018**, respectively. This excludes additional
 thinking/output, caching, tool charges and repeated calls. It is not a measured
-Sparrow request cost. [Assistant pricing](https://retired-provider.invalid),
-[Astra pricing](https://retired-provider.invalid).
+Sparrow request cost. [Z.ai pricing](https://docs.z.ai/guides/overview/pricing).
 
 Routing should use known task type and saved evidence without adding a separate
 classifier model call. A difficult user request can start at the balanced tier.
@@ -236,14 +227,9 @@ successful English speech samples.
 ## Framework decision
 
 Keep the present runtime as the baseline while evaluating a thin adapter on
-read-only Discovery. Compare it with the Assistant Agent SDK first, as the product
-plan already proposes. The SDK supplies a loop, context management and sessions;
-Sparrow still owns permissions, durable jobs, budgets and verified completion.
-[Official SDK overview](https://retired-provider.invalid).
-
-assistant is another possible adapter: its CLI supports resuming a specific session,
-which Mogged uses. Test the same cancellation, interruption, evidence and budget
-contracts before selecting it. [Official non-interactive documentation](https://retired-provider.invalid).
+read-only Discovery. Compare it with an agent SDK first, as the product plan
+proposes. An SDK supplies a loop, context management and sessions; Sparrow
+still owns permissions, durable jobs, budgets and verified completion.
 
 Separate the framework comparison from model selection. Compare the same model
 where feasible; label tests that change both runtime and model as combined

@@ -20,15 +20,14 @@ The fixture runs the actual Sparrow app, authenticated subtitle APIs, node worke
 persistent review runtime and player. Japanese audio is explicitly selected,
 including for the two copies with default English dubs. Independent speech
 evidence uses local Whisper medium, CPU int8, two threads, five 30-second windows
-distributed through each episode. Assistant Small reviews those observations;
-a proposed rejection of translated captions receives a Medium 4.6 second review
+distributed through each episode. The cheap model reviews those observations;
+a proposed rejection of translated captions receives a smart-model second review
 in the final fixture. The normal configurable cheap/smart roles are preserved.
 These measurements do not evaluate the smaller packaged Whisper base model.
 
-The existing Assistant CLI login supplies bounded experimental model calls. Sparrow
-owns the real tool loop and durable receipts. Normal application calls still use
-the existing Provider API integration; no new provider/account was introduced.
-CLI list-price estimates are not subscription invoices.
+An existing CLI sign-in supplied bounded experimental model calls. Sparrow
+owns the real tool loop and durable receipts; no new provider/account was
+introduced. CLI list-price estimates are not subscription invoices.
 
 ## Defects found and fixed
 
@@ -107,7 +106,7 @@ Actual Chromium playback passed eight distributed caption positions per episode
 (24 total), seeks, advancing video, authenticated subtitle delivery and narrow
 390-pixel layouts. Saved frames were visually inspected. Browser runs are muted:
 they prove rendering/playback, not independent human listening. Local ASR processes
-the soundtrack; Assistant reasons over that recorded speech evidence.
+the soundtrack; the model reasons over that recorded speech evidence.
 
 Preference browser checks pass default inclusion/on and checking/off, save/reload,
 and inheritance by the per-title action. A desktop browser with a narrow viewport

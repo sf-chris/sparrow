@@ -2,12 +2,12 @@
 
 `tests/evals/search_bench.py live` on main `8b25fb8`, 28 fixed titles (16 anime
 series, 6 films, 6 western series), stopping each request once its download was
-chosen; nothing was downloaded. Models: `cheap-model` scouting and `smart-model`
-for review and escalation (the Provider key had no credit). Summary:
+chosen; nothing was downloaded. Models: a previous cheap model scouting and a
+previous mid-tier model for review and escalation. Summary:
 [`tests/evals/results/search-live-20261122.json`](../../tests/evals/results/search-live-20261122.json).
 The indexer answers were recorded locally only; they are real listings.
 
-| | This run | Target | Before (batch 3, Assistant, 2026-10-02) |
+| | This run | Target | Before (batch 3, previous provider, 2026-10-02) |
 |---|---|---|---|
 | Titles | 28 | | 20 |
 | Total | $0.43 | | $5.19 |
@@ -20,7 +20,7 @@ The models differ between the two runs, so the before/after is not a model-only
 comparison; the scout fixes moved most titles onto the cheap path, which is where
 most of the change comes from. The audit agent's report follows.
 
-## Ledger audit (smart-model, $0.0526)
+## Ledger audit (previous mid-tier model, $0.0526)
 
 The run meets all three aggregate search-cost targets, but three escalated titles account for $0.336 of $0.427 (79%). None reached the library, and subtitles cost $0, so this run does not establish that episodes or professional subtitles were delivered. The largest savings are in smart-model search loops, not indexer fees.
 

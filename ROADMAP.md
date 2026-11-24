@@ -48,7 +48,7 @@ transcription and semantic comparison, with targeted scene review and the exact
 copy of *Four Lions* as the first acceptance case. The opt-in
 [audio trial](docs/agentic-audit/SUBTITLE_TRIAL.md) ran on recorded English fixtures.
 The [Four Lions experiment](docs/agentic-audit/FOUR_LIONS_TRIAL.md) now includes
-actual Sparrow-tool acquisition, foreign-speech samples, live Assistant comparisons
+actual Sparrow-tool acquisition, foreign-speech samples, live model comparisons
 and separate browser rendering. The 30 September iteration adds durable scene
 investigation and draft repairs, a full-soundtrack recognition pass, and 24
 positions tested in Sparrow's actual player using isolated fixture state. It
@@ -203,8 +203,6 @@ wrapper around an existing automation stack.
 - Existing-library import and correction are core collection-management work.
 - Discovery becomes a genuine tool-using agent; instant title suggestions remain
   useful. Existing Fetch, Media and Librarian loops already provide agentic work.
-- Evaluate a Assistant Agent SDK adapter for discovery, preserving durable domain
-  state and tool guardrails. SDK migration is conditional on demonstrated parity.
 - Video comes first. Music and a mobile listening experience are a later
   product expansion.
 - Asynchronous provider batch APIs are a cost optimization for non-urgent work,
@@ -396,8 +394,6 @@ On a clean machine or clean account:
   unmatched identities and rescans that preserve verification evidence.
 - [ ] Add a Discovery Agent that searches/refines using tools and returns title
   cards plus exact scope/language/monitoring intent for user-authorised requests.
-- [ ] Evaluate the Assistant Agent SDK behind an adapter using cancellation,
-  restart, cost, restricted-tool and structured-result acceptance checks.
 - [ ] Keep the existing management agents operational while proving migration
   parity; add subtitle quality-review sessions over the built-in processing
   pipeline. Retain setup-agent extension points without implementing that agent.
@@ -499,10 +495,9 @@ Example fallback:
 5. A failed or late batch never corrupts the job; Sparrow backs off or returns
    to synchronous reasoning.
 
-AltProvider's Batch API currently documents discounted asynchronous processing with
-a completion window of up to 24 hours, which fits this class of work. It does
-not fit the dinner scenario, so Sparrow must never require it for urgent jobs:
-<https://retired-provider.invalid>
+A provider batch API with discounted asynchronous processing and a completion
+window of up to a day fits this class of work. It does not fit the dinner
+scenario, so Sparrow must never require it for urgent jobs.
 
 ### Acceptance test
 

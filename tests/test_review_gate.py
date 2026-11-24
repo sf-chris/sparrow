@@ -206,7 +206,7 @@ class CheckDownloadTests(GateFixture):
         [download] = self.downloads()
         self.assertEqual(download.metadata["check"]["concern"], acquisition_review.UNVERIFIED)
         self.assertIn("This is a check download", landing_notes(download.metadata))
-        self.assertEqual(self.service.store.get_session(self.session.id).model, "cheap-model")  # no escalation
+        self.assertEqual(self.service.store.get_session(self.session.id).model, "glm-5.3-flash")  # no escalation
         [check] = [r for r in ledger.load_enforcements(self.service.store) if r["rule"] == "check_download"]
         self.assertEqual((check["profile"], check["detail"]["used"], check["detail"]["allowance"]), ("fetch_review", 1, 1))
         self.assertIn("its quality is not in its name", check["detail"]["doubts"])

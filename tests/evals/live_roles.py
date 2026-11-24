@@ -232,14 +232,14 @@ class LibrarianWorld(World):
             return
         if scenario == "no_key_then_key":
             runtime = self.service.runtime
-            getters = (runtime._api_key_getter, runtime._altprovider_key_getter, runtime._glm_key_getter)
-            runtime._api_key_getter = runtime._altprovider_key_getter = runtime._glm_key_getter = lambda: ""
+            getter = runtime._api_key_getter
+            runtime._api_key_getter = lambda: ""
             await care.check(self.row["id"])
             self.marks["requests_without_key"] = self.provider_requests
             row = care.row(self.row["id"])
             self.marks["reviewed_without_key"] = bool(row["data"].get("fingerprint")) and \
                 row["data"].get("fingerprint") == row["data"].get("observed_fingerprint")
-            runtime._api_key_getter, runtime._altprovider_key_getter, runtime._glm_key_getter = getters
+            runtime._api_key_getter = getter
             await care.check(self.row["id"])
             return
         if scenario == "outage_then_restart":
