@@ -88,7 +88,7 @@ async def tmdb(path, **kwargs):
                 if kwargs.get("query", "").lower() in name.lower()
             ]
         }
-    if len(parts) > 2 and parts[2] == "credits":
+    if len(parts) > 2 and parts[2] in ("credits", "aggregate_credits"):
         # Fictional people for the fictional fixture titles.
         return {
             "cast": [{"name": n} for n in ("Mara Ellison", "Tomas Reyes", "June Okafor", "Ilse Brandt", "Sam Whitlow", "Noor Haddad")],

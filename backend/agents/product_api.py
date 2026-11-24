@@ -92,15 +92,19 @@ def install_product(app, storage, accounts, nodes, get_service):
         return job
 
     async def credits(media_type, tmdb_id, details):
-        """Cast and crew, fetched once per title and kept with its details."""
-        if "credits" in details or details.get("cached"):
+        """Cast and crew, fetched once per title and kept with its details.
+        A series uses its whole-run cast (plain credits list only the latest
+        season's)."""
+        if (details.get("credits") or {}).get("v") == 2 or details.get("cached"):
             return details
+        path = "aggregate_credits" if media_type == "tv" else "credits"
         try:
-            found = await get_service().toolbox.tmdb_get(f"/{media_type}/{tmdb_id}/credits")
+            found = await get_service().toolbox.tmdb_get(f"/{media_type}/{tmdb_id}/{path}")
         except (ToolError, AttributeError):
             return details
         current = catalogue.cached_title(media_type, tmdb_id) or details
         current["credits"] = {
+            "v": 2,
             "cast": [{"name": c.get("name", "")} for c in found.get("cast", [])[:8]],
             "directors": [
                 c.get("name", "") for c in found.get("crew", []) if c.get("job") == "Director"
