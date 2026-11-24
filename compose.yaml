@@ -5,18 +5,19 @@ services:
     restart: unless-stopped
     init: true
     environment:
-      SPARROW_SMART_MODEL: ${SPARROW_SMART_MODEL:-assistant-medium}
-      SPARROW_CHEAP_MODEL: ${SPARROW_CHEAP_MODEL:-assistant-small}
+      SPARROW_SMART_MODEL: ${SPARROW_SMART_MODEL:-glm-5.3}
+      SPARROW_CHEAP_MODEL: ${SPARROW_CHEAP_MODEL:-glm-5.3-flash}
       SPARROW_TRANSCRIPTION_MODEL: ${SPARROW_TRANSCRIPTION_MODEL:-/opt/sparrow/models/whisper-base}
-      # Subtitle agent: Large manages; a cheap page checker (the cheap model when an
-      # AltProvider key is set) reads every page. Leave unset for the defaults.
+      # Subtitle agent: with a Z.ai key GLM 5.3 manages and GLM 5.3 Flash reads
+      # every page. Leave unset for the defaults (each role's own effort).
       SPARROW_SUBTITLE_MODEL: ${SPARROW_SUBTITLE_MODEL:-}
-      SPARROW_SUBTITLE_EFFORT: ${SPARROW_SUBTITLE_EFFORT:-medium}
+      SPARROW_SUBTITLE_EFFORT: ${SPARROW_SUBTITLE_EFFORT:-}
       SPARROW_SUBTITLE_BUDGET: ${SPARROW_SUBTITLE_BUDGET:-}
       SPARROW_SUBTITLE_CONTRACTOR: ${SPARROW_SUBTITLE_CONTRACTOR:-}
       SPARROW_SUBTITLE_VERIFIER: ${SPARROW_SUBTITLE_VERIFIER:-}
       PROVIDER_API_KEY: ${PROVIDER_API_KEY:-}
       ALTPROVIDER_API_KEY: ${ALTPROVIDER_API_KEY:-}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
     ports:
       - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:${SPARROW_PORT:-8888}:8888"
     volumes:
