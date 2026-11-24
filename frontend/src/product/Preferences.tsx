@@ -109,7 +109,7 @@ export function PreferenceFields({
               />
               Check, fix or write every subtitle with AI
             </label>,
-            "Needs an Provider key. Off: timing is still fixed automatically.",
+            "Needs a model key. Off: timing is still fixed automatically.",
           )}
           {field(
             "audio_pref",

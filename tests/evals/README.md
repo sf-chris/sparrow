@@ -87,6 +87,33 @@ recorded usage/estimated spend. Successful prose alone cannot pass. The offline
 failure rule without a provider call. Keep live runs separate from controlled
 results; do not choose new production defaults from the latter.
 
+GLM models run the same way through Z.ai (`ZAI_API_KEY`); the harness meters
+and, in a dry run, scripts Chat Completions answers too:
+
+```sh
+SPARROW_RUN_LIVE_EVALS=1 ZAI_API_KEY=... SPARROW_CHEAP_MODEL=glm-5.3-flash SPARROW_SMART_MODEL=glm-5.3 \
+  SPARROW_SUBTITLE_MODEL=glm-5.3 SPARROW_SUBTITLE_CONTRACTOR=glm-5.3-flash SPARROW_SUBTITLE_VERIFIER=glm-5.3 \
+  SPARROW_FFMPEG=... SPARROW_FFPROBE=... .venv/bin/python tests/evals/run_live.py --max-dollars 15
+```
+
+## One real title's subtitles
+
+`title_subtitles.py` runs a real film through the subtitle pipeline (the real
+speech recogniser, page checkers and manager on the configured models) in a new
+isolated state directory. Give it a human track to verify (`--track`), or none
+for Sparrow to write one (`--reference` compares the result with a human track).
+Speech evidence is built once and reused with `--evidence-from`, so two model
+setups differ only in their models. The online archive is off unless
+`--archive`. It reports the outcome, the track's timing and review, and model
+calls and cost by ledger phase.
+
+```sh
+SPARROW_FFMPEG=... SPARROW_FFPROBE=... SPARROW_TRANSCRIPTION_MODEL=.../whisper-medium ZAI_API_KEY=... \
+  SPARROW_SUBTITLE_MODEL=glm-5.3 SPARROW_SUBTITLE_CONTRACTOR=glm-5.3-flash SPARROW_SUBTITLE_VERIFIER=glm-5.3 \
+  .venv/bin/python tests/evals/title_subtitles.py --video "Four Lions.mp4" --title "Four Lions" --year 2010 \
+  --track four-lions.en.srt --state data/bench/fl-verify --output fl-verify.json
+```
+
 ## Search benchmark (issue #15)
 
 `search_bench.py` measures what finding a title costs, before and after a change

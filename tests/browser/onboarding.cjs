@@ -118,7 +118,7 @@ const out =
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
       .getByRole("alert")
-      .filter({ hasText: "Needed to find and download." })
+      .filter({ hasText: "One model key is needed to find and download." })
       .waitFor();
     assert.equal((await state()).step, "providers");
     assert.equal(

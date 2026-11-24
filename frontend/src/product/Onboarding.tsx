@@ -84,7 +84,13 @@ export default function Onboarding({
   );
   const keyState = (configured: boolean, required: boolean) =>
     configured ? "On server" : required && !library ? "Missing" : "Optional";
-  const checks = state
+  const checks: {
+    label: string;
+    ok: boolean;
+    value: string;
+    step: Step;
+    optional?: boolean;
+  }[] = state
     ? [
         {
           label: "TMDB key",
@@ -169,8 +175,7 @@ export default function Onboarding({
                 >
                   <strong>Find and download for me</strong>
                   <span id="choice-autopilot" aria-hidden="true">
-                    Needs a TMDB key, an Provider key, storage and a download
-                    app.
+                    Needs a TMDB key, a model key, storage and a download app.
                   </span>
                 </button>
                 <button
