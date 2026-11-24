@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Info, Play } from "lucide-react";
-import { api, type Asset, type Job, type Title as TitleData } from "./api";
+import { Download, Info, Play } from "lucide-react";
+import { api, post, type Asset, type Job, type Title as TitleData } from "./api";
 import { Tick } from "./Brand";
 import {
   Bar,
@@ -57,11 +57,15 @@ export function SeasonEpisodes({
   assets,
   start,
   onSubtitles,
+  canRequest = false,
+  onRequested,
 }: {
   title: TitleData;
   assets: Asset[];
   start?: number;
   onSubtitles: (asset: Asset) => void;
+  canRequest?: boolean;
+  onRequested?: () => void;
 }) {
   const seasons = useMemo(
     () =>
@@ -139,6 +143,18 @@ export function SeasonEpisodes({
               job={wanted.get(episode.episode_number)}
               today={today}
               onSubtitles={onSubtitles}
+              onRequest={
+                canRequest && title.tmdb_id
+                  ? async () => {
+                      await post("/jobs", {
+                        tmdb_id: title.tmdb_id,
+                        media_type: "tv",
+                        wanted_episodes: { [season]: [episode.episode_number] },
+                      });
+                      onRequested?.();
+                    }
+                  : undefined
+              }
             />
           ))}
           {extras.map((asset) => (
@@ -164,6 +180,7 @@ function EpisodeRow({
   job,
   today,
   onSubtitles,
+  onRequest,
 }: {
   season: number;
   episode: SeasonEpisode;
@@ -171,7 +188,10 @@ function EpisodeRow({
   job?: Job;
   today: string;
   onSubtitles: (asset: Asset) => void;
+  onRequest?: () => Promise<void>;
 }) {
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState("");
   const ready = asset?.state === "ready";
   const watching = asset && inProgress(asset);
   const code = `S${season} E${episode.episode_number}`;
@@ -257,6 +277,10 @@ function EpisodeRow({
             <Flag value={asset.state} />
           ) : job ? (
             transferLine(job)
+          ) : asking ? (
+            "Requesting…"
+          ) : askError ? (
+            <span className="ep-error">{askError}</span>
           ) : aired ? (
             "Not downloaded"
           ) : (
@@ -278,6 +302,29 @@ function EpisodeRow({
             {watching ? "Resume" : "Play"}
             <span className="sr-only"> {code}</span>
           </Link>
+        </span>
+      )}
+      {state === "missing" && onRequest && (
+        <span className="episode-actions">
+          <button
+            className="icon-button"
+            disabled={asking}
+            aria-label={`Download ${code}`}
+            title={`Download ${code}`}
+            onClick={async () => {
+              setAsking(true);
+              setAskError("");
+              try {
+                await onRequest();
+              } catch (e) {
+                setAskError((e as Error).message);
+              } finally {
+                setAsking(false);
+              }
+            }}
+          >
+            <Download size={18} strokeWidth={2} />
+          </button>
         </span>
       )}
     </li>

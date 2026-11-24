@@ -2287,6 +2287,15 @@ a.tonight-art:hover .still img {
 .ep.unaired .ep-head strong {
   color: var(--ink-2);
 }
+.ep.missing .icon-button {
+  color: var(--ink-2);
+}
+.ep.missing .icon-button:hover {
+  color: var(--ink);
+}
+.ep-error {
+  color: var(--red);
+}
 .ep.watched .ep-still img {
   opacity: 0.75;
 }
@@ -4271,6 +4280,15 @@ button.link:hover {
     grid-column: 1 / -1;
     justify-self: end;
     margin-left: 0;
+  }
+  /* A missing episode's download icon sits top right, beside its name. */
+  .ep.missing:has(.icon-button) {
+    grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  }
+  .ep.missing .episode-actions {
+    grid-column: 3;
+    grid-row: 1;
+    margin: -0.6rem -0.5rem 0 0;
   }
   .ep-head {
     flex-wrap: wrap;

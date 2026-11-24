@@ -251,6 +251,8 @@ export default function Title({ user }: { user: User }) {
           assets={assets}
           start={next?.season}
           onSubtitles={setSubtitleAsset}
+          canRequest={user.role !== "viewer"}
+          onRequested={() => void resource.refresh()}
         />
       ) : assets.length > 0 ? (
         <section className="episodes" aria-labelledby="episodes">
