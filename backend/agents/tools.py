@@ -26,7 +26,7 @@ from ..services.torrent_client import TorrentManager, build_magnet, match_files,
 from ..services.apibay import query as apibay_query
 from ..services.release_parser import parse_release_name
 from .models import (AgentKind, AgentSession, Event, JournalEntry, JobStatus,
-                     MonitoringMode)
+                     MonitoringMode, SessionStatus)
 from .runtime import ToolCtx, ToolDef, ToolError
 from .store import AgentStore
 from .accounts import Accounts
@@ -513,6 +513,28 @@ class Toolbox:
     def job_for(self, session: AgentSession):
         return self.store.get_job(session.job_id) if session.job_id else None
 
+    # How long a finished download waits for the Media Agent before Fetch may
+    # remove it anyway (a check that never finished must not pin it forever).
+    UNCHECKED_LANDING_HOLD = 24 * 3600
+
+    def refuse_unchecked_removal(self, dl: Download) -> None:
+        """A finished download stays until the Media Agent has checked it: its
+        files are the evidence ("100%" in the download app is not), and
+        removing them would throw a possibly good copy away."""
+        finished = (float(dl.progress or 0) >= 1.0 or dl.metadata.get("landed_emitted")
+                    or dl.status in (DownloadStatus.COMPLETED, DownloadStatus.SEEDING))
+        if not finished:
+            return
+        checks = [s for s in self.store.get_sessions(agent=AgentKind.MEDIA, job_id=dl.metadata.get("job_id", ""))
+                  if s.download_id == dl.id]
+        if any(s.status == SessionStatus.CLOSED for s in checks):
+            return
+        landed = dl.completed_at or dl.stats_updated_at or dl.added_at
+        if landed and time.time() - landed >= self.UNCHECKED_LANDING_HOLD:
+            return
+        raise ToolError("This download has finished and the Media Agent is checking its files. Don't remove "
+                        "it: wake_me and act on its report (it says so if the files are wrong).")
+
     async def enforce_mandate(self, tmdb_id: int, media_type: str,
                               wanted_episodes: dict, origin: str) -> None:
         """Refuse agent-originated work outside the user's recorded authority.
@@ -966,6 +988,7 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
         dl = tb.storage.get_download(args["download_id"])
         if not dl or dl.metadata.get("job_id") != ctx.session.job_id:
             raise ToolError("No such download on this job.")
+        tb.refuse_unchecked_removal(dl)
         mgr, connected, _ = await tb.connect_torrents()
         delete_files = bool(args.get("delete_files", True))
         if connected:
@@ -1074,8 +1097,8 @@ def fetch_tools(tb: Toolbox) -> list[ToolDef]:
         _t("client_status", "Live status of this job's downloads.",
            {"include_done": {"type": "boolean"}}, [], status),
         _t("client_remove",
-           "Remove a download (e.g. stalled, or contents turned out wrong). "
-           "delete_files defaults true.",
+           "Remove a download: stalled, or the Media Agent reported its files wrong. "
+           "A finished download stays until the Media Agent has checked it. delete_files defaults true.",
            {"download_id": {"type": "string"}, "delete_files": {"type": "boolean"},
             "reason": {"type": "string"}}, ["download_id"], remove),
         _t("triage_parse",

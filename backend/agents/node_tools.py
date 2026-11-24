@@ -430,6 +430,7 @@ def acquisition_tools(tb):
         dl = tb.storage.get_download(args.get("download_id", ""))
         if not dl or dl.metadata.get("job_id") != job.id:
             raise ToolError("This transfer does not belong to the request.")
+        tb.refuse_unchecked_removal(dl)
         dl.metadata["desired_control"] = "remove"
         await tb.storage.update_download(dl.id, metadata=dl.metadata)
         # Each re-added attempt is removed by its own operation (a reused id

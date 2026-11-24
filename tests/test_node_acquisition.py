@@ -395,6 +395,32 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         await self.call("client_remove", {"download_id": dl.id}, ctx)
         self.assertNotIn("a" * 40, self.client_state)
 
+    async def test_a_finished_download_stays_until_the_media_agent_has_checked_it(self):
+        from backend.agents.models import AgentKind, SessionStatus
+
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        dl = self.storage.get_download(first["download_id"])
+        await self.storage.update_download(dl.id, progress=1.0, completed_at=time.time())
+        # "100%" in the download app is not a check: the copy may be good.
+        with self.assertRaisesRegex(ToolError, "Media Agent is checking"):
+            await self.call("client_remove", {"download_id": dl.id})
+        self.assertIn("a" * 40, self.client_state)
+        check = AgentSession(agent=AgentKind.MEDIA, job_id=self.job.id, download_id=dl.id,
+                             user_id=self.owner["id"], status=SessionStatus.HIBERNATING)
+        self.service.store.save_session(check)
+        with self.assertRaisesRegex(ToolError, "Media Agent is checking"):
+            await self.call("client_remove", {"download_id": dl.id})
+        # Once it has reported (its session closed), a wrong copy can go.
+        check.status = SessionStatus.CLOSED
+        self.service.store.save_session(check)
+        await self.call("client_remove", {"download_id": dl.id})
+        self.assertNotIn("a" * 40, self.client_state)
+
+    async def test_an_unfinished_download_can_be_removed(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        await self.call("client_remove", {"download_id": first["download_id"]})
+        self.assertNotIn("a" * 40, self.client_state)
+
     async def test_a_live_requests_copy_stays_with_it(self):
         first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
         _, ctx = self.second_request()
