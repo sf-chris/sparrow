@@ -946,6 +946,25 @@ class CoveredSpeechTests(unittest.TestCase):
         self.assertEqual(gaps, [["u00002"]])
 
 
+class WrittenDraftTests(unittest.TestCase):
+    def test_a_line_heard_twice_at_once_is_one_caption_citing_both(self):
+        """Four Lions, GLM run: the recogniser heard "Yeah." twice at 64.2 s.
+        Two identical captions collapse to one when the file is read back, and
+        every later caption then cited its neighbour's speech."""
+        twice = [utterance(1, 62.0), utterance(2, 64.2), utterance(3, 64.2), utterance(4, 66.0)]
+        pages = [{"number": 1}]
+        written = {"1": [
+            {"speech": ["u00001"], "text": "Focus on what you can see."},
+            {"speech": ["u00002"], "text": "Yeah."},
+            {"speech": ["u00003"], "text": "Yeah."},
+            {"speech": ["u00004"], "text": "Get on with it."},
+        ]}
+        cues = review.compose(pages, written, twice, [])
+        self.assertEqual([c["text"] for c in cues], ["Focus on what you can see.", "Yeah.", "Get on with it."])
+        self.assertEqual(cues[1]["speech"], ["u00002", "u00003"])
+        self.assertEqual(len(cues_from_text(render(cues, vtt=True), "vtt")), len(cues))
+
+
 class ProfessionalRewriteTests(unittest.TestCase):
     def test_rewriting_a_professional_line_needs_a_second_hearing(self):
         cues = [{"start": 10.0, "end": 12.0, "text": "Good Joseph!"}, {"start": 20.0, "end": 21.0, "text": "What did l...?"}]

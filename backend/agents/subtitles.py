@@ -1377,12 +1377,20 @@ class Subtitles:
         state = self.task(task["id"])["data"]["review"]
         track = self.track(new_id)
         new_cues = await self.cues(context["node"], track["data"]["path"], track["data"]["version"])
+        # Each caption keeps the speech it was written from, matched by time and
+        # words: the published file may hold fewer captions than the draft, and
+        # a position would then hand every later caption its neighbour's speech.
+        drafted = {}
+        for cue in cues:
+            drafted.setdefault((round(cue["start"], 2), cue["text"].strip()), cue)
         for page in pages:
-            state["judgements"][str(page["number"])] = {
-                pages_.caption_id(i): {"verdict": "ok", "speech": cues[i]["speech"], "note": "checker's translation", "by": "contractor draft"}
-                for i, _ in pages_.page_captions(page, new_cues)
-                if i < len(cues)
-            }
+            judged = {}
+            for i, _ in pages_.page_captions(page, new_cues):
+                source = drafted.get((round(new_cues[i]["start"], 2), new_cues[i]["text"].strip()))
+                if source:
+                    judged[pages_.caption_id(i)] = {"verdict": "ok", "speech": source["speech"],
+                                                    "note": "checker's translation", "by": "contractor draft"}
+            state["judgements"][str(page["number"])] = judged
         gaps = subtitle_contract.untranslated(pages, context["utterances"], state.get("translations", {}))
         for page in pages:
             state["missing"][str(page["number"])] = gaps.get(str(page["number"]), [])
