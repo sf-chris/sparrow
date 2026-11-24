@@ -2089,6 +2089,253 @@ a.tonight-art:hover .still img {
 .episode-actions .btn {
   white-space: nowrap;
 }
+/* A series' whole season: picture, name, what it is about, where it stands. */
+.season-list {
+  border-bottom: 2px solid var(--ink);
+}
+.season-list > li + li {
+  border-top: 1px solid var(--rule);
+}
+.ep {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr) auto;
+  gap: 1.1rem;
+  align-items: center;
+  padding: 0.9rem 0.3rem;
+}
+.ep-still {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--paper-sink);
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.ep-still img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ep-blank {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 900;
+  font-stretch: 62%;
+}
+.ep-play {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding-left: 3px;
+  border-radius: 50%;
+  background: oklch(0% 0 0 / 0.55);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+}
+.ep-still:hover .ep-play,
+.ep:focus-within .ep-play {
+  opacity: 1;
+}
+.ep-meter {
+  position: absolute;
+  left: 0.45rem;
+  right: 0.45rem;
+  bottom: 0.45rem;
+}
+.ep-meter .meter {
+  height: 4px;
+  background: oklch(100% 0 0 / 0.45);
+}
+.ep-meter .meter > span {
+  background: var(--accent);
+}
+.ep.coming .ep-meter .meter > span {
+  background: var(--blue);
+}
+.ep-copy {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.ep-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.ep-no {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 900;
+  font-stretch: 64%;
+  color: var(--ink-2);
+}
+.ep-head strong {
+  min-width: 0;
+  font-size: 1.12rem;
+  font-weight: 750;
+  font-stretch: 84%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ep-head .meta {
+  flex: none;
+  margin-left: auto;
+}
+.ep-blurb {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  max-width: 68ch;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.ep.coming .ep-state {
+  color: var(--blue);
+  font-weight: 700;
+}
+.ep.missing .ep-still,
+.ep.unaired .ep-still {
+  filter: grayscale(0.85);
+  opacity: 0.55;
+}
+.ep.missing .ep-head strong,
+.ep.unaired .ep-head strong {
+  color: var(--ink-2);
+}
+.ep.watched .ep-still img {
+  opacity: 0.75;
+}
+.episodes-note {
+  padding: 1rem 0.3rem;
+}
+/* The people in it: a row of faces that scrolls sideways. */
+.cast {
+  margin-top: 2.5rem;
+}
+.cast-row {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 0.3rem 0.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.cast-row li {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 0.2rem;
+  width: 7.25rem;
+  text-align: center;
+  scroll-snap-align: start;
+}
+.cast-photo {
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  margin-bottom: 0.35rem;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--paper-sink);
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 850;
+  font-stretch: 70%;
+}
+.cast-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cast-row strong {
+  font-size: var(--t-small);
+  font-weight: 750;
+  line-height: 1.2;
+}
+.cast-row .meta {
+  line-height: 1.2;
+}
+/* The small ⓘ: details one tap away, out of the way otherwise. */
+.info-button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--control);
+  height: var(--control);
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+}
+.info-button:hover {
+  background: var(--paper-sink);
+}
+.info-list {
+  display: grid;
+  gap: 0.55rem;
+}
+.info-list > div {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 0.75rem;
+}
+.info-list dt {
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.info-list dd {
+  margin: 0;
+  font-weight: 650;
+}
+.info-line {
+  display: block;
+}
+.info-list .release {
+  font-size: var(--t-small);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.info-list.picked + .info-list.picked {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+}
+.info-files {
+  width: 100%;
+  margin-top: 1.25rem;
+  border-collapse: collapse;
+  font-size: var(--t-small);
+}
+.info-files th,
+.info-files td {
+  padding: 0.45rem 0.5rem 0.45rem 0;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+.info-files thead th {
+  color: var(--ink-2);
+  font-weight: 650;
+  border-bottom: 1.5px solid var(--ink);
+}
+.checklist-row.settled {
+  color: var(--ink-2);
+}
 /* Who is in it and what it is, in two or three quiet lines. */
 .title-facts {
   display: grid;
@@ -3928,6 +4175,9 @@ button.link:hover {
   .feature-copy > .actions .btn {
     flex: 1 1 100%;
   }
+  .feature-copy > .actions .btn:not(.primary):has(+ .info-button) {
+    flex: 1 1 0;
+  }
   .episode {
     grid-template-columns: 2.25rem minmax(0, 1fr);
     gap: 0.6rem;
@@ -3936,6 +4186,33 @@ button.link:hover {
     grid-column: 2;
     justify-self: start;
     margin-left: -0.7rem;
+  }
+  .ep {
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    gap: 0.6rem 0.8rem;
+    align-items: start;
+  }
+  .ep .episode-actions {
+    grid-column: 1 / -1;
+    justify-self: end;
+    margin-left: 0;
+  }
+  .ep-head {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .ep-head strong {
+    white-space: normal;
+  }
+  .ep-head .meta {
+    margin-left: 0;
+  }
+  .ep-blurb {
+    -webkit-line-clamp: 3;
+  }
+  .info-list > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
   }
   .episode-no {
     font-size: 1.7rem;
@@ -4076,4 +4353,8 @@ button.link:hover {
 .placement .folder-label {
   width: auto;
   min-width: 6.25rem;
+}
+.cast-row:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
 }

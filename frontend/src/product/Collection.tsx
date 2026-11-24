@@ -68,13 +68,28 @@ export const clock = (seconds: number) => {
     : date.toLocaleDateString([], { day: "numeric", month: "short" });
 };
 
+/** "1–3, 5": episode numbers with runs joined. */
+export const episodeRuns = (numbers: number[]) => {
+  const sorted = [...new Set(numbers)].sort((a, b) => a - b);
+  const runs: string[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+    runs.push(j > i ? `${sorted[i]}–${sorted[j]}` : String(sorted[i]));
+    i = j;
+  }
+  return runs.join(", ");
+};
+
+/** What a request covers, naming its episodes: "Season 1 · episode 2". */
 export const scope = (job: Pick<Job, "media_type" | "wanted_episodes">) =>
   job.media_type === "movie"
     ? "Film"
     : Object.entries(job.wanted_episodes)
-        .map(
-          ([season, episodes]) =>
-            `Season ${season} · ${episodes.length} episode${episodes.length === 1 ? "" : "s"}`,
+        .map(([season, episodes]) =>
+          episodes.length
+            ? `Season ${season} · episode${episodes.length === 1 ? "" : "s"} ${episodeRuns(episodes)}`
+            : `Season ${season}`,
         )
         .join(" / ") || "Series";
 

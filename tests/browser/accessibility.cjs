@@ -17,7 +17,7 @@ fs.mkdirSync(out,{recursive:true});
   results.push({route,violations:audit.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})),overflow});
   await page.setViewportSize({width:390,height:844});
  }
- await page.getByRole('button',{name:/Request episodes/}).click();await page.getByRole('dialog').waitFor();await page.getByRole('checkbox').first().check();
+ await page.getByRole('button',{name:/Request episodes/}).click();await page.getByRole('dialog').waitFor();await page.getByRole('checkbox',{disabled:false}).first().check();
  const button=await page.getByRole('button',{name:'Request 1 episode',exact:true}).boundingBox();
  if(!button||button.y+button.height>844)throw new Error('Request footer is outside the phone viewport');
  await page.screenshot({path:out+'/request-episodes-mobile.png',fullPage:true});

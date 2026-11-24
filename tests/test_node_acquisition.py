@@ -426,6 +426,40 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         dl = self.storage.get_download(first["download_id"])
         self.assertEqual((dl.metadata["job_id"], dl.status), (again_job.id, DownloadStatus.DOWNLOADING))
 
+    async def test_a_taken_over_copy_is_checked_for_the_new_request(self):
+        from backend.agents.models import Event, SessionStatus
+
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        await self.storage.update_download(first["download_id"], status=DownloadStatus.ORGANIZED)
+        earlier = AgentSession(
+            agent=AgentKind.MEDIA, job_id=self.job.id, download_id=first["download_id"],
+            user_id=self.owner["id"],
+        )
+        earlier.status = SessionStatus.CLOSED
+        self.service.store.save_session(earlier)
+        self.job.status, self.job.closed_at = JobStatus.COMPLETE, time.time()
+        self.service.store.save_job(self.job)
+        again_job, ctx = self.second_request()
+        await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"}, ctx)
+        await self.storage.update_download(first["download_id"], status=DownloadStatus.COMPLETED)
+        # Restart tidy-up leaves the new request's landed copy for it to settle.
+        await self.service._reconcile_completed_media_sessions()
+        self.assertEqual(
+            self.storage.get_download(first["download_id"]).status, DownloadStatus.COMPLETED
+        )
+        woken = []
+        with patch.object(self.service, "_wake_soon", lambda sid, event: woken.append(sid)):
+            await self.service._spawn_media(
+                Event(kind="files_landed", job_id=again_job.id, download_id=first["download_id"])
+            )
+        media = [
+            s for s in self.service.store.get_sessions(AgentKind.MEDIA)
+            if s.download_id == first["download_id"]
+        ]
+        self.assertEqual(sorted(s.job_id for s in media), sorted([self.job.id, again_job.id]))
+        mine = next(s for s in media if s.job_id == again_job.id)
+        self.assertEqual(woken, [mine.id])  # not the earlier request's session
+
     async def test_an_ended_requests_leftovers_are_cleared_after_a_day(self):
         from backend.agents.transfer_control import RELEASE_AFTER, release_finished
 

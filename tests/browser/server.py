@@ -91,7 +91,13 @@ async def tmdb(path, **kwargs):
     if len(parts) > 2 and parts[2] in ("credits", "aggregate_credits"):
         # Fictional people for the fictional fixture titles.
         return {
-            "cast": [{"name": n} for n in ("Mara Ellison", "Tomas Reyes", "June Okafor", "Ilse Brandt", "Sam Whitlow", "Noor Haddad")],
+            "cast": [
+                {"name": n, "character": c}
+                for n, c in (
+                    ("Mara Ellison", "Ines Varga"), ("Tomas Reyes", "Keeper Hale"), ("June Okafor", "Dr. Adaeze"),
+                    ("Ilse Brandt", "Marta"), ("Sam Whitlow", "Young Ben"), ("Noor Haddad", "Radio Voice"),
+                )
+            ],
             "crew": [{"job": "Director", "name": "Petra Lind"}],
         }
     if len(parts) > 2 and parts[2] == "season":

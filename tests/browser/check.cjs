@@ -67,9 +67,9 @@ for(const [route,name] of [['/?view=covers','library'],['/activity','activity'],
  await page.setViewportSize({width:1440,height:1000});
 }
 await page.goto(url+'/title/tv/101');await page.getByRole('button',{name:/Request episodes/}).click();await page.getByRole('dialog').waitFor();
-await page.getByRole('checkbox').first().check();await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'request-episodes-mobile.png'),fullPage:true});
+await page.getByRole('checkbox',{disabled:false}).first().check();await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'request-episodes-mobile.png'),fullPage:true});
 await page.getByRole('button',{name:'Request 1 episode',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
-const jobs=await (await page.request.get(url+'/api/v1/jobs')).json();if(JSON.stringify(jobs[0].wanted_episodes)!=='{"1":[1]}')throw new Error('Incorrect exact scope');
+const jobs=await (await page.request.get(url+'/api/v1/jobs')).json();if(JSON.stringify(jobs[0].wanted_episodes)!=='{"1":[2]}')throw new Error('Incorrect exact scope: '+JSON.stringify(jobs[0].wanted_episodes));
 await page.goto(url+'/activity');await page.getByRole('heading',{name:'Requests',exact:true}).waitFor();await page.waitForTimeout(250);if(await page.getByRole('button',{name:'Resume',exact:true}).first().isVisible())await page.getByRole('button',{name:'Resume',exact:true}).first().click();await page.getByRole('button',{name:'Pause',exact:true}).first().click();await page.getByRole('button',{name:'Resume',exact:true}).first().waitFor();
 await page.screenshot({path:path.join(out,'activity-paused-mobile.png'),fullPage:true});
 fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify({passed:true,errors,responses,watching,exact_scope:jobs[0].wanted_episodes},null,2));

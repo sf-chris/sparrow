@@ -8,19 +8,21 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { ArrowRight, Pause, Play } from "lucide-react";
+import { ArrowRight, Info, Pause, Play } from "lucide-react";
 import { api, post, type Job, type User } from "./api";
 import { Circled } from "./Brand";
 import {
   BackLink,
   Bar,
   Cover,
+  Dialog,
   Empty,
   ErrorNote,
   Flag,
   Loading,
   Page,
   RequestProgress,
+  bytes,
   useResource,
 } from "./ui";
 import { Age, scope } from "./Collection";
@@ -238,10 +240,115 @@ function RequestActions({
   );
 }
 
+type Picked = {
+  id: string;
+  name: string;
+  quality: string;
+  status: string;
+  progress: number;
+  size_bytes: number;
+  added_at: number;
+  files: string[];
+  skipped: number;
+  selected_bytes: number;
+  reused: boolean;
+  error: string;
+};
 type Detail = {
   job: Job;
   journal: { id: string; text: string; ts: number }[];
+  downloads: Picked[];
 };
+
+const pickedState: Record<string, string> = {
+  queued: "Starting",
+  downloading: "Downloading",
+  paused: "Paused",
+  completed: "Downloaded, being checked",
+  seeding: "Downloaded, being checked",
+  organizing: "Being added to your collection",
+  organized: "In your collection",
+  error: "Set aside",
+};
+
+/** The ⓘ on a request: the copy Sparrow chose and the files it is taking. */
+function PickedInfo({ downloads, requestedBy }: { downloads: Picked[]; requestedBy?: string }) {
+  const [shown, setShown] = useState(false);
+  const ordered = [...downloads].sort(
+    (a, b) => Number(a.status === "error") - Number(b.status === "error") || b.added_at - a.added_at,
+  );
+  return (
+    <>
+      <button
+        className="info-button"
+        aria-label="What Sparrow picked"
+        title="What Sparrow picked"
+        onClick={() => setShown(true)}
+      >
+        <Info size={20} strokeWidth={2.25} />
+      </button>
+      {shown && (
+        <Dialog title="What Sparrow picked" onClose={() => setShown(false)}>
+          {requestedBy && <p className="meta">Requested by {requestedBy}</p>}
+          {!ordered.length ? (
+            <p className="muted">Sparrow hasn’t picked a copy yet.</p>
+          ) : (
+            ordered.map((d) => (
+              <dl className="info-list picked" key={d.id}>
+                <div>
+                  <dt>Copy</dt>
+                  <dd className="release">{d.name}</dd>
+                </div>
+                {d.quality && (
+                  <div>
+                    <dt>Quality</dt>
+                    <dd>{d.quality}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt>Taking</dt>
+                  <dd>
+                    {d.files.length
+                      ? `${d.files.length} of ${d.files.length + d.skipped} files${d.selected_bytes ? ` · ${bytes(d.selected_bytes)}` : ""}`
+                      : d.size_bytes
+                        ? `The whole copy · ${bytes(d.size_bytes)}`
+                        : "The whole copy"}
+                  </dd>
+                </div>
+                {!!d.files.length && (
+                  <div>
+                    <dt>Files</dt>
+                    <dd>
+                      {d.files.map((file) => (
+                        <span className="info-line release" key={file}>
+                          {file}
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                )}
+                <div>
+                  <dt>Status</dt>
+                  <dd>
+                    {pickedState[d.status] || d.status}
+                    {d.status === "downloading" ? ` · ${Math.floor(100 * d.progress)}%` : ""}
+                    {d.status === "error" && d.error ? ` · ${d.error}` : ""}
+                  </dd>
+                </div>
+                {d.reused && (
+                  <div>
+                    <dt>Note</dt>
+                    <dd>Reuses a copy an earlier request already started, so finished parts aren’t fetched twice.</dd>
+                  </div>
+                )}
+              </dl>
+            ))
+          )}
+        </Dialog>
+      )}
+    </>
+  );
+}
 
 const timeOf = (ts: number) =>
   new Date(ts * 1000).toLocaleTimeString([], {
@@ -269,7 +376,7 @@ export function RequestDetail() {
         {resource.loading && <Loading page label="Opening this request" />}
       </Page>
     );
-  const { job, journal } = detail;
+  const { job, journal, downloads } = detail;
   const open = job.status !== "complete";
   const from = { from: location.pathname };
   return (
@@ -317,6 +424,7 @@ export function RequestDetail() {
           >
             Open title
           </Link>
+          <PickedInfo downloads={downloads || []} requestedBy={job.requested_by} />
         </div>
       </section>
       <section aria-labelledby="notes">

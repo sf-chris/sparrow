@@ -36,6 +36,7 @@ import {
   useResource,
 } from "./ui";
 import { scope } from "./Collection";
+import { CastRow, SeasonEpisodes, TitleInfo } from "./TitleParts";
 import {
   StorageOptions,
   places,
@@ -103,8 +104,6 @@ export default function Title({ user }: { user: User }) {
     return () => clearInterval(timer);
   }, [movingNow?.id]);
   const [subtitleAsset, setSubtitleAsset] = useState<Asset | null>(null);
-  const [visibleSeason, setVisibleSeason] = useState("all");
-  useEffect(() => setVisibleSeason("all"), [mediaType, tmdbId, itemId]);
   const title = resource.data;
   useEffect(() => {
     if (title) document.title = `${title.title} · Sparrow`;
@@ -127,14 +126,7 @@ export default function Title({ user }: { user: User }) {
       </Page>
     );
   const tv = title.media_type === "tv";
-  const seasons = [...new Set(assets.map((asset) => asset.season || 1))].sort(
-    (a, b) => a - b,
-  );
   const shown = [...assets]
-    .filter(
-      (asset) =>
-        visibleSeason === "all" || String(asset.season || 1) === visibleSeason,
-    )
     .sort(
       (a, b) =>
         (a.season || 0) - (b.season || 0) ||
@@ -173,7 +165,20 @@ export default function Title({ user }: { user: User }) {
               {!!title.cast?.length && (
                 <div>
                   <dt>Starring</dt>
-                  <dd>{title.cast.join(", ")}</dd>
+                  <dd>
+                    {title.cast
+                      .slice(0, 5)
+                      .map((person) => person.name)
+                      .join(", ")}
+                    {title.cast.length > 5 && (
+                      <>
+                        {" "}
+                        <a className="link" href="#cast-list">
+                          more
+                        </a>
+                      </>
+                    )}
+                  </dd>
                 </div>
               )}
               {!!title.makers?.length && (
@@ -211,6 +216,15 @@ export default function Title({ user }: { user: User }) {
                 {tv ? "Request episodes" : "Request"}
               </button>
             )}
+            <TitleInfo
+              title={title}
+              assets={assets}
+              place={
+                title.items.length
+                  ? title.items.map((item) => storedOn(destinations.data, item)).join(", ")
+                  : ""
+              }
+            />
           </div>
           {active && (
             <p className="feature-coming">
@@ -256,25 +270,16 @@ export default function Title({ user }: { user: User }) {
           )}
         </div>
       </article>
-      {assets.length > 0 ? (
+      {tv && title.seasons.some((season) => season.episode_count > 0) ? (
+        <SeasonEpisodes
+          title={title}
+          assets={assets}
+          start={next?.season}
+          onSubtitles={setSubtitleAsset}
+        />
+      ) : assets.length > 0 ? (
         <section className="episodes" aria-labelledby="episodes">
-          <Bar id="episodes" title={tv ? "Episodes" : "Copies"}>
-            {tv && seasons.length > 1 && (
-              <select
-                className="bar-select"
-                aria-label="Show episodes from"
-                value={visibleSeason}
-                onChange={(event) => setVisibleSeason(event.target.value)}
-              >
-                <option value="all">All seasons</option>
-                {seasons.map((season) => (
-                  <option key={season} value={season}>
-                    Season {season}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Bar>
+          <Bar id="episodes" title={tv ? "Episodes" : "Copies"} />
           <ol>
             {shown.map((asset, index) => (
               <Episode
@@ -307,6 +312,7 @@ export default function Title({ user }: { user: User }) {
                 : undefined)}
         </Empty>
       )}
+      <CastRow cast={title.cast || []} />
       {subtitleAsset && (
         <Dialog
           title={`Subtitles${subtitleAsset.episode ? ` · ${episodeCode(subtitleAsset)}` : ""}`}
@@ -587,7 +593,25 @@ function RequestSheet({
   const values = title.preferences?.values
     ? { ...title.preferences.values, ...overrides }
     : undefined;
-  const aired = episodes.filter((e) => e.air_date && e.air_date <= today);
+  // Episodes already here or already asked for show ticked, and aren't asked again.
+  const have = new Set(
+    title.items
+      .flatMap((i) => i.assets)
+      .filter((a) => (a.season ?? 1) === season && a.episode)
+      .map((a) => a.episode!),
+  );
+  const asked = new Set(
+    title.jobs
+      .filter((j) => ["active", "paused"].includes(j.status))
+      .flatMap((j) => j.wanted_episodes[String(season)] || []),
+  );
+  const aired = episodes.filter(
+    (e) =>
+      e.air_date &&
+      e.air_date <= today &&
+      !have.has(e.episode_number) &&
+      !asked.has(e.episode_number),
+  );
   return (
     <Dialog
       title={`Request ${title.title}`}
@@ -667,12 +691,17 @@ function RequestSheet({
                 <div className="checklist-rows">
                   {episodes.map((ep) => (
                     <label
-                      className="check checklist-row"
+                      className={`check checklist-row ${have.has(ep.episode_number) || asked.has(ep.episode_number) ? "settled" : ""}`}
                       key={ep.episode_number}
                     >
                       <input
                         type="checkbox"
-                        checked={selected.includes(ep.episode_number)}
+                        disabled={have.has(ep.episode_number) || asked.has(ep.episode_number)}
+                        checked={
+                          have.has(ep.episode_number) ||
+                          asked.has(ep.episode_number) ||
+                          selected.includes(ep.episode_number)
+                        }
                         onChange={(e) =>
                           setSelected(
                             e.target.checked
@@ -685,10 +714,16 @@ function RequestSheet({
                         {ep.episode_number}
                       </span>
                       <span>{ep.name}</span>
-                      {ep.air_date > today && (
-                        <span className="meta num">
-                          Airs {airs(ep.air_date)}
-                        </span>
+                      {have.has(ep.episode_number) ? (
+                        <span className="meta">In your collection</span>
+                      ) : asked.has(ep.episode_number) ? (
+                        <span className="meta">Requested</span>
+                      ) : (
+                        ep.air_date > today && (
+                          <span className="meta num">
+                            Airs {airs(ep.air_date)}
+                          </span>
+                        )
                       )}
                     </label>
                   ))}

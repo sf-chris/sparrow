@@ -95,7 +95,7 @@ def install_product(app, storage, accounts, nodes, get_service):
         """Cast and crew, fetched once per title and kept with its details.
         A series uses its whole-run cast (plain credits list only the latest
         season's)."""
-        if (details.get("credits") or {}).get("v") == 2 or details.get("cached"):
+        if (details.get("credits") or {}).get("v") == 3 or details.get("cached"):
             return details
         path = "aggregate_credits" if media_type == "tv" else "credits"
         try:
@@ -104,8 +104,16 @@ def install_product(app, storage, accounts, nodes, get_service):
             return details
         current = catalogue.cached_title(media_type, tmdb_id) or details
         current["credits"] = {
-            "v": 2,
-            "cast": [{"name": c.get("name", "")} for c in found.get("cast", [])[:8]],
+            "v": 3,
+            "cast": [
+                {
+                    "name": c.get("name", ""),
+                    "character": c.get("character")
+                    or ((c.get("roles") or [{}])[0].get("character") or ""),
+                    "photo": c.get("profile_path") or "",
+                }
+                for c in found.get("cast", [])[:16]
+            ],
             "directors": [
                 c.get("name", "") for c in found.get("crew", []) if c.get("job") == "Director"
             ][:3],
@@ -246,6 +254,9 @@ def install_product(app, storage, accounts, nodes, get_service):
             and i.media_type.value == media_type
             and catalogue.visible_item(user, i)
         ]
+        by_job = {}
+        for download in storage.get_all_downloads():
+            by_job.setdefault(download.metadata.get("job_id"), []).append(download)
         if media_type == "tv":
             # Episode names for the seasons here, fetched once and kept.
             known = details.get("episodes_by_season") or {}
@@ -277,7 +288,14 @@ def install_product(app, storage, accounts, nodes, get_service):
             ],
             "runtime": details.get("runtime"),
             "genres": [g.get("name", "") for g in details.get("genres", [])][:3],
-            "cast": [c["name"] for c in (details.get("credits") or {}).get("cast", [])][:5],
+            "cast": [
+                {
+                    "name": c["name"],
+                    "character": c.get("character", ""),
+                    "photo_url": image_url(c.get("photo"), "w185"),
+                }
+                for c in (details.get("credits") or {}).get("cast", [])
+            ][:16],
             # Series list their creators; films their directors.
             "makers": [c.get("name", "") for c in details.get("created_by", [])][:3]
             or (details.get("credits") or {}).get("directors", []),
@@ -289,7 +307,7 @@ def install_product(app, storage, accounts, nodes, get_service):
             },
             "items": items,
             "jobs": [
-                j.to_dict()
+                {**public_job(j, by_job.get(j.id, [])), "requested_by": requester(j)}
                 for j in jobs(user)
                 if j.tmdb_id == tmdb_id and j.media_type == media_type
             ],
@@ -318,6 +336,28 @@ def install_product(app, storage, accounts, nodes, get_service):
                 503,
                 "Episode information is unavailable. Existing episodes remain playable.",
             ) from exc
+
+    def requester(job):
+        person = accounts.user(job.user_id) if job.user_id else None
+        return person["name"] if person else ""
+
+    def picked(download):
+        """What a request's download is fetching, for its info panel: the copy's
+        name and the files chosen from it (not a primary surface)."""
+        selection = download.metadata.get("selection") or {}
+        return {
+            "id": download.id,
+            "name": download.name,
+            "quality": download.quality,
+            "status": download.status.value,
+            "progress": download.progress,
+            "size_bytes": download.size_bytes,
+            "added_at": download.added_at,
+            "files": [f.rsplit("/", 1)[-1] for f in selection.get("files", [])][:20],
+            "skipped": selection.get("skipped", 0),
+            "selected_bytes": selection.get("bytes", 0),
+            "reused": bool(download.metadata.get("previous_job_id")),
+        }
 
     def public_job(job, downloads):
         value = job.to_dict()
@@ -361,16 +401,10 @@ def install_product(app, storage, accounts, nodes, get_service):
             d for d in storage.get_all_downloads() if d.metadata.get("job_id") == job.id
         ]
         return {
-            "job": public_job(job, own),
+            "job": {**public_job(job, own), "requested_by": requester(job)},
             "journal": [j.to_dict() for j in get_service().store.get_journal(job.id)],
             "downloads": [
-                {
-                    "id": d.id,
-                    "progress": d.progress,
-                    "status": d.status.value,
-                    "error": d.error_message,
-                    "updated": d.stats_updated_at,
-                }
+                {**picked(d), "error": d.error_message, "updated": d.stats_updated_at}
                 for d in own
             ],
         }
