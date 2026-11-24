@@ -246,6 +246,22 @@ def install_product(app, storage, accounts, nodes, get_service):
             and i.media_type.value == media_type
             and catalogue.visible_item(user, i)
         ]
+        if media_type == "tv":
+            # Episode names for the seasons here, fetched once and kept.
+            known = details.get("episodes_by_season") or {}
+            owned = {
+                a["season"]
+                for i in items
+                for a in i["assets"]
+                if a.get("season") is not None and str(a["season"]) not in known
+            }
+            for season in sorted(owned)[:4]:
+                try:
+                    await season_detail(tmdb_id, season, request)
+                except HTTPException:
+                    break
+            if owned:
+                details = catalogue.cached_title("tv", tmdb_id) or details
         return {
             "tmdb_id": tmdb_id,
             "media_type": media_type,
