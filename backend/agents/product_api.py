@@ -15,9 +15,42 @@ from .runtime import ToolError
 from ..configuration import (
     apply_config_update, public_config, settle_media_folders, suggested_media_folders,
 )
-from ..models import SparrowConfig
+from ..models import DownloadStatus, SparrowConfig
 from ..services.library_view import build_library_view
 
+
+def transfer_summary(downloads):
+    """A request's downloads as one plain reading for the app (no names,
+    hashes or peer counts): downloading, paused, checking (landed and being
+    verified) or done. None while there is nothing downloading yet."""
+    current = [d for d in downloads if d.status != DownloadStatus.ERROR]
+    if not current:
+        return None
+    unfinished = [d for d in current if d.status != DownloadStatus.ORGANIZED]
+    if not unfinished:
+        return {"state": "done", "progress": 1.0, "eta_seconds": -1, "speed": 0}
+    moving = [
+        d
+        for d in unfinished
+        if d.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING)
+    ]
+    if moving:
+        state = "downloading"
+    elif any(d.status == DownloadStatus.PAUSED for d in unfinished):
+        state = "paused"
+    else:
+        state = "checking"
+    etas = [d.eta_seconds for d in moving if (d.eta_seconds or 0) > 0]
+    return {
+        "state": state,
+        "progress": round(
+            sum(min(1.0, max(0.0, d.progress or 0.0)) for d in unfinished)
+            / len(unfinished),
+            3,
+        ),
+        "eta_seconds": max(etas) if etas else -1,
+        "speed": sum(d.download_speed or 0 for d in moving),
+    }
 
 def image_url(path, size="w500"):
     if not path:
@@ -236,41 +269,50 @@ def install_product(app, storage, accounts, nodes, get_service):
                 "Episode information is unavailable. Existing episodes remain playable.",
             ) from exc
 
+    def public_job(job, downloads):
+        value = job.to_dict()
+        value["transfer"] = transfer_summary(downloads)
+        session = get_service().store.get_session(job.session_id)
+        if (
+            job.status == JobStatus.ACTIVE
+            and session
+            and session.status == SessionStatus.HIBERNATING
+            and (
+                session.outcome
+                in (
+                    CaseState.NEEDS_INPUT,
+                    CaseState.BUDGET_LIMITED,
+                    CaseState.FAILED,
+                )
+                or any(
+                    word in session.wake_reason.lower()
+                    for word in ("limit", "budget", "reasoning service", "error")
+                )
+            )
+        ):
+            value["state_line"] = session.wake_reason
+            value["needs_attention"] = True
+        return value
+
     @router.get("/jobs")
     def list_jobs(request: Request):
-        output = []
-        for job in jobs(request.state.user):
-            value = job.to_dict()
-            session = get_service().store.get_session(job.session_id)
-            if (
-                job.status == JobStatus.ACTIVE
-                and session
-                and session.status == SessionStatus.HIBERNATING
-                and (
-                    session.outcome
-                    in (
-                        CaseState.NEEDS_INPUT,
-                        CaseState.BUDGET_LIMITED,
-                        CaseState.FAILED,
-                    )
-                    or any(
-                        word in session.wake_reason.lower()
-                        for word in ("limit", "budget", "reasoning service", "error")
-                    )
-                )
-            ):
-                value["state_line"] = session.wake_reason
-                value["needs_attention"] = True
-            output.append(value)
-        return output
+        by_job = {}
+        for download in storage.get_all_downloads():
+            by_job.setdefault(download.metadata.get("job_id"), []).append(download)
+        return [
+            public_job(job, by_job.get(job.id, []))
+            for job in jobs(request.state.user)
+        ]
 
     @router.get("/jobs/{job_id}")
     def job_detail(job_id: str, request: Request):
         job = job_for(request.state.user, job_id)
-        service = get_service()
+        own = [
+            d for d in storage.get_all_downloads() if d.metadata.get("job_id") == job.id
+        ]
         return {
-            "job": job.to_dict(),
-            "journal": [j.to_dict() for j in service.store.get_journal(job.id)],
+            "job": public_job(job, own),
+            "journal": [j.to_dict() for j in get_service().store.get_journal(job.id)],
             "downloads": [
                 {
                     "id": d.id,
@@ -279,8 +321,7 @@ def install_product(app, storage, accounts, nodes, get_service):
                     "error": d.error_message,
                     "updated": d.stats_updated_at,
                 }
-                for d in storage.get_all_downloads()
-                if d.metadata.get("job_id") == job.id
+                for d in own
             ],
         }
 

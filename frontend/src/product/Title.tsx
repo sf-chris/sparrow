@@ -5,7 +5,7 @@ import { Still, Tick } from "./Brand";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useEffect, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import {
   api,
   post,
@@ -16,6 +16,7 @@ import {
   type Preferences,
 } from "./api";
 import {
+  BackLink,
   Bar,
   Cover,
   Dialog,
@@ -26,6 +27,7 @@ import {
   Loading,
   Meter,
   Page,
+  RequestProgress,
   bytes,
   duration,
   episodeCode,
@@ -54,11 +56,7 @@ const airs = (date: string) =>
 export default function Title({ user }: { user: User }) {
   const { mediaType, tmdbId, itemId } = useParams();
   const location = useLocation();
-  const previous = location.state?.from;
-  const returnTo =
-    typeof previous === "string" && /^\/(discover)?(\?|$)/.test(previous)
-      ? previous
-      : "/";
+  const from = { from: location.pathname + location.search };
   const resource = useResource(async () => {
     if (itemId) {
       const item = await api<Item>(`/items/${itemId}`);
@@ -119,19 +117,13 @@ export default function Title({ user }: { user: User }) {
   const active = title?.jobs.find((j) =>
     ["active", "paused"].includes(j.status),
   );
-  const backTo = returnTo.startsWith("/discover") ? "Find" : "Guide";
-  const back = (
-    <Link className="back" to={returnTo} aria-label={`Back to ${backTo}`}>
-      <ArrowLeft size={18} strokeWidth={2.5} />
-      {backTo}
-    </Link>
-  );
+  const back = <BackLink from={location.state?.from} />;
   if (!title)
     return (
       <Page title="" className="title-page">
         {back}
         <ErrorNote error={resource.error} retry={resource.refresh} />
-        {resource.loading && <Loading label="Opening this title" />}
+        {resource.loading && <Loading page label="Opening this title" />}
       </Page>
     );
   const tv = title.media_type === "tv";
@@ -215,8 +207,9 @@ export default function Title({ user }: { user: User }) {
                 {active.status === "paused" ? "Paused" : "Coming up"}
               </strong>
               <span>{scope(active)}</span>
-              <Link className="link" to={`/activity?request=${active.id}`}>
-                See request
+              <RequestProgress job={active} />
+              <Link className="link" to={`/activity/${active.id}`} state={from}>
+                Details
               </Link>
             </p>
           )}
@@ -288,8 +281,8 @@ export default function Title({ user }: { user: User }) {
           title={active ? "Coming up." : "Not in your collection."}
           action={
             active ? (
-              <Link className="btn" to={`/activity?request=${active.id}`}>
-                See request
+              <Link className="btn" to={`/activity/${active.id}`} state={from}>
+                Details
               </Link>
             ) : undefined
           }

@@ -115,6 +115,7 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
                 "title": "Fixture",
                 "runtime": 0.4,
                 "original_language": "en",
+                "release_date": "2019-03-01",
             }
         )
 
@@ -182,6 +183,9 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
             True,
         )
         self.assertTrue(recorded["verified"])
+        # The guide sorts and groups by year, so a placed title carries it.
+        placed = [i for i in self.storage.get_library() if i.tmdb_id == 42]
+        self.assertEqual([i.year for i in placed], [2019])
         self.assertTrue(source.exists())
         self.assertEqual(
             source.read_bytes(), (self.library / "Fixture/movie.mp4").read_bytes()

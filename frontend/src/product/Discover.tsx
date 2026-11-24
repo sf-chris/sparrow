@@ -3,7 +3,7 @@ import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { Search, ArrowRight } from "lucide-react";
 import { api, post, type Item } from "./api";
 import { Tick } from "./Brand";
-import { Bar, Cover, Empty, ErrorNote, Loading, useResource } from "./ui";
+import { Bar, Cover, ErrorNote, Loading, useResource } from "./ui";
 
 type Card = {
   tmdb_id: number;
@@ -22,6 +22,30 @@ type Research = {
   state: string;
   status_line: string;
 };
+/** Lowercase letters and digits only, accents dropped. */
+const plain = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+/** Whether the text names one of these titles (or the start of one, as while
+ * typing, or a title plus a little more, like "breaking bad season 2").
+ * Anything else reads as a description, which goes to Sparrow. */
+function namesTitle(cards: Card[], text: string) {
+  const query = plain(text);
+  const words = query.split(" ").length;
+  return cards.some((card) => {
+    const name = plain(card.title);
+    return (
+      name.startsWith(query) ||
+      (query.startsWith(name + " ") && name.split(" ").length * 2 >= words)
+    );
+  });
+}
+
 const ideas = [
   "A mystery we can finish tonight",
   "Funny and under 90 minutes",
@@ -40,6 +64,8 @@ export default function Discover() {
   const [asking, setAsking] = useState(false);
   const [searched, setSearched] = useState("");
   const [error, setError] = useState("");
+  // The text Sparrow was last asked about, so a pause never asks twice.
+  const [asked, setAsked] = useState(params.get("session") ? query.trim() : "");
   const input = useRef<HTMLInputElement>(null);
   const owned = useResource(() => api<Item[]>("/catalogue"));
   const inGuide = useMemo(
@@ -118,18 +144,36 @@ export default function Discover() {
       { replace: true },
     );
   }
-  async function ask() {
+  // A description (no title matches what was typed) goes to Sparrow once
+  // typing pauses, rather than ending at "no title called…".
+  useEffect(() => {
+    const text = query.trim();
+    if (
+      text.length < 3 ||
+      searching ||
+      searched !== text ||
+      asking ||
+      asked === text ||
+      namesTitle(titles, text)
+    )
+      return;
+    const timer = window.setTimeout(() => void ask(text), 700);
+    return () => clearTimeout(timer);
+  }, [query, searched, searching, titles, asking, asked]);
+  async function ask(text = query.trim()) {
     setError("");
+    setAsked(text);
     setAsking(true);
+    remember(text);
     try {
       const result = await post<{ id: string }>("/discovery", {
-        message: query,
+        message: text,
         session_id: identity || undefined,
       });
       setResearch(null);
       setIdentity(result.id);
       setPollVersion((v) => v + 1);
-      remember(query, result.id);
+      remember(text, result.id);
     } catch (e) {
       setError((e as Error).message);
       setAsking(false);
@@ -208,7 +252,13 @@ export default function Discover() {
         role="search"
         onSubmit={(event) => {
           event.preventDefault();
-          document.querySelector<HTMLElement>(".results [data-nav]")?.focus();
+          const text = query.trim();
+          if (text.length >= 2 && !namesTitle(titles, text)) {
+            if (asked !== text && !asking) void ask(text);
+          } else
+            document
+              .querySelector<HTMLElement>('section[aria-labelledby="titles"] .results [data-nav]')
+              ?.focus();
         }}
       >
         <label className="finder-field">
@@ -250,7 +300,7 @@ export default function Discover() {
               Start over
             </button>
           </Bar>
-          {asking && <Loading label="Finding picks" />}
+          {asking && <Loading label="Sparrow is looking" />}
           {research?.message && <p className="pick-note">{research.message}</p>}
           {research && !asking && !research.message && (
             <p className="muted pick-status" role="status">
@@ -260,20 +310,12 @@ export default function Discover() {
           {!!research?.cards.length && rows(research.cards)}
         </section>
       )}
-      {typed && (!identity || titles.length > 0) && (
+      {typed && (titles.length > 0 || (searching && !identity)) && (
         <section aria-labelledby="titles">
           <Bar id="titles" title="Titles">
             {searching && <span>Searching…</span>}
           </Bar>
-          {titles.length
-            ? rows(titles)
-            : searched &&
-              !searching &&
-              !error && (
-                <Empty title={`No title called “${searched}”.`}>
-                  Check the spelling, or ask Sparrow.
-                </Empty>
-              )}
+          {rows(titles)}
         </section>
       )}
       {!query && !identity && (
@@ -287,8 +329,7 @@ export default function Discover() {
                   data-nav
                   onClick={() => {
                     setQuery(idea);
-                    remember(idea);
-                    input.current?.focus();
+                    void ask(idea);
                   }}
                 >
                   <span>{idea}</span>

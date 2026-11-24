@@ -152,6 +152,13 @@ export type Job = {
   preferences: Effective;
   revision: number;
   needs_attention?: boolean;
+  poster_path?: string;
+  transfer?: {
+    state: "downloading" | "paused" | "checking" | "done";
+    progress: number;
+    eta_seconds: number;
+    speed: number;
+  } | null;
 };
 export type Title = {
   tmdb_id: number;

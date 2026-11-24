@@ -8,13 +8,14 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { api, type Auth as AuthState } from "./product/api";
-import { ErrorNote, Loading, useResource } from "./product/ui";
+import { ErrorNote, useResource } from "./product/ui";
+import { Logotype } from "./product/Brand";
 import Auth from "./product/Auth";
 import Landing from "./product/Landing";
 import Shell from "./product/Shell";
 import Collection from "./product/Collection";
 import Title from "./product/Title";
-import Activity from "./product/Activity";
+import Activity, { RequestDetail } from "./product/Activity";
 import Preferences from "./product/Preferences";
 import Security from "./product/Security";
 import Logs from "./product/Logs";
@@ -76,11 +77,14 @@ export default function App() {
   }, [auth.refresh]);
   if (!auth.data)
     return (
-      <main className="boot">
+      <main className={`boot ${auth.error ? "" : "splash"}`}>
         {auth.error ? (
           <ErrorNote error={auth.error} retry={auth.refresh} />
         ) : (
-          <Loading label="Opening Sparrow" />
+          <div className="splash-mark" role="status">
+            <Logotype />
+            <span className="sr-only">Opening Sparrow</span>
+          </div>
         )}
       </main>
     );
@@ -144,6 +148,7 @@ export default function App() {
               <Route path="/items/:itemId" element={<Title user={user} />} />
               <Route path="/watch/:assetId" element={<Watch />} />
               <Route path="/activity" element={<Activity user={user} />} />
+              <Route path="/activity/:jobId" element={<RequestDetail />} />
               <Route path="/discover" element={<Discover />} />
               <Route
                 path="/settings"

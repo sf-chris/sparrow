@@ -236,6 +236,17 @@ def _classify_media_type(torrent_name: str) -> MediaType:
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
 
+async def fill_missing_years():
+    """Titles placed before their year was recorded take it from the catalogue."""
+    from .agents.node_tools import title_year
+
+    for item in storage.get_library():
+        if item.tmdb_id and not item.year:
+            details = catalogue.cached_title(item.media_type.value, item.tmdb_id) or {}
+            if title_year(details):
+                await storage.update_library_item(item.id, year=title_year(details))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global agent_service
@@ -251,6 +262,7 @@ async def lifespan(app: FastAPI):
     agent_service = AgentService(storage, DATA_DIR, broadcast)
     subtitles.attach(agent_service)
     subtitles.recover()
+    await fill_missing_years()
     discovery.register()
     from .services import managed_transmission
     # Bring back Sparrow's own Transmission without delaying startup.

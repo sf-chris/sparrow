@@ -142,7 +142,10 @@ Everything new lives in `backend/agents/`:
   vision model (only with the switch on, within the title's allowance), an
   archive track for the same episode, then writing. A
   human-made track is verified, never edited (only OCR and timing fixes): a
-  failing one is set aside for the next source. Sparrow-written tracks are
+  failing one is set aside for the next source. Ads and release credits
+  ("www.…", "Subtitles by …") are the one exception: code shortlists them,
+  the cheap model confirms, and those whole captions are deleted
+  (`subtitle_promos.py`). Sparrow-written tracks are
   edited through tools that re-measure every change. Checker and manager spend
   share one per-title allowance (the household per-case limit unless
   `SPARROW_SUBTITLE_BUDGET` is set); the design target is under $1 per title.

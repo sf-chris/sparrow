@@ -53,6 +53,9 @@ const path = require('node:path');
     const prompt = page.getByRole('searchbox', { name: 'Find a title or describe a mood', exact: true });
     if (await prompt.inputValue() !== 'A mystery we can finish tonight') throw new Error('Discovery suggestion did not fill the prompt');
     if (!new URL(page.url()).searchParams.get('q')) throw new Error('Discovery draft not preserved in URL');
+    // An idea is a description, so it goes straight to Sparrow (the fixture has no
+    // reasoning provider, so that ends in a plain error and the draft stays).
+    await page.getByRole('alert').filter({ hasText: 'reasoning provider' }).waitFor();
     if (await page.getByRole('button', { name: 'Ask Sparrow', exact: true }).isDisabled()) throw new Error('A filled draft should offer Ask Sparrow');
     await audit('discovery-prompt', [390, 1440]);
     await page.reload(); await prompt.waitFor();

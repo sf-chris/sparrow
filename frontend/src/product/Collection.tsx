@@ -16,6 +16,7 @@ import {
   ErrorNote,
   Flag,
   Loading,
+  RequestProgress,
   Meter,
   duration,
   episodeCode,
@@ -213,6 +214,37 @@ export default function Collection({ user }: { user: User }) {
   const today = new Date();
   const from = { from: location.pathname + location.search };
   const filtered = !!(query || type || state);
+  const comingUp = coming.length > 0 && (
+    <section aria-labelledby="coming-up">
+      <Bar id="coming-up" title="Coming up">
+        <Link to="/activity">
+          See all<span className="sr-only"> requests</span>
+        </Link>
+      </Bar>
+      <ol className="slots">
+        {coming.map((job) => (
+          <li key={job.id}>
+            <Link
+              className="slot"
+              data-nav
+              to={`/activity/${job.id}`}
+              state={from}
+            >
+              <Age seconds={job.updated_at} />
+              <span className="slot-body">
+                <Circled>
+                  <strong>{job.title}</strong>
+                </Circled>
+                <span className="meta">{scope(job)}</span>
+                <RequestProgress job={job} />
+              </span>
+              <Flag value={job.needs_attention ? "attention" : job.status} />
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
   return (
     <main id="main-content" className="page guide">
       <header className="dayband">
@@ -232,8 +264,10 @@ export default function Collection({ user }: { user: User }) {
       {notice}
       <ErrorNote error={resource.error} retry={resource.refresh} />
       {!resource.data ? (
-        resource.loading && <Loading label="Loading the guide" />
+        resource.loading && <Loading page label="Loading the guide" />
       ) : !all.length ? (
+        <>
+        {comingUp && <div className="guide-coming-only">{comingUp}</div>}
         <Empty
           title="Nothing listed yet."
           action={
@@ -259,6 +293,7 @@ export default function Collection({ user }: { user: User }) {
               ? "Import films and series you have, or request something new."
               : "Find a film or series and request it."}
         </Empty>
+        </>
       ) : (
         <div
           className={`guide-columns ${continuing.length || coming.length ? "" : "single"}`}
@@ -349,39 +384,7 @@ export default function Collection({ user }: { user: User }) {
                   )}
                 </section>
               )}
-              {coming.length > 0 && (
-                <section aria-labelledby="coming-up">
-                  <Bar id="coming-up" title="Coming up">
-                    <Link to="/activity">
-                      See all<span className="sr-only"> requests</span>
-                    </Link>
-                  </Bar>
-                  <ol className="slots">
-                    {coming.map((job) => (
-                      <li key={job.id}>
-                        <Link
-                          className="slot"
-                          data-nav
-                          to={`/activity?request=${job.id}`}
-                        >
-                          <Age seconds={job.updated_at} />
-                          <span className="slot-body">
-                            <Circled>
-                              <strong>{job.title}</strong>
-                            </Circled>
-                            <span className="meta">{scope(job)}</span>
-                          </span>
-                          <Flag
-                            value={
-                              job.needs_attention ? "attention" : job.status
-                            }
-                          />
-                        </Link>
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-              )}
+              {comingUp}
             </div>
           )}
           <section className="guide-main" aria-labelledby="collection">

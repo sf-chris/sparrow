@@ -9,9 +9,10 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { Scissors, X } from "lucide-react";
+import { ArrowLeft, Scissors, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Bird } from "./Brand";
-import type { Asset, Item } from "./api";
+import type { Asset, Item, Job } from "./api";
 
 export function Page({
   title,
@@ -112,12 +113,102 @@ export function ErrorNote({
   );
 }
 
-export function Loading({ label = "Loading" }: { label?: string }) {
+/** `page` centres it in the space the page will fill, so a screen that is
+ * still arriving looks deliberate rather than empty. */
+export function Loading({
+  label = "Loading",
+  page = false,
+}: {
+  label?: string;
+  page?: boolean;
+}) {
   return (
-    <div className="loading" role="status">
+    <div className={`loading ${page ? "page-loading" : ""}`} role="status">
       <Bird />
       <span>{label}</span>
     </div>
+  );
+}
+
+const backNames: [RegExp, string][] = [
+  [/^\/discover/, "Find"],
+  [/^\/activity/, "Requests"],
+  [/^\/settings/, "Settings"],
+  [/^\/(\?|$)/, "Guide"],
+];
+
+/** Back to the screen that opened this one (history back, so its scroll and
+ * filters return too); straight to `fallback` when opened directly. */
+export function BackLink({
+  from,
+  fallback = "/",
+}: {
+  from?: unknown;
+  fallback?: string;
+}) {
+  const navigate = useNavigate();
+  const known =
+    typeof from === "string" && from.startsWith("/") && !from.startsWith("//");
+  const to = known ? (from as string) : fallback;
+  const name = backNames.find(([pattern]) => pattern.test(to))?.[1] || "Back";
+  return (
+    <Link
+      className="back"
+      to={to}
+      aria-label={name === "Back" ? "Back" : `Back to ${name}`}
+      onClick={(event) => {
+        if (known && (window.history.state?.idx ?? 0) > 0) {
+          event.preventDefault();
+          navigate(-1);
+        }
+      }}
+    >
+      <ArrowLeft size={18} strokeWidth={2.5} />
+      {name}
+    </Link>
+  );
+}
+
+/** Where an open request's download is, in plain words. */
+export function transferLine(job: Job) {
+  const t = job.transfer;
+  const percent = Math.floor(100 * (t?.progress || 0));
+  if (job.status === "paused")
+    return t && percent > 0 ? `Paused at ${percent}%` : "Paused";
+  if (!t) return "Looking for a copy";
+  if (t.state === "checking") return "Checking the file";
+  if (t.state === "done") return "In your collection";
+  if (t.state === "paused") return `Paused at ${percent}%`;
+  if (!percent && !t.speed) return "Starting the download";
+  const left =
+    t.eta_seconds > 0
+      ? t.eta_seconds < 60
+        ? " · almost done"
+        : ` · about ${duration(t.eta_seconds)} left`
+      : !t.speed
+        ? " · waiting for a source"
+        : "";
+  return `Downloading · ${percent}%${left}`;
+}
+
+export function RequestProgress({ job }: { job: Job }) {
+  if (!["active", "paused"].includes(job.status) || job.needs_attention)
+    return null;
+  const t = job.transfer;
+  const percent = Math.floor(100 * (t?.progress || 0));
+  return (
+    <span className={`request-progress ${t?.state || "searching"}`}>
+      {t && ["downloading", "paused"].includes(t.state) ? (
+        <Meter value={percent} label={`Download progress for ${job.title}`} />
+      ) : (
+        job.status === "active" && (
+          <span className="meter working" aria-hidden="true">
+            <span />
+          </span>
+        )
+      )}
+      <span className="meta">{transferLine(job)}</span>
+    </span>
   );
 }
 

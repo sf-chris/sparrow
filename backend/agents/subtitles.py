@@ -26,7 +26,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..configuration import effective_altprovider_key
-from . import altprovider_loop, profiles, subtitle_archive, subtitle_contract
+from . import altprovider_loop, profiles, subtitle_archive, subtitle_contract, subtitle_promos
 from . import subtitle_review as pages_
 from .account_api import administrator
 from .media_state import language_code
@@ -437,8 +437,11 @@ class Subtitles:
             ).fetchall()
         for row in rows:
             self.launch(row["id"])
+        self.cleaning = asyncio.create_task(self.clean_promotions(delay=30))
 
     async def stop(self):
+        if getattr(self, "cleaning", None):
+            self.cleaning.cancel()
         tasks = list(self.tasks.values())
         for task in tasks:
             task.cancel()
@@ -656,6 +659,88 @@ class Subtitles:
             )
         return operation
 
+    async def strip_promotions(self, task, asset, track_id):
+        """Delete ads and release credits ("www.…", "Subtitles by …") from a
+        newly prepared source before anyone sees it (subtitle_promos). Whole
+        captions only, never reworded; a failed check leaves the track as it
+        is, to be checked again later. Returns the track to use."""
+        track = self.track(track_id)
+        data = track["data"]
+        if data.get("promotions_checked") or data.get("source") in ("upload", "written"):
+            return track_id
+        service = self.get_service()
+        try:
+            cues = await self.cues(asset["node_id"], data["path"], data["version"])
+            remove, spend = await subtitle_promos.find(
+                self.contract_caller(service.cheap_model()), cues
+            )
+            if spend:
+                self.charge_checkers(task, {}, [spend])
+            if not remove:
+                self.save_track(track_id, promotions_checked=True)
+                return track_id
+            from .subtitle_worker import render
+
+            dropped = set(remove)
+            text = render([c for i, c in enumerate(cues) if i not in dropped], vtt=True)
+            new_id = await self.prepare(
+                task,
+                asset,
+                {"id": data["source_id"], "source": data["source"], "title": data.get("title", "")},
+                text,
+                "vtt",
+                data["audio_index"],
+                suffix=":promotions:" + hashlib.sha256(text.encode()).hexdigest()[:16],
+            )
+        except Exception as exc:  # an unavailable model or storage must not cost the subtitles
+            logger.warning("subtitle ad check skipped for %s: %s", track_id, exc)
+            return track_id
+        self.save_track(
+            new_id,
+            original_path=data.get("original_path"),
+            original_version=data.get("original_version"),
+            derived_from=track_id,
+            correction=data.get("correction"),
+            timing=data.get("timing"),
+            edits=(data.get("edits") or [])[-20:]
+            + [{"kind": "promotions", "removed": [cues[i]["text"][:120] for i in remove][:10], "automatic": "promotions"}],
+            promotions_checked=True,
+        )
+        if new_id != track_id:
+            self.save_track(track_id, state="superseded")
+        logger.info("removed %d promotional captions from subtitle track %s", len(remove), track_id)
+        return new_id
+
+    async def clean_promotions(self, delay=0):
+        """Once per track: the same ad check for subtitles prepared before it
+        existed (finished requests included). The task follows the cleaned copy."""
+        await asyncio.sleep(delay)  # storage reconnects first after a restart
+        with self.accounts.connect() as db:
+            rows = db.execute("SELECT id FROM subtitle_tasks").fetchall()
+        for row in rows:
+            task = self.task(row["id"])
+            track_id = (task["data"] or {}).get("track_id")
+            track = track_id and self.track(track_id)
+            if not track or track["state"] != "ready" or track["data"].get("promotions_checked"):
+                continue
+            # Its request may have finished long ago; only the copy must match.
+            view = {**task, "data": {**task["data"], "job_id": ""}}
+            try:
+                _, asset = self.authority(view)
+            except ToolError:
+                continue
+            new_id = await self.strip_promotions(view, asset, track_id)
+            if new_id != track_id:
+                current = self.task(task["id"])
+                data = current["data"]
+                self.update(
+                    current,
+                    current["state"],
+                    data.get("message", ""),
+                    track_id=new_id,
+                    measured=new_id if data.get("measured") == track_id else data.get("measured"),
+                )
+
     async def find(self, task, user, asset):
         """Prepare the next untried candidate as a playable track."""
         lock = self.node_locks.setdefault(asset["node_id"], asyncio.Lock())
@@ -735,6 +820,7 @@ class Subtitles:
                 track = await self.prepare(
                     task, asset, candidate, text, format_name, task["data"]["audio_index"]
                 )
+                track = await self.strip_promotions(task, asset, track)
             except (NodeError, ToolError, httpx.HTTPError, ValueError) as exc:
                 attempts.append(
                     {"source_id": candidate["id"], "outcome": "failed", "reason": str(exc)[:500]}
@@ -1716,6 +1802,7 @@ class Subtitles:
                 new_id = await self.prepare(
                     task, asset, candidate, text, format_name, task["data"]["audio_index"]
                 )
+                new_id = await self.strip_promotions(task, asset, new_id)
             except (NodeError, ToolError, httpx.HTTPError, ValueError) as exc:
                 attempts = task["data"].get("attempts", []) + [
                     {"source_id": identity, "outcome": "failed", "reason": str(exc)[:500]}

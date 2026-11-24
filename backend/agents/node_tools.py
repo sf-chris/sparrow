@@ -25,6 +25,11 @@ from ..models import Download, DownloadStatus, LibraryItem, MediaType
 from ..services.torrent_client import build_magnet
 
 
+def title_year(details):
+    """A title's year from its catalogue details (first release or first air)."""
+    text = (details.get("release_date") or details.get("first_air_date") or "")[:4]
+    return int(text) if text.isdigit() else None
+
 def components(tb):
     if not hasattr(tb, "nodes"):
         from types import SimpleNamespace
@@ -1120,6 +1125,7 @@ def storage_tools(tb):
             item.size_bytes = facts["size_bytes"]
         else:
             item.set_episode_file(season, episode, media)
+        item.year = item.year or title_year(details) or job.year or None
         await tb.storage.add_library_item(item)
         await tb.broadcast({"type": "library_update", "data": item.to_dict()})
         subtitles = getattr(tb, "subtitles", None)
