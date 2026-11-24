@@ -156,6 +156,11 @@ Everything new lives in `backend/agents/`:
   including timing measurement and correction for foreign dialogue, is built in
   and makes no model call; no setup-agent implementation is planned now.
   Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
+  Z.ai GLM models run through the same loop (`glm-` names; `glm_loop.py`, Chat
+  Completions; key in Settings or `ZAI_API_KEY`): `glm-5.3-flash` cheap,
+  `glm-5.3` smart, and with a Z.ai key the subtitle roles default to them.
+  GLM's default effort is max, so a GLM call always sends one. Compared with the
+  current setup in `docs/agentic-audit/GLM_BENCHMARK_2026-11-25.md`.
   These defaults are the role profiles in `profiles.py`; sessions and ledger
   rows record the profile id and version they ran under. Effort is sent only
   where a model accepts it (never to Small 4.5). `SPARROW_PROFILES` (JSON per
