@@ -37,7 +37,7 @@ await page.getByRole('heading',{level:1,name:/^(Mon|Tues|Wednes|Thurs|Fri|Satur|
 await page.getByRole('link',{name:'Open The Quiet Planet'}).waitFor();
 await page.screenshot({path:path.join(out,'home-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).click();await page.getByRole('heading',{name:'The Quiet Planet',exact:true}).waitFor();
-await page.getByText('Mara Ellison, Tomas Reyes',{exact:false}).waitFor();if(!(await page.getByText('Directed by',{exact:true}).count()))throw new Error('Title details (cast, director) missing');
+await page.getByText('Mara Ellison, Tomas Reyes',{exact:false}).first().waitFor();await page.getByRole('button',{name:'Details',exact:true}).click();if(!(await page.getByRole('dialog').getByText('Directed by',{exact:true}).count()))throw new Error('Title details (cast, director) missing');await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});
 await page.screenshot({path:path.join(out,'movie-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:/^(Play|Resume)\b/}).first().click();
 await page.locator('video').waitFor();await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,{timeout:15000});

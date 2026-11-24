@@ -147,7 +147,6 @@
 [data-theme="cinema"]
   :is(
     .page-head,
-    .feature,
     .section-head,
     .preference-group > legend,
     .setup-heading,
@@ -253,7 +252,7 @@
   box-shadow: none;
   background: rgb(255 255 255 / 0.3);
 }
-[data-theme="cinema"] :is(.tonight-art, .feature-art .still) {
+[data-theme="cinema"] .tonight-art {
   border-radius: 14px;
 }
 @media (min-width: 48rem) {
@@ -435,8 +434,7 @@
     .setup-heading,
     .choice strong,
     .order-head h3,
-    .theatre-top h1,
-    .feature-coming strong
+    .theatre-top h1
   ) {
   font-weight: 800;
   letter-spacing: -0.015em;
@@ -613,7 +611,7 @@
 [data-theme="clear"] .cover {
   border-radius: 6px;
 }
-[data-theme="clear"] :is(.tonight-art, .feature-art .still) {
+[data-theme="clear"] .tonight-art {
   border-radius: 10px;
 }
 [data-theme="clear"] .entry {
@@ -726,7 +724,6 @@
     .choice strong,
     .order-head h3,
     .theatre-top h1,
-    .feature-coming strong,
     .dayband p
   ) {
   font-weight: 700;
@@ -859,7 +856,7 @@
   transform: rotate(0) translateY(-5px);
   box-shadow: 7px 9px 0 var(--ink);
 }
-[data-theme="saturday"] :is(.tonight-art, .feature-art .still) {
+[data-theme="saturday"] .tonight-art {
   border: 3px solid var(--ink);
   border-radius: 18px;
   box-shadow: 5px 5px 0 var(--ink);
@@ -909,7 +906,7 @@
   ) {
   border-bottom: 3px dashed var(--rule);
 }
-[data-theme="saturday"] :is(.page-head, .feature) {
+[data-theme="saturday"] .page-head {
   border-width: 0;
 }
 [data-theme="saturday"]

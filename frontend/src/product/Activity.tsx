@@ -285,7 +285,7 @@ function PickedInfo({ downloads, requestedBy }: { downloads: Picked[]; requested
         title="What Sparrow picked"
         onClick={() => setShown(true)}
       >
-        <Info size={20} strokeWidth={2.25} />
+        <Info size={18} strokeWidth={2} />
       </button>
       {shown && (
         <Dialog title="What Sparrow picked" onClose={() => setShown(false)}>
@@ -418,7 +418,7 @@ export function RequestDetail() {
             />
           )}
           <Link
-            className="btn quiet"
+            className={open ? "btn quiet" : "btn"}
             to={`/title/${job.media_type}/${job.tmdb_id}`}
             state={from}
           >

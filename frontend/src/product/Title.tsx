@@ -135,139 +135,114 @@ export default function Title({ user }: { user: User }) {
   const seasonCount = title.seasons.filter((s) => s.season_number > 0).length;
   return (
     <Page title="" className="title-page">
-      {back}
       <ErrorNote error={resource.error} retry={resource.refresh} />
-      <article className={`feature ${title.backdrop_url ? "" : "portrait"}`}>
-        <div className="feature-art">
-          {title.backdrop_url ? (
-            <Still src={title.backdrop_url} />
-          ) : (
-            <Cover title={title.title} src={title.poster_url} />
-          )}
+      <article className={`hero ${title.backdrop_url ? "" : "hero-poster"}`}>
+        <div className="hero-art" aria-hidden="true">
+          <Still src={title.backdrop_url || title.poster_url} />
         </div>
-        <div className="feature-copy">
-          <h1 className="display">{title.title}</h1>
-          <p className="feature-meta num">
-            {[
-              title.year,
-              tv ? "Series" : "Film",
-              tv && seasonCount
-                ? `${seasonCount} season${seasonCount === 1 ? "" : "s"}`
-                : "",
-              title.runtime ? duration(title.runtime * 60) : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-          {title.overview && <p className="feature-blurb">{title.overview}</p>}
-          {!!(title.cast?.length || title.makers?.length || title.genres?.length) && (
-            <dl className="title-facts">
-              {!!title.cast?.length && (
-                <div>
-                  <dt>Starring</dt>
-                  <dd>
-                    {title.cast
-                      .slice(0, 5)
-                      .map((person) => person.name)
-                      .join(", ")}
-                    {title.cast.length > 5 && (
-                      <>
-                        {" "}
-                        <a className="link" href="#cast-list">
-                          more
-                        </a>
-                      </>
-                    )}
-                  </dd>
-                </div>
-              )}
-              {!!title.makers?.length && (
-                <div>
-                  <dt>{tv ? "Created by" : "Directed by"}</dt>
-                  <dd>{title.makers.join(", ")}</dd>
-                </div>
-              )}
-              {!!title.genres?.length && (
-                <div>
-                  <dt>Genres</dt>
-                  <dd>{title.genres.join(", ")}</dd>
-                </div>
-              )}
-            </dl>
-          )}
-          <div className="actions">
-            {next && (
-              <Link
-                className="btn primary big"
-                data-nav
-                to={`/watch/${next.id}`}
-              >
-                <Play size={18} fill="currentColor" strokeWidth={0} />
-                {inProgress(next) ? "Resume" : "Play"}
-                {next.episode ? ` ${episodeCode(next)}` : ""}
-              </Link>
-            )}
-            {user.role !== "viewer" && title.tmdb_id && (
-              <button
-                className={`btn ${next ? "" : "primary"} big`}
-                data-nav
-                onClick={() => setRequestOpen(true)}
-              >
-                {tv ? "Request episodes" : "Request"}
-              </button>
-            )}
-            <TitleInfo
-              title={title}
-              assets={assets}
-              place={
-                title.items.length
-                  ? title.items.map((item) => storedOn(destinations.data, item)).join(", ")
-                  : ""
-              }
-            />
-          </div>
-          {active && (
-            <p className="feature-coming">
-              <strong>
-                {active.status === "paused" ? "Paused" : "Coming up"}
-              </strong>
-              <span>{scope(active)}</span>
-              <RequestProgress job={active} />
-              <Link className="link" to={`/activity/${active.id}`} state={from}>
-                Details
-              </Link>
+        <div className="hero-copy">
+          {back}
+          <div className="hero-main">
+            <h1 className="display">{title.title}</h1>
+            <p className="hero-meta num">
+              {[
+                title.year,
+                tv ? "Series" : "Film",
+                tv && seasonCount
+                  ? `${seasonCount} season${seasonCount === 1 ? "" : "s"}`
+                  : "",
+                title.runtime ? duration(title.runtime * 60) : "",
+                (title.genres || []).slice(0, 2).join(", "),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
-          )}
-          {active?.placement && places(destinations.data).count > 1 && (
-            <p className="meta">{active.placement}</p>
-          )}
-          {places(destinations.data).count > 1 &&
-            title.items.map((item) => (
-              <p className="meta stored-on" key={item.id}>
-                {movingNow?.item_id === item.id
-                  ? `Moving to ${movingNow.to} · ${movingNow.copied} of ${movingNow.files} files`
-                  : `On ${storedOn(destinations.data, item)}`}
-                {user.role === "admin" && movingNow?.item_id !== item.id && (
-                  <button className="link" onClick={() => setMoving(item)}>
-                    Move
-                  </button>
-                )}
+            {title.overview && <p className="hero-blurb">{title.overview}</p>}
+            {!!title.cast?.length && (
+              <p className="hero-cast">
+                <span>Starring</span>{" "}
+                {title.cast
+                  .slice(0, 3)
+                  .map((person) => person.name)
+                  .join(", ")}
               </p>
-            ))}
-          {assets.some((a) => a.state === "unavailable") && (
-            <p className="muted">
-              {tv
-                ? "Some episodes are on storage that’s offline."
-                : "This film is on storage that’s offline."}
-            </p>
-          )}
-          {user.role !== "viewer" && title.tmdb_id && (
-            <CollectionCare
-              mediaType={title.media_type}
-              tmdbId={title.tmdb_id}
-              title={title.title}
-            />
-          )}
+            )}
+            <div className="actions hero-actions">
+              {next && (
+                <Link
+                  className="btn primary big"
+                  data-nav
+                  to={`/watch/${next.id}`}
+                >
+                  <Play size={18} fill="currentColor" strokeWidth={0} />
+                  {inProgress(next) ? "Resume" : "Play"}
+                  {next.episode ? ` ${episodeCode(next)}` : ""}
+                </Link>
+              )}
+              {user.role !== "viewer" && title.tmdb_id && (
+                <button
+                  className={`btn ${next ? "" : "primary"} big`}
+                  data-nav
+                  onClick={() => setRequestOpen(true)}
+                >
+                  {tv ? "Request episodes" : "Request"}
+                </button>
+              )}
+              <span className="hero-icons">
+                {user.role !== "viewer" && title.tmdb_id && (
+                  <CollectionCare
+                    mediaType={title.media_type}
+                    tmdbId={title.tmdb_id}
+                    title={title.title}
+                  />
+                )}
+                <TitleInfo
+                  title={title}
+                  assets={assets}
+                  places={title.items.map((item) => ({
+                    id: item.id,
+                    label:
+                      movingNow?.item_id === item.id
+                        ? `Moving to ${movingNow.to} · ${movingNow.copied} of ${movingNow.files} files`
+                        : storedOn(destinations.data, item),
+                    move:
+                      user.role === "admin" &&
+                      places(destinations.data).count > 1 &&
+                      movingNow?.item_id !== item.id
+                        ? () => setMoving(item)
+                        : undefined,
+                  }))}
+                />
+              </span>
+            </div>
+            {active && (
+              <div className="hero-status">
+                <p>
+                  <strong>
+                    {active.status === "paused" ? "Paused" : "Coming up"}
+                  </strong>{" "}
+                  {tv && scope(active)}
+                  <Link className="link" to={`/activity/${active.id}`} state={from}>
+                    Details
+                  </Link>
+                </p>
+                <RequestProgress job={active} />
+              </div>
+            )}
+            {movingNow && (
+              <p className="hero-note">
+                Moving to {movingNow.to} · {movingNow.copied} of{" "}
+                {movingNow.files} files
+              </p>
+            )}
+            {assets.some((a) => a.state === "unavailable") && (
+              <p className="hero-note">
+                {tv
+                  ? "Some episodes are on storage that’s offline."
+                  : "This film is on storage that’s offline."}
+              </p>
+            )}
+          </div>
         </div>
       </article>
       {tv && title.seasons.some((season) => season.episode_count > 0) ? (

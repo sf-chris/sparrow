@@ -317,15 +317,19 @@ export function CastRow({ cast }: { cast: NonNullable<TitleData["cast"]> }) {
   );
 }
 
-/** The small ⓘ: what is stored, how big, since when and who asked for it. */
+export type Place = { id: string; label: string; move?: () => void };
+
+/** The small ⓘ: everything about a title that isn't watching or requesting
+ * it. What it is and who made it, then what is stored, where, how big, since
+ * when and who asked for it. */
 export function TitleInfo({
   title,
   assets,
-  place,
+  places,
 }: {
   title: TitleData;
   assets: Asset[];
-  place: string;
+  places: Place[];
 }) {
   const [shown, setShown] = useState(false);
   const tv = title.media_type === "tv";
@@ -346,13 +350,35 @@ export function TitleInfo({
         title="Details"
         onClick={() => setShown(true)}
       >
-        <Info size={20} strokeWidth={2.25} />
+        <Info size={18} strokeWidth={2} />
       </button>
       {shown && (
-        <Dialog title={`${title.title} · details`} onClose={() => setShown(false)}>
+        <Dialog title={title.title} onClose={() => setShown(false)}>
+          {title.overview && <p className="info-about">{title.overview}</p>}
+          <dl className="info-list">
+            {!!title.makers?.length && (
+              <div>
+                <dt>{tv ? "Created by" : "Directed by"}</dt>
+                <dd>{title.makers.join(", ")}</dd>
+              </div>
+            )}
+            {!!title.genres?.length && (
+              <div>
+                <dt>Genres</dt>
+                <dd>{title.genres.join(", ")}</dd>
+              </div>
+            )}
+            {!!title.cast?.length && (
+              <div>
+                <dt>Starring</dt>
+                <dd>{title.cast.map((person) => person.name).join(", ")}</dd>
+              </div>
+            )}
+          </dl>
+          <h3 className="info-head">In your collection</h3>
           <dl className="info-list">
             <div>
-              <dt>In your collection</dt>
+              <dt>Stored</dt>
               <dd>
                 {assets.length
                   ? `${assets.length} ${
@@ -367,10 +393,30 @@ export function TitleInfo({
                   : "Nothing yet"}
               </dd>
             </div>
-            {place && (
+            {!!places.length && (
               <div>
-                <dt>Stored on</dt>
-                <dd>{place}</dd>
+                <dt>On</dt>
+                <dd>
+                  {places.map((place) => (
+                    <span className="info-line" key={place.id}>
+                      {place.label}
+                      {place.move && (
+                        <>
+                          {" "}
+                          <button
+                            className="link"
+                            onClick={() => {
+                              setShown(false);
+                              place.move?.();
+                            }}
+                          >
+                            Move
+                          </button>
+                        </>
+                      )}
+                    </span>
+                  ))}
+                </dd>
               </div>
             )}
             {!!added.length && (
