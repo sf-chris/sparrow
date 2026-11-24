@@ -48,7 +48,8 @@ MANIFESTS = {"main": HERE / "live-v1.json", "holdout": HERE / "live-holdout-v1.j
 ARTIFACTS = HERE / "artifacts"
 VERSION = 1
 DRY_MODELS = {"SPARROW_CHEAP_MODEL": "cheap-model", "SPARROW_SMART_MODEL": "smart-model"}
-DRY_KEYS = {"ALTPROVIDER_API_KEY": "dry-run-not-a-key", "PROVIDER_API_KEY": "dry-run-not-a-key"}
+DRY_KEYS = {"ALTPROVIDER_API_KEY": "dry-run-not-a-key", "PROVIDER_API_KEY": "dry-run-not-a-key",
+            "ZAI_API_KEY": "dry-run-not-a-key"}
 # Hermetic for every run: no online subtitle archive (it would be refused).
 HERMETIC = {"SPARROW_SUBTITLE_ARCHIVE": "off"}
 STATUSES = ("passed", "failed", "error", "timeout", "cancelled_at_cap", "not_run", "skipped")

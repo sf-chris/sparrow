@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
 from .account_api import administrator
-from ..configuration import effective_provider_key, effective_altprovider_key, effective_tmdb_key
+from ..configuration import any_model_key, effective_glm_key, effective_altprovider_key, effective_tmdb_key
 from ..models import SparrowConfig
 
 
@@ -35,15 +35,16 @@ def setup_status(storage, nodes):
                 and caps.get("download")
             ):
                 destinations.append(node["name"])
-    providers = bool(effective_tmdb_key(config) and effective_provider_key(config))
+    providers = bool(effective_tmdb_key(config) and any_model_key(config))
     return {
         "complete": config.onboarding_complete,
         "deferred": config.onboarding_deferred,
         "mode": config.onboarding_mode,
         "step": config.onboarding_step,
         "tmdb_configured": bool(effective_tmdb_key(config)),
-        "reasoning_configured": bool(effective_provider_key(config)),
+        "reasoning_configured": any_model_key(config),
         "altprovider_configured": bool(effective_altprovider_key(config)),
+        "glm_configured": bool(effective_glm_key(config)),
         "libraries": libraries,
         "download_destinations": destinations,
         "can_finish": bool(libraries)

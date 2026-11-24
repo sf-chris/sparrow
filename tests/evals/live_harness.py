@@ -2,7 +2,7 @@
 becomes a fixture, at the boundary where Sparrow meets the outside world.
 
 - Network. Every httpx request passes through Gate. The model providers
-  (https://retired-provider.invalid, api.provider.com) reach the real network in a live run
+  (https://retired-provider.invalid, api.provider.com, api.z.ai) reach the real network in a live run
   and ScriptedProvider in a dry run; TMDB and the torrent index answer from
   the case's catalogue and index; anything else is refused and recorded as a
   violation, which fails the run. A dry run also refuses raw socket
@@ -42,7 +42,7 @@ import httpx
 from backend.agents import runtime as runtime_module
 
 CURRENT: contextvars.ContextVar = contextvars.ContextVar("sparrow_live_world", default=None)
-PROVIDERS = {"https://retired-provider.invalid": "altprovider", "api.provider.com": "provider"}
+PROVIDERS = {"https://retired-provider.invalid": "altprovider", "api.provider.com": "provider", "api.z.ai": "glm"}
 MARKER = b"SPARROW-FIXTURE:"
 # The real transport: only a live run's provider requests ever reach it.
 _ORIGINAL_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
@@ -375,6 +375,10 @@ def usage_of(kind: str, data: dict) -> dict:
     """Tokens from a provider answer, as {input, cached, cache_write, output}
     (input counts every prompt token, cached ones included)."""
     usage = data.get("usage") or {}
+    if kind == "glm":
+        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
+        return {"input": usage.get("prompt_tokens", 0) or 0, "cached": cached, "cache_write": 0,
+                "output": usage.get("completion_tokens", 0) or 0}
     if kind == "altprovider":
         cached = (usage.get("input_tokens_details") or {}).get("cached_tokens", 0) or 0
         return {"input": usage.get("input_tokens", 0) or 0, "cached": cached, "cache_write": 0,
@@ -725,9 +729,9 @@ class World:
         ))
         self.service = AgentService(self.storage, str(self.state_dir), _quiet)
         self.store = self.service.store
-        # Discovery and the Librarian check for an Provider key before they
-        # start, even when their profile is an AltProvider model.
-        self.service.runtime._api_key_getter = lambda: os.getenv("PROVIDER_API_KEY", "") or "altprovider-only-evaluation"
+        # Keys come from the environment (never the run's state); a run on
+        # AltProvider or GLM models needs no Provider key.
+        self.service.runtime._api_key_getter = lambda: os.getenv("PROVIDER_API_KEY", "")
         accounts = self.service.accounts
         settings = accounts.server_settings()
         accounts.set_defaults(settings["defaults"], {**settings["policy"],
@@ -933,6 +937,35 @@ class Transcript:
                     t.texts.append(block.get("text", ""))
         return t
 
+    @classmethod
+    def from_glm(cls, body):
+        t = cls()
+        t.tools = {(tool.get("function") or {}).get("name") for tool in body.get("tools") or []}
+        by_id = {}
+        for message in body.get("messages") or []:
+            role, content = message.get("role"), message.get("content")
+            if role == "system":
+                t.system = str(content or "")
+            elif role == "assistant":
+                for call in message.get("tool_calls") or []:
+                    function = call.get("function") or {}
+                    try:
+                        args = json.loads(function.get("arguments") or "{}")
+                    except (TypeError, ValueError):
+                        args = {}
+                    entry = {"id": call.get("id"), "name": function.get("name"), "args": args, "output": None,
+                             "error": False}
+                    t.calls.append(entry)
+                    by_id[entry["id"]] = entry
+            elif role == "tool" and message.get("tool_call_id") in by_id:
+                output = str(content or "")
+                error = output.startswith("Error: ")
+                by_id[message["tool_call_id"]].update(output=output[7:] if error else output, error=error)
+            elif role == "user":
+                t.texts.append(content if isinstance(content, str) else
+                               " ".join(str(b.get("text", "")) for b in content or [] if isinstance(b, dict)))
+        return t
+
     def called(self, name) -> list[dict]:
         return [c for c in self.calls if c["name"] == name]
 
@@ -971,6 +1004,8 @@ class ScriptedProvider:
         self.previous: dict[str, int] = {}
 
     def answer(self, kind, body, world):
+        if kind == "glm":
+            return self._glm_answer(body, world)
         if kind == "altprovider":
             if body.get("tools"):
                 output = self._altprovider_calls(world.policy(Transcript.from_altprovider(body)))
@@ -1009,6 +1044,37 @@ class ScriptedProvider:
                 "stop_sequence": None,
                 "usage": {"input_tokens": used - cached, "output_tokens": produced, "cache_read_input_tokens": cached,
                           "cache_creation_input_tokens": 0}}
+
+    def _glm_answer(self, body, world):
+        message = {"role": "assistant", "content": ""}
+        if body.get("tools"):
+            decision = world.policy(Transcript.from_glm(body))
+            if isinstance(decision, str):
+                message["content"] = decision
+            else:
+                message["tool_calls"] = [
+                    {"id": "call_" + uuid.uuid4().hex[:16], "type": "function", "index": i,
+                     "function": {"name": d["name"], "arguments": json.dumps(d.get("args") or {})}}
+                    for i, d in enumerate(self._decisions(decision))]
+        else:
+            messages = body.get("messages") or [{}]
+            system = str(messages[0].get("content", "")) if messages[0].get("role") == "system" else ""
+            system, _, schema_text = system.partition("It must match this JSON Schema:\n")
+            try:
+                schema = json.loads(schema_text) if schema_text else {}
+            except ValueError:
+                schema = {}
+            prompt = messages[-1].get("content", "")
+            prompt = prompt if isinstance(prompt, str) else " ".join(
+                str(b.get("text", "")) for b in prompt if isinstance(b, dict))
+            message["content"] = json.dumps(world.structured(system, prompt, schema))
+        used, cached, produced = self._usage(body, message, body.get("reasoning_effort", "low"),
+                                             json.dumps(body.get("messages", [{}])[:1])[:200])
+        return {"id": "glm_dry_" + uuid.uuid4().hex[:12], "object": "chat.completion", "model": body.get("model", ""),
+                "choices": [{"index": 0, "message": message,
+                             "finish_reason": "tool_calls" if message.get("tool_calls") else "stop"}],
+                "usage": {"prompt_tokens": used, "prompt_tokens_details": {"cached_tokens": cached},
+                          "completion_tokens": produced, "total_tokens": used + produced}}
 
     @staticmethod
     def _decisions(decision):

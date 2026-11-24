@@ -22,8 +22,8 @@ from typing import Any, Awaitable, Callable, Optional
 
 import provider
 
-from ..configuration import effective_altprovider_key
-from . import ledger, altprovider_loop, profiles
+from ..configuration import effective_glm_key, effective_altprovider_key
+from . import glm_loop, ledger, altprovider_loop, profiles, providers
 from .models import AgentSession, Event, SessionStatus, JobStatus, CaseState
 from .store import AgentStore
 from .errors import ToolError  # noqa: F401  (tools import it from here)
@@ -48,11 +48,28 @@ ALTPROVIDER_RATES = {
 }
 
 
+# Z.ai GLM list prices per million tokens: input, cached input, output
+# (docs.z.ai/guides/overview/pricing, checked 2026-11-25). Cache storage is
+# free for now and there is no write premium; reasoning bills as output.
+GLM_RATES = {
+    "glm-5.3-flashx": (0.37, 0.075, 1.25),
+    "glm-5.3-flash": (0.15, 0.03, 0.50),
+    "glm-5.3": (1.40, 0.26, 4.40),
+}
+
+
 def rates_for_model(model: str, at: Optional[float] = None) -> dict[str, float]:
     normalized = (model or "").lower()
-    for name, (base_input, cached, output) in ALTPROVIDER_RATES.items():
+    # Longest names first, so glm-5.3-flash is not priced as glm-5.3.
+    listed = {**ALTPROVIDER_RATES, **GLM_RATES}
+    for name in sorted(listed, key=len, reverse=True):
+        base_input, cached, output = listed[name]
         if normalized == name or normalized.startswith(name + "-"):
             return {"input": base_input, "output": output, "cache_write": base_input, "cache_read": cached}
+    if providers.is_glm_model(normalized):
+        # An unlisted GLM model: priced as the flagship rather than as Assistant.
+        base_input, cached, output = GLM_RATES["glm-5.3"]
+        return {"input": base_input, "output": output, "cache_write": base_input, "cache_read": cached}
     cache_read_multiplier = 0.1
     if "medium-5" in normalized:
         # The announced September price increase was withdrawn by the provider.
@@ -228,6 +245,7 @@ class AgentRuntime:
         self.store = store
         self._api_key_getter = api_key_getter
         self._altprovider_key_getter: Callable[[], str] = effective_altprovider_key
+        self._glm_key_getter: Callable[[], str] = effective_glm_key
         self._specs: dict[str, AgentSpec] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._on_session_change = on_session_change
@@ -333,9 +351,15 @@ class AgentRuntime:
 
     def provider_ready(self, model: str) -> bool:
         """Whether the provider this model runs on has a key."""
-        if altprovider_loop.is_altprovider_model(model):
-            return bool(self._altprovider_key_getter())
-        return bool(self._api_key_getter())
+        return bool(self.key_for(model))
+
+    def key_for(self, model: str) -> str:
+        provider = providers.provider_for(model)
+        if provider == providers.ALTPROVIDER:
+            return self._altprovider_key_getter()
+        if provider == providers.GLM:
+            return self._glm_key_getter()
+        return self._api_key_getter()
 
     def _client(self) -> provider.AsyncProvider:
         return provider.AsyncProvider(
@@ -891,6 +915,8 @@ class AgentRuntime:
     async def _call_api(self, session: AgentSession, system: str, tools: list[ToolDef]):
         if altprovider_loop.is_altprovider_model(session.model):
             return await self._call_altprovider(session, system, tools)
+        if providers.is_glm_model(session.model):
+            return await self._call_glm(session, system, tools)
         client = self._client()
         try:
             delay = 2.0
@@ -950,6 +976,36 @@ class AgentRuntime:
                 if status and 400 <= status < 500 and status != 429:
                     raise  # our bug — don't retry blindly
                 logger.warning("AltProvider API error (attempt %d): %s", attempt + 1, e)
+                if attempt < 2:
+                    await asyncio.sleep(delay)
+                delay *= 3
+        return None
+
+    async def _call_glm(self, session: AgentSession, system: str, tools: list[ToolDef]):
+        """The same call through Z.ai's Chat Completions API (see glm_loop)."""
+        import httpx
+
+        profile = self.profile_for(session)
+        key = self._glm_key_getter()
+        if not key:
+            raise glm_loop.GLMStatusError(401, f"{session.model} needs a Z.ai key. Add one in Settings → Connections.")
+        delay = 2.0
+        for attempt in range(3):
+            try:
+                return await glm_loop.create(
+                    key,
+                    session.model,
+                    system,
+                    [t.to_api() for t in tools],
+                    session.messages,
+                    max_tokens=profile.max_tokens,
+                    effort=profile.effort_sent,
+                )
+            except (glm_loop.GLMStatusError, httpx.TransportError) as e:
+                status = getattr(e, "status_code", None)
+                if status and 400 <= status < 500 and status != 429:
+                    raise  # a rejected request or no credit: retrying cannot help
+                logger.warning("Z.ai API error (attempt %d): %s", attempt + 1, e)
                 if attempt < 2:
                     await asyncio.sleep(delay)
                 delay *= 3

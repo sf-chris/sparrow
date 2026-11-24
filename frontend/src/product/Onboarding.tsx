@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, patch, post } from "./api";
 import { ErrorNote, Loading, Page, useResource } from "./ui";
 import { Tick } from "./Brand";
-import { KEYS, KeyField, type KeyName } from "./Keys";
+import { KEYS, KeyField, missingKeys, type KeyName } from "./Keys";
 import DownloadApp from "./DownloadApp";
 import Storage from "./Storage";
 
@@ -93,17 +93,10 @@ export default function Onboarding({
           step: "providers" as Step,
         },
         {
-          label: "Provider key",
+          label: "Model key",
           ok: state.reasoning_configured,
           value: keyState(state.reasoning_configured, true),
           step: "providers" as Step,
-        },
-        {
-          label: "AltProvider key",
-          ok: state.altprovider_configured,
-          value: keyState(state.altprovider_configured, false),
-          step: "providers" as Step,
-          optional: true,
         },
         {
           label: "Library",
@@ -355,9 +348,7 @@ function KeysStep({
         config.setData(saved);
         setDraft({});
       }
-      const absent = KEYS.filter(
-        (key) => key.required && !saved[`${key.name}_configured`],
-      ).map((key) => key.name);
+      const absent = missingKeys(saved);
       setMissing(absent);
       if (absent.length) {
         requestAnimationFrame(() =>
@@ -395,7 +386,9 @@ function KeysStep({
               value={draft[spec.name] || ""}
               error={
                 missing.includes(spec.name) && !draft[spec.name]?.trim()
-                  ? "Needed to find and download."
+                  ? spec.group
+                    ? "One model key is needed to find and download."
+                    : "Needed to find and download."
                   : undefined
               }
               onChange={(value) => setDraft({ ...draft, [spec.name]: value })}

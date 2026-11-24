@@ -231,14 +231,15 @@ class LibrarianWorld(World):
                                "work if any, and finish the review."}))
             return
         if scenario == "no_key_then_key":
-            getter = self.service.runtime._api_key_getter
-            self.service.runtime._api_key_getter = lambda: ""
+            runtime = self.service.runtime
+            getters = (runtime._api_key_getter, runtime._altprovider_key_getter, runtime._glm_key_getter)
+            runtime._api_key_getter = runtime._altprovider_key_getter = runtime._glm_key_getter = lambda: ""
             await care.check(self.row["id"])
             self.marks["requests_without_key"] = self.provider_requests
             row = care.row(self.row["id"])
             self.marks["reviewed_without_key"] = bool(row["data"].get("fingerprint")) and \
                 row["data"].get("fingerprint") == row["data"].get("observed_fingerprint")
-            self.service.runtime._api_key_getter = getter
+            runtime._api_key_getter, runtime._altprovider_key_getter, runtime._glm_key_getter = getters
             await care.check(self.row["id"])
             return
         if scenario == "outage_then_restart":
@@ -575,7 +576,7 @@ class FetchWorld(Household):
         if "approve" in (schema.get("properties") or {}):
             veto = self.fixture.get("reference", {}).get("review") == "veto"
             return {"approve": not veto, "reason": "It fits the request." if not veto else "Wrong copy.",
-                    "instead": "", "queries": []}
+                    "instead": "", "queries": [], "concern": "wrong_title_or_episode" if veto else "none"}
         return default_for(schema)
 
     def policy(self, t):

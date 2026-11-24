@@ -861,7 +861,8 @@ async def audit(store, model, since=0.0, job=None, batch=None):
 
     summary = summarize(store, since, job, batch)
     body = report(summary) + "\n\n# Timelines\n" + timelines(store, since, job, batch=batch)
-    caller = subtitle_contract.caller_for(model, os.getenv("PROVIDER_API_KEY", ""), os.getenv("ALTPROVIDER_API_KEY", ""), "medium")
+    caller = subtitle_contract.caller_for(model, os.getenv("PROVIDER_API_KEY", ""), os.getenv("ALTPROVIDER_API_KEY", ""), "medium",
+                                          glm_key=os.getenv("ZAI_API_KEY", ""))
     data, usage = await caller(AUDIT_SYSTEM, body[:180_000], AUDIT_SCHEMA)
     return data, subtitle_contract.cost(model, usage)
 

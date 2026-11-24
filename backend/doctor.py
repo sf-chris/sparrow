@@ -14,7 +14,9 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from .configuration import effective_provider_key, effective_tmdb_key, normalize_config
+from .configuration import (
+    effective_provider_key, effective_glm_key, effective_altprovider_key, effective_tmdb_key, normalize_config,
+)
 from .models import SparrowConfig, TorrentClientType
 from .services.torrent_client import TorrentManager
 from .storage import Storage
@@ -108,11 +110,13 @@ async def build_report(storage: Storage, *, check_client: bool = True,
         required=not runtime_only,
         fix="Add a TMDB API key in Settings.",
     ))
+    providers = [name for name, key in (("Provider", effective_provider_key(config)),
+                                        ("AltProvider", effective_altprovider_key(config)), ("Z.ai", effective_glm_key(config))) if key]
     checks.append(DoctorCheck(
-        "provider_key", bool(effective_provider_key(config)), "Provider API key",
-        "Configured." if effective_provider_key(config) else "Not configured.",
+        "model_key", bool(providers), "Model API key",
+        f"Configured: {', '.join(providers)}." if providers else "Not configured.",
         required=not runtime_only,
-        fix="Add an Provider API key in Settings.",
+        fix="Add an Provider, AltProvider or Z.ai API key in Settings.",
     ))
     checks.append(DoctorCheck(
         "frontend", (ROOT / "frontend" / "dist" / "index.html").exists(),

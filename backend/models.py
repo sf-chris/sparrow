@@ -110,6 +110,7 @@ class SparrowConfig:
     tmdb_api_key: str = ""
     provider_api_key: str = ""
     altprovider_api_key: str = ""
+    glm_api_key: str = ""
     onboarding_complete: bool = False
     onboarding_deferred: bool = False
     onboarding_mode: str = "autopilot"
@@ -134,6 +135,7 @@ class SparrowConfig:
             "tmdb_api_key": self.tmdb_api_key,
             "provider_api_key": self.provider_api_key,
             "altprovider_api_key": self.altprovider_api_key,
+            "glm_api_key": self.glm_api_key,
             "onboarding_complete": self.onboarding_complete,
             "onboarding_deferred": self.onboarding_deferred,
             "onboarding_mode": self.onboarding_mode,

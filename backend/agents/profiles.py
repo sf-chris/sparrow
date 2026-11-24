@@ -3,7 +3,8 @@
 A role (Discovery, the Fetch scout, its pick reviewer and its escalation,
 Media, the Librarian, the subtitle manager and its checkers) resolves to a
 Profile: the model, the reasoning effort actually sent to the provider
-(nothing when the model takes no effort parameter, such as Small 4.5), call
+(nothing when the model takes no effort parameter, such as Small 4.5; always
+one for GLM, whose default is max), call
 and output bounds, spend bounds, and digests of the code that writes the
 role's standing prompt and tools. Its version is a short hash of all of
 that, so a session and every ledger row say exactly what they ran under.
@@ -55,6 +56,11 @@ PROVIDER_EFFORT = {name: ("low", "medium", "high") + (("xhigh",) if name in _XHI
 # AltProvider reasoning models take reasoning.effort; the levels Sparrow sends.
 ALTPROVIDER_EFFORT = ("low", "medium", "high")
 ALTPROVIDER_REASONING = re.compile(r"^(model-[56]|o[134])")
+# GLM 5.3 and 5.3-Flash always think and accept only these levels; with none
+# sent they think at max, so a GLM call always carries one (see effort_for).
+GLM_EFFORT = ("low", "high", "max")
+GLM_NEAREST = {"": "low", "none": "low", "minimal": "low", "low": "low", "medium": "low", "high": "high",
+               "xhigh": "high", "max": "max"}
 
 # Fields an operator may override per role in SPARROW_PROFILES.
 OVERRIDABLE = {"model": str, "effort": str, "max_steps": int, "max_tokens": int, "max_dollars": float,
@@ -74,6 +80,7 @@ class Role:
     about: str
     effort: str = ""  # requested; "" is the provider's default (nothing sent)
     altprovider_effort: Optional[str] = None  # a different default request for AltProvider models
+    glm_effort: Optional[str] = None  # and for GLM models (otherwise low: GLM's own default is max)
     max_steps: int = 40  # model calls per wake (or per structured check)
     max_tokens: int = 4096  # 0: the provider's own limit (nothing sent)
     max_dollars: float = 0.0  # allowance per budget scope; 0 is the household policy
@@ -125,7 +132,7 @@ ROLES: dict[str, Role] = {
         "fetch", "smart", "Fetch: the smart model searches with the raw tools after the scout gave up",
         # Calls bound a wave on any provider (a long context made one Medium call
         # cost about the old $0.02 cap); dollars are only a ceiling for huge contexts.
-        note_only_limit=2, idle_backoff=3600, wave_calls=4, wave_dollars=0.25, waves=3,
+        note_only_limit=2, idle_backoff=3600, wave_calls=4, wave_dollars=0.25, waves=3, glm_effort="high",
         prompt=("backend.agents.prompts:fetch_system", "backend.agents.prompts:MANUAL_WORKFLOW",
                 "backend.agents.prompts:SHARED_RULES"), tools=_FETCH_TOOLS),
     "media": Role(
@@ -134,7 +141,7 @@ ROLES: dict[str, Role] = {
         prompt=("backend.agents.prompts:media_system", "backend.agents.prompts:SHARED_RULES"), tools=_MEDIA_TOOLS),
     "media_escalation": Role(
         "media", "smart", "Media after escalate_model: conflicting evidence or ambiguous numbering",
-        note_only_limit=2, idle_backoff=3600,
+        note_only_limit=2, idle_backoff=3600, glm_effort="high",
         prompt=("backend.agents.prompts:media_system", "backend.agents.prompts:SHARED_RULES"), tools=_MEDIA_TOOLS),
     "librarian": Role(
         "librarian", "cheap", "Librarian: one person's subscription, eligible gaps and opted-in upgrades",
@@ -142,7 +149,7 @@ ROLES: dict[str, Role] = {
         prompt=("backend.agents.curation:Curation.system_prompt",), tools=("backend.agents.curation:Curation.register",)),
     "subtitle_manager": Role(
         "subtitle", "subtitle_manager", "Subtitles: the manager reviews flagged pages and approves a track",
-        effort="medium", max_steps=40, max_tokens=16000, cache=True,
+        effort="medium", glm_effort="high", max_steps=40, max_tokens=16000, cache=True,
         prompt=("backend.agents.subtitle_review:SYSTEM", "backend.agents.subtitle_review:MANAGER_SYSTEM",
                 "backend.agents.subtitle_review:VERIFY_SYSTEM"), tools=("backend.agents.subtitles:Subtitles.attach",)),
     "subtitle_checker": Role(
@@ -221,6 +228,12 @@ def is_altprovider(model: str) -> bool:
     return is_altprovider_model(model)
 
 
+def is_glm(model: str) -> bool:
+    from .providers import is_glm_model
+
+    return is_glm_model(model)
+
+
 def _provider_name(model: str) -> str:
     name = re.sub(r"^(?:provider\.)?assistant-", "", (model or "").lower())
     return re.sub(r"-(?:\d{8}|latest)$", "", name)
@@ -230,6 +243,9 @@ def effort_for(model: str, requested: str) -> str:
     """The effort to send for a request, or "" when the model takes none
     (or none at that level): Sparrow never sends a parameter a model refuses."""
     requested = (requested or "").strip().lower()
+    if is_glm(model):
+        # The nearest level GLM accepts, rounding down; never nothing (that is max).
+        return GLM_NEAREST.get(requested, "low")
     if not requested:
         return ""
     if is_altprovider(model):
@@ -326,13 +342,15 @@ def resolve(role: str, cfg=None, model: str = "") -> Profile:
 
 def _requested_effort(role, spec, model):
     if role == "subtitle_manager":
-        return os.getenv("SPARROW_SUBTITLE_EFFORT") or spec.effort
+        return os.getenv("SPARROW_SUBTITLE_EFFORT") or (spec.glm_effort if is_glm(model) else spec.effort)
     if role in ("subtitle_checker", "subtitle_verifier"):
         configured = os.getenv("SPARROW_SUBTITLE_CONTRACTOR_EFFORT", "")
         if configured:
             return configured
     if spec.altprovider_effort is not None and is_altprovider(model):
         return spec.altprovider_effort
+    if is_glm(model):
+        return spec.glm_effort or "low"
     return spec.effort
 
 

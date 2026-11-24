@@ -289,11 +289,19 @@ def altprovider_caller(api_key, model, effort="low"):
     return call
 
 
-def caller_for(model, provider_key, altprovider_key, effort=""):
-    if model.startswith("model"):
+def caller_for(model, provider_key, altprovider_key, effort="", glm_key=""):
+    """A structured single-turn caller on the model's own provider."""
+    from . import glm_loop, providers
+
+    provider = providers.provider_for(model)
+    if provider == providers.ALTPROVIDER:
         if not altprovider_key:
             raise ValueError("The AltProvider page checker needs ALTPROVIDER_API_KEY.")
         return altprovider_caller(altprovider_key, model, effort or "low")
+    if provider == providers.GLM:
+        if not glm_key:
+            raise ValueError(f"{model} needs a Z.ai key (Settings → Connections or ZAI_API_KEY).")
+        return glm_loop.caller(glm_key, model, effort or "low")
     return provider_caller(provider_key, model, effort)
 
 
@@ -556,6 +564,17 @@ def altprovider_reader(api_key, model, effort="low"):
 
     read.model = model
     return read
+
+
+def reader_for(model, altprovider_key, glm_key, effort="low"):
+    """The picture reader on the model's own provider (the cheap model or GLM 5.3 Flash)."""
+    from . import glm_loop, providers
+
+    if providers.provider_for(model) == providers.GLM:
+        if not glm_key:
+            raise ValueError(f"{model} needs a Z.ai key (Settings → Connections or ZAI_API_KEY).")
+        return glm_loop.reader(glm_key, model, READ_SYSTEM, READ_SCHEMA, effort or "low")
+    return altprovider_reader(altprovider_key, model, effort)
 
 
 async def read_pictures(reader, rendered, *, parallel=4, max_dollars=0.0):

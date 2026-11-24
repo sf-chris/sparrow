@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 import time
 
-from ..configuration import effective_provider_key, effective_altprovider_key
+from ..configuration import effective_provider_key, effective_glm_key, effective_altprovider_key
 from . import scout
 from .media_state import language_code
 from .release_match import episode_in
@@ -88,7 +88,8 @@ async def review(tb, job, wanted, rows, pick, reason, episode_titles=None, names
     profile = resolve("fetch_review", tb.cfg())
     model = profile.model
     caller = subtitle_contract.caller_for(
-        model, effective_provider_key(tb.cfg()), effective_altprovider_key(tb.cfg()), profile.effort_sent
+        model, effective_provider_key(tb.cfg()), effective_altprovider_key(tb.cfg()), profile.effort_sent,
+        glm_key=effective_glm_key(tb.cfg()),
     )
     data, usage = await caller(REVIEW_SYSTEM, record(job, wanted, rows, pick, reason, episode_titles, namesakes, note),
                                REVIEW_SCHEMA)

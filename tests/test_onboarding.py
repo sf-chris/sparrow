@@ -32,7 +32,7 @@ def node(name="Library", **changes):
 class OnboardingTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.env = patch.dict(os.environ, {"TMDB_API_KEY": "", "PROVIDER_API_KEY": ""})
+        self.env = patch.dict(os.environ, {"TMDB_API_KEY": "", "PROVIDER_API_KEY": "", "ALTPROVIDER_API_KEY": "", "ZAI_API_KEY": ""})
         self.env.start()
         self.storage = Storage(self.temp.name)
         await self.storage.load_all()

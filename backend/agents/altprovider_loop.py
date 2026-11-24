@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-ALTPROVIDER_PREFIXES = ("model-", "o1", "o3", "o4")
+from .providers import ALTPROVIDER_PREFIXES
 
 
 def is_altprovider_model(model: str) -> bool:
@@ -84,8 +84,11 @@ def input_items(messages: list[dict]) -> list[dict]:
 
 
 def provider_messages(messages: list[dict]) -> list[dict]:
-    """The history for a Assistant call: a session escalated from an AltProvider model
-    keeps its reasoning items, which only AltProvider can read."""
+    """The history for a Assistant call: a session escalated from an AltProvider or
+    GLM model keeps its reasoning, which only that provider reads."""
+    from .glm_loop import other_provider_messages
+
+    messages = other_provider_messages(messages)
     out = []
     for message in messages:
         content = message.get("content")
