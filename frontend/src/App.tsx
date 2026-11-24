@@ -98,6 +98,8 @@ export default function App() {
   return (
     <BrowserRouter key="signed-in">
       <Routes>
+        {/* Watching is full screen, outside the app's navigation. */}
+        {user.welcomed && <Route path="/watch/:assetId" element={<Watch />} />}
         <Route
           element={
             <Shell
@@ -146,7 +148,6 @@ export default function App() {
                 element={<Title user={user} />}
               />
               <Route path="/items/:itemId" element={<Title user={user} />} />
-              <Route path="/watch/:assetId" element={<Watch />} />
               <Route path="/activity" element={<Activity user={user} />} />
               <Route path="/activity/:jobId" element={<RequestDetail />} />
               <Route path="/discover" element={<Discover />} />

@@ -91,18 +91,37 @@ def install_product(app, storage, accounts, nodes, get_service):
             raise HTTPException(404, "Request not found.")
         return job
 
+    async def credits(media_type, tmdb_id, details):
+        """Cast and crew, fetched once per title and kept with its details."""
+        if "credits" in details or details.get("cached"):
+            return details
+        try:
+            found = await get_service().toolbox.tmdb_get(f"/{media_type}/{tmdb_id}/credits")
+        except (ToolError, AttributeError):
+            return details
+        current = catalogue.cached_title(media_type, tmdb_id) or details
+        current["credits"] = {
+            "cast": [{"name": c.get("name", "")} for c in found.get("cast", [])[:8]],
+            "directors": [
+                c.get("name", "") for c in found.get("crew", []) if c.get("job") == "Director"
+            ][:3],
+        }
+        return catalogue.cache_title(media_type, tmdb_id, current)
+
     async def title(media_type, tmdb_id):
         if media_type not in ("movie", "tv"):
             raise HTTPException(422, "Choose a movie or TV show.")
         cached = catalogue.cached_title(media_type, tmdb_id)
         if cached:
-            return cached
+            return await credits(media_type, tmdb_id, cached)
         service = get_service()
         if not service:
             raise HTTPException(503, "Sparrow is still starting. Try again shortly.")
         try:
             details = await service.toolbox.tmdb_get(f"/{media_type}/{tmdb_id}")
-            return catalogue.cache_title(media_type, tmdb_id, details)
+            return await credits(
+                media_type, tmdb_id, catalogue.cache_title(media_type, tmdb_id, details)
+            )
         except ToolError as exc:
             # Existing local metadata is sufficient to browse and watch during an outage.
             item = next(
@@ -237,6 +256,17 @@ def install_product(app, storage, accounts, nodes, get_service):
                 s for s in details.get("seasons", []) if s.get("season_number", 0) >= 0
             ],
             "runtime": details.get("runtime"),
+            "genres": [g.get("name", "") for g in details.get("genres", [])][:3],
+            "cast": [c["name"] for c in (details.get("credits") or {}).get("cast", [])][:5],
+            # Series list their creators; films their directors.
+            "makers": [c.get("name", "") for c in details.get("created_by", [])][:3]
+            or (details.get("credits") or {}).get("directors", []),
+            "episode_names": {
+                f"{season}:{e.get('episode_number')}": e.get("name", "")
+                for season, episodes in (details.get("episodes_by_season") or {}).items()
+                for e in episodes
+                if e.get("name")
+            },
             "items": items,
             "jobs": [
                 j.to_dict()

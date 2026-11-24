@@ -169,6 +169,10 @@ export type Title = {
   poster_url?: string;
   backdrop_url?: string;
   seasons: { season_number: number; episode_count: number; name?: string }[];
+  genres?: string[];
+  cast?: string[];
+  makers?: string[];
+  episode_names?: Record<string, string>;
   items: Item[];
   jobs: Job[];
   preferences?: Effective;

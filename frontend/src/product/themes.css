@@ -88,7 +88,7 @@
     .setup-heading,
     .choice strong,
     .order-head h3,
-    .player-head h1
+    .theatre-top h1
   ) {
   font-weight: 800;
   letter-spacing: -0.035em;
@@ -435,7 +435,7 @@
     .setup-heading,
     .choice strong,
     .order-head h3,
-    .player-head h1,
+    .theatre-top h1,
     .feature-coming strong
   ) {
   font-weight: 800;
@@ -725,7 +725,7 @@
     .setup-heading,
     .choice strong,
     .order-head h3,
-    .player-head h1,
+    .theatre-top h1,
     .feature-coming strong,
     .dayband p
   ) {

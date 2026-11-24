@@ -65,6 +65,8 @@ def details(identity):
         "original_language": "en",
         "poster_path": f"/art/{identity}.svg",
         "backdrop_path": f"/art/{identity}-backdrop.svg",
+        "genres": [{"name": "Drama"}, {"name": "Mystery"}],
+        "created_by": [{"name": "Petra Lind"}] if kind == "tv" else [],
         "seasons": (
             [
                 {"season_number": 1, "episode_count": 3, "name": "Season 1"},
@@ -85,6 +87,12 @@ async def tmdb(path, **kwargs):
                 for i, (name, kind) in TITLES.items()
                 if kwargs.get("query", "").lower() in name.lower()
             ]
+        }
+    if len(parts) > 2 and parts[2] == "credits":
+        # Fictional people for the fictional fixture titles.
+        return {
+            "cast": [{"name": n} for n in ("Mara Ellison", "Tomas Reyes", "June Okafor", "Ilse Brandt", "Sam Whitlow", "Noor Haddad")],
+            "crew": [{"job": "Director", "name": "Petra Lind"}],
         }
     if len(parts) > 2 and parts[2] == "season":
         return {

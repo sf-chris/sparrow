@@ -37,16 +37,17 @@ await page.getByRole('heading',{level:1,name:/^(Mon|Tues|Wednes|Thurs|Fri|Satur|
 await page.getByRole('link',{name:'Open The Quiet Planet'}).waitFor();
 await page.screenshot({path:path.join(out,'home-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:'Open The Quiet Planet'}).click();await page.getByRole('heading',{name:'The Quiet Planet',exact:true}).waitFor();
+await page.getByText('Mara Ellison, Tomas Reyes',{exact:false}).waitFor();if(!(await page.getByText('Directed by',{exact:true}).count()))throw new Error('Title details (cast, director) missing');
 await page.screenshot({path:path.join(out,'movie-desktop.png'),fullPage:true});
 await page.getByRole('link',{name:/^(Play|Resume)\b/}).first().click();
 await page.locator('video').waitFor();await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,{timeout:15000});
 await page.locator('video').evaluate(v=>{v.pause();v.currentTime=12;});
 await page.waitForFunction(()=>Math.abs(document.querySelector('video').currentTime-12)<.5);
-await page.getByLabel('Subtitles',{exact:true}).selectOption({index:1});
+await page.getByRole('button',{name:'Audio and subtitles',exact:true}).click();await page.getByRole('group',{name:'Subtitles',exact:true}).getByRole('radio').nth(1).check();
 await page.waitForFunction(()=>Array.from(document.querySelector('video').textTracks).some(t=>t.cues?.length===3));
 await page.screenshot({path:path.join(out,'player-desktop.png'),fullPage:true});
 // Switch to the second audio track: the real node must prepare HLS and retain the seek.
-await page.getByLabel('Audio',{exact:true}).selectOption({index:1});
+await page.getByRole('group',{name:'Audio',exact:true}).getByRole('radio').nth(1).check();
 // Chrome may use native HLS or MediaSource. Both must load the converted audio.
 await page.waitForFunction(()=>{const v=document.querySelector('video');return v&&(/blob:|\/hls\//.test(v.src))&&v.readyState>=2},null,{timeout:25000});
 await page.locator('video').evaluate(v=>{v.pause();v.currentTime=18;});
@@ -54,7 +55,7 @@ await page.locator('video').evaluate(v=>{v.pause();v.currentTime=18;});
 // and buffers through hls.js, which takes longer on a busy machine.
 await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2&&!document.querySelector('video')?.seeking,null,{timeout:45000});
 await page.screenshot({path:path.join(out,'player-converted-desktop.png'),fullPage:true});
-await page.getByRole('link',{name:'Back to title'}).click();
+await page.mouse.move(40,40);await page.getByRole('button',{name:'Back to title'}).click();
 const saved=await page.request.get(url+'/api/v1/catalogue');const items=await saved.json();
 const watching=items.find(i=>i.title==='The Quiet Planet').assets[0].watch;
 if(!watching||watching.position<10)throw new Error('Resume progress was not saved: '+JSON.stringify(watching));
