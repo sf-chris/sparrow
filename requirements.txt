@@ -5,6 +5,8 @@ python-multipart==0.0.26
 python-dotenv==1.2.2
 websockets==16.0
 Pillow==12.2.0
+# Sparrow Connect: this server's own certificate (ACME) for its HTTPS address.
+cryptography==50.0.2
 
 # Subtitle files, their text encodings and local speech inspection.
 pysubs2==1.8.1 ; python_version < "3.12"

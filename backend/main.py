@@ -275,7 +275,9 @@ async def lifespan(app: FastAPI):
     log_setup(DATA_DIR)
     migration_task=asyncio.create_task(catalogue.migrate_verified_legacy(broadcast))
     moves_task = asyncio.create_task(moves.loop())
+    await connect.start()
     yield
+    await connect.stop()
     await subtitles.stop()
     migration_task.cancel()
     moves_task.cancel()
@@ -1375,6 +1377,8 @@ install_curation(app, accounts, lambda: agent_service)
 subtitles = install_subtitles(app, accounts, nodes, catalogue, lambda: agent_service)
 from .agents.playback import install_playback
 playback = install_playback(app, storage, accounts, nodes, catalogue)
+from .agents.connect import install_connect
+connect = install_connect(app, DATA_DIR)
 from .agents.discovery import install_discovery
 discovery = install_discovery(app, accounts, catalogue, lambda: agent_service)
 from .agents.ledger import install_ledger

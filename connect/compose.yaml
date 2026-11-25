@@ -3,6 +3,10 @@ services:
   connect:
     build: .
     restart: unless-stopped
+    # CONNECT_ZONE_ID, CONNECT_DOMAIN and a DNS key limited to h.<domain>.
+    env_file: .env
+    volumes:
+      - connect-data:/data
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -19,5 +23,6 @@ services:
       - caddy-data:/data
       - caddy-config:/config
 volumes:
+  connect-data:
   caddy-data:
   caddy-config:

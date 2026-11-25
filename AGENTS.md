@@ -70,6 +70,14 @@ Everything new lives in `backend/agents/`:
   TV can fetch without a sign-in; it ends with the session, the sign-in that
   started it or the viewer's access. Its converted stream carries the chosen
   subtitle so AirPlay shows it.
+- `connect.py`, `acme.py` — Sparrow Connect on this server (Settings →
+  Connections), off until an administrator turns it on. It registers with the
+  shared service, gets its own certificate for `<id>.h.streamsparrow.com` by a
+  DNS proof that Connect publishes (the key never leaves this server), serves
+  HTTPS on `SPARROW_CONNECT_PORT`, and checks in so Connect calls back and
+  verifies it before pointing the name here. Off forgets it everywhere. The
+  shared service itself is `connect/` (FastAPI + Caddy), deployed separately;
+  no video passes through it. Homes that can't open a port: issue #37.
 - `placement.py`, `moves.py` — where a request is stored (Automatic, pools, a
   person's storage or one disk), pinned when it starts with a plain reason; and
   verified copy-then-remove moves of a title between disks and computers.

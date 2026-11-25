@@ -20,6 +20,7 @@ import {
 } from "./ui";
 import { Tick } from "./Brand";
 import SubtitleProviderSettings from "./SubtitleProviderSettings";
+import ConnectSettings from "./ConnectSettings";
 import { PreferenceFields } from "./Preferences";
 import { useDestinations } from "./StoragePicker";
 import { KEYS, KeyField } from "./Keys";
@@ -246,6 +247,7 @@ export function ServerSettings() {
             </div>
           </Section>
           <SubtitleProviderSettings />
+          <ConnectSettings />
           <Section
             title="Download app"
             description="On this server. A paired Windows machine sets its own in Sparrow Node."

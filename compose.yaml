@@ -16,8 +16,12 @@ services:
       SPARROW_SUBTITLE_CONTRACTOR: ${SPARROW_SUBTITLE_CONTRACTOR:-}
       SPARROW_SUBTITLE_VERIFIER: ${SPARROW_SUBTITLE_VERIFIER:-}
       ZAI_API_KEY: ${ZAI_API_KEY:-}
+      # Sparrow Connect (Settings → Connections): the port your router sends
+      # to this server's HTTPS. Used only once Connect is turned on.
+      SPARROW_CONNECT_PORT: ${SPARROW_CONNECT_PORT:-8443}
     ports:
       - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:${SPARROW_PORT:-8888}:8888"
+      - "${SPARROW_BIND_ADDRESS:-127.0.0.1}:${SPARROW_CONNECT_PORT:-8443}:8443"
     volumes:
       - sparrow-data:/data
       # Films, series and downloads. Set SPARROW_MEDIA_DIR to a folder on this

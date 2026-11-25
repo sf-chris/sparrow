@@ -87,6 +87,8 @@ def install_accounts(app, storage, get_service):
             "/api/v1/auth/login",
             "/api/v1/auth/bootstrap",
             "/api/v1/auth/join",
+            # Sparrow Connect's call-back; answers only with a keyed proof.
+            "/api/v1/connect/proof",
         }
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             origin = request.headers.get("origin")

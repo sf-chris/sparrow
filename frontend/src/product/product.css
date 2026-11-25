@@ -2629,6 +2629,34 @@ a.tonight-art:hover .still img {
   width: 1.8rem;
   color: var(--accent);
 }
+/* Sparrow Connect's status in Settings. */
+.connect-ready,
+.connect-problem {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.4rem;
+}
+.connect-ready p,
+.connect-problem p {
+  margin: 0;
+}
+.connect-ready svg {
+  color: var(--accent);
+  vertical-align: -0.15em;
+}
+.connect-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.connect-link a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.connect-problem .btn {
+  justify-self: start;
+}
 /* Playing on a TV: the phone shows where the picture went, and the controls. */
 .screen-status.on-tv {
   align-content: center;
