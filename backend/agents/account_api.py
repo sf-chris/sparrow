@@ -87,6 +87,7 @@ def install_accounts(app, storage, get_service):
             "/api/v1/auth/login",
             "/api/v1/auth/bootstrap",
             "/api/v1/auth/join",
+            "/api/v1/auth/device-link/redeem",
             # Sparrow Connect's call-back; answers only with a keyed proof.
             "/api/v1/connect/proof",
         }
@@ -154,6 +155,25 @@ def install_accounts(app, storage, get_service):
             "complete": config.onboarding_complete,
             "deferred": config.onboarding_deferred,
         }
+
+    class DeviceCode(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        code: str = Field(min_length=16, max_length=128)
+
+    @router.post("/auth/device-link")
+    def device_link(request: Request):
+        """Sign this person in on another device: the code goes in a QR code."""
+        code, expires = accounts.device_link(request.state.user["id"])
+        return {"code": code, "expires": expires}
+
+    @router.post("/auth/device-link/redeem")
+    def redeem_device_link(body: DeviceCode, request: Request, response: Response):
+        user = accounts.redeem_device_link(body.code)
+        if not user:
+            raise HTTPException(
+                401, "This sign-in code has expired or was already used. Scan a new one."
+            )
+        return session_cookie(request, response, user)
 
     @router.get("/auth/status")
     def auth_status(request: Request):

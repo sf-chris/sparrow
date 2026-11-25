@@ -1,22 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { api, post } from "./api";
-import { ErrorNote, Field, Loading, Section, useResource } from "./ui";
+import { ErrorNote, Loading, Section, useResource } from "./ui";
 
 type Status = {
   enabled: boolean;
   working: string | null;
-  name: string | null;
   link: string | null;
-  address: string | null;
   port: number;
   reachable: boolean;
   problem: string | null;
 };
+type SignIn = { code: string; expires: number };
 
-/** A scannable code for a link: black on white, with the quiet border a
- *  phone camera needs, whatever the theme. */
+/** A scannable code: black on white with the quiet border a phone camera
+ *  needs, whatever the theme. */
 function QrCode({ text, label }: { text: string; label: string }) {
   const { size, path } = useMemo(() => {
     const qr = qrcode(0, "M");
@@ -44,131 +42,164 @@ function QrCode({ text, label }: { text: string; label: string }) {
   );
 }
 
-/** Sparrow Connect: an HTTPS address for this server, so phones and TVs
- *  reach it from anywhere. Off until an administrator turns it on. */
+/** Sparrow Connect: this server's secure address, so a phone or TV reaches
+ *  it from anywhere. Off until an administrator turns it on. */
 export default function ConnectSettings() {
   const resource = useResource(() => api<Status>("/admin/connect"));
   const status = resource.data;
-  const [port, setPort] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [port, setPort] = useState<string | null>(null);
+  const [signin, setSignin] = useState<SignIn | null>(null);
   // While it switches, show each step as it happens.
   useEffect(() => {
     if (!status?.working) return;
     const timer = window.setTimeout(() => void resource.refresh(), 1500);
     return () => clearTimeout(timer);
   }, [status]);
-  async function change(enabled: boolean) {
+  // A sign-in code is a key: hide it when it lapses.
+  useEffect(() => {
+    if (!signin) return;
+    const left = signin.expires * 1000 - Date.now();
+    const timer = window.setTimeout(() => setSignin(null), Math.max(0, left));
+    return () => clearTimeout(timer);
+  }, [signin]);
+  async function run(action: () => Promise<unknown>) {
     setError("");
     try {
-      await api("/admin/connect", {
+      await action();
+      await resource.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  const change = (enabled: boolean, nextPort?: number) =>
+    run(() =>
+      api("/admin/connect", {
         method: "PUT",
-        body: JSON.stringify({ enabled, port: port ?? status?.port }),
-      });
-      await resource.refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  async function check() {
+        body: JSON.stringify({ enabled, port: nextPort ?? status?.port }),
+      }),
+    );
+  async function showCode() {
     setError("");
     try {
-      await post("/admin/connect/check", {});
-      await resource.refresh();
+      setSignin(await post<SignIn>("/auth/device-link"));
     } catch (e) {
       setError((e as Error).message);
     }
   }
-  async function copy(text: string) {
-    await navigator.clipboard?.writeText(text).catch(() => {});
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+  function savePort() {
+    const value = Number(port);
+    setPort(null);
+    if (value && value !== status?.port) void change(true, value);
   }
+  const on = !!status?.enabled;
+  const ready = on && status!.reachable && !status!.working && !!status!.link;
+  const portEditor = (
+    <span className="connect-port">
+      <label>
+        Port{" "}
+        <input
+          type="number"
+          min={1}
+          max={65535}
+          value={port ?? ""}
+          autoFocus
+          onChange={(e) => setPort(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && savePort()}
+        />
+      </label>
+      <button className="link" onClick={savePort}>
+        Save
+      </button>
+    </span>
+  );
   return (
     <Section
       title="Sparrow Connect"
-      description="A secure address for this server, so your phone and TVs reach it from anywhere. No video goes through Sparrow."
+      description="Reach this server from anywhere, on your phone and your TVs. Video goes straight from this server."
+      action={
+        status && (
+          <button
+            className="switch"
+            role="switch"
+            aria-checked={on}
+            aria-label="Sparrow Connect"
+            disabled={!!status.working}
+            onClick={() => void change(!on)}
+          >
+            <span aria-hidden="true" />
+          </button>
+        )
+      }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
-      {status ? (
-        <div className="form-grid">
-          <Field label="Connect">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={status.enabled}
-                disabled={!!status.working}
-                onChange={(e) => void change(e.target.checked)}
-              />
-              Reach this server from anywhere
-            </label>
-          </Field>
-          <Field
-            label="Outside port"
-            hint="The port your router sends to this server."
-          >
-            <input
-              type="number"
-              min={1}
-              max={65535}
-              value={port ?? status.port}
-              disabled={!!status.working}
-              onChange={(e) => setPort(Number(e.target.value))}
-              onBlur={() =>
-                status.enabled &&
-                port !== null &&
-                port !== status.port &&
-                void change(true)
-              }
+      {!status && resource.loading && <Loading label="Loading" />}
+      {status?.working && <Loading label={`${status.working}…`} />}
+      {ready &&
+        (signin ? (
+          <div className="connect-signin">
+            <QrCode
+              text={`${status!.link}#signin=${signin.code}`}
+              label="Sign-in code for your phone"
             />
-          </Field>
-          {status.working && (
-            <div className="meta" role="status">
-              <Loading label={`${status.working}…`} />
-            </div>
-          )}
-          {!status.working && status.enabled && status.reachable && status.link && (
-            <div className="connect-ready" role="status">
-              <p>
-                <Check size={16} strokeWidth={2.5} aria-hidden="true" /> Reachable
-                at <span className="num">{status.address}</span>
-              </p>
-              <div className="connect-phone">
-                <QrCode
-                  text={status.link}
-                  label={`QR code for ${status.link}`}
-                />
-                <div>
-                  <p>Scan with your phone’s camera, once.</p>
-                  <div className="connect-link">
-                    <a href={status.link}>{status.link}</a>
-                    <button
-                      className="btn"
-                      onClick={() => void copy(status.link!)}
-                    >
-                      {copied ? (
-                        <Check size={16} strokeWidth={2.5} />
-                      ) : (
-                        <Copy size={16} strokeWidth={2.25} />
-                      )}
-                      {copied ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {!status.working && status.enabled && status.problem && (
-            <div className="connect-problem" role="alert">
-              <p>{status.problem}</p>
-              <button className="btn" onClick={() => void check()}>
-                Check again
+            <div>
+              <p className="connect-lead">Scan with your phone’s camera.</p>
+              <p className="meta">It signs you in once, within ten minutes.</p>
+              <button className="link" onClick={() => setSignin(null)}>
+                Done
               </button>
             </div>
+          </div>
+        ) : (
+          <button className="btn primary" onClick={() => void showCode()}>
+            Sign in on your phone
+          </button>
+        ))}
+      {on && !status!.working && (
+        <p className={`connect-state meta${status!.reachable ? " good" : ""}`}>
+          {status!.reachable ? (
+            <>
+              <span className="dot" aria-hidden="true" />
+              Reachable from anywhere · Port {status!.port}{" "}
+              {port === null ? (
+                <button
+                  className="link"
+                  onClick={() => setPort(String(status!.port))}
+                >
+                  Change
+                </button>
+              ) : (
+                portEditor
+              )}
+            </>
+          ) : (
+            <>
+              <span className="dot problem" aria-hidden="true" />
+              <span className="connect-problem" role="alert">
+                {status!.problem || "Not reachable yet."}
+              </span>{" "}
+              {port === null ? (
+                <>
+                  <button
+                    className="link"
+                    onClick={() => void run(() => post("/admin/connect/check"))}
+                  >
+                    Check again
+                  </button>
+                  {" · "}
+                  <button
+                    className="link"
+                    onClick={() => setPort(String(status!.port))}
+                  >
+                    Change port
+                  </button>
+                </>
+              ) : (
+                portEditor
+              )}
+            </>
           )}
-        </div>
-      ) : (
-        resource.loading && <Loading label="Loading Sparrow Connect" />
+        </p>
       )}
     </Section>
   );

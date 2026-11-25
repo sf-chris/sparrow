@@ -144,6 +144,9 @@ class Accounts:
                     policy TEXT NOT NULL, revision INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS login_attempts (
                     key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, window REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS device_links (
+                    code_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+                    expires REAL NOT NULL, used REAL);
             """)
             db.execute(
                 "INSERT OR IGNORE INTO server_preferences VALUES (1, ?, ?, 1)",
@@ -304,6 +307,35 @@ class Accounts:
                 (digest(token), time.time()),
             ).fetchone()
         return self.public(row)
+
+    DEVICE_LINK_SECONDS = 600
+
+    def device_link(self, user_id):
+        """A one-time code that signs this person in on another device: shown
+        as a QR code, it works once, within ten minutes."""
+        code = secrets.token_urlsafe(24)
+        now = time.time()
+        with self.connect() as db:
+            db.execute("DELETE FROM device_links WHERE expires<?", (now,))
+            db.execute(
+                "INSERT INTO device_links VALUES (?, ?, ?, NULL)",
+                (digest(code), user_id, now + self.DEVICE_LINK_SECONDS),
+            )
+        return code, now + self.DEVICE_LINK_SECONDS
+
+    def redeem_device_link(self, code):
+        now = time.time()
+        with self.connect() as db:
+            # Claimed atomically, so a code can't sign in twice.
+            claimed = db.execute(
+                "UPDATE device_links SET used=? WHERE code_hash=? AND used IS NULL AND expires>?",
+                (now, digest(code or ""), now),
+            ).rowcount
+            row = db.execute(
+                "SELECT user_id FROM device_links WHERE code_hash=?", (digest(code or ""),)
+            ).fetchone()
+        user = self.user(row["user_id"]) if claimed and row else None
+        return user if user and not user["disabled"] else None
 
     def revoke(self, token):
         with self.connect() as db:
