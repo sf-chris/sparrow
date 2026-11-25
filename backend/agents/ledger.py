@@ -182,7 +182,9 @@ def record_call(store, *, session_id, phase, model="", usage=None, cost=0.0, job
 
 SECRET_NAME = re.compile(r"(?i)^(api[_-]?key|key|access[_-]?token|auth[_-]?token|token|password|passwd|secret|"
                          r"authorization|cookie|credentials?)$")
-SECRET_TEXT = re.compile(r"\b(sk-[A-Za-z0-9_\-]{16,}|eyJ[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,})")
+# Z.ai keys (id.secret), tokens signed from them, and generic secret-key prefixes.
+SECRET_TEXT = re.compile(r"\b([0-9a-f]{32}\.[0-9A-Za-z]{16}\b|sk-[A-Za-z0-9_\-]{16,}|"
+                         r"eyJ[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,})")
 
 
 def _clip(value, depth=0):

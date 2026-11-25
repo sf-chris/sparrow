@@ -163,6 +163,13 @@ class SparrowConfig:
         d.setdefault("season_pack_size_limit_gb", 0.0)
         d.setdefault("max_active_transfers", 3)
         d.setdefault("extra_library_dirs", [])
+        # A model saved by an older release that GLM cannot run is dropped, so the
+        # GLM default is what runs and what Settings shows.
+        from .agents.glm_loop import is_glm_model
+
+        for name in ("smart_model", "cheap_model"):
+            if name in d and not is_glm_model(str(d[name] or "")):
+                del d[name]
         # Settings saved by an older release may hold fields this one no longer has.
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in d.items() if k in known})

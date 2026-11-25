@@ -294,10 +294,13 @@ class LedgerTests(unittest.IsolatedAsyncioTestCase):
 
     def test_keys_never_reach_the_ledger(self):
         ledger.record_tool(self.store, session_id="s", tool_id="t", name="tmdb_get", outcome="ok",
-                           facts={"args": {"api_key": "abc", "query": "Show"}, "note": "used sk-0123456789abcdefABCDEF"})
+                           facts={"args": {"api_key": "abc", "query": "Show"},
+                                  "note": "used 0123456789abcdef0123456789abcdef.AbCdEfGh12345678",
+                                  "other": "and sk-0123456789abcdefABCDEF"})
         _, tools, _, _ = ledger.load(self.store)
         self.assertEqual(tools[0]["facts"]["args"], {"api_key": "[redacted]", "query": "Show"})
         self.assertEqual(tools[0]["facts"]["note"], "used [redacted]")
+        self.assertEqual(tools[0]["facts"]["other"], "and [redacted]")
 
     def test_old_runs_are_backfilled_from_their_spend_entries(self):
         self.session.spend.entries = [{"ts": 1.0, "model": "glm-5.3", "cost": 0.03, "input_tokens": 9000},
