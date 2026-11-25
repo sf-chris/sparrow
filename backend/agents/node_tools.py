@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 from .node_executor import NodeError, canonical, is_library
 from .tools import fetch_tools, media_tools, quality_rank
 from . import escalation
+from .durations import at_film_speed, episode_runtime, mismatch, names_cut, runtime_matches  # noqa: F401
 from ..models import Download, DownloadStatus, LibraryItem, MediaType
 from ..services.torrent_client import build_magnet
 
@@ -139,24 +140,6 @@ def missing_episodes(tb, job):
         for episode in sorted(episodes)
         if (int(season), int(episode)) not in have
     ]
-
-
-def runtime_matches(duration, minutes, approximate=False):
-    """Whether a measured duration is the catalogue's runtime.
-
-    Shorter by up to two minutes or 10%; longer by up to two minutes or, for
-    short items, a quarter (credits can be a large part of a short film:
-    Big Buck Bunny runs 9:56 against TMDB's 8 minutes). Never less than a
-    minute either way, since catalogue runtimes are whole minutes. A quarter
-    either way when the figure is a season-wide placeholder. Samples and
-    double-length cuts never pass."""
-    seconds = float(minutes or 0) * 60
-    shorter = min(120, max(60, seconds * 0.1))
-    longer = min(120, max(60, seconds * 0.25))
-    if approximate:
-        shorter, longer = max(shorter, seconds * 0.25), max(longer, seconds * 0.25)
-    difference = float(duration) - seconds
-    return bool(seconds) and -shorter <= difference <= longer
 
 
 def unsuitable(job, facts):
@@ -952,7 +935,8 @@ def storage_tools(tb):
                     dl.id,
                     job.node_id or "local",
                     destination,
-                    canonical(result),
+                    # The staging name came from the release, for the runtime check.
+                    canonical({**result, "source": source}),
                 ),
             )
         tb.require_authority(ctx)
@@ -989,7 +973,8 @@ def storage_tools(tb):
     async def upgrade(ctx, args):
         old = await operation(ctx, "probe", args["old_path"])
         new = await operation(ctx, "probe", args["new_path"])
-        if abs(old["duration"] - new["duration"]) > 120 or quality_rank(
+        lengths = [at_film_speed(c["duration"], c.get("fps")) for c in (old, new)]
+        if abs(lengths[0] - lengths[1]) > 120 or quality_rank(
             new["quality"]
         ) <= quality_rank(old["quality"]):
             raise ToolError(
@@ -1047,31 +1032,16 @@ def storage_tools(tb):
         root = published.get("root_id") or "library"
         details = await tb.tmdb_get(f"/{job.media_type}/{job.tmdb_id}")
         expected = details.get("runtime", 0)
-        approximate = False
+        approximate = cut = False
         if job.media_type == "tv":
             data = await tb.tmdb_get(f"/tv/{job.tmdb_id}/season/{season}")
-            ep = next(
-                (
-                    e
-                    for e in data.get("episodes", [])
-                    if e.get("episode_number") == episode
-                ),
-                {},
-            )
-            expected = ep.get("runtime") or next(
-                iter(details.get("episode_run_time") or []), 0
-            )
-            # One runtime for a whole season (or the show's default) is a
-            # placeholder, not a measurement: TMDB gives every Psycho-Pass
-            # episode 28 minutes; they run 23.
-            runtimes = [e.get("runtime") for e in data.get("episodes", []) if e.get("runtime")]
-            approximate = not ep.get("runtime") or (len(runtimes) >= 3 and len(set(runtimes)) == 1)
-        if not runtime_matches(facts["duration"], expected, approximate):
-            raise ToolError(
-                f"Measured duration ({facts['duration'] / 60:.1f} min) does not match the catalogue runtime "
-                f"({float(expected or 0):.0f} min{', a season-wide figure' if approximate else ''}). "
-                "Resolve the identity before recording this copy."
-            )
+            expected, approximate = episode_runtime(data, episode)
+            expected = expected or next(iter(details.get("episode_run_time") or []), 0)
+        else:
+            # Names the agent cannot choose: the release and its own file.
+            cut = names_cut(dl.name, published.get("source"))
+        if not runtime_matches(facts["duration"], expected, approximate, facts.get("fps"), cut):
+            raise ToolError(mismatch(facts["duration"], expected, approximate, facts.get("fps")))
         candidate = {"state": "ready", "facts": facts}
         if not suitable(job, candidate):
             reasons = unsuitable(job, facts) or ["the measured audio, picture quality or size"]

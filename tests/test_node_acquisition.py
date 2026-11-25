@@ -659,11 +659,32 @@ class ScoutJudgementTests(unittest.TestCase):
         self.assertTrue(runtime_matches(150, 3))  # 2:30 against a rounded 3 minutes
         self.assertFalse(runtime_matches(16 * 60, 8))  # twice as long
         self.assertFalse(runtime_matches(60, 8))  # a sample
-        # Features keep two minutes either way.
-        self.assertTrue(runtime_matches(91.9 * 60, 90))
-        self.assertFalse(runtime_matches(92.5 * 60, 90))
-        self.assertFalse(runtime_matches(87.5 * 60, 90))
+        # Features allow 5% either way; episodes keep their minutes.
+        self.assertTrue(runtime_matches(94.4 * 60, 90))
+        self.assertFalse(runtime_matches(95 * 60, 90))
+        self.assertTrue(runtime_matches(85.6 * 60, 90))
+        self.assertFalse(runtime_matches(85 * 60, 90))
         self.assertTrue(runtime_matches(23.5 * 60, 24))
+        # Either playback speed: a 25 fps copy runs about 4% short of film speed.
+        self.assertFalse(runtime_matches(113.1 * 60, 120))
+        self.assertTrue(runtime_matches(113.1 * 60, 120, fps=25))
+        self.assertTrue(runtime_matches(126.8 * 60, 120, fps=23.976))  # against a 25 fps catalogue figure
+        self.assertFalse(runtime_matches(126.8 * 60, 120, fps=29.97))
+        # Another cut the release names: The Fellowship of the Ring runs 178 or 228 minutes.
+        self.assertFalse(runtime_matches(228 * 60, 178))
+        self.assertTrue(runtime_matches(228 * 60, 178, cut=True))
+        self.assertFalse(runtime_matches(356 * 60, 178, cut=True))
+        self.assertFalse(runtime_matches(3 * 60, 178, cut=True))
+        from backend.agents.durations import frame_rate, mismatch, names_cut
+
+        self.assertTrue(names_cut("The Lord of the Rings 2001 EXTENDED 1080p"))
+        self.assertTrue(names_cut("Blade.Runner.1982.Final.Cut.1080p"))
+        self.assertTrue(names_cut("Movie 2004 Directors Cut 720p"))
+        self.assertFalse(names_cut("Four Lions (2010) 1080p BrRip x264 - YIFY"))
+        self.assertEqual(frame_rate({"avg_frame_rate": "24000/1001"}), 23.976)
+        self.assertEqual(frame_rate({"avg_frame_rate": "0/0", "r_frame_rate": "25/1"}), 25)
+        self.assertEqual(frame_rate({}), 0)
+        self.assertIn("115.3 min at film speed, since it plays at 25 fps", mismatch(110.6 * 60, 140, fps=25))
         # A rejected copy says why.
         job = NS(preferences={"values": {"max_file_size_gb": 3}, "policy": {}}, audio_pref="original",
                  original_language="ja", min_quality="720p")

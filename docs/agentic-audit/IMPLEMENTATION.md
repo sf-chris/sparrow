@@ -125,7 +125,9 @@ assets and loading the bundled speech model. No installed owner state was used. 
 checked working tree. The removed CWM endpoints remain unavailable even with
 the old enable flag set (GET 404; removed POST handlers 405).
 
-## Remaining issue #3 work (do not close the parent)
+## Remaining issue #3 work
+
+Issue #3 closed on 26 November 2026. Sparrow now runs on GLM only; the GLM role evaluations scored 121/126 ([benchmark](GLM_BENCHMARK_2026-11-25.md)). P8 is decided: keep Sparrow's own agent loop. The other items below were not carried forward as separate work; open a focused issue when one is needed. Physical phone checks happen with casting (#38).
 
 The next P4 slice adds [retrievable oversized observations](EVIDENCE.md), atomic
 with invocation receipts, private to a session and subject to explicit storage

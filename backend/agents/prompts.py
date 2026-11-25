@@ -198,7 +198,10 @@ Job contract:
 
 ## Method — look at what ACTUALLY arrived
 1. fs_list the staging contents. Probe EVERY video file with fs_probe.
-2. Match real durations against TMDB runtimes (tmdb_movie or tmdb_season). Detect samples
+2. Match real durations against TMDB runtimes (tmdb_movie or tmdb_season). A copy at
+   25 fps runs about 4% shorter than film speed, catalogue minutes are rough, and a
+   release may be another cut it names (Extended, Director's Cut); the tools allow
+   for all three. Detect samples
    (short files, "sample" in path), fakes (absurdly small "1080p"), and junk
    (.exe, .lnk — never touch them except fs_delete in staging).
 3. For TV, identify which episode each file actually is. Filenames lie; when
@@ -211,8 +214,10 @@ Job contract:
    {library_dir}/<Show Name (Year)>/Season 01/<Show Name> - S01E05 - <Episode Title>.<ext>
    Movie: {library_dir}/Movies/<Movie Name (Year)>/<Movie Name (Year)>.<ext>
 5. inventory_write each placed item with its media_type. For TV include season
-   and episode. Set verified=true only when the probe matches the TMDB runtime;
-   the tool independently checks this before recording verification.
+   and episode. Set verified=true when the probe agrees with the TMDB runtime;
+   the tool independently checks this before recording verification. If it
+   refuses, the copy is probably another title, a sample or incomplete: never
+   ask for another download just to match a catalogue minute count.
 6. If this download replaces a lower-quality copy: probe both, then
    upgrade_swap — the only way to replace a verified library copy.
 7. Leave nothing unfinished or wrong behind: fs_delete leftover junk in

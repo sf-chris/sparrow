@@ -232,6 +232,46 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ctx.close)
         self.assertEqual(self.store.get_job(self.job.id).status.value, "complete")
 
+    async def test_movie_runtime_allows_playback_speed_and_named_cuts(self) -> None:
+        """TMDB lists Four Lions at 97 minutes, its 25 fps length; the film-speed copy runs 101."""
+        self.job.media_type = "movie"
+        self.job.min_quality = "720p"
+        self.store.save_job(self.job)
+        inventory = self._tool(media_tools(self.toolbox), "inventory_write")
+
+        async def tmdb_get(path: str, **_):
+            return {"title": "Fixture", "release_date": "2010-01-01", "runtime": 97, "overview": ""}
+
+        self.toolbox.tmdb_get = tmdb_get
+
+        async def record(name, minutes, fps):
+            session = AgentSession(agent=AgentKind.MEDIA, job_id=self.job.id, download_id=f"dl-{len(name)}-{minutes}")
+            await self.storage.add_download(Download(
+                id=session.download_id, name=name, magnet_url="magnet:?xt=fixture",
+                media_type=MediaType.MOVIE, status=DownloadStatus.COMPLETED,
+                metadata={"agent_managed": True, "job_id": self.job.id}))
+            movie = self.library / "Movies" / "Fixture (2010)" / "Fixture (2010).mp4"
+            movie.parent.mkdir(parents=True, exist_ok=True)
+            movie.write_bytes(b"fixture media")
+            with patch("backend.agents.tools._probe_media_facts", new=AsyncMock(return_value={
+                "duration_seconds": minutes * 60, "width": 1920, "height": 1038, "quality": "1080p", "fps": fps,
+            })):
+                return await inventory.handler(
+                    ToolCtx(session=session, runtime=_Runtime()),
+                    {"tmdb_id": 99, "media_type": "movie", "path": str(movie), "verified": True})
+
+        self.assertIn("verified movie recorded", await record("Fixture (2010) 1080p BrRip x264", 101.1, 23.976))
+        self.assertIn("verified movie recorded", await record("Fixture 2010 1080p BluRay", 97.3, 25))
+        # A longer cut passes when the release names it, never on length alone.
+        with self.assertRaisesRegex(ToolError, "Do not search for a cut"):
+            await record("Fixture 2010 1080p BluRay", 124, 23.976)
+        self.assertIn("verified movie recorded", await record("Fixture 2010 Extended Cut 1080p BluRay", 124, 23.976))
+        # Samples and double-length files never pass.
+        with self.assertRaisesRegex(ToolError, "verification refused"):
+            await record("Fixture 2010 Extended Cut 1080p BluRay", 2, 23.976)
+        with self.assertRaisesRegex(ToolError, "verification refused"):
+            await record("Fixture 2010 Director's Cut 1080p", 194, 23.976)
+
     async def test_tv_episode_inventory_can_satisfy_first_episode_job(self) -> None:
         self.job.media_type = "tv"
         self.job.min_quality = "720p"
@@ -299,15 +339,16 @@ class ToolGuardrailTests(unittest.IsolatedAsyncioTestCase):
         tool = self._tool(media_tools(self.toolbox), "upgrade_swap")
         ctx = ToolCtx(session=self.session, runtime=_Runtime())
 
-        with patch("backend.agents.tools._probe_duration_seconds",
-                   new=AsyncMock(side_effect=[1200.0, 1500.0])):
+        probe = lambda *copies: patch("backend.agents.tools._probe_media_facts", new=AsyncMock(side_effect=[
+            {"duration_seconds": seconds, "fps": fps} for seconds, fps in copies]))
+        with probe((1200.0, 23.976), (1500.0, 23.976)):
             with self.assertRaisesRegex(ToolError, "durations differ"):
                 await tool.handler(ctx, {"old_path": str(old), "new_path": str(new)})
         self.assertTrue(old.exists())
         self.assertTrue(new.exists())
 
-        with patch("backend.agents.tools._probe_duration_seconds",
-                   new=AsyncMock(side_effect=[1200.0, 1201.0])):
+        # A 25 fps copy of the same cut is 4% shorter: 97.3 against 101.4 minutes.
+        with probe((5837.0, 25), (6086.0, 23.976)):
             await tool.handler(ctx, {"old_path": str(old), "new_path": str(new)})
         self.assertFalse(old.exists())
         self.assertFalse(new.exists())
