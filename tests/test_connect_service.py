@@ -139,13 +139,13 @@ class ConnectServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         linked = await self.client.get(f'/h/{home["id"]}')
         self.assertEqual(linked.status_code, 303)
-        self.assertEqual(linked.headers["location"], f'https://{home["name"]}:8382/')
+        self.assertEqual(linked.headers["location"], f'https://{home["name"]}:8382/login')
         cookie = linked.headers["set-cookie"]
         self.assertIn("Secure", cookie)
         self.assertIn("HttpOnly", cookie)
         front = await self.client.get("/")
         self.assertEqual(front.status_code, 303)
-        self.assertEqual(front.headers["location"], f'https://{home["name"]}:8382/')
+        self.assertEqual(front.headers["location"], f'https://{home["name"]}:8382/login')
         await self.client.get("/forget")
         self.assertEqual((await self.client.get("/")).status_code, 200)
 

@@ -379,8 +379,9 @@ def create_app(store=None, dns=None, call_back=None):
         return row if row and row["verified"] and row["port"] else None
 
     def address_of(row):
+        # Sign-in when signed out; a signed-in Sparrow sends /login home.
         port = "" if row["port"] == 443 else f":{row['port']}"
-        return f"https://{row['id']}.{SUFFIX}{port}/"
+        return f"https://{row['id']}.{SUFFIX}{port}/login"
 
     @app.get("/h/{home_id}")
     def link(home_id: str):

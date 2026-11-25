@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Copy } from "lucide-react";
+import qrcode from "qrcode-generator";
 import { api, post } from "./api";
 import { ErrorNote, Field, Loading, Section, useResource } from "./ui";
 
@@ -13,6 +14,35 @@ type Status = {
   reachable: boolean;
   problem: string | null;
 };
+
+/** A scannable code for a link: black on white, with the quiet border a
+ *  phone camera needs, whatever the theme. */
+function QrCode({ text, label }: { text: string; label: string }) {
+  const { size, path } = useMemo(() => {
+    const qr = qrcode(0, "M");
+    qr.addData(text);
+    qr.make();
+    const count = qr.getModuleCount(),
+      quiet = 4;
+    let d = "";
+    for (let row = 0; row < count; row++)
+      for (let col = 0; col < count; col++)
+        if (qr.isDark(row, col)) d += `M${col + quiet} ${row + quiet}h1v1h-1z`;
+    return { size: count + quiet * 2, path: d };
+  }, [text]);
+  return (
+    <svg
+      className="qr"
+      viewBox={`0 0 ${size} ${size}`}
+      role="img"
+      aria-label={label}
+      shapeRendering="crispEdges"
+    >
+      <rect width={size} height={size} fill="#fff" />
+      <path d={path} fill="#000" />
+    </svg>
+  );
+}
 
 /** Sparrow Connect: an HTTPS address for this server, so phones and TVs
  *  reach it from anywhere. Off until an administrator turns it on. */
@@ -103,16 +133,28 @@ export default function ConnectSettings() {
                 <Check size={16} strokeWidth={2.5} aria-hidden="true" /> Reachable
                 at <span className="num">{status.address}</span>
               </p>
-              <p className="meta">Open this on your phone once:</p>
-              <div className="connect-link">
-                <a href={status.link}>{status.link}</a>
-                <button
-                  className="control"
-                  aria-label={copied ? "Copied" : "Copy link"}
-                  onClick={() => void copy(status.link!)}
-                >
-                  {copied ? <Check size={16} /> : <Copy size={16} />}
-                </button>
+              <div className="connect-phone">
+                <QrCode
+                  text={status.link}
+                  label={`QR code for ${status.link}`}
+                />
+                <div>
+                  <p>Scan with your phone’s camera, once.</p>
+                  <div className="connect-link">
+                    <a href={status.link}>{status.link}</a>
+                    <button
+                      className="btn"
+                      onClick={() => void copy(status.link!)}
+                    >
+                      {copied ? (
+                        <Check size={16} strokeWidth={2.5} />
+                      ) : (
+                        <Copy size={16} strokeWidth={2.25} />
+                      )}
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
