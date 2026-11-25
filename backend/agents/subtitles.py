@@ -227,6 +227,63 @@ class Subtitles:
                 raise ToolError("The media request changed; subtitle work has stopped.")
         return user, asset
 
+    async def caption(self, user, identity, original=False):
+        """A ready track as WebVTT for this person, with their timing nudge."""
+        with self.accounts.connect() as db:
+            row = db.execute(
+                "SELECT * FROM subtitle_tracks WHERE id=?", (identity,)
+            ).fetchone()
+        if not row:
+            raise HTTPException(404, "Subtitle track not found.")
+        asset = self.catalogue.asset(user, row["asset_id"])
+        data = json.loads(row["data"])
+        if (
+            not asset
+            or data["media_version"] != asset["facts"]["version"]
+            or (row["state"] != "ready" and not original)
+        ):
+            raise HTTPException(404, "This subtitle is not ready for this media copy.")
+        if original:
+            if not data.get("original_version"):
+                raise HTTPException(404, "The original track is unavailable.")
+            data = {
+                **data,
+                "path": data["original_path"],
+                "version": data["original_version"],
+            }
+        try:
+            raw = (
+                await self.read(row["node_id"], "cache", data["path"], data["version"])
+            ).decode("utf8")
+        except (NodeError, UnicodeError, ValueError) as exc:
+            raise HTTPException(
+                503,
+                "The subtitle’s storage is unavailable. Reconnect it and try again.",
+            ) from exc
+        from .subtitle_worker import cues_from_text, render
+
+        with self.accounts.connect() as db:
+            personal = db.execute(
+                "SELECT seconds FROM subtitle_offsets WHERE user_id=? AND track_id=?",
+                (user["id"], identity),
+            ).fetchone()
+        if personal and personal["seconds"] and not original:
+            cues = cues_from_text(raw, "vtt")
+            delta = personal["seconds"]
+            raw = render(
+                [
+                    {
+                        **c,
+                        "start": max(0, c["start"] + delta),
+                        "end": max(0.001, c["end"] + delta),
+                    }
+                    for c in cues
+                    if c["end"] + delta > 0
+                ],
+                vtt=True,
+            )
+        return raw
+
     def tracks(self, user, asset_id):
         asset = self.catalogue.asset(user, asset_id)
         if not asset:
@@ -2574,59 +2631,7 @@ def install_subtitles(app, accounts, nodes, catalogue, get_service):
 
     @router.get("/subtitles/tracks/{identity}.vtt")
     async def caption(identity: str, request: Request, original: bool = False):
-        with accounts.connect() as db:
-            row = db.execute(
-                "SELECT * FROM subtitle_tracks WHERE id=?", (identity,)
-            ).fetchone()
-        if not row:
-            raise HTTPException(404, "Subtitle track not found.")
-        asset = catalogue.asset(request.state.user, row["asset_id"])
-        data = json.loads(row["data"])
-        if (
-            not asset
-            or data["media_version"] != asset["facts"]["version"]
-            or (row["state"] != "ready" and not original)
-        ):
-            raise HTTPException(404, "This subtitle is not ready for this media copy.")
-        if original:
-            if not data.get("original_version"):
-                raise HTTPException(404, "The original track is unavailable.")
-            data = {
-                **data,
-                "path": data["original_path"],
-                "version": data["original_version"],
-            }
-        try:
-            raw = (
-                await subtitles.read(row["node_id"], "cache", data["path"], data["version"])
-            ).decode("utf8")
-        except (NodeError, UnicodeError, ValueError) as exc:
-            raise HTTPException(
-                503,
-                "The subtitle’s storage is unavailable. Reconnect it and try again.",
-            ) from exc
-        from .subtitle_worker import cues_from_text, render
-
-        with accounts.connect() as db:
-            personal = db.execute(
-                "SELECT seconds FROM subtitle_offsets WHERE user_id=? AND track_id=?",
-                (request.state.user["id"], identity),
-            ).fetchone()
-        if personal and personal["seconds"] and not original:
-            cues = cues_from_text(raw, "vtt")
-            delta = personal["seconds"]
-            raw = render(
-                [
-                    {
-                        **c,
-                        "start": max(0, c["start"] + delta),
-                        "end": max(0.001, c["end"] + delta),
-                    }
-                    for c in cues
-                    if c["end"] + delta > 0
-                ],
-                vtt=True,
-            )
+        raw = await subtitles.caption(request.state.user, identity, original)
         return Response(
             raw, media_type="text/vtt", headers={"Cache-Control": "private,no-store"}
         )

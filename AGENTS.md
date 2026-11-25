@@ -12,9 +12,11 @@ for the shared interface contract. Stage 7 is excluded from the current work.
 The short version: an agent is an LLM in a tool-use loop — nothing else
 qualifies. Agents own uncertain discovery/acquisition/curation decisions and
 quality review. Predictable subtitle processing runs automatically under resolved
-policy; tools establish facts and enforce limits. The setup agent and all
-TV/Emby/casting work are parked; do not treat retained TV option notes as active
-implementation requirements. Follow the delivery sequence at the top of ROADMAP.md.
+policy; tools establish facts and enforce limits. Casting from the phone and
+opt-in Sparrow Connect are current work
+([issue #38](https://github.com/sf-chris/sparrow/issues/38)); the setup agent,
+Emby and native TV apps stay parked, so don't treat retained TV option notes as
+active implementation requirements. Follow the delivery sequence at the top of ROADMAP.md.
 
 The next agentic reliability phase is tracked in
 [issue #3](https://github.com/sf-chris/sparrow/issues/3), with the source audit and
@@ -64,6 +66,10 @@ Everything new lives in `backend/agents/`:
   checks that wake the Librarian only for eligible work.
 - `accounts.py`, `nodes.py`, `node_executor.py`, `catalogue.py`, `playback.py` —
   household preferences/permissions, durable portable storage and media delivery.
+  Each playback session also has a signed cast link (`/api/v1/cast/…`) that a
+  TV can fetch without a sign-in; it ends with the session, the sign-in that
+  started it or the viewer's access. Its converted stream carries the chosen
+  subtitle so AirPlay shows it.
 - `placement.py`, `moves.py` — where a request is stored (Automatic, pools, a
   person's storage or one disk), pinned when it starts with a plain reason; and
   verified copy-then-remove moves of a title between disks and computers.

@@ -117,7 +117,11 @@ in stage 2 and cover each later endpoint; stage 7 completes external access
 and diagnostics. Backup/migration safety and installation checks begin when
 persistent state and packaging change, rather than waiting until stage 7.
 
-**Parked:** all TV/Emby/casting work and the setup/deployment agent. Retain the
+**Current (2026-11-26):** the phone as a remote, casting to a TV (AirPlay first,
+then Chromecast) and opt-in Sparrow Connect for HTTPS addresses, issue #38. Homes
+that can't open a port (relay, peer-to-peer) follow later, issue #37.
+
+**Parked:** Emby integration, native TV apps and the setup/deployment agent. Retain the
 TV option notes in the product plan, but do not investigate or implement them
 as dependencies of this sequence. Normal guided setup remains core. Source
 expansion, music, native phone apps and an operated relay service remain later
@@ -189,8 +193,9 @@ wrapper around an existing automation stack.
 - Prowlarr/Torznab may eventually exist as optional compatibility bridges.
 - Guided setup, mobile responsiveness, accounts/sharing, inherited preferences
   and browser playback are part of the complete current owner experience.
-- All TV work is parked, including the installed Emby app, real-server bridges,
-  protocol compatibility, casting and a dedicated Sparrow TV app.
+- Casting from the phone (AirPlay, Chromecast) is current work (issue #38). The
+  rest of TV work stays parked: the installed Emby app, real-server bridges,
+  protocol compatibility and a dedicated Sparrow TV app.
 - Bundle or vendor selected subtitle-processing components so the owner manages
   one feature; agents review results and handle uncertainty rather than driving
   every predictable processing step.

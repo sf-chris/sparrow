@@ -13,7 +13,7 @@ Mobile use, accounts, guided self-hosting, subtitle preparation, agentic discove
 | Area | Direction | Qualification |
 |---|---|---|
 | Watching | Sparrow owns its player, playback sessions and personal watch state | Reuse established media libraries and ffmpeg; playback must work while the reasoning provider is unavailable |
-| TV (parked) | Retain the Samsung/Emby context for a future decision | No current client evaluation, bridge, casting or native-app work; no dependency on TV details for the active roadmap |
+| Casting | Play from the phone on a TV: AirPlay, then Chromecast (issue #38) | The TV fetches through a signed, session-bound cast link; subtitles travel inside the stream. Emby bridges and native TV apps stay parked |
 | Subtitles | Built-in automatic acquisition/alignment pipeline, followed by agent verification and exception handling | Bundle or vendor selected compatible components; no separate subtitle app/service for the owner to manage |
 | Discovery | Add a real tool-using Discovery Agent with conversational refinement and structured results | Retain instant direct-title suggestions; discovery alone cannot initiate unrequested acquisition |
 | Agent framework | Evaluate an agent SDK first for the new discovery session | Preserve Sparrow's durable jobs, permissions and evidence; migrate existing agents only after parity checks |

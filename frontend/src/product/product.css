@@ -2629,6 +2629,25 @@ a.tonight-art:hover .still img {
   width: 1.8rem;
   color: var(--accent);
 }
+/* Playing on a TV: the phone shows where the picture went, and the controls. */
+.screen-status.on-tv {
+  align-content: center;
+  justify-items: center;
+  gap: 0.75rem;
+  color: var(--on-screen);
+  text-align: center;
+}
+.screen-status.on-tv svg {
+  color: var(--accent);
+}
+.screen-status.on-tv p {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+.control.on-tv {
+  color: var(--accent);
+}
 .theatre-errors {
   position: absolute;
   top: 4.5rem;
@@ -4379,6 +4398,10 @@ button.link:hover {
     height: 1.9rem;
   }
   .control.jump {
+    display: none;
+  }
+  /* With the TV button too, the scrubber shows the length. */
+  .theatre .controls:has(.control.tv) .clock.total {
     display: none;
   }
   .theatre-panel {

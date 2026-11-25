@@ -8,7 +8,11 @@
 Updated product direction, 2026-09-09: the owner accepted the product review
 and added agentic discovery, subtitle/audio synchronisation, mobile use,
 accounts and guided self-hosting as core requirements. The owner subsequently
-parked all TV/Emby/casting work and the setup agent. Read
+parked all TV/Emby/casting work and the setup agent. On 2026-11-26 the owner
+made the phone as a remote, casting to a TV (AirPlay, then Chromecast) and an
+opt-in Sparrow Connect service current work
+([issue #38](https://github.com/sf-chris/sparrow/issues/38)); Emby, native TV
+apps and the setup agent stay parked. Read
 [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md) and [ROADMAP.md](ROADMAP.md) for the
 current target and acceptance criteria. The implementation and its measured checks are recorded in
 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md). Household accounts, browser
@@ -196,8 +200,11 @@ decisions.
   controls are separate. Technical diagnostics remain available without
   dominating normal use.
 
-Phone responsiveness applies throughout. TV/Emby integration, casting and
-native TV applications are parked, as is the setup agent. Guided setup and
+Phone responsiveness applies throughout. Casting from the phone is current work:
+a playback session's signed cast link lets a TV that fetches the video itself
+play it without the viewer's sign-in, ending with the session or the viewer's
+access. TV/Emby integration and native TV applications are parked, as is the
+setup agent. Guided setup and
 predictable diagnostics remain core. Browser playback uses shared asset identity,
 permissions and personal progress that future clients can reuse. Nodes provide
 local processing and evidence.

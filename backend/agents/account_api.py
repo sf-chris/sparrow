@@ -75,10 +75,10 @@ def install_accounts(app, storage, get_service):
     @app.middleware("http")
     async def identity_boundary(request: Request, call_next):
         path = request.url.path
-        if path.startswith("/api/v1/node/"):
-            return await call_next(
-                request
-            )  # Node routes enforce their own unique credentials.
+        if path.startswith("/api/v1/node/") or path.startswith("/api/v1/cast/"):
+            # Node routes enforce their own unique credentials; a cast link is
+            # a signed, session-bound address checked by the playback routes.
+            return await call_next(request)
         protected = path.startswith("/api/") or path.startswith("/art/")
         if not protected:
             return await call_next(request)

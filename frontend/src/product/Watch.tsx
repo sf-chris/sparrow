@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  Airplay,
   ArrowLeft,
   Captions,
+  Cast,
   Maximize,
   Minimize,
   Minus,
@@ -11,6 +13,7 @@ import {
   Plus,
   RotateCcw,
   RotateCw,
+  Tv,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -26,7 +29,32 @@ type Playback = {
   duration: number;
   audio_index: number | null;
   subtitles: Caption[];
+  /** Addresses a TV can fetch without this browser's sign-in. */
+  cast: {
+    url: string;
+    stream: string | null;
+    subtitles: { index: number; url: string }[];
+  };
 };
+type RemotePlayback = EventTarget & {
+  state: "connecting" | "connected" | "disconnected";
+  watchAvailability(callback: (available: boolean) => void): Promise<number>;
+  cancelWatchAvailability(id?: number): Promise<void>;
+  prompt(): Promise<void>;
+};
+/** Safari's AirPlay and the standard Remote Playback API (Chrome's cast). */
+type TvVideo = HTMLVideoElement & {
+  remote?: RemotePlayback;
+  webkitShowPlaybackTargetPicker?: () => void;
+  webkitCurrentPlaybackTargetIsWireless?: boolean;
+  webkitEnterFullscreen?: () => void;
+};
+const AIRPLAY =
+  typeof window !== "undefined" && "WebKitPlaybackTargetAvailabilityEvent" in window;
+const NATIVE_HLS =
+  typeof document !== "undefined" &&
+  !!document.createElement("video").canPlayType("application/vnd.apple.mpegurl");
+const absolute = (path: string) => new URL(path, window.location.href).href;
 const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
 const stamp = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds || 0));
@@ -36,8 +64,13 @@ const stamp = (seconds: number) => {
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 };
 /** Show the chosen subtitles. Tracks are matched by element, not position:
- *  Safari also lists the text tracks inside the file, which shifts positions. */
-function showSubtitle(element: HTMLVideoElement | null, chosen: unknown) {
+ *  Safari also lists the text tracks inside the file, which shifts positions.
+ *  On a TV the stream itself carries the one chosen track; show that. */
+function showSubtitle(
+  element: HTMLVideoElement | null,
+  chosen: unknown,
+  inStream = false,
+) {
   if (!element) return;
   const own = new Set<TextTrack>();
   element.querySelectorAll("track").forEach((el) => {
@@ -45,7 +78,10 @@ function showSubtitle(element: HTMLVideoElement | null, chosen: unknown) {
     el.track.mode = el.dataset.index === String(chosen) ? "showing" : "disabled";
   });
   for (let i = 0; i < element.textTracks.length; i++) {
-    if (!own.has(element.textTracks[i])) element.textTracks[i].mode = "disabled";
+    const track = element.textTracks[i];
+    if (own.has(track)) continue;
+    const text = track.kind === "subtitles" || track.kind === "captions";
+    track.mode = inStream && text && chosen !== -1 ? "showing" : "disabled";
   }
 }
 
@@ -121,6 +157,10 @@ function Player({
   const [muted, setMuted] = useState(false);
   const [full, setFull] = useState(false);
   const [panel, setPanel] = useState(false);
+  // Whether a TV is in reach, and whether this video is playing on one.
+  const [tvs, setTvs] = useState(false);
+  const [tv, setTv] = useState<"off" | "connecting" | "on">("off");
+  const applied = useRef("");
   // The controls and title show while the pointer moves, while paused and
   // while the panel is open; otherwise they fade after a moment.
   const [chrome, setChrome] = useState(true);
@@ -131,7 +171,7 @@ function Player({
     hideTimer.current = window.setTimeout(() => setChrome(false), 2800);
   }, []);
   useEffect(() => () => clearTimeout(hideTimer.current), []);
-  const shown = chrome || !playing || panel || busy;
+  const shown = chrome || !playing || panel || busy || tv !== "off";
   const navigate = useNavigate();
   const back = () =>
     (window.history.state?.idx ?? 0) > 0
@@ -184,7 +224,11 @@ function Player({
   }
   function fullscreen() {
     if (document.fullscreenElement) void document.exitFullscreen();
-    else void screen.current?.requestFullscreen?.().catch(() => {});
+    else if (screen.current?.requestFullscreen)
+      void screen.current.requestFullscreen().catch(() => {});
+    // An iPhone has no page full screen; its own player does it instead.
+    else
+      (video.current as TvVideo | null)?.webkitEnterFullscreen?.();
   }
   const position = useRef<number | undefined>(undefined);
   const save = async (ended = false, keepalive = false) => {
@@ -279,13 +323,10 @@ function Player({
       element.currentTime = session.position;
       void element.play().catch(() => {});
     };
-    element.addEventListener("loadedmetadata", metadata);
-    if (
-      session.mode === "direct" ||
-      element.canPlayType("application/vnd.apple.mpegurl")
-    )
-      element.src = session.url;
-    else
+    // A browser that plays the address itself gets it from the source effect
+    // below, so a TV can take it over; others convert through hls.js.
+    if (session.mode !== "direct" && !NATIVE_HLS) {
+      element.addEventListener("loadedmetadata", metadata);
       void import("hls.js")
         .then(({ default: Hls }) => {
           if (disposed) return;
@@ -312,6 +353,7 @@ function Player({
           hls.attachMedia(element);
         })
         .catch(() => setError("The player didn’t load. Refresh the page."));
+    }
     const timer = window.setInterval(() => {
       if (!element.paused) void save();
     }, 5000);
@@ -327,11 +369,98 @@ function Player({
       element.removeEventListener("loadedmetadata", metadata);
       element.removeAttribute("src");
       element.load();
+      applied.current = "";
     };
   }, [session?.id]);
+  // What the video element plays. On a TV with subtitles chosen, the stream
+  // that carries them: a TV shows only what the stream itself contains.
+  const stream = session?.cast.stream;
+  const tvSubtitles = tv === "on" && subtitle !== -1 && !!stream && NATIVE_HLS;
+  const source =
+    session && (session.mode === "direct" || NATIVE_HLS)
+      ? tvSubtitles
+        ? `${stream}?subtitle=${subtitle}`
+        : session.cast.url
+      : null;
   useEffect(() => {
     const element = video.current;
-    const apply = () => showSubtitle(element, subtitle);
+    if (!element || !session || !source || applied.current === source) return;
+    // A switch keeps the place and whether it was playing.
+    const first = !applied.current;
+    const at = first ? session.position : element.currentTime;
+    const resume = first || !element.paused;
+    applied.current = source;
+    const resumed = () => {
+      setError("");
+      element.currentTime = at;
+      if (resume) void element.play().catch(() => {});
+    };
+    element.addEventListener("loadedmetadata", resumed, { once: true });
+    element.src = absolute(
+      source === session.cast.url ? source : `${source}&start=${at.toFixed(1)}`,
+    );
+    return () => element.removeEventListener("loadedmetadata", resumed);
+  }, [session?.id, source]);
+  // AirPlay (Safari) or the browser's cast: is a TV in reach, are we on it?
+  useEffect(() => {
+    const element = video.current as TvVideo | null;
+    if (!element) return;
+    if (AIRPLAY) {
+      const reach = (event: Event) =>
+        setTvs(
+          (event as Event & { availability?: string }).availability ===
+            "available",
+        );
+      const wireless = () =>
+        setTv(element.webkitCurrentPlaybackTargetIsWireless ? "on" : "off");
+      element.addEventListener("webkitplaybacktargetavailabilitychanged", reach);
+      element.addEventListener("webkitcurrentplaybacktargetiswirelesschanged", wireless);
+      return () => {
+        element.removeEventListener("webkitplaybacktargetavailabilitychanged", reach);
+        element.removeEventListener(
+          "webkitcurrentplaybacktargetiswirelesschanged",
+          wireless,
+        );
+      };
+    }
+    const remote = element.remote;
+    if (!remote) return;
+    const update = () =>
+      setTv(
+        remote.state === "connected"
+          ? "on"
+          : remote.state === "connecting"
+            ? "connecting"
+            : "off",
+      );
+    const names = ["connecting", "connect", "disconnect"];
+    names.forEach((name) => remote.addEventListener(name, update));
+    return () => names.forEach((name) => remote.removeEventListener(name, update));
+  }, []);
+  useEffect(() => {
+    const remote = (video.current as TvVideo | null)?.remote;
+    if (AIRPLAY || !remote) return;
+    // A converted stream played through hls.js can't be handed to a TV.
+    let live = true,
+      id: number | undefined;
+    remote
+      .watchAvailability((available) => live && setTvs(available))
+      .then((n) => (id = n))
+      .catch(() => live && setTvs(false));
+    return () => {
+      live = false;
+      if (id !== undefined)
+        void remote.cancelWatchAvailability(id).catch(() => {});
+    };
+  }, [source]);
+  function chooseTv() {
+    const element = video.current as TvVideo | null;
+    if (AIRPLAY) element?.webkitShowPlaybackTargetPicker?.();
+    else void element?.remote?.prompt().catch(() => {});
+  }
+  useEffect(() => {
+    const element = video.current;
+    const apply = () => showSubtitle(element, subtitle, tvSubtitles);
     apply();
     // Safari picks tracks again when one loads or appears; choose again then.
     const tracks = element ? [...element.querySelectorAll("track")] : [];
@@ -341,7 +470,7 @@ function Player({
       tracks.forEach((t) => t.removeEventListener("load", apply));
       element?.textTracks.removeEventListener("addtrack", apply);
     };
-  }, [subtitle, session]);
+  }, [subtitle, session, tvSubtitles]);
   const selected = session?.subtitles.find((t) => t.index === subtitle);
   return (
     <div
@@ -376,6 +505,7 @@ function Player({
     >
       <video
         ref={video}
+        x-webkit-airplay="allow"
         playsInline
         tabIndex={-1}
         onPointerUp={(event) => {
@@ -415,7 +545,8 @@ function Player({
             );
         }}
       >
-        {session?.subtitles.map((t) => (
+        {!tvSubtitles &&
+          session?.subtitles.map((t) => (
           <track
             key={`${session.id}-${t.index}-${t.url}`}
             kind="subtitles"
@@ -424,9 +555,15 @@ function Player({
             label={trackLabel(t, "Subtitles")}
             data-index={t.index}
           />
-        ))}
+          ))}
       </video>
-      {(busy || waiting) && (
+      {tv !== "off" && (
+        <div className="screen-status on-tv" role="status">
+          <Tv size={40} strokeWidth={1.75} aria-hidden="true" />
+          <p>{tv === "on" ? "Playing on your TV" : "Connecting to your TV"}</p>
+        </div>
+      )}
+      {(busy || waiting) && tv === "off" && (
         <div className="screen-status">
           <Loading label={busy ? "Starting" : "Buffering"} />
         </div>
@@ -581,7 +718,7 @@ function Player({
           }
           onChange={(e) => seek(Number(e.target.value))}
         />
-        <span className="clock num" aria-hidden="true">
+        <span className="clock total num" aria-hidden="true">
           {stamp(length)}
         </span>
         <button
@@ -593,6 +730,21 @@ function Player({
         >
           <Captions size={22} strokeWidth={2.25} />
         </button>
+        {(tvs || tv !== "off") && (
+          <button
+            className={`control tv${tv === "on" ? " on-tv" : ""}`}
+            aria-label={
+              tv === "on" ? "Playing on TV. Choose where to play" : "Play on TV"
+            }
+            onClick={chooseTv}
+          >
+            {AIRPLAY ? (
+              <Airplay size={20} strokeWidth={2.25} />
+            ) : (
+              <Cast size={20} strokeWidth={2.25} />
+            )}
+          </button>
+        )}
         <button
           className="control"
           aria-label={muted ? "Unmute" : "Mute"}
