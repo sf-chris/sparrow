@@ -162,9 +162,13 @@ def install_accounts(app, storage, get_service):
 
     @router.post("/auth/device-link")
     def device_link(request: Request):
-        """Sign this person in on another device: the code goes in a QR code."""
+        """Sign this person in on another device: the code goes in a QR code,
+        pointed at Sparrow Connect's address when this server has a working one."""
         code, expires = accounts.device_link(request.state.user["id"])
-        return {"code": code, "expires": expires}
+        connect = getattr(request.app.state, "connect", None)
+        state = connect.state() if connect else {}
+        link = state.get("link") if state.get("enabled") and state.get("reachable") else None
+        return {"code": code, "expires": expires, "link": link}
 
     @router.post("/auth/device-link/redeem")
     def redeem_device_link(body: DeviceCode, request: Request, response: Response):

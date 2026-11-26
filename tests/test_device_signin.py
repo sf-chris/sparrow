@@ -50,6 +50,27 @@ class DeviceSignInTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(again.status_code, 401)
             self.assertNotIn(COOKIE, other.cookies)
 
+    async def test_codes_point_at_a_working_connect_address_only(self):
+        class Connect:
+            def __init__(self, **state):
+                self.saved = state
+
+            def state(self):
+                return self.saved
+
+        viewer = self.accounts.create_user(
+            "viewer", "fixture-password-456", "Viewer", invitation=self.accounts.invite("viewer", None)
+        )
+        async with self.client(viewer) as phone_owner:
+            # Without Sparrow Connect the phone opens this same address.
+            self.assertIsNone((await phone_owner.post("/api/v1/auth/device-link")).json()["link"])
+            link = "https://streamsparrow.com/h/abc123"
+            self.app.state.connect = Connect(enabled=True, reachable=False, link=link)
+            self.assertIsNone((await phone_owner.post("/api/v1/auth/device-link")).json()["link"])
+            # Anyone signed in, not just an administrator, gets the address.
+            self.app.state.connect = Connect(enabled=True, reachable=True, link=link)
+            self.assertEqual((await phone_owner.post("/api/v1/auth/device-link")).json()["link"], link)
+
     async def test_codes_lapse_and_need_a_signed_in_person_to_make(self):
         async with self.client() as stranger:
             self.assertEqual((await stranger.post("/api/v1/auth/device-link")).status_code, 401)

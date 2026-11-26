@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import qrcode from "qrcode-generator";
+import { useEffect, useId, useState } from "react";
 import { api, post } from "./api";
-import { ErrorNote, Loading, Section, useResource } from "./ui";
+import { Tick } from "./Brand";
+import { ErrorNote, Section, useResource } from "./ui";
 
 type Status = {
   enabled: boolean;
@@ -11,36 +11,6 @@ type Status = {
   reachable: boolean;
   problem: string | null;
 };
-type SignIn = { code: string; expires: number };
-
-/** A scannable code: black on white with the quiet border a phone camera
- *  needs, whatever the theme. */
-function QrCode({ text, label }: { text: string; label: string }) {
-  const { size, path } = useMemo(() => {
-    const qr = qrcode(0, "M");
-    qr.addData(text);
-    qr.make();
-    const count = qr.getModuleCount(),
-      quiet = 4;
-    let d = "";
-    for (let row = 0; row < count; row++)
-      for (let col = 0; col < count; col++)
-        if (qr.isDark(row, col)) d += `M${col + quiet} ${row + quiet}h1v1h-1z`;
-    return { size: count + quiet * 2, path: d };
-  }, [text]);
-  return (
-    <svg
-      className="qr"
-      viewBox={`0 0 ${size} ${size}`}
-      role="img"
-      aria-label={label}
-      shapeRendering="crispEdges"
-    >
-      <rect width={size} height={size} fill="#fff" />
-      <path d={path} fill="#000" />
-    </svg>
-  );
-}
 
 /** Sparrow Connect: this server's secure address, so a phone or TV reaches
  *  it from anywhere. Off until an administrator turns it on. */
@@ -49,158 +19,137 @@ export default function ConnectSettings() {
   const status = resource.data;
   const [error, setError] = useState("");
   const [port, setPort] = useState<string | null>(null);
-  const [signin, setSignin] = useState<SignIn | null>(null);
+  const id = useId();
   // While it switches, show each step as it happens.
   useEffect(() => {
     if (!status?.working) return;
     const timer = window.setTimeout(() => void resource.refresh(), 1500);
     return () => clearTimeout(timer);
   }, [status]);
-  // A sign-in code is a key: hide it when it lapses.
-  useEffect(() => {
-    if (!signin) return;
-    const left = signin.expires * 1000 - Date.now();
-    const timer = window.setTimeout(() => setSignin(null), Math.max(0, left));
-    return () => clearTimeout(timer);
-  }, [signin]);
   async function run(action: () => Promise<unknown>) {
     setError("");
     try {
       await action();
+      setPort(null);
       await resource.refresh();
     } catch (e) {
       setError((e as Error).message);
     }
   }
-  const change = (enabled: boolean, nextPort?: number) =>
+  const change = (enabled: boolean) =>
     run(() =>
       api("/admin/connect", {
         method: "PUT",
-        body: JSON.stringify({ enabled, port: nextPort ?? status?.port }),
+        body: JSON.stringify({
+          enabled,
+          port: Number(port ?? status?.port) || status?.port,
+        }),
       }),
     );
-  async function showCode() {
-    setError("");
-    try {
-      setSignin(await post<SignIn>("/auth/device-link"));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  function savePort() {
-    const value = Number(port);
-    setPort(null);
-    if (value && value !== status?.port) void change(true, value);
-  }
+  const busy = !!status?.working;
   const on = !!status?.enabled;
-  const ready = on && status!.reachable && !status!.working && !!status!.link;
-  const portEditor = (
-    <span className="connect-port">
-      <label>
-        Port{" "}
-        <input
-          type="number"
-          min={1}
-          max={65535}
-          value={port ?? ""}
-          autoFocus
-          onChange={(e) => setPort(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && savePort()}
-        />
-      </label>
-      <button className="link" onClick={savePort}>
-        Save
-      </button>
-    </span>
-  );
+  const problem = on && !busy && !status?.reachable;
+  const changed = !!status && port !== null && Number(port) !== status.port;
   return (
     <Section
       title="Sparrow Connect"
-      description="Reach this server from anywhere, on your phone and your TVs. Video goes straight from this server."
-      action={
-        status && (
-          <button
-            className="switch"
-            role="switch"
-            aria-checked={on}
-            aria-label="Sparrow Connect"
-            disabled={!!status.working}
-            onClick={() => void change(!on)}
-          >
-            <span aria-hidden="true" />
-          </button>
-        )
-      }
+      description="Use Sparrow away from home, on your phone and TV. Video comes straight from this server."
     >
-      <ErrorNote error={error || resource.error} retry={resource.refresh} />
-      {!status && resource.loading && <Loading label="Loading" />}
-      {status?.working && <Loading label={`${status.working}…`} />}
-      {ready &&
-        (signin ? (
-          <div className="connect-signin">
-            <QrCode
-              text={`${status!.link}#signin=${signin.code}`}
-              label="Sign-in code for your phone"
-            />
-            <div>
-              <p className="connect-lead">Scan with your phone’s camera.</p>
-              <p className="meta">It signs you in once, within ten minutes.</p>
-              <button className="link" onClick={() => setSignin(null)}>
-                Done
-              </button>
+      <div className="form">
+        <ErrorNote error={error || resource.error} retry={resource.refresh} />
+        {status && (
+          <>
+            <div className="form-grid">
+              <div className={`field key-field${problem ? " invalid" : ""}`}>
+                <div className="key-label">
+                  <label htmlFor={id}>Port</label>
+                  <span
+                    className={`key-state${on && status.reachable && !busy ? " saved" : ""}`}
+                    id={id + "-state"}
+                  >
+                    {busy ? (
+                      `${status.working}…`
+                    ) : !on ? (
+                      "Off"
+                    ) : status.reachable ? (
+                      <>
+                        <Tick /> Reachable
+                      </>
+                    ) : (
+                      "Not reachable"
+                    )}
+                  </span>
+                </div>
+                <input
+                  id={id}
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={port ?? status.port}
+                  disabled={busy}
+                  aria-invalid={problem || undefined}
+                  aria-describedby={`${id}-state ${id}-hint`}
+                  onChange={(e) => setPort(e.target.value)}
+                />
+                <small id={id + "-hint"} role={problem ? "alert" : undefined}>
+                  {problem ? (
+                    status.problem || "Not reachable yet."
+                  ) : on && status.link && !busy ? (
+                    <a href={status.link} target="_blank" rel="noreferrer">
+                      {status.link.replace(/^https:\/\//, "")}
+                    </a>
+                  ) : (
+                    "Forward this port on your router to this server."
+                  )}
+                </small>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button className="btn primary" onClick={() => void showCode()}>
-            Sign in on your phone
-          </button>
-        ))}
-      {on && !status!.working && (
-        <p className={`connect-state meta${status!.reachable ? " good" : ""}`}>
-          {status!.reachable ? (
-            <>
-              <span className="dot" aria-hidden="true" />
-              Reachable from anywhere · Port {status!.port}{" "}
-              {port === null ? (
+            <div className="actions end">
+              {on && (changed || problem) && (
                 <button
-                  className="link"
-                  onClick={() => setPort(String(status!.port))}
+                  className="btn quiet"
+                  disabled={busy}
+                  onClick={() => void change(false)}
                 >
-                  Change
+                  Turn off
+                </button>
+              )}
+              {!on ? (
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => void change(true)}
+                >
+                  Turn on
+                </button>
+              ) : changed ? (
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => void change(true)}
+                >
+                  Save
+                </button>
+              ) : problem ? (
+                <button
+                  className="btn"
+                  onClick={() => void run(() => post("/admin/connect/check"))}
+                >
+                  Check again
                 </button>
               ) : (
-                portEditor
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => void change(false)}
+                >
+                  Turn off
+                </button>
               )}
-            </>
-          ) : (
-            <>
-              <span className="dot problem" aria-hidden="true" />
-              <span className="connect-problem" role="alert">
-                {status!.problem || "Not reachable yet."}
-              </span>{" "}
-              {port === null ? (
-                <>
-                  <button
-                    className="link"
-                    onClick={() => void run(() => post("/admin/connect/check"))}
-                  >
-                    Check again
-                  </button>
-                  {" · "}
-                  <button
-                    className="link"
-                    onClick={() => setPort(String(status!.port))}
-                  >
-                    Change port
-                  </button>
-                </>
-              ) : (
-                portEditor
-              )}
-            </>
-          )}
-        </p>
-      )}
+            </div>
+          </>
+        )}
+      </div>
     </Section>
   );
 }

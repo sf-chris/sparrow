@@ -351,6 +351,7 @@ class Switch(BaseModel):
 
 def install_connect(app, data_dir, connect=None):
     connect = connect or Connect(app, data_dir)
+    app.state.connect = connect
     router = APIRouter(prefix="/api/v1")
 
     @router.get("/admin/connect")

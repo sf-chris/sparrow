@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Monitor, Smartphone } from "lucide-react";
 import { api } from "./api";
 import PasswordSettings from "./PasswordSettings";
+import AddPhone from "./PhoneSignIn";
 import { Empty, ErrorNote, Loading, Page, Section, useResource } from "./ui";
 
 type Session = { id: string; label: string; created: number; current: boolean };
@@ -25,7 +26,10 @@ export default function Security() {
   return (
     <Page title="Account">
       <PasswordSettings onChanged={resource.refresh} />
-      <Section title="Devices">
+      <Section
+        title="Devices"
+        action={<AddPhone onSignedIn={() => void resource.refresh()} />}
+      >
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {!resource.data && resource.loading ? (
           <Loading label="Loading devices" />
