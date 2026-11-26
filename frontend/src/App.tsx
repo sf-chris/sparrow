@@ -48,7 +48,10 @@ function DeviceSignIn({
     post<AuthState>("/auth/device-link/redeem", { code })
       .then((auth) => {
         if (!live) return;
-        navigate("/", { replace: true });
+        // The code opens the page it was made on; drop it from the address.
+        navigate(window.location.pathname + window.location.search, {
+          replace: true,
+        });
         onSuccess(auth);
       })
       .catch((e) => {

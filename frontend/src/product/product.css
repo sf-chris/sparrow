@@ -287,6 +287,28 @@ time {
   margin-left: auto;
   padding: 0 0.35rem 0 0.35rem;
 }
+/* Open on phone: an outlined pill beside the account, like its initial. */
+.open-on-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  margin-left: auto;
+  padding: 0 1rem 0 0.85rem;
+  border: 2px solid currentColor;
+  border-radius: var(--pill);
+  background: transparent;
+  color: inherit;
+  font-size: 1rem;
+  font-weight: 750;
+}
+.open-on-phone:hover {
+  background: var(--on-band);
+  color: var(--band);
+}
+.open-on-phone ~ .account {
+  margin-left: calc(0.6rem - clamp(1rem, 3vw, 2.5rem));
+}
 .account-name {
   padding-right: 0.65rem;
 }
@@ -2762,8 +2784,31 @@ a.tonight-art:hover .still img {
   font-size: 1.125rem;
   font-weight: 600;
 }
-.control.on-tv {
-  color: var(--accent);
+/* Play on TV sits top right, where people look for it, with its name. */
+.tv-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  margin-left: auto;
+  padding: 0 1.05rem 0 0.9rem;
+  border: 2px solid var(--on-screen);
+  border-radius: var(--pill);
+  background: oklch(0% 0 0 / 0.35);
+  color: var(--on-screen);
+  font-size: 1rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.tv-button:hover {
+  background: var(--on-screen);
+  color: #000;
+}
+.tv-button.on-tv {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .theatre-errors {
   position: absolute;
@@ -4223,7 +4268,8 @@ button.link:hover {
     font-size: 1.85rem;
   }
   .primary-nav,
-  .account {
+  .account,
+  .open-on-phone {
     display: none;
   }
   .tabbar {
@@ -4515,10 +4561,6 @@ button.link:hover {
     height: 1.9rem;
   }
   .control.jump {
-    display: none;
-  }
-  /* With the TV button too, the scrubber shows the length. */
-  .theatre .controls:has(.control.tv) .clock.total {
     display: none;
   }
   .theatre-panel {

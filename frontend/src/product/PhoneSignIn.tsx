@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import qrcode from "qrcode-generator";
 import { api, post } from "./api";
@@ -40,15 +40,23 @@ function QrCode({ text, label }: { text: string; label: string }) {
 const LOOPBACK = /^(localhost|127\.|\[::1\])/;
 
 /** Sign this person in on their phone by scanning: no password to type.
- *  The dialog notices the phone arrive and says so. */
+ *  The phone opens at `path`. The dialog notices it arrive and says so. */
 export default function AddPhone({
   onSignedIn,
   primary = false,
   admin = true,
+  label = "Add a phone",
+  icon: Icon = Plus,
+  className = "btn",
+  path = "/",
 }: {
   onSignedIn?: () => void;
   primary?: boolean;
   admin?: boolean;
+  label?: string;
+  icon?: LucideIcon;
+  className?: string;
+  path?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState<Code | null>(null);
@@ -107,20 +115,20 @@ export default function AddPhone({
     setOpen(false);
     setCode(null);
   };
-  const target = code?.link ?? `${location.origin}/`;
+  const target = new URL(path, code?.link ?? location.origin).href;
   const unreachable = !!code && !code.link && LOOPBACK.test(location.hostname);
   return (
     <>
       <button
-        className={`btn${primary ? " primary" : ""}`}
+        className={`${className}${primary ? " primary" : ""}`}
         onClick={() => void start()}
       >
-        <Plus size={18} strokeWidth={2.5} />
-        Add a phone
+        <Icon size={18} strokeWidth={2.5} aria-hidden="true" />
+        {label}
       </button>
       {open && (
         <Dialog
-          title="Add a phone"
+          title={label}
           onClose={close}
           footer={
             <button className={`btn${done ? " primary" : ""}`} onClick={close}>

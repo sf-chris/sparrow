@@ -578,6 +578,22 @@ function Player({
             <span className="num"> {episodeCode(asset)}</span>
           ) : null}
         </h1>
+        {(tvs || tv !== "off") && (
+          <button
+            className={`tv-button${tv === "on" ? " on-tv" : ""}`}
+            aria-label={
+              tv === "on" ? "On your TV. Choose where to play" : undefined
+            }
+            onClick={chooseTv}
+          >
+            {AIRPLAY ? (
+              <Airplay size={20} strokeWidth={2.25} aria-hidden="true" />
+            ) : (
+              <Cast size={20} strokeWidth={2.25} aria-hidden="true" />
+            )}
+            {tv === "on" ? "On your TV" : "Play on TV"}
+          </button>
+        )}
       </header>
       {(error || progressError) && (
         <div className="theatre-errors">
@@ -730,21 +746,6 @@ function Player({
         >
           <Captions size={22} strokeWidth={2.25} />
         </button>
-        {(tvs || tv !== "off") && (
-          <button
-            className={`control tv${tv === "on" ? " on-tv" : ""}`}
-            aria-label={
-              tv === "on" ? "Playing on TV. Choose where to play" : "Play on TV"
-            }
-            onClick={chooseTv}
-          >
-            {AIRPLAY ? (
-              <Airplay size={20} strokeWidth={2.25} />
-            ) : (
-              <Cast size={20} strokeWidth={2.25} />
-            )}
-          </button>
-        )}
         <button
           className="control"
           aria-label={muted ? "Unmute" : "Mute"}
