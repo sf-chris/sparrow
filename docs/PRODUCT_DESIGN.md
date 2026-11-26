@@ -116,9 +116,13 @@ between titles, rows and covers anywhere they are listed.
   title/episode also opens those controls. Available tracks are distinguished
   from sync-checked tracks; paid checking is optional in shared preferences.
 - **Settings:** a left index grouped You (Preferences, Account, Logs),
-  Household (People, Defaults) and Server (Storage, Connections, Setup), with
-  Sign out beneath. On phones the index becomes a scrolling strip with Sign
-  out beside it. People is a cast list; Storage lists devices; Logs is a timed
+  Household (People, Defaults) and Server (Storage, Connections, Sparrow
+  Connect, Setup), with Sign out beneath. On phones the index becomes a
+  scrolling strip with Sign out beside it. People is a cast list; Storage lists
+  devices; Sparrow Connect is one device card in Storage's grammar (Address and
+  Port lines with ticks), its page action the next step (Turn on, then Add a
+  phone). Add a phone (Account › Devices) shows the code beside three numbered
+  steps and confirms by itself when the phone signs in. Logs is a timed
   listing (time, title, summary, action) whose filters persist through
   pagination and reload. Preferences label only personal or server-limited values.
 - **Setup:** numbered steps with the current step circled; two start choices;

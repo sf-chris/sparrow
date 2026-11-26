@@ -2629,34 +2629,113 @@ a.tonight-art:hover .still img {
   width: 1.8rem;
   color: var(--accent);
 }
-/* Add a phone: one scannable code, then confirmation. */
+/* Add a phone: the code beside three numbered steps, then a tick. */
 .phone-signin {
   display: grid;
-  justify-items: center;
-  gap: 0.35rem;
-  text-align: center;
-}
-.phone-signin p {
-  margin: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1.75rem;
 }
 .qr {
-  width: min(15rem, 70vw);
+  display: block;
+  width: 13rem;
   height: auto;
-  margin-bottom: 0.75rem;
   border: 2px solid var(--ink);
   border-radius: 4px;
 }
-.phone-done {
+.phone-steps {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1.1rem;
+  font-weight: 750;
+}
+.phone-steps li {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.75rem;
+}
+.phone-steps .step-no {
+  flex: none;
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 1rem;
+}
+.phone-waiting {
+  margin: 1.4rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+.phone-done,
+.phone-away {
+  display: grid;
+  justify-items: center;
   gap: 0.4rem;
-  margin: 1.5rem 0;
-  font-weight: 700;
+  padding: 1.5rem 0 1rem;
+  text-align: center;
+}
+.phone-done h3,
+.phone-away h3 {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 850;
+  font-stretch: 70%;
+  line-height: 1.05;
 }
 .phone-done .tick {
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: 0.5rem;
+}
+.phone-away p {
+  max-width: 26rem;
+}
+.phone-away .btn {
+  margin-top: 0.9rem;
+}
+@media (max-width: 30rem) {
+  .phone-signin {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 1.25rem;
+  }
+  .qr {
+    width: min(14rem, 66vw);
+  }
+}
+/* Sparrow Connect: one listing card, the same grammar as Storage. */
+.connect-page .folder-label label {
+  cursor: inherit;
+}
+.connect-page a.path {
+  color: inherit;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+.folder-state.working {
+  color: var(--ink-2);
+  font-weight: 650;
+}
+.port-edit {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.port-edit input {
+  width: 7rem;
+  min-height: 2.5rem;
+}
+.port-edit .btn {
+  min-height: 2.5rem;
+}
+.connect-problem {
+  max-width: 46rem;
+  color: var(--red);
+  font-size: var(--t-small);
+  font-weight: 650;
 }
 .device-signin-problem {
   position: fixed;

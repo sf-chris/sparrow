@@ -40,6 +40,7 @@ const settingsGroups = [
     items: [
       { to: "/settings/storage", label: "Storage" },
       { to: "/settings/server", label: "Connections" },
+      { to: "/settings/connect", label: "Sparrow Connect" },
       { to: "/setup", label: "Setup" },
     ],
   },

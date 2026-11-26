@@ -18,6 +18,7 @@ import Title from "./product/Title";
 import Activity, { RequestDetail } from "./product/Activity";
 import Preferences from "./product/Preferences";
 import Security from "./product/Security";
+import SparrowConnect from "./product/SparrowConnect";
 import Logs from "./product/Logs";
 import Storage from "./product/Storage";
 import { Defaults, People, ServerSettings } from "./product/Administration";
@@ -202,7 +203,10 @@ export default function App() {
                 path="/settings"
                 element={<Preferences user={user} onChanged={auth.refresh} />}
               />
-              <Route path="/settings/security" element={<Security />} />
+              <Route
+                path="/settings/security"
+                element={<Security admin={user.role === "admin"} />}
+              />
               <Route path="/settings/logs" element={<Logs user={user} />} />
               {user.role === "admin" && (
                 <>
@@ -212,6 +216,7 @@ export default function App() {
                   />
                   <Route path="/settings/storage" element={<Storage />} />
                   <Route path="/settings/server" element={<ServerSettings />} />
+                  <Route path="/settings/connect" element={<SparrowConnect />} />
                   <Route
                     path="/settings/people"
                     element={<People currentUser={user} />}

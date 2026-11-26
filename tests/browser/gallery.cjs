@@ -134,6 +134,7 @@ async function playFrame(page) {
     await capture(household, 'storage', '/settings/storage');
     await capture(household, 'defaults', '/settings/defaults');
     await capture(household, 'server', '/settings/server');
+    await capture(household, 'connect', '/settings/connect');
     console.log(`Gallery written to ${out}`);
   } finally {
     await browser.close();

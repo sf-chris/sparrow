@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
+import { Link } from "react-router-dom";
 import qrcode from "qrcode-generator";
 import { api, post } from "./api";
 import { Tick } from "./Brand";
@@ -40,7 +41,15 @@ const LOOPBACK = /^(localhost|127\.|\[::1\])/;
 
 /** Sign this person in on their phone by scanning: no password to type.
  *  The dialog notices the phone arrive and says so. */
-export default function AddPhone({ onSignedIn }: { onSignedIn: () => void }) {
+export default function AddPhone({
+  onSignedIn,
+  primary = false,
+  admin = true,
+}: {
+  onSignedIn?: () => void;
+  primary?: boolean;
+  admin?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState<Code | null>(null);
   const [done, setDone] = useState(false);
@@ -86,7 +95,7 @@ export default function AddPhone({ onSignedIn }: { onSignedIn: () => void }) {
         if (sessions.some((s) => !known.current!.has(s.id))) {
           setDone(true);
           setCode(null);
-          onSignedIn();
+          onSignedIn?.();
         }
       } catch {
         /* Try again on the next tick. */
@@ -102,7 +111,10 @@ export default function AddPhone({ onSignedIn }: { onSignedIn: () => void }) {
   const unreachable = !!code && !code.link && LOOPBACK.test(location.hostname);
   return (
     <>
-      <button className="btn" onClick={() => void start()}>
+      <button
+        className={`btn${primary ? " primary" : ""}`}
+        onClick={() => void start()}
+      >
         <Plus size={18} strokeWidth={2.5} />
         Add a phone
       </button>
@@ -118,14 +130,25 @@ export default function AddPhone({ onSignedIn }: { onSignedIn: () => void }) {
         >
           <ErrorNote error={error} retry={() => void fresh()} />
           {done ? (
-            <p className="phone-done" role="status">
-              <Tick /> Your phone is signed in.
-            </p>
+            <div className="phone-done" role="status">
+              <Tick />
+              <h3>Your phone is signed in</h3>
+              <p className="meta">It’s listed under Devices.</p>
+            </div>
           ) : unreachable ? (
-            <p className="muted">
-              Your phone can’t reach this address. An administrator can turn on
-              Sparrow Connect in Connections.
-            </p>
+            <div className="phone-away">
+              <h3>Phones can’t reach this server yet</h3>
+              <p className="muted">
+                {admin
+                  ? "Turn on Sparrow Connect and your phone opens Sparrow from anywhere."
+                  : "Ask an administrator to turn on Sparrow Connect."}
+              </p>
+              {admin && (
+                <Link className="btn primary" to="/settings/connect" onClick={close}>
+                  Set up Sparrow Connect
+                </Link>
+              )}
+            </div>
           ) : (
             code && (
               <div className="phone-signin">
@@ -133,8 +156,22 @@ export default function AddPhone({ onSignedIn }: { onSignedIn: () => void }) {
                   text={`${target}#signin=${code.code}`}
                   label="Sign-in code for your phone"
                 />
-                <p>Point your phone’s camera at the code.</p>
-                <p className="meta">Each code signs in one phone.</p>
+                <div>
+                  <ol className="phone-steps">
+                    <li>
+                      <span className="step-no">1</span>Open your phone’s camera
+                    </li>
+                    <li>
+                      <span className="step-no">2</span>Point it at the code
+                    </li>
+                    <li>
+                      <span className="step-no">3</span>Tap the link
+                    </li>
+                  </ol>
+                  <p className="meta phone-waiting" aria-live="polite">
+                    Waiting for your phone…
+                  </p>
+                </div>
               </div>
             )
           )}

@@ -7,7 +7,7 @@ import { Empty, ErrorNote, Loading, Page, Section, useResource } from "./ui";
 
 type Session = { id: string; label: string; created: number; current: boolean };
 
-export default function Security() {
+export default function Security({ admin = false }: { admin?: boolean }) {
   const resource = useResource(() => api<Session[]>("/sessions"));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -28,7 +28,9 @@ export default function Security() {
       <PasswordSettings onChanged={resource.refresh} />
       <Section
         title="Devices"
-        action={<AddPhone onSignedIn={() => void resource.refresh()} />}
+        action={
+          <AddPhone admin={admin} onSignedIn={() => void resource.refresh()} />
+        }
       >
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {!resource.data && resource.loading ? (

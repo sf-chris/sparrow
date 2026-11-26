@@ -59,7 +59,7 @@ await page.mouse.move(40,40);await page.getByRole('button',{name:'Back to title'
 const saved=await page.request.get(url+'/api/v1/catalogue');const items=await saved.json();
 const watching=items.find(i=>i.title==='The Quiet Planet').assets[0].watch;
 if(!watching||watching.position<10)throw new Error('Resume progress was not saved: '+JSON.stringify(watching));
-for(const [route,name] of [['/?view=covers','library'],['/activity','activity'],['/settings','preferences'],['/settings/storage','storage'],['/settings/people','people'],['/settings/server','server'],['/settings/defaults','defaults'],['/discover','discover']]){
+for(const [route,name] of [['/?view=covers','library'],['/activity','activity'],['/settings','preferences'],['/settings/storage','storage'],['/settings/people','people'],['/settings/server','server'],['/settings/connect','connect'],['/settings/defaults','defaults'],['/discover','discover']]){
  await page.goto(url+route);await page.locator('h1').waitFor();await page.waitForTimeout(150);
  await page.screenshot({path:path.join(out,name+'-desktop.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,name+'-mobile.png'),fullPage:true});
