@@ -720,7 +720,26 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
     }
   }
   return (
-    <Dialog title={done === null ? "Import" : "Imported"} onClose={onClose}>
+    <Dialog
+      title={done === null ? "Import" : "Imported"}
+      onClose={onClose}
+      footer={
+        done === null &&
+        scan.candidates.length > 0 && (
+          <button
+            className="btn primary"
+            disabled={busy || !Object.keys(selected).length}
+            onClick={confirm}
+          >
+            {busy
+              ? "Checking and importing…"
+              : !Object.keys(selected).length
+                ? "Choose files to import"
+                : `Import ${Object.keys(selected).length} ${Object.keys(selected).length === 1 ? "file" : "files"}`}
+          </button>
+        )
+      }
+    >
       <div className="form">
         <ErrorNote error={error} />
         {done !== null ? (
@@ -753,9 +772,13 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
                   )
                 }
               >
-                Select {Math.min(scan.candidates.length, 100)} files
+                {scan.candidates.length > 100 ? "Select the first 100" : "Select all"}
               </button>
-              <button className="btn quiet" onClick={() => setSelected({})}>
+              <button
+                className="btn quiet"
+                disabled={!Object.keys(selected).length}
+                onClick={() => setSelected({})}
+              >
                 Clear
               </button>
             </div>
@@ -852,15 +875,6 @@ function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
                 </div>
               ))}
             </div>
-            <button
-              className="btn primary"
-              disabled={busy || !Object.keys(selected).length}
-              onClick={confirm}
-            >
-              {busy
-                ? "Checking and importing…"
-                : `Import ${Object.keys(selected).length} ${Object.keys(selected).length === 1 ? "file" : "files"}`}
-            </button>
           </>
         )}
         {matching && (

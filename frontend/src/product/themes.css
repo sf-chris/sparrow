@@ -67,6 +67,7 @@
   --font-display: var(--font-body);
   --font-label: var(--font-body);
   --case-display: none;
+  --display-space: normal;
   --case-label: none;
   --radius: 10px;
   --preview-stretch: 100%;
@@ -397,6 +398,7 @@
   --font-display: var(--font-body);
   --font-label: var(--font-body);
   --case-display: none;
+  --display-space: normal;
   --case-label: none;
   --t-meta: 0.95rem;
   --t-small: 1.05rem;
@@ -704,6 +706,7 @@
   --font-display: var(--font-body);
   --font-label: var(--font-body);
   --case-display: none;
+  --display-space: normal;
   --case-label: none;
   --radius: 14px;
   --control: 3rem;

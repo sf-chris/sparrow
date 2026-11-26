@@ -49,17 +49,18 @@ export default function PasswordSettings({
   }
   return (
     <>
-      <Section title="Password">
-        <div className="row">
-          <p className="muted">
-            {!open && saved ? (
-              <span className="done-note" role="status">
-                <Tick /> Password changed.
-              </span>
-            ) : (
-              "Changing it signs you out on other devices."
-            )}
-          </p>
+      <Section
+        title="Password"
+        description={
+          !open && saved ? (
+            <span className="done-note" role="status">
+              <Tick /> Password changed.
+            </span>
+          ) : (
+            "Changing it signs you out on other devices."
+          )
+        }
+        action={
           <button
             className="btn"
             onClick={() => {
@@ -67,10 +68,10 @@ export default function PasswordSettings({
               setOpen(true);
             }}
           >
-            Change your password
+            Change password
           </button>
-        </div>
-      </Section>
+        }
+      />
       {open && (
         <Dialog title="Change password" onClose={close}>
           <form className="form" onSubmit={save}>
@@ -102,7 +103,7 @@ export default function PasswordSettings({
                 )}
               </span>
               <button className="btn primary" disabled={busy}>
-                {busy ? "Saving…" : "Change password"}
+                {busy ? "Saving…" : "Save password"}
               </button>
             </div>
           </form>

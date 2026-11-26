@@ -141,10 +141,8 @@ export default function Activity({ user }: { user: User }) {
                   </div>
                   <p className="meta">{scope(job)}</p>
                   <RequestProgress job={job} />
-                  {job.status !== "paused" && (
-                    <p className="request-note">
-                      {job.state_line || "Starting…"}
-                    </p>
+                  {job.status !== "paused" && job.state_line && (
+                    <p className="request-note">{job.state_line}</p>
                   )}
                   <div className="actions">
                     {open && (
@@ -193,8 +191,11 @@ function RequestActions({
   onError: (message: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  // Cancelling deletes half-finished downloads: ask once, right where it was pressed.
+  const [confirming, setConfirming] = useState(false);
   async function control(action: string) {
     setBusy(true);
+    setConfirming(false);
     onError("");
     try {
       await post(`/jobs/${job.id}/${action}`);
@@ -227,15 +228,31 @@ function RequestActions({
           {job.status === "paused" ? "Resume" : "Try again"}
         </button>
       )}
-      {["active", "paused"].includes(job.status) && (
-        <button
-          className="btn quiet"
-          disabled={busy}
-          onClick={() => control("cancel")}
-        >
-          Cancel request
-        </button>
-      )}
+      {["active", "paused"].includes(job.status) &&
+        (confirming ? (
+          <span className="confirm" role="group" aria-label="Cancel this request?">
+            <span className="confirm-text">Half-finished downloads are deleted.</span>
+            <button
+              className="btn danger"
+              disabled={busy}
+              autoFocus
+              onClick={() => control("cancel")}
+            >
+              Cancel request
+            </button>
+            <button className="btn quiet" onClick={() => setConfirming(false)}>
+              Keep it
+            </button>
+          </span>
+        ) : (
+          <button
+            className="btn quiet"
+            disabled={busy}
+            onClick={() => setConfirming(true)}
+          >
+            Cancel request
+          </button>
+        ))}
     </>
   );
 }
@@ -406,8 +423,8 @@ export function RequestDetail() {
       <ErrorNote error={error} />
       <section className="request-now" aria-label="Now">
         <RequestProgress job={job} />
-        {job.status !== "paused" && (
-          <p className="request-note">{job.state_line || "Starting…"}</p>
+        {job.status !== "paused" && job.state_line && (
+          <p className="request-note">{job.state_line}</p>
         )}
         <div className="actions">
           {open && (

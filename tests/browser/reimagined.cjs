@@ -308,7 +308,7 @@ fs.mkdirSync(out, { recursive: true });
     await closeDialog();
   }
   await go("/settings/security");
-  await page.getByText("Change your password", { exact: true }).click();
+  await page.getByRole("button", { name: "Change password", exact: true }).click();
   await page
     .getByLabel("Current password", { exact: true })
     .scrollIntoViewIfNeeded();

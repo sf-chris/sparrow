@@ -7,6 +7,20 @@ import { Empty, ErrorNote, Loading, Page, Section, useResource } from "./ui";
 
 type Session = { id: string; label: string; created: number; current: boolean };
 
+/** "today, 9:41 pm", "3 Nov, 9:41 pm", or with the year when it isn't this one. */
+function signedIn(seconds: number) {
+  const when = new Date(seconds * 1000);
+  const now = new Date();
+  const time = when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (when.toDateString() === now.toDateString()) return `today, ${time}`;
+  const date = when.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+    year: when.getFullYear() === now.getFullYear() ? undefined : "numeric",
+  });
+  return `${date}, ${time}`;
+}
+
 export default function Security({ admin = false }: { admin?: boolean }) {
   const resource = useResource(() => api<Session[]>("/sessions"));
   const [error, setError] = useState("");
@@ -28,6 +42,7 @@ export default function Security({ admin = false }: { admin?: boolean }) {
       <PasswordSettings onChanged={resource.refresh} />
       <Section
         title="Devices"
+        description="Where you’re signed in."
         action={
           <AddPhone admin={admin} onSignedIn={() => void resource.refresh()} />
         }
@@ -61,10 +76,7 @@ export default function Security({ admin = false }: { admin?: boolean }) {
                               ? "Phone or tablet"
                               : "Browser"}
                         </h3>
-                        <p className="num">
-                          Signed in{" "}
-                          {new Date(session.created * 1000).toLocaleString()}
-                        </p>
+                        <p className="num">Signed in {signedIn(session.created)}</p>
                         <details className="disclosure">
                           <summary>Browser details</summary>
                           <p className="muted">

@@ -13,14 +13,18 @@ import {
   Dialog,
   ErrorNote,
   Field,
+  LimitInput,
   Loading,
   Page,
+  SaveBar,
   Section,
   useResource,
 } from "./ui";
-import { Tick } from "./Brand";
-import SubtitleProviderSettings from "./SubtitleProviderSettings";
-import { PreferenceFields } from "./Preferences";
+import SubtitleProviderSettings, {
+  emptyProvider,
+  saveProvider,
+} from "./SubtitleProviderSettings";
+import { PreferenceFields, quality } from "./Preferences";
 import { useDestinations } from "./StoragePicker";
 import { KEYS, KeyField } from "./Keys";
 import DownloadApp from "./DownloadApp";
@@ -35,6 +39,10 @@ export function Defaults() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const limit = (change: Partial<Policy>) => {
+    setPolicy({ ...policy, ...change });
+    setSaved(false);
+  };
   async function save() {
     setBusy(true);
     setError("");
@@ -46,8 +54,10 @@ export function Defaults() {
           policy: { ...resource.data!.policy, ...policy },
         }),
       });
-      setSaved(true);
       await resource.refresh();
+      setDraft({});
+      setPolicy({});
+      setSaved(true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -59,7 +69,7 @@ export function Defaults() {
       title="Defaults"
       lede="Everyone starts with these and can change their own."
     >
-      <ErrorNote error={error || resource.error} retry={resource.refresh} />
+      <ErrorNote error={resource.error} retry={resource.refresh} />
       {resource.data ? (
         <>
           <PreferenceFields
@@ -78,30 +88,23 @@ export function Defaults() {
               <Field label="Highest quality">
                 <select
                   value={policy.max_quality || resource.data.policy.max_quality}
-                  onChange={(e) =>
-                    setPolicy({ ...policy, max_quality: e.target.value })
-                  }
+                  onChange={(e) => limit({ max_quality: e.target.value })}
                 >
-                  {["480p", "720p", "1080p", "2160p"].map((q) => (
-                    <option key={q}>{q}</option>
+                  {quality.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
                   ))}
                 </select>
               </Field>
-              <Field label="File size limit (GB)" hint="0 means no limit.">
-                <input
-                  type="number"
-                  min={0}
+              <Field label="File size limit (GB)" hint="Per file.">
+                <LimitInput
                   max={1000}
                   value={
                     policy.max_file_size_gb ??
                     resource.data.policy.max_file_size_gb
                   }
-                  onChange={(e) =>
-                    setPolicy({
-                      ...policy,
-                      max_file_size_gb: Number(e.target.value),
-                    })
-                  }
+                  onChange={(value) => limit({ max_file_size_gb: value })}
                 />
               </Field>
               <Field
@@ -117,10 +120,7 @@ export function Defaults() {
                     resource.data.policy.max_agent_calls
                   }
                   onChange={(e) =>
-                    setPolicy({
-                      ...policy,
-                      max_agent_calls: Number(e.target.value),
-                    })
+                    limit({ max_agent_calls: Number(e.target.value) })
                   }
                 />
               </Field>
@@ -138,27 +138,20 @@ export function Defaults() {
                     resource.data.policy.max_agent_dollars
                   }
                   onChange={(e) =>
-                    setPolicy({
-                      ...policy,
-                      max_agent_dollars: Number(e.target.value),
-                    })
+                    limit({ max_agent_dollars: Number(e.target.value) })
                   }
                 />
               </Field>
             </div>
           </Section>
-          <div className="savebar">
-            <span className="done-note" role="status">
-              {saved && (
-                <>
-                  <Tick /> Saved
-                </>
-              )}
-            </span>
-            <button className="btn primary" disabled={busy} onClick={save}>
-              {busy ? "Saving…" : "Save defaults"}
-            </button>
-          </div>
+          <SaveBar
+            dirty={Object.keys(draft).length + Object.keys(policy).length > 0}
+            busy={busy}
+            saved={saved}
+            error={error}
+            onSave={save}
+            label="Save defaults"
+          />
         </>
       ) : (
         resource.loading && <Loading label="Loading defaults" />
@@ -170,6 +163,8 @@ export function Defaults() {
 export function ServerSettings() {
   const resource = useResource(() => api<Record<string, any>>("/admin/config"));
   const [draft, setDraft] = useState<Record<string, any>>({});
+  const [provider, setProvider] = useState(emptyProvider);
+  const [providerVersion, setProviderVersion] = useState(0);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -182,8 +177,11 @@ export function ServerSettings() {
     setBusy(true);
     setError("");
     try {
-      await patch("/admin/config", draft);
+      if (Object.keys(draft).length) await patch("/admin/config", draft);
       setDraft({});
+      await saveProvider(provider);
+      setProvider(emptyProvider);
+      setProviderVersion((v) => v + 1);
       setSaved(true);
       await resource.refresh();
     } catch (e) {
@@ -194,7 +192,7 @@ export function ServerSettings() {
   }
   return (
     <Page title="Connections">
-      <ErrorNote error={error || resource.error} retry={resource.refresh} />
+      <ErrorNote error={resource.error} retry={resource.refresh} />
       {resource.data ? (
         <div className="form">
           <Section
@@ -245,7 +243,14 @@ export function ServerSettings() {
               </Field>
             </div>
           </Section>
-          <SubtitleProviderSettings />
+          <SubtitleProviderSettings
+            draft={provider}
+            version={providerVersion}
+            onChange={(value) => {
+              setProvider(value);
+              setSaved(false);
+            }}
+          />
           <Section
             title="Download app"
             description="On this server. A paired Windows machine sets its own in Sparrow Node."
@@ -263,41 +268,31 @@ export function ServerSettings() {
                   }
                 />
               </Field>
-              <Field label="Seeding ratio limit" hint="0 means no limit.">
-                <input
-                  type="number"
-                  min={0}
+              <Field label="Seeding ratio limit">
+                <LimitInput
                   step={0.1}
                   value={values.seeding_ratio_limit ?? 2}
-                  onChange={(e) =>
-                    set("seeding_ratio_limit", Number(e.target.value))
-                  }
+                  onChange={(value) => set("seeding_ratio_limit", value)}
                 />
               </Field>
-              <Field label="Seeding time limit (hours)" hint="0 means no limit.">
-                <input
-                  type="number"
-                  min={0}
+              <Field label="Seeding time limit (hours)">
+                <LimitInput
                   value={values.seeding_time_hours ?? 0}
-                  onChange={(e) =>
-                    set("seeding_time_hours", Number(e.target.value))
-                  }
+                  onChange={(value) => set("seeding_time_hours", value)}
                 />
               </Field>
             </div>
           </Section>
-          <div className="savebar">
-            <span className="done-note" role="status">
-              {saved && (
-                <>
-                  <Tick /> Saved
-                </>
-              )}
-            </span>
-            <button className="btn primary" disabled={busy} onClick={save}>
-              {busy ? "Saving…" : "Save"}
-            </button>
-          </div>
+          <SaveBar
+            dirty={
+              Object.keys(draft).length > 0 ||
+              Object.values(provider).some(Boolean)
+            }
+            busy={busy}
+            saved={saved}
+            error={error}
+            onSave={save}
+          />
         </div>
       ) : (
         resource.loading && <Loading label="Loading connections" />

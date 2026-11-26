@@ -178,15 +178,19 @@ export function SubtitleRepair({
           : latest.state === "cancelled"
             ? "Stopped"
             : "Needs attention");
+  // In its own dialog the help is the whole point: no fold to open first.
+  const Wrapper = expanded ? "div" : "details";
   return (
-    <details
-      className="disclosure help subtitle-care"
-      open={expanded || (!!latest && latest.state !== "ready")}
+    <Wrapper
+      className={`subtitle-care ${expanded ? "" : "disclosure help"}`}
+      open={expanded ? undefined : !!latest && latest.state !== "ready"}
     >
-      <summary>
-        Subtitle help
-        {status && <span className="meta"> · {status}</span>}
-      </summary>
+      {!expanded && (
+        <summary>
+          Subtitle help
+          {status && <span className="meta"> · {status}</span>}
+        </summary>
+      )}
       <div className="help-body form">
         <ErrorNote error={error || resource.error} retry={resource.refresh} />
         {latest && (
@@ -194,6 +198,15 @@ export function SubtitleRepair({
             <strong>{status}</strong>
             <p className="muted">{latest.message}</p>
           </div>
+        )}
+        {expanded && resource.data && (
+          <p className="subtitle-have">
+            {(() => {
+              const ready = resource.data.tracks.filter((t) => t.state === "ready");
+              const named = [...new Set(ready.map((t) => languageName(t.language)))];
+              return named.length ? `Ready to watch: ${named.join(", ")}` : "None ready to watch yet.";
+            })()}
+          </p>
         )}
         <p className="muted">
           Find a track, check its timing or fix an out-of-sync track.
@@ -230,14 +243,14 @@ export function SubtitleRepair({
           </Field>
         </div>
         <Field label="Subtitle agent" hint="Needs a Z.ai key.">
-          <label className="check">
+          <span className="check">
             <input
               type="checkbox"
               checked={verify}
               onChange={(e) => setVerify(e.target.checked)}
-            />{" "}
+            />
             Check, fix or write with AI
-          </label>
+          </span>
         </Field>
         <div className="actions">
           <button
@@ -330,6 +343,6 @@ export function SubtitleRepair({
           </details>
         )}
       </div>
-    </details>
+    </Wrapper>
   );
 }

@@ -294,7 +294,10 @@ function HistoryPage({
                               .filter(([, value]) => value)
                               .map(([key, value]) => (
                                 <div key={key}>
-                                  <dt>{key}</dt>
+                                  <dt>
+                                    {key.charAt(0).toUpperCase() +
+                                      key.slice(1).replace(/_/g, " ")}
+                                  </dt>
                                   <dd>{value}</dd>
                                 </div>
                               ))}
@@ -326,7 +329,12 @@ function HistoryPage({
                 }
               />
             )}
-            {(data.total > 0 || data.page > 1) && (
+            {/* One page needs no pager: just say how many. */}
+            {data.total > 0 && data.page === 1 && data.total <= data.limit ? (
+              <p className="pages-count meta num" role="status">
+                {data.total} {data.total === 1 ? "event" : "events"}
+              </p>
+            ) : (data.total > 0 || data.page > 1) && (
               <nav className="pages" aria-label="Log pages">
                 <button
                   className="btn"

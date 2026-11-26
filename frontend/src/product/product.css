@@ -60,6 +60,8 @@
   --font-label: var(--font-body);
   --case-display: uppercase;
   --case-label: uppercase;
+  /* Condensed capitals close up their word spaces; open them a little. */
+  --display-space: 0.1em;
 
   --t-meta: 0.8125rem;
   --t-small: 0.9375rem;
@@ -370,6 +372,7 @@ time {
   font-stretch: 62%;
   line-height: 0.86;
   letter-spacing: -0.015em;
+  word-spacing: var(--display-space);
   text-transform: var(--case-display);
   text-wrap: balance;
   overflow-wrap: anywhere;
@@ -428,6 +431,14 @@ time {
   gap: 0.75rem;
   font-size: var(--t-meta);
   font-weight: 700;
+}
+.bar-note {
+  white-space: nowrap;
+}
+@media (max-width: 30rem) {
+  .bar-note {
+    display: none;
+  }
 }
 .bar-end a {
   color: var(--reverse-accent);
@@ -500,6 +511,20 @@ time {
 .btn.danger {
   border-color: var(--red);
   color: var(--red);
+}
+.btn.danger:hover {
+  background: var(--red-wash);
+}
+.confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.confirm-text {
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  font-weight: 650;
 }
 .btn:disabled {
   opacity: 0.42;
@@ -660,6 +685,11 @@ input[type="checkbox"]:checked::after {
   border: solid var(--reverse-accent);
   border-width: 0 0 2.5px 2.5px;
   transform: translate(0, -0.08rem) rotate(-45deg);
+}
+/* Settled, not a choice: already here or already asked for. */
+input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .segmented {
   display: inline-flex;
@@ -892,6 +922,7 @@ details > summary::-webkit-details-marker {
   font-stretch: 64%;
   line-height: 0.95;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
 }
 .empty p {
   max-width: 44ch;
@@ -960,6 +991,7 @@ details > summary::-webkit-details-marker {
   font-stretch: 64%;
   line-height: 0.95;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
 }
 .still {
   display: block;
@@ -1013,6 +1045,7 @@ details > summary::-webkit-details-marker {
   font-weight: 850;
   font-stretch: 72%;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
 }
 .guide > .notice {
   margin: -1.75rem 0 1.75rem;
@@ -1035,6 +1068,7 @@ details > summary::-webkit-details-marker {
   font-weight: 800;
   font-stretch: 75%;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
   letter-spacing: 0.01em;
 }
 .guide-columns {
@@ -1362,8 +1396,13 @@ a.tonight-art:hover .still img {
   margin-top: 0;
 }
 /* The page title's rule already opens the first section. */
-.page-head + .form > .section:first-child > .section-head {
+.page-head + .form > .section:first-child > .section-head,
+.page-head + .section > .section-head,
+.page-head + .preference-groups > .preference-group:first-child > legend {
   padding-top: 0;
+  border-top: 0;
+}
+.page-head + .cast {
   border-top: 0;
 }
 .section-head {
@@ -1376,6 +1415,13 @@ a.tonight-art:hover .still img {
   padding-top: 0.65rem;
   border-top: 3px solid var(--ink);
 }
+/* On a phone a section's button goes under its words, the same in every section. */
+@media (max-width: 30rem) {
+  .section-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 .section-head h2 {
   font-family: var(--font-display);
   font-size: 1.55rem;
@@ -1383,6 +1429,7 @@ a.tonight-art:hover .still img {
   font-stretch: 66%;
   line-height: 1;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
 }
 .section-head p {
   margin-top: 0.4rem;
@@ -1428,6 +1475,23 @@ a.tonight-art:hover .still img {
 }
 .savebar .muted {
   margin-right: auto;
+}
+/* Unsaved changes keep Save in reach at the bottom of the screen. */
+.savebar.floating {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding-bottom: 1rem;
+  background: var(--paper);
+  box-shadow: 0 -0.75rem 1rem -0.75rem oklch(0% 0 0 / 0.18);
+}
+.savebar-state {
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  font-weight: 650;
+}
+.savebar-state .problem-text {
+  font-weight: 700;
 }
 .sheet {
   width: min(40rem, calc(100vw - 2rem));
@@ -1544,13 +1608,19 @@ a.tonight-art:hover .still img {
   max-width: 60rem;
   margin: 0 auto;
 }
+/* Before the first step is done, leaving is the masthead's only control. */
 .welcome-exit {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0.75rem;
+  margin-left: auto;
 }
 .welcome-exit .sign-out {
+  padding: 0;
   border: 0;
+}
+.welcome-exit .btn.quiet {
+  color: inherit;
+}
+.welcome-exit .btn.quiet:hover {
+  background: oklch(100% 0 0 / 0.14);
 }
 
 /* ─── Small parts ───────────────────────────────────────────────── */
@@ -1829,6 +1899,19 @@ a.tonight-art:hover .still img {
   border: 2.5px dashed var(--ink);
   border-radius: 4px;
 }
+/* A laptop's short window: the whole form, button included, fits on screen. */
+@media (min-width: 48rem) and (max-height: 50rem) {
+  .entry-top {
+    padding: 0.75rem 0 0.65rem;
+  }
+  .coupon {
+    margin-top: 1.5rem;
+    padding-block: 1.6rem;
+  }
+  .coupon .form {
+    gap: 0.85rem;
+  }
+}
 .coupon-cut {
   position: absolute;
   top: -0.8rem;
@@ -2072,38 +2155,38 @@ a.tonight-art:hover .still img {
 .hero-actions {
   margin-top: 1.4rem;
 }
-.hero .hero-actions .btn {
+.hero .hero-actions > .btn {
   border-color: rgb(255 255 255 / 0.8);
   background: transparent;
   color: var(--hero-ink);
   box-shadow: none;
 }
-.hero .hero-actions .btn:hover {
+.hero .hero-actions > .btn:hover {
   background: rgb(255 255 255 / 0.12);
 }
-.hero .hero-actions .btn.primary {
+.hero .hero-actions > .btn.primary {
   border-color: var(--hero-ink);
   background: var(--hero-ink);
   color: var(--hero-bg);
 }
-.hero .hero-actions .btn.primary:hover {
+.hero .hero-actions > .btn.primary:hover {
   background: rgb(255 255 255 / 0.86);
 }
-.hero .hero-actions .btn.primary svg {
+.hero .hero-actions > .btn.primary svg {
   color: currentColor;
 }
 .hero-icons {
   display: flex;
   gap: 0.1rem;
 }
-.hero :is(.info-button, .icon-button) {
+.hero-icons > :is(.info-button, .icon-button) {
   color: var(--hero-ink-2);
 }
-.hero :is(.info-button, .icon-button):hover {
+.hero-icons > :is(.info-button, .icon-button):hover {
   background: rgb(255 255 255 / 0.14);
   color: var(--hero-ink);
 }
-.hero .icon-button.on {
+.hero-icons > .icon-button.on {
   color: var(--hero-ink);
 }
 .hero-status {
@@ -2120,7 +2203,7 @@ a.tonight-art:hover .still img {
   gap: 0.25rem 0.5rem;
 }
 .hero-status .link {
-  margin-left: auto;
+  margin-left: 0.25rem;
   color: var(--hero-ink);
 }
 .hero-status .meta,
@@ -2208,6 +2291,10 @@ a.tonight-art:hover .still img {
   background: var(--paper-sink);
   color: var(--ink-3);
   text-decoration: none;
+}
+/* Number, play button and meter share the picture's one cell. */
+.ep-still > * {
+  grid-area: 1 / 1;
 }
 .ep-still img {
   position: absolute;
@@ -2402,6 +2489,14 @@ a.tonight-art:hover .still img {
   display: grid;
   grid-template-columns: 9rem minmax(0, 1fr);
   gap: 0.75rem;
+  align-items: baseline;
+}
+.pages-count {
+  margin-top: 1rem;
+  text-align: center;
+}
+.subtitle-have {
+  font-weight: 700;
 }
 .info-list dt {
   color: var(--ink-2);
@@ -2473,6 +2568,7 @@ a.tonight-art:hover .still img {
   font-stretch: 64%;
   line-height: 0.95;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
 }
 .checklist {
   display: grid;
@@ -2598,6 +2694,13 @@ a.tonight-art:hover .still img {
 .theatre video:focus {
   outline: none;
 }
+/* Subtitles rise above the controls while they show, rather than behind them. */
+.theatre video::-webkit-media-text-track-container {
+  transition: transform 0.2s var(--ease);
+}
+.theatre.chrome video::-webkit-media-text-track-container {
+  transform: translateY(-5.5rem);
+}
 .theatre-top,
 .theatre .controls {
   position: absolute;
@@ -2627,6 +2730,7 @@ a.tonight-art:hover .still img {
   font-stretch: 64%;
   line-height: 1;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2809,6 +2913,43 @@ a.tonight-art:hover .still img {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--on-accent);
+}
+/* The end of an episode: the next one, one press away. */
+.up-next {
+  position: absolute;
+  right: clamp(1rem, 3vw, 2rem);
+  bottom: 6.5rem;
+  display: grid;
+  justify-items: end;
+  gap: 0.5rem;
+}
+.up-next-label {
+  color: var(--on-screen-2);
+  font-family: var(--font-label);
+  font-size: var(--t-meta);
+  font-weight: 800;
+  font-stretch: 112%;
+  letter-spacing: 0.07em;
+  word-spacing: 0.15em;
+  text-transform: var(--case-label);
+}
+.up-next-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 3.25rem;
+  padding: 0 1.5rem 0 1.25rem;
+  border: 0;
+  border-radius: var(--pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.up-next-play:hover {
+  filter: brightness(1.06);
 }
 .theatre-errors {
   position: absolute;
@@ -3140,6 +3281,7 @@ a.tonight-art:hover .still img {
 }
 .request-note {
   max-width: 62ch;
+  font-size: var(--t-small);
 }
 .request-body .actions {
   margin-top: 0.4rem;
@@ -3215,12 +3357,15 @@ a.tonight-art:hover .still img {
 .request-now .request-progress {
   max-width: 32rem;
 }
+.request-now .request-note {
+  font-size: 1rem;
+}
 .request-now .request-progress .meter {
   height: 8px;
   border-radius: 4px;
 }
 .request-now .request-progress .meta {
-  font-size: var(--t-body);
+  font-size: 1rem;
   font-weight: 700;
   color: var(--ink);
 }
@@ -3394,6 +3539,7 @@ a.tonight-art:hover .still img {
   font-stretch: 66%;
   line-height: 1;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
 }
 .preference {
   display: grid;
@@ -3454,6 +3600,16 @@ a.tonight-art:hover .still img {
 }
 .cast-member + .cast-member {
   border-top: 1px solid var(--rule);
+}
+/* Actions keep one column, so everyone's role lines up, theirs or not. */
+@media (min-width: 64rem) {
+  .cast-member {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18.5rem;
+  }
+  .cast-member > .actions {
+    justify-content: flex-end;
+  }
 }
 .cast-line {
   flex: 1 1 22rem;
@@ -3610,6 +3766,7 @@ a.tonight-art:hover .still img {
   font-stretch: 66%;
   line-height: 1;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
 }
 .choices {
   display: grid;
@@ -3636,6 +3793,7 @@ a.tonight-art:hover .still img {
   font-stretch: 66%;
   line-height: 1;
   text-transform: var(--case-display);
+  word-spacing: var(--display-space);
 }
 .choice span {
   color: var(--ink-2);
@@ -3714,7 +3872,8 @@ a.tonight-art:hover .still img {
 }
 .key-label {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  min-height: 1.4rem;
   justify-content: space-between;
   gap: 0.5rem;
 }
@@ -3737,6 +3896,11 @@ a.tonight-art:hover .still img {
 .key-state .tick {
   width: 1.05rem;
   height: 1.05rem;
+  /* The tick must not make this label taller than its neighbour's. */
+  margin-block: -0.3rem;
+}
+.key-field small a {
+  white-space: nowrap;
 }
 .key-field input::placeholder {
   color: var(--ink-3);
@@ -3876,9 +4040,10 @@ button.link:hover {
 .folder-rows {
   margin-top: 0.4rem;
 }
+/* A long path wraps inside its own column; the state stays at the end of the dots. */
 .folder-rows li {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 0.25rem 0.75rem;
   padding: 0.6rem 0;
@@ -3923,6 +4088,9 @@ button.link:hover {
   height: 1.15rem;
 }
 @media (max-width: 30rem) {
+  .folder-rows li {
+    flex-wrap: wrap;
+  }
   .folder-label {
     width: 100%;
   }
@@ -4306,26 +4474,18 @@ button.link:hover {
   .settings-index {
     position: static;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.5rem;
     padding-top: 0.9rem;
     border-bottom: 2px solid var(--ink);
     padding-bottom: 0.6rem;
   }
+  /* Every settings page in view: the list wraps rather than hiding off the edge. */
   .settings-index nav {
     display: flex;
+    flex-wrap: wrap;
     flex: 1;
     gap: 0.2rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-    mask-image: linear-gradient(
-      to right,
-      transparent,
-      #000 0.75rem,
-      #000 calc(100% - 1.5rem),
-      transparent
-    );
-    padding: 0 0.75rem;
   }
   .settings-group {
     display: contents;
@@ -4334,6 +4494,8 @@ button.link:hover {
     display: none;
   }
   .settings-index a {
+    padding: 0.35rem 0.7rem;
+    font-size: var(--t-small);
     white-space: nowrap;
   }
   .settings-index .sign-out {
@@ -4396,6 +4558,14 @@ button.link:hover {
   .workspace,
   .settings-layout {
     padding-bottom: 7rem;
+  }
+  /* Settings always have the tab bar: unsaved changes float just above it. */
+  .settings-layout .savebar.floating {
+    bottom: calc(4.4rem + env(safe-area-inset-bottom));
+  }
+  .savebar.floating {
+    margin-inline: calc(-1 * var(--gutter));
+    padding-inline: var(--gutter);
   }
   .page-head,
   .dayhead {
@@ -4525,10 +4695,10 @@ button.link:hover {
     position: relative;
     margin-top: -2.25rem;
   }
-  .hero-actions .btn {
+  .hero-actions > .btn {
     flex: 1 1 0;
   }
-  .hero-actions .btn.primary {
+  .hero-actions > .btn.primary {
     flex-basis: 100%;
   }
   .episode {
@@ -4559,15 +4729,19 @@ button.link:hover {
     grid-row: 1;
     margin: -0.6rem -0.5rem 0 0;
   }
+  /* Number and name wrap as one line of text; the length goes underneath. */
   .ep-head {
-    flex-wrap: wrap;
-    row-gap: 0;
+    display: block;
+  }
+  .ep-no {
+    margin-right: 0.45rem;
   }
   .ep-head strong {
     white-space: normal;
   }
   .ep-head .meta {
-    margin-left: 0;
+    display: block;
+    margin: 0.15rem 0 0;
   }
   .ep-blurb {
     -webkit-line-clamp: 3;
@@ -4650,6 +4824,12 @@ button.link:hover {
   .control.jump {
     display: none;
   }
+  .up-next {
+    bottom: 9rem;
+  }
+  .theatre.chrome video::-webkit-media-text-track-container {
+    transform: translateY(-8rem);
+  }
   .theatre-panel {
     left: 0.75rem;
     right: 0.75rem;
@@ -4661,6 +4841,16 @@ button.link:hover {
   .controls .clock:last-of-type {
     margin-right: auto;
     text-align: left;
+  }
+  /* Side by side, the two times read as "where / how long". */
+  .controls .clock {
+    min-width: 0;
+  }
+  .controls .clock.total {
+    color: var(--on-screen-2);
+  }
+  .controls .clock.total::before {
+    content: "/ ";
   }
 }
 

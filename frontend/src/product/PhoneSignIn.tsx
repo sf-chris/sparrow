@@ -132,7 +132,7 @@ export default function AddPhone({
           onClose={close}
           footer={
             <button className={`btn${done ? " primary" : ""}`} onClick={close}>
-              Done
+              {unreachable ? "Close" : "Done"}
             </button>
           }
         >
