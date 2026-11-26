@@ -126,7 +126,7 @@ between titles, rows and covers anywhere they are listed.
   Devices) shows the code beside three numbered steps and confirms by itself
   when the phone signs in. The same code is Open on phone: a round phone beside
   the account's initial in the masthead (not on phones), named on hover, that
-  drops a small code; the phone opens on the page it was shown from. Logs is a
+  opens the same dialog; the phone opens on the page it was shown from. Logs is a
   timed listing (time, title, summary, action) whose filters persist through
   pagination and reload; administrators see titles over their cost target
   above it, never on Requests. Preferences label only personal or server-limited values.
