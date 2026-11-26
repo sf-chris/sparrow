@@ -2,7 +2,6 @@ import { useEffect, useId, useState } from "react";
 import { Globe, RefreshCw } from "lucide-react";
 import { api, post } from "./api";
 import { Tick } from "./Brand";
-import AddPhone from "./PhoneSignIn";
 import { Bar, ErrorNote, Loading, Page, useResource } from "./ui";
 
 type Status = {
@@ -79,9 +78,8 @@ export default function SparrowConnect() {
   const checking = /HTTPS|Checking/.test(step);
   const host = status?.address?.replace(/^https:\/\//, "");
 
-  const action = !status ? null : live ? (
-    <AddPhone primary />
-  ) : !on && !busy ? (
+  const action =
+    status && !on && !busy ? (
     <button className="btn primary" onClick={() => void turn(true)}>
       Turn on
     </button>

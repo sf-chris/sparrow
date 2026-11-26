@@ -6,11 +6,11 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { Tv, Search, Clock3, CircleUser, LogOut, Smartphone } from "lucide-react";
+import { Tv, Search, Clock3, CircleUser, LogOut } from "lucide-react";
 import { post, type User } from "./api";
 import { ErrorNote, useSpatialNavigation } from "./ui";
 import { Logotype } from "./Brand";
-import AddPhone from "./PhoneSignIn";
+import { OpenOnPhone } from "./PhoneSignIn";
 
 const navigation = [
   { to: "/", label: "Guide", icon: Tv },
@@ -151,10 +151,7 @@ export default function Shell({
             </nav>
           )}
           {user.welcomed && (
-            <AddPhone
-              label="Open on phone"
-              icon={Smartphone}
-              className="open-on-phone"
+            <OpenOnPhone
               admin={user.role === "admin"}
               path={settings ? "/" : pathname + search}
             />

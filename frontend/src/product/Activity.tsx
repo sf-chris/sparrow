@@ -4,7 +4,6 @@ import {
   Link,
   Navigate,
   useLocation,
-  useNavigate,
   useParams,
   useSearchParams,
 } from "react-router-dom";
@@ -28,35 +27,6 @@ import {
 import { Age, scope } from "./Collection";
 import { useWebSocket } from "../hooks/useWebSocket";
 
-type Spending = {
-  alerts: { kind: string; measure: string; text: string; job_id?: string }[];
-};
-
-/** Administrators only: titles and recent runs whose cost to find (or to
- * subtitle) is over its target. Titles and money only. */
-function SpendingAlerts({ open }: { open: (id: string) => void }) {
-  const resource = useResource(() => api<Spending>("/admin/spending"));
-  const alerts = resource.data?.alerts || [];
-  if (!alerts.length) return null;
-  return (
-    <section className="spending" aria-labelledby="spending">
-      <Bar id="spending" title="Over target" />
-      <ul className="rows">
-        {alerts.map((alert) => (
-          <li className="row" key={`${alert.measure}:${alert.job_id || ""}`}>
-            <p>{alert.text}</p>
-            {alert.job_id && (
-              <button className="btn quiet" onClick={() => open(alert.job_id!)}>
-                Open request
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 export default function Activity({ user }: { user: User }) {
   const [params] = useSearchParams();
   const selectedRequest = params.get("request");
@@ -64,7 +34,6 @@ export default function Activity({ user }: { user: User }) {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("current");
   const location = useLocation();
-  const navigate = useNavigate();
   const from = { from: location.pathname + location.search };
   useWebSocket(() => {
     void resource.refresh();
@@ -89,11 +58,6 @@ export default function Activity({ user }: { user: User }) {
       }
     >
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
-      {user.role === "admin" && (
-        <SpendingAlerts
-          open={(id) => navigate(`/activity/${id}`, { state: from })}
-        />
-      )}
       <div className="request-tools">
         <div className="tabs" role="tablist" aria-label="Which requests">
           {[
