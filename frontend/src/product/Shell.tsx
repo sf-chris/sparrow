@@ -6,10 +6,11 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { Tv, Search, Clock3, CircleUser, LogOut } from "lucide-react";
+import { Tv, Search, Clock3, CircleUser, LogOut, Smartphone } from "lucide-react";
 import { post, type User } from "./api";
 import { ErrorNote, useSpatialNavigation } from "./ui";
 import { Logotype } from "./Brand";
+import AddPhone from "./PhoneSignIn";
 
 const navigation = [
   { to: "/", label: "Guide", icon: Tv },
@@ -76,7 +77,7 @@ export default function Shell({
       setSigningOut(false);
     }
   }
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const index = useRef<HTMLElement>(null);
   const settings = pathname.startsWith("/settings") && user.welcomed;
@@ -148,6 +149,15 @@ export default function Shell({
                 </NavLink>
               ))}
             </nav>
+          )}
+          {user.welcomed && (
+            <AddPhone
+              label="Open on phone"
+              icon={Smartphone}
+              className="open-on-phone"
+              admin={user.role === "admin"}
+              path={settings ? "/" : pathname + search}
+            />
           )}
           {user.welcomed && (
             <NavLink

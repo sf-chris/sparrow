@@ -110,7 +110,8 @@ between titles, rows and covers anywhere they are listed.
   `?request=` narrows to one request, including completed work.
 - **Player:** the black TV screen with Sparrow's own controls: a large marigold
   play button, back 10s and forward 30s, a marigold scrubber, tabular times, mute
-  and full screen (Space/K, ←/→, M, F). Audio and subtitle choices sit under the
+  and full screen (Space/K, ←/→, M, F). When a TV is in reach, a named Play on
+  TV pill sits top right. Audio and subtitle choices sit under the
   video; Playback help and Subtitle help are disclosures. Subtitle help offers
   Get subtitles, optional Check subtitle sync, and Fix subtitle timing. Each
   title/episode also opens those controls. Available tracks are distinguished
@@ -122,7 +123,9 @@ between titles, rows and covers anywhere they are listed.
   devices; Sparrow Connect is one device card in Storage's grammar (Address and
   Port lines with ticks), its page action the next step (Turn on, then Add a
   phone). Add a phone (Account › Devices) shows the code beside three numbered
-  steps and confirms by itself when the phone signs in. Logs is a timed
+  steps and confirms by itself when the phone signs in. The same code is Open
+  on phone, an outlined pill beside the account in the masthead (not on
+  phones); the phone opens on the page it was shown from. Logs is a timed
   listing (time, title, summary, action) whose filters persist through
   pagination and reload. Preferences label only personal or server-limited values.
 - **Setup:** numbered steps with the current step circled; two start choices;
