@@ -200,6 +200,10 @@ export type NodeInfo = {
       available: boolean;
       free_bytes?: number;
       total_bytes?: number;
+      /** Sparrow's verified library files in this folder. */
+      library_bytes?: number;
+      /** Folders that share a disk share this. */
+      disk?: string;
       writable?: boolean;
       error?: string;
       label?: string;

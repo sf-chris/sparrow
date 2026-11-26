@@ -92,6 +92,18 @@ class Nodes:
             for r in rows
         ]
 
+    def library_usage(self):
+        """Bytes of verified library files on each disk, keyed (node, root)."""
+        try:
+            with self.accounts.connect() as db:
+                rows = db.execute(
+                    "SELECT node_id, root_id, SUM(json_extract(data, '$.facts.size_bytes')) AS used "
+                    "FROM assets GROUP BY node_id, root_id"
+                ).fetchall()
+        except Exception:  # No catalogue yet.
+            return {}
+        return {(r["node_id"], r["root_id"]): int(r["used"] or 0) for r in rows}
+
     def observe_availability(self):
         for node in self.list():
             if node["disabled"]:
@@ -502,7 +514,13 @@ def install_nodes(app, storage, get_service):
     @router.get("/nodes")
     def list_nodes(request: Request):
         user = request.state.user
-        return [n for n in nodes.list() if nodes.accounts.can_access(user, n["id"])]
+        used = nodes.library_usage()
+        visible = [n for n in nodes.list() if nodes.accounts.can_access(user, n["id"])]
+        for node in visible:
+            for root in node["capabilities"].get("roots", []):
+                if isinstance(root, dict) and is_library(root.get("id")):
+                    root["library_bytes"] = used.get((node["id"], root["id"]), 0)
+        return visible
 
     @router.post("/admin/nodes/enroll")
     def enroll(body: Enrollment, request: Request):

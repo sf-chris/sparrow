@@ -331,6 +331,8 @@ class Executor:
                         "available": True,
                         "free_bytes": usage.free,
                         "total_bytes": usage.total,
+                        # Folders on one disk share it; the meter counts it once.
+                        "disk": str(os.stat(root).st_dev),
                         "writable": os.access(root, os.W_OK),
                         # Shown to people choosing folders; never interpreted by the server.
                         **({"label": str(root)} if root_id != "cache" else {}),

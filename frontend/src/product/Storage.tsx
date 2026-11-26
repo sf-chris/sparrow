@@ -27,6 +27,93 @@ type Candidate = {
   size_bytes: number;
 };
 type Scan = { id: string; node_id: string; candidates: Candidate[] };
+type Root = NodeInfo["capabilities"]["roots"][number];
+type Disk = { names: string[]; total: number; free: number; sparrow: number };
+
+/** One entry per physical disk: library folders on the same disk count once. */
+function disksOf(roots: Root[]): Disk[] {
+  const out: (Disk & { key: string })[] = [];
+  roots.forEach((r) => {
+    if (!r.available || !r.total_bytes) return;
+    const name = r.id === "library" ? "Library" : `Library ${r.id.split("-")[1]}`;
+    const free = r.free_bytes || 0;
+    const same = out.find((d) =>
+      r.disk
+        ? d.key === r.disk
+        : d.total === r.total_bytes && Math.abs(d.free - free) < 1e9,
+    );
+    if (same) {
+      same.names.push(name);
+      same.sparrow += r.library_bytes || 0;
+    } else
+      out.push({
+        key: r.disk || r.id,
+        names: [name],
+        total: r.total_bytes,
+        free,
+        sparrow: r.library_bytes || 0,
+      });
+  });
+  return out;
+}
+
+/** Sizes as people say them: 850 GB, 61 GB, 1.8 TB. */
+const size = (n: number) =>
+  n >= 1e12
+    ? `${(n / 1e12).toFixed(1)} TB`
+    : n >= 1e10
+      ? `${Math.round(n / 1e9)} GB`
+      : bytes(n);
+
+const nearlyFull = (d: Disk) => d.free < Math.max(d.total * 0.05, 10e9);
+
+/** A disk as a printed bar: Sparrow's films and shows, everything else, free. */
+function DiskMeter({ disk, named }: { disk: Disk; named: boolean }) {
+  const sparrow = Math.min(disk.sparrow, disk.total - disk.free);
+  const other = Math.max(0, disk.total - disk.free - sparrow);
+  const share = (n: number) => `${(100 * n) / disk.total}%`;
+  const full = nearlyFull(disk);
+  return (
+    <div className="disk-meter">
+      {named && <span className="disk-name">{disk.names.join(" · ")}</span>}
+      <div
+        className="disk-bar"
+        role="img"
+        aria-label={`${size(sparrow)} Sparrow, ${size(other)} other files, ${size(disk.free)} free of ${size(disk.total)}`}
+      >
+        {sparrow > 0 && (
+          <span className="sparrow" style={{ width: share(sparrow) }} />
+        )}
+        {other > 0 && <span className="other" style={{ width: share(other) }} />}
+      </div>
+      <dl className="disk-legend num" aria-hidden="true">
+        <div>
+          <dt>
+            <i className="swatch sparrow" />
+            Sparrow
+          </dt>
+          <dd>{size(sparrow)}</dd>
+        </div>
+        <div>
+          <dt>
+            <i className="swatch other" />
+            Other files
+          </dt>
+          <dd>{size(other)}</dd>
+        </div>
+        <div className={full ? "problem-text" : ""}>
+          <dt>
+            <i className="swatch free" />
+            Free
+          </dt>
+          <dd>
+            {size(disk.free)} <small>of {size(disk.total)}</small>
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
 type Selection = {
   id: string;
   title: string;
@@ -212,11 +299,17 @@ export default function Storage({
               const root = rootOf("library");
               const local = node.id === "local";
               // Red is for something that broke; a folder not chosen yet is just the next step.
+              const disks = node.capabilities.roots.filter((r) =>
+                /^library(-\d+)?$/.test(r.id),
+              );
+              const meters = disksOf(disks);
               const problem = node.disabled
                 ? "Revoked"
                 : !node.online
                   ? "Offline"
-                  : "";
+                  : meters.length && meters.every(nearlyFull)
+                    ? "Nearly full"
+                    : "";
               const folders = [
                 {
                   label: "Library",
@@ -241,9 +334,6 @@ export default function Storage({
                   write: true,
                 },
               ];
-              const disks = node.capabilities.roots.filter((r) =>
-                /^library(-\d+)?$/.test(r.id),
-              );
               const free = disks.reduce(
                 (sum, r) => sum + (r.available ? r.free_bytes || 0 : 0),
                 0,
@@ -263,12 +353,24 @@ export default function Storage({
                       {problem && (
                         <span className="flag problem">{problem}</span>
                       )}
-                      {disks.some((r) => r.free_bytes !== undefined) && (
-                        <span className="meta num device-free">
-                          {bytes(free)} free
-                        </span>
-                      )}
+                      {!meters.length &&
+                        disks.some((r) => r.free_bytes !== undefined) && (
+                          <span className="meta num device-free">
+                            {bytes(free)} free
+                          </span>
+                        )}
                     </div>
+                    {meters.length > 0 && (
+                      <div className="disk-meters">
+                        {meters.map((disk) => (
+                          <DiskMeter
+                            key={disk.names.join()}
+                            disk={disk}
+                            named={meters.length > 1}
+                          />
+                        ))}
+                      </div>
+                    )}
                     {local ? (
                       <ul className="folder-rows">
                         {folders.map((folder) => {
@@ -352,7 +454,9 @@ export default function Storage({
                                     ? disk.writable === false
                                       ? "Can’t save here"
                                       : "Ready"
-                                    : `${bytes(disk.free_bytes || 0)} free`}
+                                    : meters.length
+                                      ? "Ready"
+                                      : `${bytes(disk.free_bytes || 0)} free`}
                               </span>
                             </li>
                           ))}

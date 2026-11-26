@@ -3778,6 +3778,93 @@ button.link:hover {
 .device-free {
   margin-left: auto;
 }
+/* A disk as a printed bar: Sparrow in the channel teal, other files hatched,
+   free space left as paper. */
+.disk-meters {
+  display: grid;
+  gap: 1rem;
+  max-width: 54rem;
+  margin: 0.5rem 0 0.35rem;
+}
+.disk-meter {
+  display: grid;
+  gap: 0.5rem;
+}
+.disk-name {
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: var(--case-label);
+}
+.disk-bar {
+  display: flex;
+  height: 1.5rem;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  background: var(--paper-lift);
+  overflow: hidden;
+}
+.disk-bar span {
+  flex: none;
+  min-width: 3px;
+  border-right: 2px solid var(--ink);
+}
+.disk-bar .sparrow,
+.swatch.sparrow {
+  background: var(--band);
+}
+.disk-bar .other,
+.swatch.other {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--ink-2) 0 1.5px,
+    transparent 1.5px 5px
+  );
+}
+.disk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2.25rem;
+  margin: 0.15rem 0 0;
+}
+.disk-legend dt {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  font-weight: 650;
+}
+.disk-legend dd {
+  margin: 0.1rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 850;
+  font-stretch: 80%;
+  line-height: 1.1;
+}
+.disk-legend small {
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: var(--t-small);
+  font-weight: 650;
+  font-stretch: 100%;
+}
+.disk-legend .problem-text dd,
+.disk-legend .problem-text dt,
+.disk-legend .problem-text small {
+  color: var(--red);
+}
+.swatch {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+}
+.swatch.free {
+  background: var(--paper-lift);
+}
 .device-head,
 .folder-rows {
   max-width: 54rem;

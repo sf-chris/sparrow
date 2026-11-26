@@ -120,7 +120,8 @@ between titles, rows and covers anywhere they are listed.
   Household (People, Defaults) and Server (Storage, Connections, Sparrow
   Connect, Setup), with Sign out beneath. On phones the index becomes a
   scrolling strip with Sign out beside it. People is a cast list; Storage lists
-  devices; Sparrow Connect is one device card in Storage's grammar (Address and
+  devices, each disk drawn as a bar (Sparrow in teal, other files hatched, free
+  as paper) with "Nearly full" flagged; Sparrow Connect is one device card in Storage's grammar (Address and
   Port lines with ticks), its page action the next step (Turn on, then Add a
   phone). Add a phone (Account › Devices) shows the code beside three numbered
   steps and confirms by itself when the phone signs in. The same code is Open
