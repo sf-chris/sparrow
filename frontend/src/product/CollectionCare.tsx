@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Bell, BellRing } from "lucide-react";
 import { api, post, type NodeInfo } from "./api";
 import { Bar, Dialog, ErrorNote, Field, Loading, useResource } from "./ui";
 type Subscription = {
@@ -130,13 +131,23 @@ export default function CollectionCare({
       title={`Follow ${name(editing)}`}
       onClose={() => setOpen(false)}
       footer={
-        <button className="btn primary" disabled={busy} onClick={save}>
-          {busy ? "Saving…" : "Save"}
-        </button>
+        <>
+          {editing?.data.enabled && (
+            <button className="btn quiet" onClick={() => void check(editing)}>
+              {checked === editing.id ? "Check started" : "Check now"}
+            </button>
+          )}
+          <button className="btn primary" disabled={busy} onClick={save}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </>
       }
     >
       <div className="form">
         <ErrorNote error={error} />
+        {editing?.data.message && !editing.data.message.startsWith("Saved.") && (
+          <p className="meta">{editing.data.message}</p>
+        )}
         <label className="check">
           <input
             type="checkbox"
@@ -210,33 +221,36 @@ export default function CollectionCare({
       </div>
     </Dialog>
   );
-  if (tmdbId)
+  if (tmdbId) {
+    // On a title: one quiet bell beside the ⓘ. Ringing when Sparrow keeps it
+    // up to date; the dialog holds the settings and "Check now".
+    if (!resource.data) return null;
+    const row = rows[0] || null;
+    const label = !row
+      ? mediaType === "tv"
+        ? "Follow this series"
+        : "Follow this film"
+      : row.data.enabled
+        ? `Following · ${reach(row)}${row.data.upgrades ? " · upgrades on" : ""}`
+        : "Following paused";
     return (
-      <div className="care">
-        <ErrorNote error={error || resource.error} retry={resource.refresh} />
-        {!resource.data ? null : rows.length ? (
-          rows.map((row) => (
-            <div className="care-line" key={row.id}>
-              <p>
-                <strong>
-                  {row.data.enabled ? "Following" : "Following paused"}
-                </strong>
-                <span>
-                  {reach(row)}
-                  {row.data.upgrades ? " · upgrades on" : ""}
-                </span>
-              </p>
-              {controls(row)}
-            </div>
-          ))
-        ) : (
-          <button className="btn quiet care-follow" onClick={() => edit(null)}>
-            {mediaType === "tv" ? "Follow this series" : "Follow this film"}
-          </button>
-        )}
+      <>
+        <button
+          className={`icon-button follow ${row?.data.enabled ? "on" : ""}`}
+          aria-label={label}
+          title={label}
+          onClick={() => edit(row)}
+        >
+          {row?.data.enabled ? (
+            <BellRing size={18} strokeWidth={2} />
+          ) : (
+            <Bell size={18} strokeWidth={2} />
+          )}
+        </button>
         {dialog}
-      </div>
+      </>
     );
+  }
   return (
     <section className="following" aria-labelledby="following">
       <Bar id="following" title="Following" />

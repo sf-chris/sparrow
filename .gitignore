@@ -12,7 +12,6 @@ dist/
 venv/
 .idea/
 .vscode/
-.assistant/settings.local.json
 frontend/dist/
 *.log
 backups/

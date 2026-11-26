@@ -141,7 +141,7 @@ class GateFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.env = environment(SPARROW_SMART_MODEL="smart-model", SPARROW_CHEAP_MODEL="cheap-model")
+        self.env = environment(SPARROW_SMART_MODEL="glm-5.3", SPARROW_CHEAP_MODEL="glm-5.3-flash")
         self.env.__enter__()
         self.addCleanup(self.env.__exit__, None, None, None)
         self.storage = Storage(self.temp.name)
@@ -155,7 +155,7 @@ class GateFixture(unittest.IsolatedAsyncioTestCase):
         self.tb.tmdb_get = self.tmdb
         self.job = Job(tmdb_id=42, media_type=self.MEDIA, title=self.TITLE, year=2020, original_language="en",
                        audio_pref="original", wanted_episodes=self.WANTED if self.MEDIA == "tv" else {})
-        self.session = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model="cheap-model")
+        self.session = AgentSession(agent=AgentKind.FETCH, job_id=self.job.id, model="glm-5.3-flash")
         self.job.session_id = self.session.id
         self.service.store.save_job(self.job)
         self.service.store.save_session(self.session)
@@ -191,7 +191,7 @@ class GateFixture(unittest.IsolatedAsyncioTestCase):
 
     def verdict(self, approve=True, reason="It fits.", concern="none", instead="", queries=()):
         self.verdicts.append(({"approve": approve, "reason": reason, "instead": instead, "queries": list(queries),
-                               "concern": concern}, 0.002, "smart-model", {"input_tokens": 600, "output_tokens": 40}))
+                               "concern": concern}, 0.002, "glm-5.3", {"input_tokens": 600, "output_tokens": 40}))
 
     async def run_turn(self, *calls):
         replies = iter([answer(call, tokens=800) for call in calls] + [answer(("wake_me", {"reason": "Waiting."}), tokens=800)])
@@ -229,7 +229,7 @@ class EpisodeOrderGateTests(GateFixture):
         self.assertEqual(download.metadata["episode_map"][0]["episode"], "S01E05")
         self.assertIn("record it as S01E05", landing_notes(download.metadata))
         # No escalation, and the mapping is ledger evidence.
-        self.assertEqual(self.service.store.get_session(self.session.id).model, "cheap-model")
+        self.assertEqual(self.service.store.get_session(self.session.id).model, "glm-5.3-flash")
         order = next(r for r in ledger.load_enforcements(self.service.store) if r["rule"] == "episode_order")
         self.assertEqual((order["profile"], order["tool"]), ("fetch_scout", "find_releases"))
         self.assertEqual(order["detail"]["mapped"][0]["numbered"], "09")

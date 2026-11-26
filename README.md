@@ -99,9 +99,8 @@ Add only the services you need in **Settings → Server settings**:
 | Service | Used for |
 | --- | --- |
 | TMDB | Movie/show metadata and title search |
-| Provider | Discovery, acquisition, curation and subtitle-review reasoning |
+| Z.ai (GLM) | Discovery, acquisition, curation and subtitle-review reasoning |
 | Transmission or qBittorrent | Downloads requested through Sparrow's built-in source. Setup finds one, or the Docker image runs its own Transmission |
-| AltProvider (optional) | Cheaper subtitle page checks |
 | OpenSubtitles (optional) | Additional caption candidates |
 
 Imported-media playback needs no reasoning key. Provider accounts and paid model

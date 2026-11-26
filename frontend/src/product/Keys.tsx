@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { Tick } from "./Brand";
 
-export type KeyName = "tmdb_api_key" | "provider_api_key" | "altprovider_api_key";
+export type KeyName = "tmdb_api_key" | "glm_api_key";
 
 export const KEYS: {
   name: KeyName;
@@ -20,22 +20,19 @@ export const KEYS: {
     required: true,
   },
   {
-    name: "provider_api_key",
-    label: "Provider API key",
-    purpose: "Finds what you ask for. Provider bills for use.",
-    from: "Assistant Console",
-    href: "https://retired-provider.invalid",
+    name: "glm_api_key",
+    label: "Z.ai API key",
+    purpose: "Finds what you ask for and checks subtitles. Z.ai bills for use.",
+    from: "Z.ai",
+    href: "https://z.ai/manage-apikey/apikey-list",
     required: true,
   },
-  {
-    name: "altprovider_api_key",
-    label: "AltProvider API key",
-    purpose: "Cheaper subtitle checks.",
-    from: "AltProvider",
-    href: "https://retired-provider.invalid",
-    required: false,
-  },
 ];
+
+/** Required keys the server does not have yet. */
+export function missingKeys(saved: Record<string, unknown>): KeyName[] {
+  return KEYS.filter((key) => key.required && !saved[`${key.name}_configured`]).map((key) => key.name);
+}
 
 /** A secret the browser never sees again: say plainly whether the server has one. */
 export function KeyField({

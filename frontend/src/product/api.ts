@@ -102,6 +102,7 @@ export type Asset = {
   season?: number;
   episode?: number;
   state: string;
+  verified_at?: number;
   facts: {
     duration: number;
     quality: string;
@@ -152,6 +153,15 @@ export type Job = {
   preferences: Effective;
   revision: number;
   needs_attention?: boolean;
+  poster_path?: string;
+  requested_by?: string;
+  created_at?: number;
+  transfer?: {
+    state: "downloading" | "paused" | "checking" | "done";
+    progress: number;
+    eta_seconds: number;
+    speed: number;
+  } | null;
 };
 export type Title = {
   tmdb_id: number;
@@ -162,6 +172,10 @@ export type Title = {
   poster_url?: string;
   backdrop_url?: string;
   seasons: { season_number: number; episode_count: number; name?: string }[];
+  genres?: string[];
+  cast?: { name: string; character: string; photo_url?: string | null }[];
+  makers?: string[];
+  episode_names?: Record<string, string>;
   items: Item[];
   jobs: Job[];
   preferences?: Effective;

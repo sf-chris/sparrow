@@ -25,8 +25,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..configuration import effective_altprovider_key
-from . import altprovider_loop, profiles, subtitle_archive, subtitle_contract
+from ..configuration import effective_glm_key
+from . import glm_loop, profiles, subtitle_archive, subtitle_contract, subtitle_promos
 from . import subtitle_review as pages_
 from .account_api import administrator
 from .media_state import language_code
@@ -43,10 +43,11 @@ from .subtitle_sync import (
 )
 
 ACTIVE = {"queued", "finding", "aligning", "measuring", "reviewing"}
-DEFAULT_REVIEW_MODEL = "assistant-large"
-DEFAULT_ALTPROVIDER_REVIEW_MODEL = "smart-model"
-DEFAULT_CONTRACTOR = "cheap-model"
-DEFAULT_VERIFIER = "smart-model"
+# The subtitle roles: GLM 5.3 manages and gives second opinions; GLM 5.3 Flash
+# reads every page (and picture subtitles).
+DEFAULT_REVIEW_MODEL = "glm-5.3"
+DEFAULT_CONTRACTOR = "glm-5.3-flash"
+DEFAULT_VERIFIER = "glm-5.3"
 # Above this share of captions flagged wrong, the track is plainly mismatched:
 # skip verification and let the manager replace it.
 MISMATCH_SHARE = 0.3
@@ -62,46 +63,34 @@ REVIEW_WAKES = 6
 
 
 def review_model():
-    """The manager. the smart model when an AltProvider key is set: it made the same
-    corrections as Large on the benchmark episodes for about a third of the
-    cost. Otherwise Large."""
-    configured = os.getenv("SPARROW_SUBTITLE_MODEL")
-    if configured:
-        return configured
-    return DEFAULT_ALTPROVIDER_REVIEW_MODEL if effective_altprovider_key() else DEFAULT_REVIEW_MODEL
+    """The manager: reviews what the page checker flags and approves a track."""
+    return os.getenv("SPARROW_SUBTITLE_MODEL") or DEFAULT_REVIEW_MODEL
 
 
 def verifier_model():
-    """A stronger cheap model that re-checks only the checker's flags.
-
-    In the benchmark the smart model cleared every false alarm on correct tracks
-    while keeping wrong-episode tracks flagged, for about two cents an episode.
-    """
+    """A stronger model that re-checks only the checker's flags."""
     return configured_model("SPARROW_SUBTITLE_VERIFIER", DEFAULT_VERIFIER)
 
 
 def reader_model():
-    """The vision model that reads picture subtitles; empty without one."""
+    """The vision model that reads picture subtitles (the page checker when
+    it reads images); empty without one."""
     model = contractor_model()
-    return model if altprovider_loop.is_altprovider_model(model) else ""
+    return model if glm_loop.reads_images(model) else ""
 
 
 def contractor_model():
-    """The cheaper page checker the subtitle agent manages.
-
-    the cheap model caught 6 of Large's 7 flagged problems in the page-check
-    benchmark for under a cent per episode, so it is used whenever an AltProvider
-    key is present. Empty means Large reads every page itself.
-    """
+    """The cheaper page checker the subtitle agent manages; empty ("off")
+    means the manager reads every page itself."""
     return configured_model("SPARROW_SUBTITLE_CONTRACTOR", DEFAULT_CONTRACTOR)
 
 
 def configured_model(variable, default):
-    """A named model, "off", or blank for the default when an AltProvider key is set."""
+    """A named model, "off" for none, or blank for the default."""
     configured = (os.getenv(variable) or "").strip()
     if configured.lower() == "off":
         return ""
-    return configured or (default if effective_altprovider_key() else "")
+    return configured or default
 
 
 def timing_summary(measured):
@@ -137,14 +126,11 @@ class Subtitles:
         self._measures = {}
         # Builds the page checker's model caller; tests and benchmarks replace it.
         self.contract_caller = lambda model: subtitle_contract.caller_for(
-            model,
-            self.get_service().runtime._api_key_getter(),
-            effective_altprovider_key(),
-            profiles.resolve("subtitle_checker").bind(model).effort_sent,
+            model, effective_glm_key(), profiles.resolve("subtitle_checker").bind(model).effort_sent,
         )
         # Reads picture subtitles (Blu-ray, DVD) with the cheap vision model.
-        self.picture_reader = lambda model: subtitle_contract.altprovider_reader(
-            effective_altprovider_key(), model, profiles.resolve("subtitle_reader").bind(model).effort_sent
+        self.picture_reader = lambda model: subtitle_contract.reader_for(
+            model, effective_glm_key(), profiles.resolve("subtitle_reader").bind(model).effort_sent,
         )
         with accounts.connect() as db:
             db.executescript("""
@@ -240,6 +226,63 @@ class Subtitles:
             ):
                 raise ToolError("The media request changed; subtitle work has stopped.")
         return user, asset
+
+    async def caption(self, user, identity, original=False):
+        """A ready track as WebVTT for this person, with their timing nudge."""
+        with self.accounts.connect() as db:
+            row = db.execute(
+                "SELECT * FROM subtitle_tracks WHERE id=?", (identity,)
+            ).fetchone()
+        if not row:
+            raise HTTPException(404, "Subtitle track not found.")
+        asset = self.catalogue.asset(user, row["asset_id"])
+        data = json.loads(row["data"])
+        if (
+            not asset
+            or data["media_version"] != asset["facts"]["version"]
+            or (row["state"] != "ready" and not original)
+        ):
+            raise HTTPException(404, "This subtitle is not ready for this media copy.")
+        if original:
+            if not data.get("original_version"):
+                raise HTTPException(404, "The original track is unavailable.")
+            data = {
+                **data,
+                "path": data["original_path"],
+                "version": data["original_version"],
+            }
+        try:
+            raw = (
+                await self.read(row["node_id"], "cache", data["path"], data["version"])
+            ).decode("utf8")
+        except (NodeError, UnicodeError, ValueError) as exc:
+            raise HTTPException(
+                503,
+                "The subtitle’s storage is unavailable. Reconnect it and try again.",
+            ) from exc
+        from .subtitle_worker import cues_from_text, render
+
+        with self.accounts.connect() as db:
+            personal = db.execute(
+                "SELECT seconds FROM subtitle_offsets WHERE user_id=? AND track_id=?",
+                (user["id"], identity),
+            ).fetchone()
+        if personal and personal["seconds"] and not original:
+            cues = cues_from_text(raw, "vtt")
+            delta = personal["seconds"]
+            raw = render(
+                [
+                    {
+                        **c,
+                        "start": max(0, c["start"] + delta),
+                        "end": max(0.001, c["end"] + delta),
+                    }
+                    for c in cues
+                    if c["end"] + delta > 0
+                ],
+                vtt=True,
+            )
+        return raw
 
     def tracks(self, user, asset_id):
         asset = self.catalogue.asset(user, asset_id)
@@ -437,8 +480,11 @@ class Subtitles:
             ).fetchall()
         for row in rows:
             self.launch(row["id"])
+        self.cleaning = asyncio.create_task(self.clean_promotions(delay=30))
 
     async def stop(self):
+        if getattr(self, "cleaning", None):
+            self.cleaning.cancel()
         tasks = list(self.tasks.values())
         for task in tasks:
             task.cancel()
@@ -656,6 +702,88 @@ class Subtitles:
             )
         return operation
 
+    async def strip_promotions(self, task, asset, track_id):
+        """Delete ads and release credits ("www.…", "Subtitles by …") from a
+        newly prepared source before anyone sees it (subtitle_promos). Whole
+        captions only, never reworded; a failed check leaves the track as it
+        is, to be checked again later. Returns the track to use."""
+        track = self.track(track_id)
+        data = track["data"]
+        if data.get("promotions_checked") or data.get("source") in ("upload", "written"):
+            return track_id
+        service = self.get_service()
+        try:
+            cues = await self.cues(asset["node_id"], data["path"], data["version"])
+            remove, spend = await subtitle_promos.find(
+                self.contract_caller(service.cheap_model()), cues
+            )
+            if spend:
+                self.charge_checkers(task, {}, [spend])
+            if not remove:
+                self.save_track(track_id, promotions_checked=True)
+                return track_id
+            from .subtitle_worker import render
+
+            dropped = set(remove)
+            text = render([c for i, c in enumerate(cues) if i not in dropped], vtt=True)
+            new_id = await self.prepare(
+                task,
+                asset,
+                {"id": data["source_id"], "source": data["source"], "title": data.get("title", "")},
+                text,
+                "vtt",
+                data["audio_index"],
+                suffix=":promotions:" + hashlib.sha256(text.encode()).hexdigest()[:16],
+            )
+        except Exception as exc:  # an unavailable model or storage must not cost the subtitles
+            logger.warning("subtitle ad check skipped for %s: %s", track_id, exc)
+            return track_id
+        self.save_track(
+            new_id,
+            original_path=data.get("original_path"),
+            original_version=data.get("original_version"),
+            derived_from=track_id,
+            correction=data.get("correction"),
+            timing=data.get("timing"),
+            edits=(data.get("edits") or [])[-20:]
+            + [{"kind": "promotions", "removed": [cues[i]["text"][:120] for i in remove][:10], "automatic": "promotions"}],
+            promotions_checked=True,
+        )
+        if new_id != track_id:
+            self.save_track(track_id, state="superseded")
+        logger.info("removed %d promotional captions from subtitle track %s", len(remove), track_id)
+        return new_id
+
+    async def clean_promotions(self, delay=0):
+        """Once per track: the same ad check for subtitles prepared before it
+        existed (finished requests included). The task follows the cleaned copy."""
+        await asyncio.sleep(delay)  # storage reconnects first after a restart
+        with self.accounts.connect() as db:
+            rows = db.execute("SELECT id FROM subtitle_tasks").fetchall()
+        for row in rows:
+            task = self.task(row["id"])
+            track_id = (task["data"] or {}).get("track_id")
+            track = track_id and self.track(track_id)
+            if not track or track["state"] != "ready" or track["data"].get("promotions_checked"):
+                continue
+            # Its request may have finished long ago; only the copy must match.
+            view = {**task, "data": {**task["data"], "job_id": ""}}
+            try:
+                _, asset = self.authority(view)
+            except ToolError:
+                continue
+            new_id = await self.strip_promotions(view, asset, track_id)
+            if new_id != track_id:
+                current = self.task(task["id"])
+                data = current["data"]
+                self.update(
+                    current,
+                    current["state"],
+                    data.get("message", ""),
+                    track_id=new_id,
+                    measured=new_id if data.get("measured") == track_id else data.get("measured"),
+                )
+
     async def find(self, task, user, asset):
         """Prepare the next untried candidate as a playable track."""
         lock = self.node_locks.setdefault(asset["node_id"], asyncio.Lock())
@@ -735,6 +863,7 @@ class Subtitles:
                 track = await self.prepare(
                     task, asset, candidate, text, format_name, task["data"]["audio_index"]
                 )
+                track = await self.strip_promotions(task, asset, track)
             except (NodeError, ToolError, httpx.HTTPError, ValueError) as exc:
                 attempts.append(
                     {"source_id": candidate["id"], "outcome": "failed", "reason": str(exc)[:500]}
@@ -1277,12 +1406,20 @@ class Subtitles:
         state = self.task(task["id"])["data"]["review"]
         track = self.track(new_id)
         new_cues = await self.cues(context["node"], track["data"]["path"], track["data"]["version"])
+        # Each caption keeps the speech it was written from, matched by time and
+        # words: the published file may hold fewer captions than the draft, and
+        # a position would then hand every later caption its neighbour's speech.
+        drafted = {}
+        for cue in cues:
+            drafted.setdefault((round(cue["start"], 2), cue["text"].strip()), cue)
         for page in pages:
-            state["judgements"][str(page["number"])] = {
-                pages_.caption_id(i): {"verdict": "ok", "speech": cues[i]["speech"], "note": "checker's translation", "by": "contractor draft"}
-                for i, _ in pages_.page_captions(page, new_cues)
-                if i < len(cues)
-            }
+            judged = {}
+            for i, _ in pages_.page_captions(page, new_cues):
+                source = drafted.get((round(new_cues[i]["start"], 2), new_cues[i]["text"].strip()))
+                if source:
+                    judged[pages_.caption_id(i)] = {"verdict": "ok", "speech": source["speech"],
+                                                    "note": "checker's translation", "by": "contractor draft"}
+            state["judgements"][str(page["number"])] = judged
         gaps = subtitle_contract.untranslated(pages, context["utterances"], state.get("translations", {}))
         for page in pages:
             state["missing"][str(page["number"])] = gaps.get(str(page["number"]), [])
@@ -1297,13 +1434,9 @@ class Subtitles:
     async def review(self, task):
         """Run the subtitle agent until it records a verdict; None while pending."""
         service = self.get_service()
-        altprovider = altprovider_loop.is_altprovider_model(review_model())
-        if not service or not (service.runtime._altprovider_key_getter() if altprovider else service.runtime._api_key_getter()):
-            self.update(
-                task,
-                "review_pending",
-                f"Subtitles ready. Checking them needs an {'AltProvider' if altprovider else 'Provider'} key. Add one, then try again.",
-            )
+        model = review_model()
+        if not service or not service.runtime.provider_ready(model):
+            self.update(task, "review_pending", "Subtitles ready. Checking them needs a Z.ai key. Add one, then try again.")
             return None
         _, asset = self.authority(task)
         context = await self.review_context(task, asset)
@@ -1716,6 +1849,7 @@ class Subtitles:
                 new_id = await self.prepare(
                     task, asset, candidate, text, format_name, task["data"]["audio_index"]
                 )
+                new_id = await self.strip_promotions(task, asset, new_id)
             except (NodeError, ToolError, httpx.HTTPError, ValueError) as exc:
                 attempts = task["data"].get("attempts", []) + [
                     {"source_id": identity, "outcome": "failed", "reason": str(exc)[:500]}
@@ -2497,59 +2631,7 @@ def install_subtitles(app, accounts, nodes, catalogue, get_service):
 
     @router.get("/subtitles/tracks/{identity}.vtt")
     async def caption(identity: str, request: Request, original: bool = False):
-        with accounts.connect() as db:
-            row = db.execute(
-                "SELECT * FROM subtitle_tracks WHERE id=?", (identity,)
-            ).fetchone()
-        if not row:
-            raise HTTPException(404, "Subtitle track not found.")
-        asset = catalogue.asset(request.state.user, row["asset_id"])
-        data = json.loads(row["data"])
-        if (
-            not asset
-            or data["media_version"] != asset["facts"]["version"]
-            or (row["state"] != "ready" and not original)
-        ):
-            raise HTTPException(404, "This subtitle is not ready for this media copy.")
-        if original:
-            if not data.get("original_version"):
-                raise HTTPException(404, "The original track is unavailable.")
-            data = {
-                **data,
-                "path": data["original_path"],
-                "version": data["original_version"],
-            }
-        try:
-            raw = (
-                await subtitles.read(row["node_id"], "cache", data["path"], data["version"])
-            ).decode("utf8")
-        except (NodeError, UnicodeError, ValueError) as exc:
-            raise HTTPException(
-                503,
-                "The subtitle’s storage is unavailable. Reconnect it and try again.",
-            ) from exc
-        from .subtitle_worker import cues_from_text, render
-
-        with accounts.connect() as db:
-            personal = db.execute(
-                "SELECT seconds FROM subtitle_offsets WHERE user_id=? AND track_id=?",
-                (request.state.user["id"], identity),
-            ).fetchone()
-        if personal and personal["seconds"] and not original:
-            cues = cues_from_text(raw, "vtt")
-            delta = personal["seconds"]
-            raw = render(
-                [
-                    {
-                        **c,
-                        "start": max(0, c["start"] + delta),
-                        "end": max(0.001, c["end"] + delta),
-                    }
-                    for c in cues
-                    if c["end"] + delta > 0
-                ],
-                vtt=True,
-            )
+        raw = await subtitles.caption(request.state.user, identity, original)
         return Response(
             raw, media_type="text/vtt", headers={"Cache-Control": "private,no-store"}
         )

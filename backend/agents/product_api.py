@@ -15,9 +15,42 @@ from .runtime import ToolError
 from ..configuration import (
     apply_config_update, public_config, settle_media_folders, suggested_media_folders,
 )
-from ..models import SparrowConfig
+from ..models import DownloadStatus, SparrowConfig
 from ..services.library_view import build_library_view
 
+
+def transfer_summary(downloads):
+    """A request's downloads as one plain reading for the app (no names,
+    hashes or peer counts): downloading, paused, checking (landed and being
+    verified) or done. None while there is nothing downloading yet."""
+    current = [d for d in downloads if d.status != DownloadStatus.ERROR]
+    if not current:
+        return None
+    unfinished = [d for d in current if d.status != DownloadStatus.ORGANIZED]
+    if not unfinished:
+        return {"state": "done", "progress": 1.0, "eta_seconds": -1, "speed": 0}
+    moving = [
+        d
+        for d in unfinished
+        if d.status in (DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING)
+    ]
+    if moving:
+        state = "downloading"
+    elif any(d.status == DownloadStatus.PAUSED for d in unfinished):
+        state = "paused"
+    else:
+        state = "checking"
+    etas = [d.eta_seconds for d in moving if (d.eta_seconds or 0) > 0]
+    return {
+        "state": state,
+        "progress": round(
+            sum(min(1.0, max(0.0, d.progress or 0.0)) for d in unfinished)
+            / len(unfinished),
+            3,
+        ),
+        "eta_seconds": max(etas) if etas else -1,
+        "speed": sum(d.download_speed or 0 for d in moving),
+    }
 
 def image_url(path, size="w500"):
     if not path:
@@ -58,18 +91,49 @@ def install_product(app, storage, accounts, nodes, get_service):
             raise HTTPException(404, "Request not found.")
         return job
 
+    async def credits(media_type, tmdb_id, details):
+        """Cast and crew, fetched once per title and kept with its details.
+        A series uses its whole-run cast (plain credits list only the latest
+        season's)."""
+        if (details.get("credits") or {}).get("v") == 3 or details.get("cached"):
+            return details
+        path = "aggregate_credits" if media_type == "tv" else "credits"
+        try:
+            found = await get_service().toolbox.tmdb_get(f"/{media_type}/{tmdb_id}/{path}")
+        except (ToolError, AttributeError):
+            return details
+        current = catalogue.cached_title(media_type, tmdb_id) or details
+        current["credits"] = {
+            "v": 3,
+            "cast": [
+                {
+                    "name": c.get("name", ""),
+                    "character": c.get("character")
+                    or ((c.get("roles") or [{}])[0].get("character") or ""),
+                    "photo": c.get("profile_path") or "",
+                }
+                for c in found.get("cast", [])[:16]
+            ],
+            "directors": [
+                c.get("name", "") for c in found.get("crew", []) if c.get("job") == "Director"
+            ][:3],
+        }
+        return catalogue.cache_title(media_type, tmdb_id, current)
+
     async def title(media_type, tmdb_id):
         if media_type not in ("movie", "tv"):
             raise HTTPException(422, "Choose a movie or TV show.")
         cached = catalogue.cached_title(media_type, tmdb_id)
         if cached:
-            return cached
+            return await credits(media_type, tmdb_id, cached)
         service = get_service()
         if not service:
             raise HTTPException(503, "Sparrow is still starting. Try again shortly.")
         try:
             details = await service.toolbox.tmdb_get(f"/{media_type}/{tmdb_id}")
-            return catalogue.cache_title(media_type, tmdb_id, details)
+            return await credits(
+                media_type, tmdb_id, catalogue.cache_title(media_type, tmdb_id, details)
+            )
         except ToolError as exc:
             # Existing local metadata is sufficient to browse and watch during an outage.
             item = next(
@@ -190,6 +254,25 @@ def install_product(app, storage, accounts, nodes, get_service):
             and i.media_type.value == media_type
             and catalogue.visible_item(user, i)
         ]
+        by_job = {}
+        for download in storage.get_all_downloads():
+            by_job.setdefault(download.metadata.get("job_id"), []).append(download)
+        if media_type == "tv":
+            # Episode names for the seasons here, fetched once and kept.
+            known = details.get("episodes_by_season") or {}
+            owned = {
+                a["season"]
+                for i in items
+                for a in i["assets"]
+                if a.get("season") is not None and str(a["season"]) not in known
+            }
+            for season in sorted(owned)[:4]:
+                try:
+                    await season_detail(tmdb_id, season, request)
+                except HTTPException:
+                    break
+            if owned:
+                details = catalogue.cached_title("tv", tmdb_id) or details
         return {
             "tmdb_id": tmdb_id,
             "media_type": media_type,
@@ -204,9 +287,27 @@ def install_product(app, storage, accounts, nodes, get_service):
                 s for s in details.get("seasons", []) if s.get("season_number", 0) >= 0
             ],
             "runtime": details.get("runtime"),
+            "genres": [g.get("name", "") for g in details.get("genres", [])][:3],
+            "cast": [
+                {
+                    "name": c["name"],
+                    "character": c.get("character", ""),
+                    "photo_url": image_url(c.get("photo"), "w185"),
+                }
+                for c in (details.get("credits") or {}).get("cast", [])
+            ][:16],
+            # Series list their creators; films their directors.
+            "makers": [c.get("name", "") for c in details.get("created_by", [])][:3]
+            or (details.get("credits") or {}).get("directors", []),
+            "episode_names": {
+                f"{season}:{e.get('episode_number')}": e.get("name", "")
+                for season, episodes in (details.get("episodes_by_season") or {}).items()
+                for e in episodes
+                if e.get("name")
+            },
             "items": items,
             "jobs": [
-                j.to_dict()
+                {**public_job(j, by_job.get(j.id, [])), "requested_by": requester(j)}
                 for j in jobs(user)
                 if j.tmdb_id == tmdb_id and j.media_type == media_type
             ],
@@ -236,51 +337,75 @@ def install_product(app, storage, accounts, nodes, get_service):
                 "Episode information is unavailable. Existing episodes remain playable.",
             ) from exc
 
+    def requester(job):
+        person = accounts.user(job.user_id) if job.user_id else None
+        return person["name"] if person else ""
+
+    def picked(download):
+        """What a request's download is fetching, for its info panel: the copy's
+        name and the files chosen from it (not a primary surface)."""
+        selection = download.metadata.get("selection") or {}
+        return {
+            "id": download.id,
+            "name": download.name,
+            "quality": download.quality,
+            "status": download.status.value,
+            "progress": download.progress,
+            "size_bytes": download.size_bytes,
+            "added_at": download.added_at,
+            "files": [f.rsplit("/", 1)[-1] for f in selection.get("files", [])][:20],
+            "skipped": selection.get("skipped", 0),
+            "selected_bytes": selection.get("bytes", 0),
+            "reused": bool(download.metadata.get("previous_job_id")),
+        }
+
+    def public_job(job, downloads):
+        value = job.to_dict()
+        value["transfer"] = transfer_summary(downloads)
+        session = get_service().store.get_session(job.session_id)
+        if (
+            job.status == JobStatus.ACTIVE
+            and session
+            and session.status == SessionStatus.HIBERNATING
+            and (
+                session.outcome
+                in (
+                    CaseState.NEEDS_INPUT,
+                    CaseState.BUDGET_LIMITED,
+                    CaseState.FAILED,
+                )
+                or any(
+                    word in session.wake_reason.lower()
+                    for word in ("limit", "budget", "reasoning service", "error")
+                )
+            )
+        ):
+            value["state_line"] = session.wake_reason
+            value["needs_attention"] = True
+        return value
+
     @router.get("/jobs")
     def list_jobs(request: Request):
-        output = []
-        for job in jobs(request.state.user):
-            value = job.to_dict()
-            session = get_service().store.get_session(job.session_id)
-            if (
-                job.status == JobStatus.ACTIVE
-                and session
-                and session.status == SessionStatus.HIBERNATING
-                and (
-                    session.outcome
-                    in (
-                        CaseState.NEEDS_INPUT,
-                        CaseState.BUDGET_LIMITED,
-                        CaseState.FAILED,
-                    )
-                    or any(
-                        word in session.wake_reason.lower()
-                        for word in ("limit", "budget", "reasoning service", "error")
-                    )
-                )
-            ):
-                value["state_line"] = session.wake_reason
-                value["needs_attention"] = True
-            output.append(value)
-        return output
+        by_job = {}
+        for download in storage.get_all_downloads():
+            by_job.setdefault(download.metadata.get("job_id"), []).append(download)
+        return [
+            public_job(job, by_job.get(job.id, []))
+            for job in jobs(request.state.user)
+        ]
 
     @router.get("/jobs/{job_id}")
     def job_detail(job_id: str, request: Request):
         job = job_for(request.state.user, job_id)
-        service = get_service()
+        own = [
+            d for d in storage.get_all_downloads() if d.metadata.get("job_id") == job.id
+        ]
         return {
-            "job": job.to_dict(),
-            "journal": [j.to_dict() for j in service.store.get_journal(job.id)],
+            "job": {**public_job(job, own), "requested_by": requester(job)},
+            "journal": [j.to_dict() for j in get_service().store.get_journal(job.id)],
             "downloads": [
-                {
-                    "id": d.id,
-                    "progress": d.progress,
-                    "status": d.status.value,
-                    "error": d.error_message,
-                    "updated": d.stats_updated_at,
-                }
-                for d in storage.get_all_downloads()
-                if d.metadata.get("job_id") == job.id
+                {**picked(d), "error": d.error_message, "updated": d.stats_updated_at}
+                for d in own
             ],
         }
 

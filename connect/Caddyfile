@@ -1,0 +1,25 @@
+# Sparrow Connect's public front. The office router's nginx passes TLS for
+# streamsparrow.com through unopened (SNI) to :8443 here, and port 80 to :8080,
+# so Caddy obtains and renews the certificate itself.
+{
+	http_port 8080
+	https_port 8443
+	# Redirects would name :8443; the public port is 443.
+	auto_https disable_redirects
+}
+
+http://streamsparrow.com, http://www.streamsparrow.com {
+	redir https://streamsparrow.com{uri} permanent
+}
+
+streamsparrow.com, www.streamsparrow.com {
+	@www host www.streamsparrow.com
+	redir @www https://streamsparrow.com{uri} permanent
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	reverse_proxy connect:8000
+}

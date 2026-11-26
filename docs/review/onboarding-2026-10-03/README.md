@@ -15,12 +15,7 @@ The button was below the fold. Type now scales with the window's height too.
 ## Keys
 
 The steps share the title's row, and the step has one heading, not two. Each key says
-whether the server has it. AltProvider is new and optional.
-
-| Before | After |
-| --- | --- |
-| ![Keys, before](before/keys.png) | ![Keys, after](after/keys.png) |
-| ![Missing key, before](before/keys-missing.png) | ![Missing key, after](after/keys-missing.png) |
+whether the server has it.
 
 ## Storage
 
@@ -48,4 +43,3 @@ setup shows the install command instead.
 | ![Downloads, before](before/downloads.png) | ![Docker: nothing found](after/downloads-docker.png) |
 | | ![Docker: Sparrow's Transmission](after/downloads-connected.png) |
 | | ![Without Transmission installed](after/downloads.png) |
-| | ![Check your setup](after/review.png) |

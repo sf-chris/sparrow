@@ -2,10 +2,11 @@ fastapi==0.135.3
 uvicorn[standard]==0.44.0
 httpx==0.28.1
 python-multipart==0.0.26
-provider==0.94.0
 python-dotenv==1.2.2
 websockets==16.0
 Pillow==12.2.0
+# Sparrow Connect: this server's own certificate (ACME) for its HTTPS address.
+cryptography==50.0.2
 
 # Subtitle files, their text encodings and local speech inspection.
 pysubs2==1.8.1 ; python_version < "3.12"

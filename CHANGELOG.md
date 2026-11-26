@@ -13,7 +13,6 @@ All notable changes to Sparrow are documented here.
 - Setup fits a laptop screen: the cover's button is always in view, the steps
   share the title's row and every step ends with Finish later and Continue.
   Each key says whether the server already has it, and a blank box keeps it.
-  An optional AltProvider key can be saved in Settings as well as `.env`.
 - The download step finds Transmission or qBittorrent by itself, by brand on
   request, or runs the Transmission bundled in the Docker image for you.
 - Compose mounts a media folder at `/media` (`SPARROW_MEDIA_DIR`,
@@ -44,7 +43,7 @@ All notable changes to Sparrow are documented here.
   automatic scanning, device pairing or mounted shares.
 - Retired the old curator (`SPARROW_LEGACY_CURATOR`), v2 request/goal/show
   routes, old search and suggestion routes, auto-organiser and filename rescan,
-  together with their unowned Small calls and the description call behind
+  together with their unowned cheap-model calls and the description call behind
   `/api/resolve`. Saved request history still loads.
 
 - Owner accounts, invitations, storage permissions, inherited preferences and

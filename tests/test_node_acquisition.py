@@ -115,6 +115,7 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
                 "title": "Fixture",
                 "runtime": 0.4,
                 "original_language": "en",
+                "release_date": "2019-03-01",
             }
         )
 
@@ -182,6 +183,9 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
             True,
         )
         self.assertTrue(recorded["verified"])
+        # The guide sorts and groups by year, so a placed title carries it.
+        placed = [i for i in self.storage.get_library() if i.tmdb_id == 42]
+        self.assertEqual([i.year for i in placed], [2019])
         self.assertTrue(source.exists())
         self.assertEqual(
             source.read_bytes(), (self.library / "Fixture/movie.mp4").read_bytes()
@@ -391,6 +395,32 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         await self.call("client_remove", {"download_id": dl.id}, ctx)
         self.assertNotIn("a" * 40, self.client_state)
 
+    async def test_a_finished_download_stays_until_the_media_agent_has_checked_it(self):
+        from backend.agents.models import AgentKind, SessionStatus
+
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        dl = self.storage.get_download(first["download_id"])
+        await self.storage.update_download(dl.id, progress=1.0, completed_at=time.time())
+        # "100%" in the download app is not a check: the copy may be good.
+        with self.assertRaisesRegex(ToolError, "Media Agent is checking"):
+            await self.call("client_remove", {"download_id": dl.id})
+        self.assertIn("a" * 40, self.client_state)
+        check = AgentSession(agent=AgentKind.MEDIA, job_id=self.job.id, download_id=dl.id,
+                             user_id=self.owner["id"], status=SessionStatus.HIBERNATING)
+        self.service.store.save_session(check)
+        with self.assertRaisesRegex(ToolError, "Media Agent is checking"):
+            await self.call("client_remove", {"download_id": dl.id})
+        # Once it has reported (its session closed), a wrong copy can go.
+        check.status = SessionStatus.CLOSED
+        self.service.store.save_session(check)
+        await self.call("client_remove", {"download_id": dl.id})
+        self.assertNotIn("a" * 40, self.client_state)
+
+    async def test_an_unfinished_download_can_be_removed(self):
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        await self.call("client_remove", {"download_id": first["download_id"]})
+        self.assertNotIn("a" * 40, self.client_state)
+
     async def test_a_live_requests_copy_stays_with_it(self):
         first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
         _, ctx = self.second_request()
@@ -421,6 +451,40 @@ class NodeAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.add_count, 2)
         dl = self.storage.get_download(first["download_id"])
         self.assertEqual((dl.metadata["job_id"], dl.status), (again_job.id, DownloadStatus.DOWNLOADING))
+
+    async def test_a_taken_over_copy_is_checked_for_the_new_request(self):
+        from backend.agents.models import Event, SessionStatus
+
+        first = await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"})
+        await self.storage.update_download(first["download_id"], status=DownloadStatus.ORGANIZED)
+        earlier = AgentSession(
+            agent=AgentKind.MEDIA, job_id=self.job.id, download_id=first["download_id"],
+            user_id=self.owner["id"],
+        )
+        earlier.status = SessionStatus.CLOSED
+        self.service.store.save_session(earlier)
+        self.job.status, self.job.closed_at = JobStatus.COMPLETE, time.time()
+        self.service.store.save_job(self.job)
+        again_job, ctx = self.second_request()
+        await self.call("client_add", {"info_hash": "a" * 40, "name": "Fixture"}, ctx)
+        await self.storage.update_download(first["download_id"], status=DownloadStatus.COMPLETED)
+        # Restart tidy-up leaves the new request's landed copy for it to settle.
+        await self.service._reconcile_completed_media_sessions()
+        self.assertEqual(
+            self.storage.get_download(first["download_id"]).status, DownloadStatus.COMPLETED
+        )
+        woken = []
+        with patch.object(self.service, "_wake_soon", lambda sid, event: woken.append(sid)):
+            await self.service._spawn_media(
+                Event(kind="files_landed", job_id=again_job.id, download_id=first["download_id"])
+            )
+        media = [
+            s for s in self.service.store.get_sessions(AgentKind.MEDIA)
+            if s.download_id == first["download_id"]
+        ]
+        self.assertEqual(sorted(s.job_id for s in media), sorted([self.job.id, again_job.id]))
+        mine = next(s for s in media if s.job_id == again_job.id)
+        self.assertEqual(woken, [mine.id])  # not the earlier request's session
 
     async def test_an_ended_requests_leftovers_are_cleared_after_a_day(self):
         from backend.agents.transfer_control import RELEASE_AFTER, release_finished

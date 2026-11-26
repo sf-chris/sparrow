@@ -228,6 +228,11 @@ class Catalogue:
         return json.loads(row["data"]) if row else None
 
     def cache_title(self, media_type, tmdb_id, data):
+        # Fresh details keep what was added to them since (episode lists, cast).
+        kept = self.cached_title(media_type, tmdb_id) or {}
+        for extra in ("episodes_by_season", "credits"):
+            if extra in kept and extra not in data:
+                data[extra] = kept[extra]
         with self.accounts.connect() as db:
             db.execute(
                 "INSERT INTO title_cache VALUES (?, ?, ?, ?) ON CONFLICT(media_type,tmdb_id) "

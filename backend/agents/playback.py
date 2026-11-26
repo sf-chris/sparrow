@@ -1,10 +1,19 @@
-"""Authenticated, version-bound playback and per-user resume ordering."""
+"""Authenticated, version-bound playback and per-user resume ordering.
+
+A playback session also has a cast link: an unguessable address for that one
+session, so a TV (AirPlay, Chromecast) that fetches the video itself, without
+the viewer's sign-in, can play it. The link ends with the session, and is
+refused as soon as the viewer loses access.
+"""
 
 import asyncio
 import base64
+import hashlib
+import hmac
 import json
 import math
 import mimetypes
+import os
 import re
 import secrets
 import time
@@ -19,6 +28,47 @@ from .media_state import language_code
 from .node_executor import NodeError, READ_CHUNK, canonical
 
 SEGMENT_SECONDS = 6
+TEXT_SUBTITLES = ("subrip", "ass", "ssa", "webvtt", "mov_text", "text")
+# Converted segments start 1.4 s into the MPEG-TS clock (ffmpeg's default mux
+# delay), so subtitles carried in the stream map cue time 0 to that point.
+STREAM_START_PTS = 126000
+CAST_PREFIX = "/api/v1/cast/"
+# A TV's player fetches from its own origin; the link itself is the authority.
+CAST_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range",
+    "Cache-Control": "private, no-store",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
+def link_key(data_dir):
+    """The server's secret for signing cast links, created once."""
+    path = Path(data_dir) / "playback-link-key"
+    if not path.exists():
+        spare = path.with_name(f".{path.name}.{secrets.token_hex(4)}")
+        fd = os.open(spare, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(secrets.token_bytes(32))
+        try:
+            os.link(spare, path)  # Atomic: a concurrent start keeps one key.
+        except FileExistsError:
+            pass
+        finally:
+            spare.unlink()
+    key = path.read_bytes()
+    if len(key) < 32:
+        raise RuntimeError(f"{path} is damaged. Delete it to issue new cast links.")
+    return key
+
+
+def with_stream_clock(vtt):
+    """WebVTT for an HLS subtitle rendition, aligned to the converted video."""
+    head, _, rest = vtt.lstrip("﻿").partition("\n")
+    return (
+        f"{head}\nX-TIMESTAMP-MAP=MPEGTS:{STREAM_START_PTS},LOCAL:00:00:00.000\n{rest}"
+    )
 
 
 def byte_range(header, size):
@@ -46,6 +96,31 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 closed INTEGER NOT NULL DEFAULT 0);
         """)
     router = APIRouter(prefix="/api/v1")
+    key = link_key(storage.data_dir)
+
+    def cast_token(session_id):
+        mac = hmac.new(key, b"cast:" + session_id.encode(), hashlib.sha256)
+        return session_id + mac.hexdigest()[:32]
+
+    @app.middleware("http")
+    async def cast_links(request: Request, call_next):
+        # Cast links carry their own authority (see cast_session), so the
+        # sign-in boundary passes them through; this adds what TVs need.
+        if not request.url.path.startswith(CAST_PREFIX):
+            return await call_next(request)
+        if request.method == "OPTIONS":
+            return Response(
+                status_code=204,
+                headers={
+                    **CAST_HEADERS,
+                    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+                    "Access-Control-Allow-Headers": "Range",
+                    "Access-Control-Max-Age": "600",
+                },
+            )
+        response = await call_next(request)
+        response.headers.update(CAST_HEADERS)
+        return response
 
     def report(request, asset, phase, failed):
         captions = phase == "captions"
@@ -60,13 +135,16 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             observed=(phase, "failed" if failed else "ready"),
         )
 
+    def open_row(session_id, user_id):
+        with accounts.connect() as db:
+            return db.execute(
+                "SELECT * FROM playback_sessions WHERE id=? AND user_id=? AND closed=0 AND expires>?",
+                (session_id, user_id, time.time()),
+            ).fetchone()
+
     def session(request, session_id):
         user = request.state.user
-        with accounts.connect() as db:
-            row = db.execute(
-                "SELECT * FROM playback_sessions WHERE id=? AND user_id=? AND closed=0 AND expires>?",
-                (session_id, user["id"], time.time()),
-            ).fetchone()
+        row = open_row(session_id, user["id"])
         if not row:
             raise HTTPException(
                 404, "This playback session has ended. Start playback again."
@@ -85,8 +163,58 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             )
         return dict(row), data, asset
 
+    def cast_session(request, token):
+        """Resolve a cast link to its session, as the viewer who started it."""
+        ended = HTTPException(404, "This link has ended. Start playback again.")
+        if not re.fullmatch(r"[a-f0-9]{64}", token) or not hmac.compare_digest(
+            token, cast_token(token[:32])
+        ):
+            raise ended
+        with accounts.connect() as db:
+            row = db.execute(
+                "SELECT user_id FROM playback_sessions WHERE id=?", (token[:32],)
+            ).fetchone()
+        user = accounts.user(row["user_id"]) if row else None
+        if not user or user["disabled"]:
+            raise ended
+        request.state.user = user
+        try:
+            row, data, asset = session(request, token[:32])
+        except HTTPException as exc:
+            raise ended if exc.status_code == 404 else exc
+
+        def signed_in():
+            # The link lives no longer than the sign-in that started playback:
+            # signing that device out (or everywhere) ends the TV's link too.
+            with accounts.connect() as db:
+                return db.execute(
+                    "SELECT 1 FROM login_sessions WHERE token_hash=? AND expires>?",
+                    (data.get("login", ""), time.time()),
+                ).fetchone()
+
+        def allowed():
+            # Checked between chunks: ending the session or the viewer's
+            # access stops a TV mid-stream, as signing out does in a browser.
+            viewer = accounts.user(user["id"])
+            return bool(
+                open_row(row["id"], user["id"])
+                and signed_in()
+                and accounts.can_access(viewer, asset["node_id"])
+            )
+
+        if not signed_in():
+            raise ended
+        return row, data, asset, allowed
+
     async def read_response(
-        request, asset, *, root_id=None, path=None, version=None, content_type=None
+        request,
+        asset,
+        *,
+        root_id=None,
+        path=None,
+        version=None,
+        content_type=None,
+        allowed=None,
     ):
         root_id, path = root_id or asset["root_id"], path or asset["path"]
         version = version or asset["facts"]["version"]
@@ -126,14 +254,17 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 media_type=media_type,
             )
 
+        def signed_in():
+            from .account_api import COOKIE
+
+            user = accounts.from_session(request.cookies.get(COOKIE))
+            return bool(user and accounts.can_access(user, asset["node_id"]))
+
         async def chunks():
             offset = start
             while offset <= end and size:
                 # Revocation applies during long streams as well as new requests.
-                from .account_api import COOKIE
-
-                user = accounts.from_session(request.cookies.get(COOKIE))
-                if not user or not accounts.can_access(user, asset["node_id"]):
+                if not (allowed or signed_in)():
                     return
                 try:
                     result = await nodes.execute(
@@ -164,6 +295,17 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             status_code=206 if partial else 200,
             headers=headers,
             media_type=media_type,
+        )
+
+    def signed_in_as(request):
+        from .account_api import COOKIE
+        from .accounts import digest
+
+        return digest(request.cookies.get(COOKIE) or "")
+
+    def converts(node_id):
+        return bool(
+            (nodes.info(node_id) or {}).get("capabilities", {}).get("transcode")
         )
 
     class Input(BaseModel):
@@ -273,8 +415,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             )
         )
         mode = "direct" if direct else "hls"
-        node = nodes.info(asset["node_id"])
-        if mode == "hls" and not (node or {}).get("capabilities", {}).get("transcode"):
+        if mode == "hls" and not converts(asset["node_id"]):
             report(request, asset, "start", True)
             raise HTTPException(
                 422,
@@ -288,6 +429,44 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             else (0 if previous.get("watched") else previous.get("position", 0))
         )
         position = min(requested_position, max(0, facts["duration"] - 0.1))
+        prepared = getattr(app.state, "subtitles", None)
+        prepared_tracks = (
+            [
+                t
+                for t in prepared.tracks(user, asset["id"])
+                if t["state"] == "ready" and t["audio_index"] == chosen
+            ]
+            if prepared
+            else []
+        )
+        embedded_tracks = [
+            t
+            for t in facts["subtitle_tracks"]
+            if t["codec"] in TEXT_SUBTITLES
+            # A prepared copy of this embedded track replaces it in the list.
+            and "embedded:" + str(t["index"])
+            not in {p.get("source_id") for p in prepared_tracks}
+        ]
+        offered = [
+            {
+                "index": 10000 + i,
+                "track": t["id"],
+                "language": t["language"],
+                "title": t["language"]
+                + " · "
+                + t["kind"]
+                + (" · written by Sparrow" if t["source"] == "written" else "")
+                + (" · checked" if t["sync_checked"] else ""),
+            }
+            for i, t in enumerate(prepared_tracks)
+        ] + [
+            {
+                "index": t["index"],
+                "language": language_code(t["language"]),
+                "title": t["title"],
+            }
+            for t in embedded_tracks
+        ]
         data = {
             "mode": mode,
             "audio_index": chosen,
@@ -295,6 +474,10 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             "duration": facts["duration"],
             "preferences": prefs,
             "position": position,
+            # What this session offered, so a cast link resolves the same
+            # tracks the viewer chose from.
+            "captions": offered,
+            "login": signed_in_as(request),
         }
         now = time.time()
         with accounts.connect() as db:
@@ -316,17 +499,9 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 "DO UPDATE SET session_id=excluded.session_id,sequence=-1",
                 (user["id"], asset["id"], position, facts["duration"], now, identity),
             )
-        prepared = getattr(app.state, "subtitles", None)
-        prepared_tracks = (
-            [
-                t
-                for t in prepared.tracks(user, asset["id"])
-                if t["state"] == "ready" and t["audio_index"] == chosen
-            ]
-            if prepared
-            else []
-        )
         report(request, asset, "start", False)
+        cast = f"{CAST_PREFIX}{cast_token(identity)}"
+        by_id = {t["id"]: t for t in prepared_tracks}
         return {
             "id": identity,
             "mode": mode,
@@ -339,48 +514,41 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 else f"/api/v1/playback/{identity}/hls/index.m3u8"
             ),
             "subtitles": [
-                {
-                    "index": 10000 + i,
-                    "id": t["id"],
-                    "language": t["language"],
-                    "title": t["language"]
-                    + " · "
-                    + t["kind"]
-                    + (" · written by Sparrow" if t["source"] == "written" else "")
-                    + (" · checked" if t["sync_checked"] else ""),
-                    "sync_checked": t["sync_checked"],
-                    "url": t["url"],
-                    "offset": t["offset"],
-                }
-                for i, t in enumerate(prepared_tracks)
-            ]
-            + [
-                {
-                    "index": t["index"],
-                    "language": language_code(t["language"]),
-                    "title": t["title"],
-                    "url": f'/api/v1/playback/{identity}/subtitles/{t["index"]}.vtt',
-                }
-                for t in facts["subtitle_tracks"]
-                if t["codec"] in ("subrip", "ass", "ssa", "webvtt", "mov_text", "text")
-                # A prepared copy of this embedded track replaces it in the list.
-                and "embedded:" + str(t["index"])
-                not in {p.get("source_id") for p in prepared_tracks}
+                (
+                    {
+                        **{k: v for k, v in t.items() if k != "track"},
+                        "id": t["track"],
+                        "sync_checked": by_id[t["track"]]["sync_checked"],
+                        "url": by_id[t["track"]]["url"],
+                        "offset": by_id[t["track"]]["offset"],
+                    }
+                    if "track" in t
+                    else {
+                        **t,
+                        "url": f'/api/v1/playback/{identity}/subtitles/{t["index"]}.vtt',
+                    }
+                )
+                for t in offered
             ],
+            # For a TV, which fetches without the viewer's sign-in. "url" plays
+            # as this session does; "stream" is the converted stream that can
+            # also carry a chosen subtitle (?subtitle=index) to the TV.
+            "cast": {
+                "url": f"{cast}/media" if direct else f"{cast}/hls/video.m3u8",
+                "stream": (
+                    f"{cast}/hls/index.m3u8" if converts(asset["node_id"]) else None
+                ),
+                "subtitles": [
+                    {"index": t["index"], "url": f'{cast}/subtitles/{t["index"]}.vtt'}
+                    for t in offered
+                ],
+            },
         }
 
-    @router.api_route("/playback/{session_id}/media", methods=["GET", "HEAD"])
-    async def media(session_id: str, request: Request):
-        row, data, asset = session(request, session_id)
-        if data["mode"] != "direct":
-            raise HTTPException(409, "Use the prepared playback stream.")
-        return await read_response(request, asset)
+    def segments(data):
+        return math.ceil(data["duration"] / SEGMENT_SECONDS)
 
-    @router.get("/playback/{session_id}/hls/index.m3u8")
-    def playlist(session_id: str, request: Request):
-        _, data, asset = session(request, session_id)
-        if data["mode"] != "hls":
-            raise HTTPException(409, "This session uses direct playback.")
+    def media_playlist(data):
         duration = data["duration"]
         lines = [
             "#EXTM3U",
@@ -389,7 +557,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             "#EXT-X-TARGETDURATION:6",
             "#EXT-X-MEDIA-SEQUENCE:0",
         ]
-        for index in range(math.ceil(duration / SEGMENT_SECONDS)):
+        for index in range(segments(data)):
             lines.extend(
                 [
                     f"#EXTINF:{min(SEGMENT_SECONDS, duration-index*SEGMENT_SECONDS):.6f},",
@@ -397,18 +565,17 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 ]
             )
         lines.append("#EXT-X-ENDLIST")
+        return playlist_response(lines)
+
+    def playlist_response(lines):
         return Response(
             "\n".join(lines) + "\n",
             media_type="application/vnd.apple.mpegurl",
             headers={"Cache-Control": "no-store"},
         )
 
-    @router.get("/playback/{session_id}/hls/{index}.ts")
-    async def segment(session_id: str, index: int, request: Request):
-        _, data, asset = session(request, session_id)
-        if data["mode"] != "hls" or not 0 <= index < math.ceil(
-            data["duration"] / SEGMENT_SECONDS
-        ):
+    async def serve_segment(request, session_id, data, asset, index, allowed=None):
+        if not 0 <= index < segments(data):
             raise HTTPException(404, "Playback segment not found.")
         try:
             prepared = await nodes.execute(
@@ -432,6 +599,7 @@ def install_playback(app, storage, accounts, nodes, catalogue):
                 path=prepared["path"],
                 version=prepared["version"],
                 content_type="video/mp2t",
+                allowed=allowed,
             )
         except NodeError as exc:
             report(request, asset, "preparation", True)
@@ -439,15 +607,13 @@ def install_playback(app, storage, accounts, nodes, catalogue):
 
     converted = {}  # (node, root, path, version, index) -> WebVTT, newest last
 
-    @router.get("/playback/{session_id}/subtitles/{index}.vtt")
-    async def subtitles(session_id: str, index: int, request: Request):
-        _, data, asset = session(request, session_id)
+    async def embedded_vtt(request, data, asset, index):
         if not any(t["index"] == index for t in asset["facts"]["subtitle_tracks"]):
             raise HTTPException(404, "Subtitle track not found.")
         key = (asset["node_id"], asset["root_id"], asset["path"], canonical(data["version"]), index)
         if key in converted:
             converted[key] = converted.pop(key)
-            return Response(converted[key], media_type="text/vtt")
+            return converted[key]
         try:
             result = await nodes.execute(
                 asset["node_id"],
@@ -477,10 +643,139 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             converted[key] = vtt
             while len(converted) > 16:
                 converted.pop(next(iter(converted)))
-            return Response(vtt, media_type="text/vtt")
+            return vtt
         except NodeError as exc:
             report(request, asset, "captions", True)
             raise HTTPException(422, str(exc)) from exc
+
+    @router.api_route("/playback/{session_id}/media", methods=["GET", "HEAD"])
+    async def media(session_id: str, request: Request):
+        row, data, asset = session(request, session_id)
+        if data["mode"] != "direct":
+            raise HTTPException(409, "Use the prepared playback stream.")
+        return await read_response(request, asset)
+
+    @router.get("/playback/{session_id}/hls/index.m3u8")
+    def playlist(session_id: str, request: Request):
+        _, data, asset = session(request, session_id)
+        if data["mode"] != "hls":
+            raise HTTPException(409, "This session uses direct playback.")
+        return media_playlist(data)
+
+    @router.get("/playback/{session_id}/hls/{index}.ts")
+    async def segment(session_id: str, index: int, request: Request):
+        _, data, asset = session(request, session_id)
+        if data["mode"] != "hls":
+            raise HTTPException(404, "Playback segment not found.")
+        return await serve_segment(request, session_id, data, asset, index)
+
+    @router.get("/playback/{session_id}/subtitles/{index}.vtt")
+    async def subtitles(session_id: str, index: int, request: Request):
+        _, data, asset = session(request, session_id)
+        vtt = await embedded_vtt(request, data, asset, index)
+        return Response(vtt, media_type="text/vtt")
+
+    # ── Cast links: what a TV fetches. Each route resolves the link itself. ──
+
+    def offered(data, index):
+        caption = next((t for t in data.get("captions", []) if t["index"] == index), None)
+        if not caption:
+            raise HTTPException(404, "Subtitle track not found.")
+        return caption
+
+    async def caption_vtt(request, data, asset, index):
+        caption = offered(data, index)
+        if "track" not in caption:
+            return await embedded_vtt(request, data, asset, index)
+        prepared = getattr(app.state, "subtitles", None)
+        if not prepared:
+            raise HTTPException(404, "Subtitle track not found.")
+        return await prepared.caption(request.state.user, caption["track"])
+
+    def converted_stream(asset, data):
+        if data["mode"] != "hls" and not converts(asset["node_id"]):
+            raise HTTPException(
+                409, "This storage can't convert video, so it can only play as it is."
+            )
+
+    @router.api_route("/cast/{token}/media", methods=["GET", "HEAD"])
+    async def cast_media(token: str, request: Request):
+        _, data, asset, allowed = cast_session(request, token)
+        if data["mode"] != "direct":
+            raise HTTPException(409, "Use the cast stream for this video.")
+        return await read_response(request, asset, allowed=allowed)
+
+    @router.api_route("/cast/{token}/hls/index.m3u8", methods=["GET", "HEAD"])
+    def cast_stream(
+        token: str,
+        request: Request,
+        subtitle: int | None = None,
+        start: float | None = None,
+    ):
+        """The converted video, with the chosen subtitle as a rendition: a TV
+        shows only what the stream itself carries."""
+        _, data, asset, _ = cast_session(request, token)
+        converted_stream(asset, data)
+        lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-INDEPENDENT-SEGMENTS"]
+        if start is not None and 0 < start < data["duration"]:
+            lines.append(f"#EXT-X-START:TIME-OFFSET={start:.3f},PRECISE=YES")
+        info = "BANDWIDTH=6000000,CODECS=\"avc1.640028" + (
+            ",mp4a.40.2\"" if data["audio_index"] is not None else "\""
+        )
+        if subtitle is not None:
+            caption = offered(data, subtitle)
+            name = re.sub(r'["\r\n]', "", caption.get("title") or "Subtitles")
+            language = language_code(caption.get("language") or "")
+            lines.append(
+                f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="{name}",'
+                + (f'LANGUAGE="{language}",' if language and language != "und" else "")
+                + f'DEFAULT=YES,AUTOSELECT=YES,FORCED=NO,URI="subs/{subtitle}.m3u8"'
+            )
+            info += ',SUBTITLES="subs"'
+        lines.extend([f"#EXT-X-STREAM-INF:{info}", "video.m3u8"])
+        return playlist_response(lines)
+
+    @router.api_route("/cast/{token}/hls/video.m3u8", methods=["GET", "HEAD"])
+    def cast_video(token: str, request: Request):
+        _, data, asset, _ = cast_session(request, token)
+        converted_stream(asset, data)
+        return media_playlist(data)
+
+    @router.api_route("/cast/{token}/hls/{index}.ts", methods=["GET", "HEAD"])
+    async def cast_segment(token: str, index: int, request: Request):
+        row, data, asset, allowed = cast_session(request, token)
+        converted_stream(asset, data)
+        return await serve_segment(request, row["id"], data, asset, index, allowed)
+
+    @router.api_route("/cast/{token}/hls/subs/{index}.m3u8", methods=["GET", "HEAD"])
+    def cast_subtitle_playlist(token: str, index: int, request: Request):
+        _, data, _, _ = cast_session(request, token)
+        offered(data, index)
+        duration = data["duration"]
+        return playlist_response(
+            [
+                "#EXTM3U",
+                "#EXT-X-VERSION:3",
+                "#EXT-X-PLAYLIST-TYPE:VOD",
+                f"#EXT-X-TARGETDURATION:{max(1, math.ceil(duration))}",
+                "#EXT-X-MEDIA-SEQUENCE:0",
+                f"#EXTINF:{duration:.6f},",
+                f"{index}.vtt",
+                "#EXT-X-ENDLIST",
+            ]
+        )
+
+    @router.api_route("/cast/{token}/hls/subs/{index}.vtt", methods=["GET", "HEAD"])
+    async def cast_stream_subtitle(token: str, index: int, request: Request):
+        _, data, asset, _ = cast_session(request, token)
+        vtt = await caption_vtt(request, data, asset, index)
+        return Response(with_stream_clock(vtt), media_type="text/vtt")
+
+    @router.api_route("/cast/{token}/subtitles/{index}.vtt", methods=["GET", "HEAD"])
+    async def cast_subtitle(token: str, index: int, request: Request):
+        _, data, asset, _ = cast_session(request, token)
+        vtt = await caption_vtt(request, data, asset, index)
+        return Response(vtt, media_type="text/vtt")
 
     @router.put("/playback/{session_id}/progress")
     def progress(session_id: str, body: Progress, request: Request):
@@ -537,7 +832,8 @@ def install_playback(app, storage, accounts, nodes, catalogue):
             db.execute(
                 "UPDATE playback_sessions SET closed=1 WHERE id=?", (session_id,)
             )
-        if data["mode"] == "hls":
+        # A direct session may have converted too, for a TV's stream.
+        if data["mode"] == "hls" or converts(asset["node_id"]):
             try:
                 await nodes.execute(
                     asset["node_id"], "hls_stop", {"session_id": session_id}, timeout=10

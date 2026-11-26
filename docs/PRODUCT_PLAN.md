@@ -13,10 +13,10 @@ Mobile use, accounts, guided self-hosting, subtitle preparation, agentic discove
 | Area | Direction | Qualification |
 |---|---|---|
 | Watching | Sparrow owns its player, playback sessions and personal watch state | Reuse established media libraries and ffmpeg; playback must work while the reasoning provider is unavailable |
-| TV (parked) | Retain the Samsung/Emby context for a future decision | No current client evaluation, bridge, casting or native-app work; no dependency on TV details for the active roadmap |
+| Casting | Play from the phone on a TV: AirPlay, then Chromecast (issue #38) | The TV fetches through a signed, session-bound cast link; subtitles travel inside the stream. Emby bridges and native TV apps stay parked |
 | Subtitles | Built-in automatic acquisition/alignment pipeline, followed by agent verification and exception handling | Bundle or vendor selected compatible components; no separate subtitle app/service for the owner to manage |
 | Discovery | Add a real tool-using Discovery Agent with conversational refinement and structured results | Retain instant direct-title suggestions; discovery alone cannot initiate unrequested acquisition |
-| Agent framework | Evaluate the Assistant Agent SDK first for the new discovery session | Preserve Sparrow's durable jobs, permissions and evidence; migrate existing agents only after parity checks |
+| Agent framework | Evaluate an agent SDK first for the new discovery session | Preserve Sparrow's durable jobs, permissions and evidence; migrate existing agents only after parity checks |
 | Management | Extend Fetch, Media and Librarian; use an agent for subtitle quality review | Predictable subtitle processing runs automatically; the setup agent is parked |
 | Mobile | Responsive web application and installable PWA | Phone usability is an acceptance criterion for every flow; offline video is separate future scope |
 | Sharing | Local accounts, invitations, per-user progress and explicit permissions | No compulsory external identity provider or Sparrow-hosted account service |
@@ -41,9 +41,7 @@ Discovery should handle â€œa funny film under two hours that we haven't watchedâ
 
 Preserve fast autocomplete while an agent handles the richer submitted task. Cancel superseded discovery work, cache factual catalogue responses and retain conversational/search state when opening a title. Ordinary playback, local browsing, pause and account checks must remain available without a model call.
 
-The Assistant Agent SDK provides Python/TypeScript loops, sessions and context management, and supports custom tools through an in-process MCP server. That makes it a reasonable first candidate for the existing Provider/Python codebase. This is an architectural recommendation, not a completed evaluation. [SDK overview](https://retired-provider.invalid), [custom tools](https://retired-provider.invalid).
-
-The SDK trial must demonstrate cancellation, resumption after process loss, structured results, tool restrictions and bounded cost. Run it behind a small adapter. Sparrow's database remains the authority for request state and operation identity; SDK transcripts do not become the only record of an acquisition. Expose domain tools and disable unrelated filesystem/shell tools. Keep credentials in tool-side services and use isolated SDK configuration so a server worker cannot inherit an administrator's personal development tools or permissions.
+An SDK trial must demonstrate cancellation, resumption after process loss, structured results, tool restrictions and bounded cost. Run it behind a small adapter. Sparrow's database remains the authority for request state and operation identity; SDK transcripts do not become the only record of an acquisition. Expose domain tools and disable unrelated filesystem/shell tools. Keep credentials in tool-side services and use isolated SDK configuration so a server worker cannot inherit an administrator's personal development tools or permissions.
 
 Every consequential tool rechecks user/role authority, request revision, destination and resource budget. Durable operations prevent duplicate effects after retries. Agents wake on changed facts or bounded scheduled work; unchanged outages and subscriptions do not incur repeated reasoning. Limits must stop calls and new acquisitions in code, including concurrent work. Budget exhaustion becomes an understandable waiting state.
 

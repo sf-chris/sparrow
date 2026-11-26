@@ -4,13 +4,13 @@
 following the [subtitle plan](../SUBTITLE_PLAN.md). It does not change installed
 Sparrow, publish subtitles, or satisfy multilingual/movie/player acceptance.
 The subsequent [Four Lions trial](FOUR_LIONS_TRIAL.md) acquired the actual film,
-sampled foreign speech and ran live Assistant comparisons through the existing
+sampled foreign speech and ran live model comparisons through an existing
 CLI sign-in. The English-only results below retain their original scope.
 
 ## What ran
 
 The installed library contained no items or paired storage nodes, and Sparrow
-had no Provider key configured. The requested *Four Lions* copy and existing
+had no model key configured. The requested *Four Lions* copy and existing
 key location were requested from the owner at this initial stage. No private
 film was retrieved or watched, and no paid inference or external subtitle-provider
 call occurred in that initial experiment.
@@ -33,8 +33,8 @@ independent language detection per window, no VAD filtering or caption prompt.
 The assistant inspected the saved transcript and associated its phrases with
 the eight candidate captions. The resulting measured onset differences ranged
 from 3.54 to 4.32 seconds late, with a median of 3.91 seconds, against the injected
-4-second shift. These correspondences were selected by assistant in this session;
-they are **not a live Assistant API result or an autonomous agent evaluation**.
+4-second shift. These correspondences were selected by the assistant in this session;
+they are **not a live model API result or an autonomous agent evaluation**.
 Fixture caption boundaries describe recording clips, not independently labelled
 word onsets, so the residuals do not establish word-level accuracy.
 
@@ -59,7 +59,7 @@ word, confidence and timing. Multiple audio tracks require an explicit choice.
 the whole soundtrack first. No input media or caption file is overwritten.
 
 [subtitle_trial.py](../../backend/agents/subtitle_trial.py) optionally uses the
-existing persistent agent runtime for a Assistant inspection/submission tool loop.
+existing persistent agent runtime for a model inspection/submission tool loop.
 It retains invocation receipts, complete observations through the evidence
 archive, bounded retrieval, an eight-turn limit and a $0.50 estimated allowance
 with the runtime's retry reservations. Interrupted reasoning can continue from
@@ -72,7 +72,7 @@ cues and unmapped word observations; overlapping windows include duplicates.
 Every result carries `verified: false`. Completing a diagnostic session does
 not mean completing subtitle verification. There is no publication tool.
 
-The Assistant path was tested with controlled responses only. The local run with
+The model path was tested with controlled responses only. The local run with
 `--review` retained its transcript and reported `awaiting_api_key`, exit code 2.
 Normal transcription-only runs exit zero; they explicitly disclaim semantic,
 independent-listening and playback verification. ASR interruption retains partial
@@ -99,16 +99,16 @@ For actual media, choose the intended stream and an existing caption candidate:
 ```
 
 Omit `--seconds` to transcribe the entire soundtrack, bounded to six hours.
-Once `PROVIDER_API_KEY` is supplied through the process environment, continue:
+Once the model key is supplied through the process environment, continue:
 
 ```sh
 .venv/bin/python -m backend.agents.subtitle_trial \
   --output data/subtitle-movie-trial --review --review-only
 ```
 
-The optional review sends recognised text and subtitle text to Provider. It
-does not upload raw audio/video. Default reasoning model follows
-`SPARROW_CHEAP_MODEL`, otherwise `assistant-small`; this is not a model-selection
+The optional review sends recognised text and subtitle text to the model provider. It
+does not upload raw audio/video. The default reasoning model follows
+`SPARROW_CHEAP_MODEL`; this is not a model-selection
 result. Use `--reasoning-model` for an explicit experimental choice. The review
 can remain incomplete if its bounded allowance cannot cover the selected input.
 
@@ -127,5 +127,5 @@ compilation and dependency consistency passed. No browser or live bilingual
 acceptance is claimed.
 
 The later [movie trial](FOUR_LIONS_TRIAL.md) resolves acquisition and the existing
-Assistant sign-in. Source-language accuracy, independent listening, justified repairs
+model sign-in. Source-language accuracy, independent listening, justified repairs
 and installed-player acceptance remain open; that record details actual findings.

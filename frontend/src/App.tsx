@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -7,16 +7,18 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { api, type Auth as AuthState } from "./product/api";
+import { api, post, type Auth as AuthState } from "./product/api";
 import { ErrorNote, Loading, useResource } from "./product/ui";
+import { Logotype } from "./product/Brand";
 import Auth from "./product/Auth";
 import Landing from "./product/Landing";
 import Shell from "./product/Shell";
 import Collection from "./product/Collection";
 import Title from "./product/Title";
-import Activity from "./product/Activity";
+import Activity, { RequestDetail } from "./product/Activity";
 import Preferences from "./product/Preferences";
 import Security from "./product/Security";
+import SparrowConnect from "./product/SparrowConnect";
 import Logs from "./product/Logs";
 import Storage from "./product/Storage";
 import { Defaults, People, ServerSettings } from "./product/Administration";
@@ -27,6 +29,40 @@ import "./product/product.css";
 import "./product/themes.css";
 import { applyTheme } from "./product/theme";
 
+/** A QR code from Settings carries a one-time sign-in code (in the part of
+ *  the address browsers never send to servers). Spend it, or fall back to
+ *  the sign-in form with the reason. */
+function DeviceSignIn({
+  code,
+  children,
+  onSuccess,
+}: {
+  code: string;
+  children: (problem: string) => React.ReactNode;
+  onSuccess: (auth: AuthState) => void;
+}) {
+  const navigate = useNavigate();
+  const [problem, setProblem] = useState("");
+  useEffect(() => {
+    let live = true;
+    post<AuthState>("/auth/device-link/redeem", { code })
+      .then((auth) => {
+        if (!live) return;
+        navigate("/", { replace: true });
+        onSuccess(auth);
+      })
+      .catch((e) => {
+        if (!live) return;
+        navigate("/login", { replace: true });
+        setProblem((e as Error).message);
+      });
+    return () => {
+      live = false;
+    };
+  }, [code]);
+  return problem ? <>{children(problem)}</> : <Loading page label="Signing you in" />;
+}
+
 function Guest({
   needsSetup,
   onSuccess,
@@ -36,9 +72,22 @@ function Guest({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const setupLink = new URLSearchParams(location.hash.slice(1)).has(
-    "setup_code",
-  );
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const setupLink = hash.has("setup_code");
+  const [signin] = useState(() => hash.get("signin"));
+  if (signin)
+    return (
+      <DeviceSignIn code={signin} onSuccess={onSuccess}>
+        {(problem) => (
+          <>
+            <div className="device-signin-problem">
+              <ErrorNote error={problem} />
+            </div>
+            <Auth needsSetup={needsSetup} onSuccess={onSuccess} />
+          </>
+        )}
+      </DeviceSignIn>
+    );
   if (location.pathname === "/" && !setupLink)
     return <Landing needsSetup={needsSetup} />;
   return (
@@ -76,11 +125,14 @@ export default function App() {
   }, [auth.refresh]);
   if (!auth.data)
     return (
-      <main className="boot">
+      <main className={`boot ${auth.error ? "" : "splash"}`}>
         {auth.error ? (
           <ErrorNote error={auth.error} retry={auth.refresh} />
         ) : (
-          <Loading label="Opening Sparrow" />
+          <div className="splash-mark" role="status">
+            <Logotype />
+            <span className="sr-only">Opening Sparrow</span>
+          </div>
         )}
       </main>
     );
@@ -94,6 +146,8 @@ export default function App() {
   return (
     <BrowserRouter key="signed-in">
       <Routes>
+        {/* Watching is full screen, outside the app's navigation. */}
+        {user.welcomed && <Route path="/watch/:assetId" element={<Watch />} />}
         <Route
           element={
             <Shell
@@ -142,14 +196,17 @@ export default function App() {
                 element={<Title user={user} />}
               />
               <Route path="/items/:itemId" element={<Title user={user} />} />
-              <Route path="/watch/:assetId" element={<Watch />} />
               <Route path="/activity" element={<Activity user={user} />} />
+              <Route path="/activity/:jobId" element={<RequestDetail />} />
               <Route path="/discover" element={<Discover />} />
               <Route
                 path="/settings"
                 element={<Preferences user={user} onChanged={auth.refresh} />}
               />
-              <Route path="/settings/security" element={<Security />} />
+              <Route
+                path="/settings/security"
+                element={<Security admin={user.role === "admin"} />}
+              />
               <Route path="/settings/logs" element={<Logs user={user} />} />
               {user.role === "admin" && (
                 <>
@@ -159,6 +216,7 @@ export default function App() {
                   />
                   <Route path="/settings/storage" element={<Storage />} />
                   <Route path="/settings/server" element={<ServerSettings />} />
+                  <Route path="/settings/connect" element={<SparrowConnect />} />
                   <Route
                     path="/settings/people"
                     element={<People currentUser={user} />}

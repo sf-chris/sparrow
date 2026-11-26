@@ -9,7 +9,7 @@ from unittest.mock import patch
 from backend import configuration
 from backend.configuration import (
     apply_config_update,
-    effective_altprovider_key,
+    effective_glm_key,
     mounted_path,
     public_config,
     repair_media_folders,
@@ -24,7 +24,7 @@ class ConfigurationTests(unittest.TestCase):
     def test_public_config_never_returns_credentials(self) -> None:
         config = SparrowConfig(
             tmdb_api_key="tmdb-secret",
-            provider_api_key="provider-secret",
+            glm_api_key="model-secret",
             torrent_client=TorrentClientConfig(
                 type=TorrentClientType.TRANSMISSION,
                 username="sparrow",
@@ -36,9 +36,9 @@ class ConfigurationTests(unittest.TestCase):
         data = public_config(config)
 
         self.assertEqual(data["tmdb_api_key"], "")
-        self.assertEqual(data["provider_api_key"], "")
+        self.assertEqual(data["glm_api_key"], "")
         self.assertTrue(data["tmdb_api_key_configured"])
-        self.assertTrue(data["provider_api_key_configured"])
+        self.assertTrue(data["glm_api_key_configured"])
         self.assertEqual(data["torrent_client"]["password"], "")
         self.assertEqual(data["torrent_client"]["url"], "")
         self.assertTrue(data["torrent_client"]["password_configured"])
@@ -47,17 +47,17 @@ class ConfigurationTests(unittest.TestCase):
     def test_blank_browser_secrets_preserve_stored_values(self) -> None:
         config = SparrowConfig(
             tmdb_api_key="tmdb-secret",
-            provider_api_key="provider-secret",
+            glm_api_key="model-secret",
             torrent_client=TorrentClientConfig(password="client-secret", url="http://secret"),
         )
         updated = apply_config_update(config, {
             "tmdb_api_key": "",
-            "provider_api_key": "",
+            "glm_api_key": "",
             "torrent_client": {"type": "none", "password": "", "url": ""},
         })
 
         self.assertEqual(updated.tmdb_api_key, "tmdb-secret")
-        self.assertEqual(updated.provider_api_key, "provider-secret")
+        self.assertEqual(updated.glm_api_key, "model-secret")
         self.assertEqual(updated.torrent_client.password, "client-secret")
         self.assertEqual(updated.torrent_client.url, "http://secret")
 
@@ -77,31 +77,39 @@ class ConfigurationTests(unittest.TestCase):
                     "library_dir": str(parent / "Library"),
                 })
 
-    def test_altprovider_key_is_saved_like_the_others_and_never_returned(self) -> None:
-        config = apply_config_update(SparrowConfig(), {"altprovider_api_key": " sk-altprovider "})
-        self.assertEqual(config.altprovider_api_key, "sk-altprovider")
-        self.assertEqual(SparrowConfig.from_dict(config.to_dict()).altprovider_api_key, "sk-altprovider")
+    def test_model_key_is_saved_like_the_others_and_never_returned(self) -> None:
+        config = apply_config_update(SparrowConfig(), {"glm_api_key": " zai-key "})
+        self.assertEqual(config.glm_api_key, "zai-key")
+        self.assertEqual(SparrowConfig.from_dict(config.to_dict()).glm_api_key, "zai-key")
         data = public_config(config)
-        self.assertEqual(data["altprovider_api_key"], "")
-        self.assertTrue(data["altprovider_api_key_configured"])
-        self.assertEqual(apply_config_update(config, {"altprovider_api_key": ""}).altprovider_api_key, "sk-altprovider")
-        self.assertEqual(apply_config_update(config, {"clear_altprovider_api_key": True}).altprovider_api_key, "")
+        self.assertEqual(data["glm_api_key"], "")
+        self.assertTrue(data["glm_api_key_configured"])
+        self.assertEqual(apply_config_update(config, {"glm_api_key": ""}).glm_api_key, "zai-key")
+        self.assertEqual(apply_config_update(config, {"clear_glm_api_key": True}).glm_api_key, "")
         # Settings saved before this key existed still load.
         old = SparrowConfig().to_dict()
-        old.pop("altprovider_api_key")
-        self.assertEqual(SparrowConfig.from_dict(old).altprovider_api_key, "")
+        old.pop("glm_api_key")
+        self.assertEqual(SparrowConfig.from_dict(old).glm_api_key, "")
 
-    def test_saved_altprovider_key_wins_over_the_environment(self) -> None:
-        saved = SparrowConfig(altprovider_api_key="saved")
-        with patch.dict(os.environ, {"ALTPROVIDER_API_KEY": "env"}):
-            self.assertEqual(effective_altprovider_key(SparrowConfig()), "env")
-            self.assertEqual(effective_altprovider_key(saved), "saved")
+    def test_a_saved_model_glm_cannot_run_shows_the_default(self) -> None:
+        old = {**SparrowConfig().to_dict(), "smart_model": "retired-model", "cheap_model": ""}
+        loaded = SparrowConfig.from_dict(old)
+        self.assertEqual((loaded.smart_model, loaded.cheap_model), ("glm-5.3", "glm-5.3-flash"))
+        self.assertEqual(public_config(loaded)["smart_model"], "glm-5.3")
+        chosen = SparrowConfig.from_dict({**old, "smart_model": "glm-5.3-flashx"})
+        self.assertEqual(chosen.smart_model, "glm-5.3-flashx")
+
+    def test_saved_model_key_wins_over_the_environment(self) -> None:
+        saved = SparrowConfig(glm_api_key="saved")
+        with patch.dict(os.environ, {"ZAI_API_KEY": "env"}):
+            self.assertEqual(effective_glm_key(SparrowConfig()), "env")
+            self.assertEqual(effective_glm_key(saved), "saved")
             with patch.object(configuration, "_saved_config", lambda: saved):
-                self.assertEqual(effective_altprovider_key(), "saved")
+                self.assertEqual(effective_glm_key(), "saved")
             with patch.object(configuration, "_saved_config", None):
-                self.assertEqual(effective_altprovider_key(), "env")
-        with patch.dict(os.environ, {"ALTPROVIDER_API_KEY": ""}):
-            self.assertEqual(public_config(SparrowConfig())["altprovider_api_key_configured"], False)
+                self.assertEqual(effective_glm_key(), "env")
+        with patch.dict(os.environ, {"ZAI_API_KEY": ""}):
+            self.assertEqual(public_config(SparrowConfig())["glm_api_key_configured"], False)
 
     def test_chosen_folders_are_made_when_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, patch.object(

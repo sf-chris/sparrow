@@ -48,7 +48,7 @@ const frame = page => page.evaluate(() => new Promise(done => requestAnimationFr
       await page.goto(base + '/title/tv/101');
       await page.getByRole('button', { name: /Request episodes/ }).click();
       await page.getByRole('dialog').waitFor();
-      await page.getByRole('checkbox').first().check();
+      await page.getByRole('checkbox', { disabled: false }).first().check();
       results.push({ theme: theme || 'guide', route: 'episode-dialog', violations: summarise(await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()), overflow: [] });
       await page.screenshot({ path: `${out}/${theme || 'guide'}-request-mobile.png` });
     }

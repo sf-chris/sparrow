@@ -225,6 +225,117 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual((await self.client.get(f"{prefix}/0.ts")).status_code, 404)
 
+    def tv(self):
+        """A TV's player: no Sparrow sign-in, its own origin."""
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self.app),
+            base_url="http://testserver",
+            headers={"Origin": "https://receiver.example"},
+        )
+
+    async def test_cast_link_plays_without_sign_in_until_access_ends(self):
+        session = await self.start()
+        cast = session["cast"]
+        self.assertTrue(cast["url"].startswith("/api/v1/cast/"))
+        self.assertNotIn(session["id"], cast["url"].split("/")[-1][32:])
+        async with self.tv() as tv:
+            response = await tv.get(cast["url"], headers={"Range": "bytes=20-79"})
+            self.assertEqual(response.status_code, 206, response.text[:200])
+            self.assertEqual(response.content, self.source.read_bytes()[20:80])
+            self.assertEqual(response.headers["access-control-allow-origin"], "*")
+            self.assertIn("Content-Range", response.headers["access-control-expose-headers"])
+            head = await tv.head(cast["url"])
+            self.assertEqual(head.status_code, 200)
+            self.assertEqual(int(head.headers["content-length"]), self.source.stat().st_size)
+            preflight = await tv.options(
+                cast["url"],
+                headers={
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "range",
+                },
+            )
+            self.assertEqual(preflight.status_code, 204)
+            self.assertIn("Range", preflight.headers["access-control-allow-headers"])
+            caption = await tv.get(cast["subtitles"][0]["url"])
+            self.assertIn("A second caption.", caption.text)
+            # A guessed or altered link is refused, like an ended one.
+            token = cast["url"].split("/")[4]
+            forged = token[:-1] + ("0" if token[-1] != "0" else "1")
+            self.assertEqual(
+                (await tv.get(cast["url"].replace(token, forged))).status_code, 404
+            )
+            # The browser's own media address still needs the sign-in.
+            self.assertEqual((await tv.get(session["url"])).status_code, 401)
+            # Signing that device out ends the TV's link too.
+            other = self.browser(self.owner)
+            second = (
+                await other.post("/api/v1/playback", json={"asset_id": self.asset})
+            ).json()
+            self.accounts.revoke(self.client.cookies.get(COOKIE))
+            self.assertEqual((await tv.get(cast["url"])).status_code, 404)
+            self.assertEqual((await tv.get(second["cast"]["url"])).status_code, 200)
+            # Losing access to the library ends it.
+            with self.accounts.connect() as db:
+                db.execute("UPDATE users SET disabled=1 WHERE id=?", (self.owner["id"],))
+            self.assertEqual((await tv.get(second["cast"]["url"])).status_code, 404)
+            await other.aclose()
+
+    async def test_cast_link_ends_with_the_session(self):
+        session = await self.start()
+        async with self.tv() as tv:
+            self.assertEqual((await tv.get(session["cast"]["url"])).status_code, 200)
+            await self.client.delete(f'/api/v1/playback/{session["id"]}')
+            self.assertEqual((await tv.get(session["cast"]["url"])).status_code, 404)
+
+    async def test_cast_stream_carries_the_chosen_subtitle_on_the_video_clock(self):
+        session = await self.start(position=12)
+        self.assertEqual(session["mode"], "direct")
+        stream = session["cast"]["stream"]
+        self.assertIsNotNone(stream)
+        caption = session["subtitles"][0]
+        async with self.tv() as tv:
+            master = await tv.get(f'{stream}?subtitle={caption["index"]}&start=12')
+            self.assertEqual(master.status_code, 200, master.text)
+            self.assertIn("#EXT-X-START:TIME-OFFSET=12.000", master.text)
+            self.assertIn('TYPE=SUBTITLES,GROUP-ID="subs"', master.text)
+            self.assertIn('LANGUAGE="en"', master.text)
+            self.assertIn(f'URI="subs/{caption["index"]}.m3u8"', master.text)
+            self.assertIn('SUBTITLES="subs"', master.text)
+            self.assertIn('CODECS="avc1.640028,mp4a.40.2"', master.text)
+            self.assertNotIn("TYPE=SUBTITLES", (await tv.get(stream)).text)
+            self.assertEqual(
+                (await tv.get(f"{stream}?subtitle=424242")).status_code, 404
+            )
+            base = stream.rsplit("/", 1)[0]
+            video = await tv.get(f"{base}/video.m3u8")
+            self.assertIn("0.ts", video.text)
+            self.assertIn("#EXT-X-ENDLIST", video.text)
+            segment = await tv.get(f"{base}/0.ts")
+            self.assertEqual(segment.status_code, 200, segment.text[:200])
+            path = self.root / "cast-0.ts"
+            path.write_bytes(segment.content)
+            started = float(
+                (
+                    await run_media(
+                        "ffprobe", "-v", "error", "-show_entries", "format=start_time",
+                        "-of", "csv=p=0", path,
+                    )
+                ).decode()
+            )
+            # Subtitles map cue time 0 to 1.4 s on the stream clock; the video
+            # must start there too, or every caption would be early or late.
+            self.assertAlmostEqual(started, 126000 / 90000, delta=0.15)
+            playlist = await tv.get(f'{base}/subs/{caption["index"]}.m3u8')
+            self.assertIn(f'{caption["index"]}.vtt', playlist.text)
+            vtt = (await tv.get(f'{base}/subs/{caption["index"]}.vtt')).text
+            self.assertTrue(
+                vtt.startswith("WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:126000,LOCAL:00:00:00.000\n"),
+                vtt[:120],
+            )
+            self.assertIn("A second caption.", vtt)
+            await self.client.delete(f'/api/v1/playback/{session["id"]}')
+            self.assertEqual((await tv.get(f"{base}/1.ts")).status_code, 404)
+
     async def test_changed_file_cannot_start_or_resume_as_verified(self):
         session = await self.start()
         self.source.write_bytes(b"replacement")

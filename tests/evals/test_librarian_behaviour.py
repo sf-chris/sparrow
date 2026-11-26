@@ -1,6 +1,6 @@
 """Opt-in real-model tests against personal subscription/tool contracts.
 
-SPARROW_RUN_AGENT_EVALS=1 PROVIDER_API_KEY=... .venv/bin/python -m unittest discover -s tests/evals
+SPARROW_RUN_AGENT_EVALS=1 ZAI_API_KEY=... .venv/bin/python -m unittest discover -s tests/evals
 SPARROW_EVAL_RUNS defaults to three independent runs of each case.
 SPARROW_EVAL_REPORT overrides the default ignored JSONL evidence destination.
 No download worker, live catalogue request or personal media is used.
@@ -12,7 +12,7 @@ from backend.agents.models import SessionStatus
 from tests.evals.librarian_fixture import LibrarianFixture, append_report
 
 RUN_EVALS = os.getenv("SPARROW_RUN_AGENT_EVALS") == "1" and bool(
-    os.getenv("PROVIDER_API_KEY")
+    os.getenv("ZAI_API_KEY")
 )
 EVAL_RUNS = int(os.getenv("SPARROW_EVAL_RUNS", "3"))
 
@@ -26,7 +26,7 @@ class LibrarianBehaviourEvals(unittest.IsolatedAsyncioTestCase):
         for run in range(EVAL_RUNS):
             with self.subTest(run=run):
                 fixture = await LibrarianFixture().start(
-                    scenario, os.environ["PROVIDER_API_KEY"]
+                    scenario, os.environ["ZAI_API_KEY"]
                 )
                 try:
                     session, report = await fixture.run()

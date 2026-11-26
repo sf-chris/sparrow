@@ -42,7 +42,7 @@ The owner asked to keep iterating on Four Lions before moving to another test
 list. This iteration added an opt-in scene investigation on Sparrow's existing
 persistent agent runtime. The agent can inspect audio observations, request a
 different recogniser or crop, edit a separate full-track draft, and recheck it.
-It reuses the existing Assistant CLI login with execution tools disabled. Original
+It used a hosted model through a CLI sign-in with execution tools disabled. Original
 media, downloaded subtitles, observations and every draft revision are retained.
 This is an experimental harness, not a deployed default subtitle service.
 
@@ -191,7 +191,7 @@ to bypass allowances. Original source files and all failed experiments remain.
 
 The next gate is an independent audio-capable review of the unresolved clips,
 then rechecking any repairs and the exact final revision in Sparrow. The current
-local recognisers plus text-only Assistant have not met the owner's completion
+local recognisers plus a text-only model have not met the owner's completion
 standard; do not move this title to accepted merely because code tests pass.
 At the end of this iteration, six scene assessments are aligned against their
 current cue hashes; the uncle scene remains `needs_evidence`. A separate bounded
@@ -207,7 +207,7 @@ draft, scopes, controls and playback evidence with whole-film acceptance false.
 At the owner's request, used Sparrow's existing search service to find the film,
 then its node executor and Transmission integration to download the complete
 file and probe it. The installed instance had no configured downloader, library
-or Provider API key, so this used private trial storage and an isolated local
+or model key, so this used private trial storage and an isolated local
 downloader. The installed owner's configuration and accounts were not changed.
 The downloader was stopped after completion; the media and receipts remain.
 
@@ -277,26 +277,25 @@ Specific failures matter more than mean confidence:
 - Some repetitive failures have high model confidence. A confidence threshold
   alone cannot prevent false acceptance.
 
-## Real Assistant comparison, using the existing sign-in
+## Real model comparison, using an existing sign-in
 
-The owner's existing Assistant CLI authentication worked without a new account or
-API key. The opt-in [CLI adapter](../../backend/agents/subtitle_cli_trial.py)
-disables CLI execution tools, MCP integrations and local customisations. It
-returns proposed actions to Sparrow's actual persistent tool loop; Sparrow
-executes inspection and submission, records receipts and enforces evidence IDs.
-Assistant receives source-language transcript/caption text, **not audio or video**.
-This Linux trial adapter does not replace the production Provider API provider.
+The owner's existing CLI sign-in worked without a new account or API key. The
+opt-in CLI adapter disabled CLI execution tools, MCP integrations and local
+customisations. It returned proposed actions to Sparrow's actual persistent tool
+loop; Sparrow executed inspection and submission, recorded receipts and enforced
+evidence IDs. The model received source-language transcript/caption text, **not
+audio or video**. The trial adapter did not replace the production provider.
 
-Ran Small 4.5 on the translated passage, then Medium 4.6 on the unchanged
+Ran the cheaper model on the translated passage, then the stronger model on the unchanged
 candidate and three negative cases. Source audio and ASR evidence were identical
 across the cases. Modified captions were separate derivatives, never originals.
 
 | Case | Observed result |
 | --- | --- |
-| Ordinary English track | No cues in the scoped passage; all 12 recognised word observations remain unmapped. Assistant explicitly leaves the work incomplete. The complete source subtitle also has no caption at the utterance's onset. |
-| Downloaded foreign-dialogue translation | Medium groups reordered clauses but retains uncertainty about an extra title in the caption and an ambiguous instruction in the ASR. No quality approval. |
-| Captions deliberately shifted +4 seconds | Tools measure onset deltas of +3.665 and +4.198 seconds for the two phrase groups; offsets differ from the unchanged case by exactly +4 seconds. Medium identifies systematic lateness. |
-| One word changed from “Tomorrow” to “Yesterday” | Medium identifies the semantic inversion from the recognised Arabic بكرة, despite unchanged timing. |
+| Ordinary English track | No cues in the scoped passage; all 12 recognised word observations remain unmapped. The model explicitly leaves the work incomplete. The complete source subtitle also has no caption at the utterance's onset. |
+| Downloaded foreign-dialogue translation | The stronger model groups reordered clauses but retains uncertainty about an extra title in the caption and an ambiguous instruction in the ASR. No quality approval. |
+| Captions deliberately shifted +4 seconds | Tools measure onset deltas of +3.665 and +4.198 seconds for the two phrase groups; offsets differ from the unchanged case by exactly +4 seconds. The stronger model identifies systematic lateness. |
+| One word changed from “Tomorrow” to “Yesterday” | The stronger model identifies the semantic inversion from the recognised Arabic بكرة, despite unchanged timing. |
 
 A concrete correspondence: medium places **بكرة** at **20:24.460–20:25.100**;
 the downloaded English caption containing **“Tomorrow”** begins at
@@ -305,14 +304,14 @@ audio-derived observation plus a bilingual text judgement, not independently
 certified word timing or a claim that the assistant heard the audio.
 
 Both models initially tried noncontiguous word mappings; Sparrow rejected them.
-Small also criticised ordinary clause reordering and treated an ambiguous Arabic
-verb as a confident equivalent. Medium handled that ambiguity more cautiously.
-After clarifying the grouping instruction, Medium submitted contiguous phrase
+The cheaper model also criticised ordinary clause reordering and treated an
+ambiguous Arabic verb as a confident equivalent. The stronger model handled that
+ambiguity more cautiously. After clarifying the grouping instruction, it submitted contiguous phrase
 groups. These were exploratory corrections, not a frozen or repeated benchmark.
 The unchanged and delayed cases also differed in semantic certainty despite
 identical wording: timing and meaning still need better separation in evaluation.
 
-The two longer Medium cases initially stopped at the $0.50 estimated runtime
+The two longer stronger-model cases initially stopped at the $0.50 estimated runtime
 allowance because of retry reservations. Their saved sessions resumed with a
 $1 experimental allowance and the grouping clarification; previous calls were
 not replayed. All five diagnostic sessions finished with `verified: false`.
@@ -351,7 +350,7 @@ Private local artifacts are under `data/four-lions-trial/` (ignored by Git):
 - `subtitles/`: original downloaded archives/text, decoded candidates and URLs.
 - `base-discovery/`: full extracted soundtrack, source identity and 30 windows.
 - `medium-scenes/`, `medium-focused/`, `turbo-scenes-v2/`: actual speech results.
-- `review-translation/`, `medium-{translation,late,wrong-meaning,missing}/`:
+- `review-translation/` and the four comparison-case folders:
   immutable source bindings, private request/result receipts, durable agent
   sessions and measured comparisons.
 - `playback/`: two playable excerpts, candidate tracks, diagnostic HTML,
@@ -367,9 +366,6 @@ export SPARROW_FFPROBE="$PWD/data/subtitle-trial-tools/bin/ffprobe"
   --model-path data/four-lions-trial/models/whisper-medium \
   --subtitles data/four-lions-trial/subtitles/with-foreign-translation-0.utf8.srt \
   --start 1220 --seconds 10 --output data/four-lions-new-trial
-.venv/bin/python -m backend.agents.subtitle_trial \
-  --output data/four-lions-new-trial --review --review-only --assistant-cli \
-  --reasoning-model assistant-medium
 ```
 
 The general CLI retains the full subtitle candidate; the live comparisons above

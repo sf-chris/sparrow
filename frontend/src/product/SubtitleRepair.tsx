@@ -229,7 +229,7 @@ export function SubtitleRepair({
             </select>
           </Field>
         </div>
-        <Field label="Subtitle agent" hint="Needs an Provider key.">
+        <Field label="Subtitle agent" hint="Needs a Z.ai key.">
           <label className="check">
             <input
               type="checkbox"

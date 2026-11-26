@@ -32,8 +32,8 @@ fi
 
 if rg -n --hidden \
   -g '!.env' -g '!data/**' -g '!frontend/node_modules/**' -g '!.venv/**' \
-  -g '!frontend/dist/**' -g '!.assistant/**' \
-  '(sk-api[0-9A-Za-z_-]{20,}|PROVIDER_API_KEY=[^[:space:]#]{12,}|TMDB_API_KEY=[0-9a-fA-F]{24,})' .; then
+  -g '!frontend/dist/**' \
+  '(ZAI_API_KEY=[^[:space:]#]{12,}|[0-9a-f]{32}\.[0-9A-Za-z]{16}|TMDB_API_KEY=[0-9a-fA-F]{24,})' .; then
   echo "Potential credential found in the release tree." >&2
   exit 1
 fi

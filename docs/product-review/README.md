@@ -6,7 +6,7 @@ These artifacts support the [product review](../PRODUCT_REVIEW.md) of Sparrow at
 
 The actual FastAPI application and routes ran against isolated temporary SQLite state. A review harness substituted catalogue artwork/metadata and downloader responses, and prevented agent wakes and background acquisition. Fictional titles represented active, paused, completed and abandoned requests; partial TV ownership; an unowned monitored show; verified/unverified movie records; and a missing file. Placeholder files were not real media. No inference about actual playback or ffprobe verification is drawn from those seeded records. Separate backend diagnostics exercised the real tools and runtime against temporary files and fake external actions.
 
-`evidence.json` has five result groups: `browser_baseline`, `browser_interactions`, `browser_additional`, `isolated_backend`, and `additional_backend`. Observation names in the main report are keys within those groups. The description-search result comes from the installed Provider SDK rejecting the call before network activity. The step-limit diagnostic uses a finite scripted response sequence, so its 46 calls are simulated provider responses, with no paid usage.
+`evidence.json` has five result groups: `browser_baseline`, `browser_interactions`, `browser_additional`, `isolated_backend`, and `additional_backend`. Observation names in the main report are keys within those groups. The description-search result comes from the installed model SDK rejecting the call before network activity. The step-limit diagnostic uses a finite scripted response sequence, so its 46 calls are simulated provider responses, with no paid usage.
 
 The backend diagnostic is preserved in [backend_reproductions.py](backend_reproductions.py). It exercises code as of `b84450c`, including modules since retired, so run it from a checkout of that commit with its Python dependencies installed: `.venv/bin/python docs/product-review/backend_reproductions.py`. It prints JSON, uses temporary storage, disables service wake scheduling and substitutes downloader/model actions. It demonstrates current behaviour; it is not a regression test asserting that behaviour should continue. The browser screenshots require the synthetic fixture state and are not a claim that a clean installation contains these titles.
 
@@ -14,7 +14,7 @@ The backend diagnostic is preserved in [backend_reproductions.py](backend_reprod
 
 | Screen/state | Desktop | Phone |
 |---|---|---|
-| Initial setup | [Image](onboarding-desktop.png) | [Image](onboarding-mobile.png) |
+| Initial setup | Image | [Image](onboarding-mobile.png) |
 | Discover / home | [Image](home-desktop.png) | [Image](home-mobile.png) |
 | Populated Library | [Image](library-desktop.png) | [Image](library-mobile.png) |
 | Active TV request / Watch | [Image](show-active-desktop.png) | [Image](show-active-mobile.png) |
@@ -22,14 +22,14 @@ The backend diagnostic is preserved in [backend_reproductions.py](backend_reprod
 | Title Preferences | [Image](show-preferences-desktop.png) | [Image](show-preferences-mobile.png) |
 | Completed season, another missing | [Image](show-completed-season-desktop.png) | [Image](show-completed-season-mobile.png) |
 | Movie marked ready | [Image](movie-ready-desktop.png) | [Image](movie-ready-mobile.png) |
-| Settings | [Image](settings-desktop.png) | [Image](settings-mobile.png) |
-| Activity | [Image](activity-desktop.png) | [Image](activity-mobile.png) |
+| Settings | Image | Image |
+| Activity | Image | Image |
 | Manual release browser | [Image](release-browser-desktop.png) | [Image](release-browser-mobile.png) |
 
 | Additional interaction | Capture | Recorded observation |
 |---|---|---|
-| Save download cap of one | [Image](settings-ignored-save.png) | UI reports Saved; value returns to three; config PATCH drops the field |
-| Invalid overlapping folders | [Image](settings-invalid-no-feedback.png) | Backend returns validation error; Settings provides no visible error |
+| Save download cap of one | Image | UI reports Saved; value returns to three; config PATCH drops the field |
+| Invalid overlapping folders | Image | Backend returns validation error; Settings provides no visible error |
 | Get a TV search result | [Image](search-scope-before-get.png) | Title-only request expands to all nine episodes across three seasons |
 | Search API unavailable | [Image](search-outage-as-no-results.png) | Error presented as no results and spelling advice |
 | Empty Library | [Image](library-empty.png) | Existing empty-state copy and available actions |

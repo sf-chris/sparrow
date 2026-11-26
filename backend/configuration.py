@@ -189,10 +189,6 @@ def effective_tmdb_key(config: SparrowConfig) -> str:
     return config.tmdb_api_key or os.getenv("TMDB_API_KEY", "")
 
 
-def effective_provider_key(config: SparrowConfig) -> str:
-    return config.provider_api_key or os.getenv("PROVIDER_API_KEY", "")
-
-
 _saved_config: Callable[[], SparrowConfig] | None = None
 
 
@@ -202,25 +198,29 @@ def track_saved_config(source: Callable[[], SparrowConfig]) -> None:
     _saved_config = source
 
 
-def effective_altprovider_key(config: SparrowConfig | None = None) -> str:
-    """The AltProvider key saved in Settings, else ALTPROVIDER_API_KEY. Optional."""
-    if config is None and _saved_config is not None:
-        try:
-            config = _saved_config()
-        except Exception:
-            config = None
-    return (config.altprovider_api_key if config else "") or os.getenv("ALTPROVIDER_API_KEY", "")
+def _saved() -> SparrowConfig | None:
+    if _saved_config is None:
+        return None
+    try:
+        return _saved_config()
+    except Exception:
+        return None
+
+
+def effective_glm_key(config: SparrowConfig | None = None) -> str:
+    """The Z.ai (GLM) key saved in Settings, else ZAI_API_KEY. Optional."""
+    if config is None:
+        config = _saved()
+    return (getattr(config, "glm_api_key", "") if config else "") or os.getenv("ZAI_API_KEY", "")
 
 
 def public_config(config: SparrowConfig) -> dict[str, Any]:
     """Serialize config for the browser without returning stored credentials."""
     data = config.to_dict()
     data["tmdb_api_key"] = ""
-    data["provider_api_key"] = ""
-    data["altprovider_api_key"] = ""
+    data["glm_api_key"] = ""
     data["tmdb_api_key_configured"] = bool(effective_tmdb_key(config))
-    data["provider_api_key_configured"] = bool(effective_provider_key(config))
-    data["altprovider_api_key_configured"] = bool(effective_altprovider_key(config))
+    data["glm_api_key_configured"] = bool(effective_glm_key(config))
 
     torrent = data["torrent_client"]
     torrent["password"] = ""
@@ -261,16 +261,12 @@ def apply_config_update(
         config.quality_preference = Quality(values["quality_preference"])
     if values.get("tmdb_api_key"):
         config.tmdb_api_key = str(values["tmdb_api_key"]).strip()
-    if values.get("provider_api_key"):
-        config.provider_api_key = str(values["provider_api_key"]).strip()
     if values.get("clear_tmdb_api_key"):
         config.tmdb_api_key = ""
-    if values.get("altprovider_api_key"):
-        config.altprovider_api_key = str(values["altprovider_api_key"]).strip()
-    if values.get("clear_provider_api_key"):
-        config.provider_api_key = ""
-    if values.get("clear_altprovider_api_key"):
-        config.altprovider_api_key = ""
+    if values.get("glm_api_key"):
+        config.glm_api_key = str(values["glm_api_key"]).strip()
+    if values.get("clear_glm_api_key"):
+        config.glm_api_key = ""
 
     scalar_fields = (
         "onboarding_complete",

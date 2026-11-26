@@ -75,10 +75,10 @@ def install_accounts(app, storage, get_service):
     @app.middleware("http")
     async def identity_boundary(request: Request, call_next):
         path = request.url.path
-        if path.startswith("/api/v1/node/"):
-            return await call_next(
-                request
-            )  # Node routes enforce their own unique credentials.
+        if path.startswith("/api/v1/node/") or path.startswith("/api/v1/cast/"):
+            # Node routes enforce their own unique credentials; a cast link is
+            # a signed, session-bound address checked by the playback routes.
+            return await call_next(request)
         protected = path.startswith("/api/") or path.startswith("/art/")
         if not protected:
             return await call_next(request)
@@ -87,6 +87,9 @@ def install_accounts(app, storage, get_service):
             "/api/v1/auth/login",
             "/api/v1/auth/bootstrap",
             "/api/v1/auth/join",
+            "/api/v1/auth/device-link/redeem",
+            # Sparrow Connect's call-back; answers only with a keyed proof.
+            "/api/v1/connect/proof",
         }
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             origin = request.headers.get("origin")
@@ -152,6 +155,29 @@ def install_accounts(app, storage, get_service):
             "complete": config.onboarding_complete,
             "deferred": config.onboarding_deferred,
         }
+
+    class DeviceCode(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        code: str = Field(min_length=16, max_length=128)
+
+    @router.post("/auth/device-link")
+    def device_link(request: Request):
+        """Sign this person in on another device: the code goes in a QR code,
+        pointed at Sparrow Connect's address when this server has a working one."""
+        code, expires = accounts.device_link(request.state.user["id"])
+        connect = getattr(request.app.state, "connect", None)
+        state = connect.state() if connect else {}
+        link = state.get("link") if state.get("enabled") and state.get("reachable") else None
+        return {"code": code, "expires": expires, "link": link}
+
+    @router.post("/auth/device-link/redeem")
+    def redeem_device_link(body: DeviceCode, request: Request, response: Response):
+        user = accounts.redeem_device_link(body.code)
+        if not user:
+            raise HTTPException(
+                401, "This sign-in code has expired or was already used. Scan a new one."
+            )
+        return session_cookie(request, response, user)
 
     @router.get("/auth/status")
     def auth_status(request: Request):

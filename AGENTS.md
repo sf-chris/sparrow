@@ -12,9 +12,11 @@ for the shared interface contract. Stage 7 is excluded from the current work.
 The short version: an agent is an LLM in a tool-use loop — nothing else
 qualifies. Agents own uncertain discovery/acquisition/curation decisions and
 quality review. Predictable subtitle processing runs automatically under resolved
-policy; tools establish facts and enforce limits. The setup agent and all
-TV/Emby/casting work are parked; do not treat retained TV option notes as active
-implementation requirements. Follow the delivery sequence at the top of ROADMAP.md.
+policy; tools establish facts and enforce limits. Casting from the phone and
+opt-in Sparrow Connect are current work
+([issue #38](https://github.com/sf-chris/sparrow/issues/38)); the setup agent,
+Emby and native TV apps stay parked, so don't treat retained TV option notes as
+active implementation requirements. Follow the delivery sequence at the top of ROADMAP.md.
 
 The next agentic reliability phase is tracked in
 [issue #3](https://github.com/sf-chris/sparrow/issues/3), with the source audit and
@@ -30,8 +32,9 @@ Everything new lives in `backend/agents/`:
 - `models.py` — `Job` (a contract against TMDB: wanted episodes, quality
   window, audio, urgency), `AgentSession` (a persistent tool-loop with full
   message history), `JournalEntry`, `Event`, `Spend`.
-- `altprovider_loop.py` — runs a session on an AltProvider model through the same loop
-  (API translation at the call boundary).
+- `glm_loop.py` — runs a session on Z.ai's GLM models (Chat Completions
+  translation at the call boundary, preserved reasoning, JSON answers checked
+  against their schema).
 - `runtime.py` — the loop: wake on event → reason across tool calls →
   hibernate with a trigger or close. Handles persistence, crash repair,
   durable event acknowledgements/tool results, spend tracking and API retries.
@@ -63,6 +66,18 @@ Everything new lives in `backend/agents/`:
   checks that wake the Librarian only for eligible work.
 - `accounts.py`, `nodes.py`, `node_executor.py`, `catalogue.py`, `playback.py` —
   household preferences/permissions, durable portable storage and media delivery.
+  Each playback session also has a signed cast link (`/api/v1/cast/…`) that a
+  TV can fetch without a sign-in; it ends with the session, the sign-in that
+  started it or the viewer's access. Its converted stream carries the chosen
+  subtitle so AirPlay shows it.
+- `connect.py`, `acme.py` — Sparrow Connect on this server (Settings →
+  Connections), off until an administrator turns it on. It registers with the
+  shared service, gets its own certificate for `<id>.h.streamsparrow.com` by a
+  DNS proof that Connect publishes (the key never leaves this server), serves
+  HTTPS on `SPARROW_CONNECT_PORT`, and checks in so Connect calls back and
+  verifies it before pointing the name here. Off forgets it everywhere. The
+  shared service itself is `connect/` (FastAPI + Caddy), deployed separately;
+  no video passes through it. Homes that can't open a port: issue #37.
 - `placement.py`, `moves.py` — where a request is stored (Automatic, pools, a
   person's storage or one disk), pinned when it starts with a plain reason; and
   verified copy-then-remove moves of a title between disks and computers.
@@ -96,7 +111,8 @@ Everything new lives in `backend/agents/`:
   conflict, and a request's repeated searches come from the cache. Handles
   stalls (removing a transfer deletes its unfinished files) and reconciles
   inventory. A copy left by an ended request is taken over by a new request
-  for it (resuming what was fetched); a live request's copy is never shared.
+  for it (resuming what was fetched) and checked by a Media session of its own;
+  a live request's copy is never shared.
   An ended request's leftover transfers are cleared a day after it ends, once
   not seeding (`transfer_control.release_finished`); library files are never touched. Woken by events; hibernates between.
 - **Media Agent** (cheap tier, self-escalates, one session per landed
@@ -132,17 +148,20 @@ Everything new lives in `backend/agents/`:
   policy. Pass relevant values to agents and use the same contract in UI/tools.
 - Current model defaults: Fetch cheap with smart review and escalation
   (`SPARROW_FETCH_SCOUT=off` keeps it smart throughout), Media cheap with self-escalation,
-  Librarian and Discovery cheap with bounded turns and spend. The subtitle agent
-  (household switch) is managed by the smart model when an AltProvider key is set (Settings →
-  Connections, or `ALTPROVIDER_API_KEY`), else
-  Assistant Large at medium effort with prompt caching. Cheap page checkers
-  (the cheap model, the smart model second opinion when borderline) read every page; the
-  manager reads only what they flag plus audit pages. Sources are tried in order:
+  Librarian and Discovery cheap with bounded turns and spend. Cheap is
+  `glm-5.3-flash`, smart is `glm-5.3` (Z.ai key in Settings → Connections or
+  `ZAI_API_KEY`). The subtitle agent (household switch) is managed by `glm-5.3`
+  at high effort. Cheap page checkers (`glm-5.3-flash`, `glm-5.3` second opinion
+  when borderline) read every page; the manager reads only what they flag plus
+  audit pages. Sources are tried in order:
   the release's text tracks, its picture (Blu-ray/DVD) tracks read by the cheap
   vision model (only with the switch on, within the title's allowance), an
   archive track for the same episode, then writing. A
   human-made track is verified, never edited (only OCR and timing fixes): a
-  failing one is set aside for the next source. Sparrow-written tracks are
+  failing one is set aside for the next source. Ads and release credits
+  ("www.…", "Subtitles by …") are the one exception: code shortlists them,
+  the cheap model confirms, and those whole captions are deleted
+  (`subtitle_promos.py`). Sparrow-written tracks are
   edited through tools that re-measure every change. Checker and manager spend
   share one per-title allowance (the household per-case limit unless
   `SPARROW_SUBTITLE_BUDGET` is set); the design target is under $1 per title.
@@ -152,9 +171,11 @@ Everything new lives in `backend/agents/`:
   including timing measurement and correction for foreign dialogue, is built in
   and makes no model call; no setup-agent implementation is planned now.
   Keep model roles configurable with `SPARROW_SMART_MODEL` / `SPARROW_CHEAP_MODEL`.
+  GLM's own default effort is max, so every call sends one (low, high or max).
+  The benchmark against the previous setup is
+  `docs/agentic-audit/GLM_BENCHMARK_2026-11-25.md`.
   These defaults are the role profiles in `profiles.py`; sessions and ledger
-  rows record the profile id and version they ran under. Effort is sent only
-  where a model accepts it (never to Small 4.5). `SPARROW_PROFILES` (JSON per
+  rows record the profile id and version they ran under. `SPARROW_PROFILES` (JSON per
   role) overrides fields for evaluations. Escalated Fetch searching gets $0.02
   of smart-model calls per wave, up to three waves; two note-only turns make
   later timer wakes back off. Spend counts per request or subscription across
@@ -185,7 +206,7 @@ Everything new lives in `backend/agents/`:
 
 - Dev: `./dev.sh` (backend :8888 + vite :3000)
 - Prod: `./start.sh` (builds frontend, serves from backend)
-- Env: `PROVIDER_API_KEY`, `TMDB_API_KEY` (or set both in Settings).
+- Env: `ZAI_API_KEY`, `TMDB_API_KEY` (or set both in Settings).
 
 ## Installation handoff
 

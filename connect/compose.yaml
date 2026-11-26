@@ -1,0 +1,28 @@
+# Sparrow Connect: run with `docker compose up -d --build` in this folder.
+services:
+  connect:
+    build: .
+    restart: unless-stopped
+    # CONNECT_ZONE_ID, CONNECT_DOMAIN and a DNS key limited to h.<domain>.
+    env_file: .env
+    volumes:
+      - connect-data:/data
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+      - "8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+volumes:
+  connect-data:
+  caddy-data:
+  caddy-config:

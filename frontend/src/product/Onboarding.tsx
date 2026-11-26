@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, patch, post } from "./api";
 import { ErrorNote, Loading, Page, useResource } from "./ui";
 import { Tick } from "./Brand";
-import { KEYS, KeyField, type KeyName } from "./Keys";
+import { KEYS, KeyField, missingKeys, type KeyName } from "./Keys";
 import DownloadApp from "./DownloadApp";
 import Storage from "./Storage";
 
@@ -15,7 +15,6 @@ type Setup = {
   step: Step;
   tmdb_configured: boolean;
   reasoning_configured: boolean;
-  altprovider_configured: boolean;
   libraries: string[];
   download_destinations: string[];
   can_finish: boolean;
@@ -84,7 +83,13 @@ export default function Onboarding({
   );
   const keyState = (configured: boolean, required: boolean) =>
     configured ? "On server" : required && !library ? "Missing" : "Optional";
-  const checks = state
+  const checks: {
+    label: string;
+    ok: boolean;
+    value: string;
+    step: Step;
+    optional?: boolean;
+  }[] = state
     ? [
         {
           label: "TMDB key",
@@ -93,17 +98,10 @@ export default function Onboarding({
           step: "providers" as Step,
         },
         {
-          label: "Provider key",
+          label: "Z.ai key",
           ok: state.reasoning_configured,
           value: keyState(state.reasoning_configured, true),
           step: "providers" as Step,
-        },
-        {
-          label: "AltProvider key",
-          ok: state.altprovider_configured,
-          value: keyState(state.altprovider_configured, false),
-          step: "providers" as Step,
-          optional: true,
         },
         {
           label: "Library",
@@ -176,8 +174,7 @@ export default function Onboarding({
                 >
                   <strong>Find and download for me</strong>
                   <span id="choice-autopilot" aria-hidden="true">
-                    Needs a TMDB key, an Provider key, storage and a download
-                    app.
+                    Needs a TMDB key, a Z.ai key, storage and a download app.
                   </span>
                 </button>
                 <button
@@ -355,9 +352,7 @@ function KeysStep({
         config.setData(saved);
         setDraft({});
       }
-      const absent = KEYS.filter(
-        (key) => key.required && !saved[`${key.name}_configured`],
-      ).map((key) => key.name);
+      const absent = missingKeys(saved);
       setMissing(absent);
       if (absent.length) {
         requestAnimationFrame(() =>

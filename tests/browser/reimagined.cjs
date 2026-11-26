@@ -240,12 +240,16 @@ fs.mkdirSync(out, { recursive: true });
   await expect(page.getByRole("status")).toHaveCount(0);
 
   await go("/title/tv/101");
-  await expect(page.locator(".episode")).toHaveCount(1);
+  // The whole season shows; the one episode here is playable.
+  await expect(page.locator(".ep")).toHaveCount(3);
+  await expect(page.locator(".ep.ready")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Request episodes", exact: true })
     .click();
   await page.getByRole("dialog").waitFor();
-  await page.getByRole("checkbox").first().check();
+  // Episode 1 is here already, so it comes ticked and can't be asked for again.
+  assert.equal(await page.getByRole("checkbox").first().isDisabled(), true);
+  await page.getByRole("checkbox", { disabled: false }).first().check();
   await snapshot("episode-request", true);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);

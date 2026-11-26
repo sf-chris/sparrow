@@ -186,7 +186,7 @@ from .agents.models import JobStatus
 from .agents.runtime import PRICING_SOURCE, rates_for_model, spend_snapshot
 from . import __version__
 from .configuration import (
-    apply_config_update, effective_provider_key, effective_tmdb_key, public_config,
+    apply_config_update, effective_glm_key, effective_tmdb_key, public_config,
     repair_media_folders, track_saved_config,
 )
 from .doctor import build_report as build_doctor_report
@@ -236,6 +236,17 @@ def _classify_media_type(torrent_name: str) -> MediaType:
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
 
+async def fill_missing_years():
+    """Titles placed before their year was recorded take it from the catalogue."""
+    from .agents.node_tools import title_year
+
+    for item in storage.get_library():
+        if item.tmdb_id and not item.year:
+            details = catalogue.cached_title(item.media_type.value, item.tmdb_id) or {}
+            if title_year(details):
+                await storage.update_library_item(item.id, year=title_year(details))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global agent_service
@@ -251,6 +262,7 @@ async def lifespan(app: FastAPI):
     agent_service = AgentService(storage, DATA_DIR, broadcast)
     subtitles.attach(agent_service)
     subtitles.recover()
+    await fill_missing_years()
     discovery.register()
     from .services import managed_transmission
     # Bring back Sparrow's own Transmission without delaying startup.
@@ -263,7 +275,9 @@ async def lifespan(app: FastAPI):
     log_setup(DATA_DIR)
     migration_task=asyncio.create_task(catalogue.migrate_verified_legacy(broadcast))
     moves_task = asyncio.create_task(moves.loop())
+    await connect.start()
     yield
+    await connect.stop()
     await subtitles.stop()
     migration_task.cancel()
     moves_task.cancel()
@@ -593,8 +607,7 @@ class ConfigUpdate(BaseModel):
     torrent_client: Optional[dict] = None
     quality_preference: Optional[str] = None
     tmdb_api_key: Optional[str] = None
-    provider_api_key: Optional[str] = None
-    altprovider_api_key: Optional[str] = None
+    glm_api_key: Optional[str] = None
     onboarding_complete: Optional[bool] = None
     seeding_ratio_limit: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
     seeding_time_hours: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
@@ -606,8 +619,7 @@ class ConfigUpdate(BaseModel):
     smart_model: Optional[str] = None
     cheap_model: Optional[str] = None
     clear_tmdb_api_key: bool = False
-    clear_provider_api_key: bool = False
-    clear_altprovider_api_key: bool = False
+    clear_glm_api_key: bool = False
 
 
 class AddDownloadRequest(BaseModel):
@@ -648,7 +660,7 @@ async def onboarding_status():
         "has_library": bool(config.library_dir),
         "has_torrent_client": config.torrent_client.type != TorrentClientType.NONE,
         "has_tmdb_key": bool(effective_tmdb_key(config)),
-        "has_provider_key": bool(effective_provider_key(config)),
+        "has_model_key": bool(effective_glm_key(config)),
     }
 
 
@@ -747,12 +759,12 @@ async def health_overview():
                 "actions": ["Add TMDB key"],
             })
 
-    if not effective_provider_key(config):
+    if not effective_glm_key(config):
         issues.append({
-            "id": "provider_missing",
+            "id": "model_key_missing",
             "title": "Reasoning key is missing",
-            "detail": "Fetch, Media, and Librarian agents need an Provider API key.",
-            "actions": ["Add Provider key"],
+            "detail": "Fetch, Media, and Librarian agents need a Z.ai API key.",
+            "actions": ["Add a Z.ai key"],
         })
 
     if not shutil.which("ffprobe"):
@@ -1365,6 +1377,8 @@ install_curation(app, accounts, lambda: agent_service)
 subtitles = install_subtitles(app, accounts, nodes, catalogue, lambda: agent_service)
 from .agents.playback import install_playback
 playback = install_playback(app, storage, accounts, nodes, catalogue)
+from .agents.connect import install_connect
+connect = install_connect(app, DATA_DIR)
 from .agents.discovery import install_discovery
 discovery = install_discovery(app, accounts, catalogue, lambda: agent_service)
 from .agents.ledger import install_ledger

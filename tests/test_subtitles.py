@@ -28,10 +28,11 @@ def srt(starts):
 # backend.main loads the developer's .env on import; subtitle tests must not
 # pick up real provider keys or model overrides from it (or spend with them).
 HERMETIC = {
-    "ALTPROVIDER_API_KEY": "",
+    "ZAI_API_KEY": "",
     "SPARROW_SUBTITLE_MODEL": "",
-    "SPARROW_SUBTITLE_CONTRACTOR": "",
-    "SPARROW_SUBTITLE_VERIFIER": "",
+    # No page checker unless a test names one: the manager reads every page.
+    "SPARROW_SUBTITLE_CONTRACTOR": "off",
+    "SPARROW_SUBTITLE_VERIFIER": "off",
     "SPARROW_SUBTITLE_BUDGET": "",
     "SPARROW_SUBTITLE_ARCHIVE": "off",
 }
@@ -262,7 +263,7 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.model, DEFAULT_REVIEW_MODEL)
         self.assertEqual(session.status, SessionStatus.CLOSED)
         profile = self.service.runtime.profile_for(session)
-        self.assertEqual((profile.id, profile.effort_sent), ("subtitle_manager", "medium"))
+        self.assertEqual((profile.id, profile.effort_sent), ("subtitle_manager", "high"))
         self.assertTrue(profile.cache)
         self.assertGreaterEqual(profile.max_tokens, 16000)
         self.assertEqual(session.profile, "subtitle_manager")
@@ -447,7 +448,7 @@ class SubtitleTests(unittest.IsolatedAsyncioTestCase):
         asset = {"node_id": "local", "root_id": "library", "path": "movie.mkv", "item_id": "none"}
         execute = AsyncMock(return_value=listing)
         with patch.object(manager.nodes, "execute", execute), patch.object(manager, "authority"), \
-                patch.object(manager, "update"), patch.object(module, "reader_model", lambda: "cheap-model"):
+                patch.object(manager, "update"), patch.object(module, "reader_model", lambda: "glm-5.3-flash"):
             for verify, offered in ((False, ["embedded:2"]), (True, ["embedded:2", "embedded:3"])):
                 task = {"id": "picture-task", "state": "finding", "data": {
                     "language": "en", "kind": "full", "upload": None, "audio_index": 1, "verify": verify,
@@ -883,12 +884,12 @@ class PageCheckerTests(unittest.TestCase):
     def test_blank_overrides_use_the_defaults_and_off_disables(self):
         from backend.agents import subtitles as module
 
-        blank = {"ALTPROVIDER_API_KEY": "key", "SPARROW_SUBTITLE_CONTRACTOR": "", "SPARROW_SUBTITLE_VERIFIER": " "}
+        blank = {"SPARROW_SUBTITLE_CONTRACTOR": "", "SPARROW_SUBTITLE_VERIFIER": " "}
         with patch.dict("os.environ", blank):
             self.assertEqual((module.contractor_model(), module.verifier_model()), (module.DEFAULT_CONTRACTOR, module.DEFAULT_VERIFIER))
         with patch.dict("os.environ", {**blank, "SPARROW_SUBTITLE_VERIFIER": "off"}):
             self.assertEqual(module.verifier_model(), "")
-        with patch.dict("os.environ", {"ALTPROVIDER_API_KEY": "", "SPARROW_SUBTITLE_CONTRACTOR": ""}):
+        with patch.dict("os.environ", {"SPARROW_SUBTITLE_CONTRACTOR": "off"}):
             self.assertEqual(module.contractor_model(), "")
 
     def test_quoted_text_and_order_recover_lines_and_retries_are_bounded(self):
@@ -944,6 +945,25 @@ class CoveredSpeechTests(unittest.TestCase):
         found = asyncio.run(subtitle_contract.check_pages(checker, pages, utterances, cues[:1], {}, "ja", {"u00001": "a", "u00002": "b"}))
         gaps = [g["speech"] for items in found["missing"].values() for g in items]
         self.assertEqual(gaps, [["u00002"]])
+
+
+class WrittenDraftTests(unittest.TestCase):
+    def test_a_line_heard_twice_at_once_is_one_caption_citing_both(self):
+        """Four Lions, GLM run: the recogniser heard "Yeah." twice at 64.2 s.
+        Two identical captions collapse to one when the file is read back, and
+        every later caption then cited its neighbour's speech."""
+        twice = [utterance(1, 62.0), utterance(2, 64.2), utterance(3, 64.2), utterance(4, 66.0)]
+        pages = [{"number": 1}]
+        written = {"1": [
+            {"speech": ["u00001"], "text": "Focus on what you can see."},
+            {"speech": ["u00002"], "text": "Yeah."},
+            {"speech": ["u00003"], "text": "Yeah."},
+            {"speech": ["u00004"], "text": "Get on with it."},
+        ]}
+        cues = review.compose(pages, written, twice, [])
+        self.assertEqual([c["text"] for c in cues], ["Focus on what you can see.", "Yeah.", "Get on with it."])
+        self.assertEqual(cues[1]["speech"], ["u00002", "u00003"])
+        self.assertEqual(len(cues_from_text(render(cues, vtt=True), "vtt")), len(cues))
 
 
 class ProfessionalRewriteTests(unittest.TestCase):
@@ -1070,7 +1090,7 @@ class PictureSubtitleTests(unittest.IsolatedAsyncioTestCase):
             rows = numbers[:-1] if len(calls) == 1 else numbers
             return {"lines": [{"n": n, "text": lines[n - 1][2].replace("\n", " / ")} for n in rows]}, {"input_tokens": 900, "output_tokens": 90}
 
-        reader.model = "cheap-model"
+        reader.model = "glm-5.3-flash"
         text, spend = await read_pictures(reader, rendered)
         self.assertEqual(len(calls), 2)
         self.assertEqual([c["text"] for c in cues_from_text(text, "srt")], [l[2] for l in lines])
@@ -1085,7 +1105,7 @@ class PictureSubtitleTests(unittest.IsolatedAsyncioTestCase):
             calls.append(numbers)
             return {"lines": [{"n": n, "text": f"line {n}"} for n in numbers]}, {"input_tokens": 900, "output_tokens": 90}
 
-        reader.model = "cheap-model"
+        reader.model = "glm-5.3-flash"
         rendered = {"events": [{"n": n, "start": n, "end": n + 0.5} for n in (1, 2, 3)], "rows_per_sheet": 1, "sheets": ["a", "b", "c"]}
         text, spend = await read_pictures(reader, rendered, parallel=1, max_dollars=0.0001)
         self.assertEqual(calls, [[1]])

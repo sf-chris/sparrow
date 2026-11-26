@@ -2,7 +2,7 @@
 
 Set SPARROW_FFMPEG, SPARROW_FFPROBE and SPARROW_TRANSCRIPTION_MODEL to installed
 components. Run: .venv/bin/python tests/subtitle_audio_benchmark.py NEW_DIRECTORY
-No network, Assistant calls, movie downloads or quality certification occur.
+No network, model calls, movie downloads or quality certification occur.
 """
 
 import json

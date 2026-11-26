@@ -44,19 +44,18 @@ answers, the network refused):
 .venv/bin/python tests/evals/run_live.py --dry-run
 ```
 
-The paid run with the AltProvider models (the Provider key has no credit):
+The paid run, with the Z.ai key in the environment:
 
 ```sh
-SPARROW_RUN_LIVE_EVALS=1 ALTPROVIDER_API_KEY=... SPARROW_CHEAP_MODEL=cheap-model SPARROW_SMART_MODEL=smart-model \
-  SPARROW_FFMPEG=... SPARROW_FFPROBE=... .venv/bin/python tests/evals/run_live.py --max-dollars 15 \
+SPARROW_RUN_LIVE_EVALS=1 ZAI_API_KEY=... SPARROW_FFMPEG=... SPARROW_FFPROBE=... \
+  .venv/bin/python tests/evals/run_live.py --max-dollars 15 \
   --output tests/evals/artifacts/live-$(date +%Y%m%d).json
 ```
 
-The dry run projects about $1.30 for all 126 runs if each agent took the
-reference path (subtitles about $1.08 of it, mostly the the smart model manager; Fetch
-$0.09 with its smart pick reviews; Media $0.05; Librarian $0.03; Discovery $0.02).
-Real agents take more turns and reason longer, so expect roughly $3–6, well
-inside the cap.
+The models are the defaults (`glm-5.3-flash` cheap, `glm-5.3` smart and subtitle
+manager) unless `SPARROW_CHEAP_MODEL`, `SPARROW_SMART_MODEL` or
+`SPARROW_SUBTITLE_*` say otherwise. All 126 runs cost $0.46 on 25 November 2026
+(`docs/agentic-audit/GLM_BENCHMARK_2026-11-25.md`).
 `SPARROW_PROFILES` overrides a role's model, effort or bounds for comparisons;
 `--cases`, `--roles` and `--set main|holdout` narrow a run, `--keep-state` keeps
 each run's state directory for `python -m backend.agents.ledger`.
@@ -87,6 +86,24 @@ recorded usage/estimated spend. Successful prose alone cannot pass. The offline
 failure rule without a provider call. Keep live runs separate from controlled
 results; do not choose new production defaults from the latter.
 
+## One real title's subtitles
+
+`title_subtitles.py` runs a real film through the subtitle pipeline (the real
+speech recogniser, page checkers and manager on the configured models) in a new
+isolated state directory. Give it a human track to verify (`--track`), or none
+for Sparrow to write one (`--reference` compares the result with a human track).
+Speech evidence is built once and reused with `--evidence-from`, so two model
+setups differ only in their models. The online archive is off unless
+`--archive`. It reports the outcome, the track's timing and review, and model
+calls and cost by ledger phase.
+
+```sh
+SPARROW_FFMPEG=... SPARROW_FFPROBE=... SPARROW_TRANSCRIPTION_MODEL=.../whisper-medium ZAI_API_KEY=... \
+  SPARROW_SUBTITLE_MODEL=glm-5.3 SPARROW_SUBTITLE_CONTRACTOR=glm-5.3-flash SPARROW_SUBTITLE_VERIFIER=glm-5.3 \
+  .venv/bin/python tests/evals/title_subtitles.py --video "Four Lions.mp4" --title "Four Lions" --year 2010 \
+  --track four-lions.en.srt --state data/bench/fl-verify --output fl-verify.json
+```
+
 ## Search benchmark (issue #15)
 
 `search_bench.py` measures what finding a title costs, before and after a change
@@ -113,7 +130,7 @@ regenerate it with each scout change and compare:
 
 The live search-only mode makes paid model calls and real indexer and TMDB
 searches, so it needs explicit consent and keys in the environment
-(`PROVIDER_API_KEY` and/or `ALTPROVIDER_API_KEY`, `TMDB_API_KEY`; models from
+(`ZAI_API_KEY`, `TMDB_API_KEY`; models from
 `SPARROW_CHEAP_MODEL` / `SPARROW_SMART_MODEL`). It runs real Fetch Agents on a new
 state directory under `artifacts/`, intercepts the transfer at the storage node (no
 torrent is ever added), stops each request once its download is chosen, and

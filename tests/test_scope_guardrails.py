@@ -65,7 +65,7 @@ class ScopeGuardBase(unittest.IsolatedAsyncioTestCase):
             staging_dir=str(self.staging),
             library_dir=str(self.library),
             tmdb_api_key="fixture",
-            provider_api_key="fixture",
+            glm_api_key="fixture",
             max_active_transfers=2,
             torrent_client=TorrentClientConfig(type=TorrentClientType.TRANSMISSION),
         ))

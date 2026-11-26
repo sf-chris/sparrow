@@ -48,7 +48,7 @@ transcription and semantic comparison, with targeted scene review and the exact
 copy of *Four Lions* as the first acceptance case. The opt-in
 [audio trial](docs/agentic-audit/SUBTITLE_TRIAL.md) ran on recorded English fixtures.
 The [Four Lions experiment](docs/agentic-audit/FOUR_LIONS_TRIAL.md) now includes
-actual Sparrow-tool acquisition, foreign-speech samples, live Assistant comparisons
+actual Sparrow-tool acquisition, foreign-speech samples, live model comparisons
 and separate browser rendering. The 30 September iteration adds durable scene
 investigation and draft repairs, a full-soundtrack recognition pass, and 24
 positions tested in Sparrow's actual player using isolated fixture state. It
@@ -117,7 +117,11 @@ in stage 2 and cover each later endpoint; stage 7 completes external access
 and diagnostics. Backup/migration safety and installation checks begin when
 persistent state and packaging change, rather than waiting until stage 7.
 
-**Parked:** all TV/Emby/casting work and the setup/deployment agent. Retain the
+**Current (2026-11-26):** the phone as a remote, casting to a TV (AirPlay first,
+then Chromecast) and opt-in Sparrow Connect for HTTPS addresses, issue #38. Homes
+that can't open a port (relay, peer-to-peer) follow later, issue #37.
+
+**Parked:** Emby integration, native TV apps and the setup/deployment agent. Retain the
 TV option notes in the product plan, but do not investigate or implement them
 as dependencies of this sequence. Normal guided setup remains core. Source
 expansion, music, native phone apps and an operated relay service remain later
@@ -189,8 +193,9 @@ wrapper around an existing automation stack.
 - Prowlarr/Torznab may eventually exist as optional compatibility bridges.
 - Guided setup, mobile responsiveness, accounts/sharing, inherited preferences
   and browser playback are part of the complete current owner experience.
-- All TV work is parked, including the installed Emby app, real-server bridges,
-  protocol compatibility, casting and a dedicated Sparrow TV app.
+- Casting from the phone (AirPlay, Chromecast) is current work (issue #38). The
+  rest of TV work stays parked: the installed Emby app, real-server bridges,
+  protocol compatibility and a dedicated Sparrow TV app.
 - Bundle or vendor selected subtitle-processing components so the owner manages
   one feature; agents review results and handle uncertainty rather than driving
   every predictable processing step.
@@ -203,8 +208,6 @@ wrapper around an existing automation stack.
 - Existing-library import and correction are core collection-management work.
 - Discovery becomes a genuine tool-using agent; instant title suggestions remain
   useful. Existing Fetch, Media and Librarian loops already provide agentic work.
-- Evaluate a Assistant Agent SDK adapter for discovery, preserving durable domain
-  state and tool guardrails. SDK migration is conditional on demonstrated parity.
 - Video comes first. Music and a mobile listening experience are a later
   product expansion.
 - Asynchronous provider batch APIs are a cost optimization for non-urgent work,
@@ -396,8 +399,6 @@ On a clean machine or clean account:
   unmatched identities and rescans that preserve verification evidence.
 - [ ] Add a Discovery Agent that searches/refines using tools and returns title
   cards plus exact scope/language/monitoring intent for user-authorised requests.
-- [ ] Evaluate the Assistant Agent SDK behind an adapter using cancellation,
-  restart, cost, restricted-tool and structured-result acceptance checks.
 - [ ] Keep the existing management agents operational while proving migration
   parity; add subtitle quality-review sessions over the built-in processing
   pipeline. Retain setup-agent extension points without implementing that agent.
@@ -499,10 +500,9 @@ Example fallback:
 5. A failed or late batch never corrupts the job; Sparrow backs off or returns
    to synchronous reasoning.
 
-AltProvider's Batch API currently documents discounted asynchronous processing with
-a completion window of up to 24 hours, which fits this class of work. It does
-not fit the dinner scenario, so Sparrow must never require it for urgent jobs:
-<https://retired-provider.invalid>
+A provider batch API with discounted asynchronous processing and a completion
+window of up to a day fits this class of work. It does not fit the dinner
+scenario, so Sparrow must never require it for urgent jobs.
 
 ### Acceptance test
 

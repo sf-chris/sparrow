@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+from ..configuration import effective_glm_key
 from ..models import DownloadStatus, MediaType, TorrentClientType
 from ..storage import Storage
 from ..services.torrent_client import TorrentManager, start_configured_client
@@ -117,10 +118,7 @@ class AgentService:
         self.toolbox = Toolbox(storage, self.store, self.emit, broadcast)
         self.runtime = AgentRuntime(
             self.store,
-            api_key_getter=lambda: (
-                storage.get_config().provider_api_key
-                or os.getenv("PROVIDER_API_KEY", "")
-            ),
+            api_key_getter=lambda: effective_glm_key(storage.get_config()),
             on_session_change=self._session_changed,
             on_tool_activity=self._tool_activity,
         )
@@ -498,6 +496,9 @@ class AgentService:
             download = self.storage.get_download(session.download_id)
             if not download:
                 continue
+            if download.metadata.get("job_id") not in (None, "", session.job_id):
+                # A newer request took this copy over: its own session settles it.
+                continue
             await self.toolbox.refresh_missing_verified_quality(session)
             if download.status == DownloadStatus.ORGANIZED:
                 continue
@@ -619,11 +620,13 @@ class AgentService:
         task.add_done_callback(self._wake_tasks.discard)
 
     async def _spawn_media(self, event: Event) -> None:
-        """A download landed: one Media Agent session per landed download."""
+        """A download landed: one Media Agent session per landed download and
+        request. A copy a new request took over gets its own session; the
+        earlier request's session knows only that request's episodes."""
         existing = [
             s
             for s in self.store.get_sessions(AgentKind.MEDIA)
-            if s.download_id == event.download_id
+            if s.download_id == event.download_id and s.job_id == event.job_id
         ]
         if existing:
             self._wake_soon(existing[0].id, event)

@@ -113,7 +113,7 @@ def main():
     port = free_port()
     base = f"http://127.0.0.1:{port}"
     env = {**os.environ, "SPARROW_DATA_DIR": str(state / "server"),
-           "PROVIDER_API_KEY": "", "ALTPROVIDER_API_KEY": "", "TMDB_API_KEY": ""}
+           "ZAI_API_KEY": "", "TMDB_API_KEY": ""}
     log = open(state / "server.log", "w")
     server = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", str(port)],

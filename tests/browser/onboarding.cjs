@@ -108,13 +108,12 @@ const out =
     await page
       .getByRole("button", { name: "Find and download for me", exact: true })
       .click();
-    await page.getByLabel("Provider API key", { exact: true }).waitFor();
+    await page.getByLabel("Z.ai API key", { exact: true }).waitFor();
     // A key already on the server needs no retyping; a missing one is named at its field.
     assert.equal(
       await page.getByLabel("TMDB API key", { exact: true }).getAttribute("placeholder"),
       "Leave blank to keep it",
     );
-    await page.getByLabel("AltProvider API key", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
       .getByRole("alert")
@@ -127,7 +126,7 @@ const out =
     );
     await audit("setup-provider-error");
     await page
-      .getByLabel("Provider API key", { exact: true })
+      .getByLabel("Z.ai API key", { exact: true })
       .fill("fixture-only-no-provider-calls");
     await page
       .getByRole("button", { name: "Save and continue", exact: true })
@@ -257,7 +256,7 @@ const out =
       (
         await context.request.patch(base + "/api/v1/admin/config", {
           headers,
-          data: { clear_tmdb_api_key: true, clear_provider_api_key: true },
+          data: { clear_tmdb_api_key: true, clear_glm_api_key: true },
         })
       ).status(),
       200,

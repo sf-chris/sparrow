@@ -3,8 +3,8 @@
 Updated 30 September 2026. **Watchability is the owner-approved acceptance standard.**
 The opt-in [audio feasibility trial](agentic-audit/SUBTITLE_TRIAL.md) ran on
 licensed English fixtures. The subsequent [Four Lions trial](agentic-audit/FOUR_LIONS_TRIAL.md)
-downloaded the real movie, sampled foreign speech, ran live Assistant comparisons
-using the existing CLI login and checked native browser captions. It exposed
+downloaded the real movie, sampled foreign speech, ran live model comparisons
+and checked native browser captions. It exposed
 recognition and semantic-review failures. The 30 September iteration added
 evidence-backed draft repairs and actual Sparrow-player checks at 24 positions;
 the owner subsequently clarified that minor translation uncertainty is not a
@@ -24,15 +24,15 @@ episode passes, rejection controls, UI checks and the measured limits.
 
 **Current scope (30 September):** foreign-language audio with English captions.
 The product now builds whole-soundtrack speech evidence, measures and corrects
-caption timing without a model call, and, when checking is on, has Assistant Large
-review the track page by page, writing its own gloss before each page's captions
+caption timing without a model call, and, when checking is on, has the subtitle
+manager model review the track page by page, writing its own gloss before each page's captions
 are revealed, with a tool-enforced approval gate. The
 [evidence record](agentic-audit/SUBTITLE_EVIDENCE.md) documents the measurements,
 heuristics and validation boundary. Sections below describe the original plan.
 
 **Latest direction:** use the owner's proposed audio-first approach. Extract the
 actual soundtrack, transcribe speech in its original language with word timings,
-then use the existing Assistant agent to match its meaning against subtitle cues.
+then use the existing subtitle agent to match its meaning against subtitle cues.
 Measure timing from those correspondences. Keep direct audio/scene review for
 uncertain passages and final playback acceptance. A large audiovisual model
 reviewing every scene is no longer the proposed prerequisite.
@@ -46,21 +46,21 @@ Preserve usable captions. Broken tracks, wrong content, substantial missing
 dialogue and material timing problems still require investigation or repair.
 Matching speech activity, trusting a release name or receiving a successful
 process exit does not establish that correspondence. Account/key preference:
-local processing plus the existing Provider key first; additional cloud
+local processing plus the existing model key first; additional cloud
 providers are optional.
 
 ## Recommended architecture
 
 One persistent Subtitle Agent owns the task through discovery, inspection,
 repair, rechecking and publication. Ordinary tools do extraction, transcription,
-acoustic alignment, rendering and measurement. Assistant reasons over their
+acoustic alignment, rendering and measurement. The model reasons over their
 observations, identifies translation/coverage problems and chooses further work.
 
 ```mermaid
 flowchart TD
     A[Exact movie and chosen audio stream] --> B[Extract audio with original timeline]
     B --> C[Local multilingual transcript and word times]
-    D[Embedded or downloaded subtitles] --> E[Assistant matches phrases by meaning]
+    D[Embedded or downloaded subtitles] --> E[Model matches phrases by meaning]
     C --> E
     E --> F[Measure cue timing and missing dialogue]
     F --> G[Versioned repair or another candidate]
@@ -73,9 +73,9 @@ flowchart TD
     J --> K[Checked publication with evidence]
 ```
 
-This analyses real spoken words and their timing. It does not mean Assistant
+This analyses real spoken words and their timing. It does not mean the model
 personally heard the soundtrack. Records must distinguish recognition evidence,
-Assistant's semantic review, direct-audio review and visual playback checks.
+the model's semantic review, direct-audio review and visual playback checks.
 A transcript can be wrong; a precise-looking timestamp cannot make it true.
 
 ## 1. Extract the correct soundtrack
@@ -167,19 +167,19 @@ or other on-screen text on its own.
 
 ## 4. Match meaning, then measure timing
 
-Supply Assistant with source-language utterances, their stable word IDs and time
+Supply the model with source-language utterances, their stable word IDs and time
 ranges, neighbouring context, and candidate subtitle cue IDs/text. It identifies
 which source phrase or phrases correspond to each caption and assesses meaning,
 omissions, invented words, negation, names, numbers and speaker attribution.
 
 For same-language captions, tools can propose lexical matches, with the agent
-resolving paraphrases and ambiguity. For translations, Assistant compares meaning,
+resolving paraphrases and ambiguity. For translations, the model compares meaning,
 optionally producing a source-grounded English gloss alongside the downloaded
 caption. Do not use a candidate-conditioned transcript as independent evidence.
 
 Translations reorder, merge and split words. Use many-to-many phrase/meaning
 correspondences, with word mappings where meaningful. Require stable IDs; tools
-derive the timestamps from saved observations. Assistant must not invent times
+derive the timestamps from saved observations. The model must not invent times
 or manufacture a source phrase to justify a convenient subtitle.
 
 Use surrounding dialogue and sequence to distinguish repeated short phrases.
@@ -226,7 +226,7 @@ If recognition is uncertain, request more context, another language hypothesis,
 another recogniser or direct audio review. A source-language forced aligner
 can fit an incorrect transcript; it cannot adjudicate disputed wording.
 If stronger tools still disagree, keep the passage unresolved. Do not buy more
-Assistant reasoning to guess what inaudible speech says.
+model reasoning to guess what inaudible speech says.
 
 Where missing captions can be generated under policy, preserve their generated
 provenance and require independent source/translation checks. Combining tracks
@@ -278,9 +278,9 @@ unresolved state outside demonstrated capability.
 | FFmpeg/ffprobe | Local stream inspection, extraction and reversible timed artifacts |
 | faster-whisper | Full-timeline multilingual source transcript and word times; compare small/medium int8 with the current base baseline |
 | WhisperX alignment | Optional timing refinement against the source language; enable per evaluated language |
-| Existing Assistant API key | Persistent investigation, phrase translation/matching, candidate selection and repair decisions |
+| Existing model key | Persistent investigation, phrase translation/matching, candidate selection and repair decisions |
 | Actual player/browser checks | Verify delivery, selection, cue rendering, seeking and playback clock |
-| Local audio/visual reviewer or Gemini | Optional exception investigation or stronger review, evaluated only when necessary |
+| Local or hosted audio/visual reviewer | Optional exception investigation or stronger review, evaluated only when necessary |
 
 The server inspected has an i5-1240P, about 16 GB RAM and Intel integrated
 graphics. Audio-only ASR is the first feasibility target on that hardware;
@@ -294,14 +294,12 @@ dependencies. Gemma documents a 30-second audio limit; Qwen's documented
 full-precision configuration is much heavier. Neither has been tested here.
 [Gemma audio](https://ai.google.dev/gemma/docs/capabilities/audio),
 [Qwen3-Omni](https://github.com/QwenLM/Qwen3-Omni).
-Gemini remains optional under an explicit external-processing policy.
-[Gemini video inputs](https://ai.google.dev/gemini-api/docs/video-understanding).
+A hosted audiovisual reviewer remains optional under an explicit external-processing policy.
 
-Local extraction/transcription plus Assistant text review needs no additional
-inference-provider key. Assistant still receives the configured source/subtitle
+Local extraction/transcription plus model text review needs no additional
+inference-provider key. The model still receives the configured source/subtitle
 text; local processing does not make that cloud reasoning offline. Do not claim
-Assistant directly heard an audio clip: its standard model documentation lists
-text/image input. [Assistant capabilities](https://retired-provider.invalid).
+the model directly heard an audio clip.
 
 ## Integration, guardrails and operating behaviour
 
@@ -377,7 +375,7 @@ evaluate meaning separately from timing, and retain direct-audio uncertainty.
 | Slice | Deliverable | Acceptance evidence |
 | --- | --- | --- |
 | 1. Audio proof and reference | Extract audio, preserve the video clock and inspect representative dialogue across the film, including foreign passages | Dialogue/caption correspondence supports identity and timing; measured CPU/memory/latency; uncertainties recorded |
-| 2. Correspondence and repair | Assistant identifies the matching utterances; tools measure and repair material timing problems or find another track | Track belongs to this movie, follows dialogue and renders in Sparrow; minor prose disagreement does not block acceptance |
+| 2. Correspondence and repair | The model identifies the matching utterances; tools measure and repair material timing problems or find another track | Track belongs to this movie, follows dialogue and renders in Sparrow; minor prose disagreement does not block acceptance |
 | 3. Persistent investigation | Agent tools, scoped evidence, chunk recovery, alternative candidates and atomic checked publication | Restarts retain work; stale versions and unresolved watchability blockers cannot complete; originals survive |
 | 4. Automatic collection/player integration | Default triggers, imports/backfill, preferences, repairs and mandatory readiness | New episodes/imports work unattended; actual track selection and seeking are correct; personal offsets remain private |
 | 5. Generalisation and packaging | Frozen failure suite, unseen titles, live provider and installed-node/browser checks | Positive cases complete and negative cases are not falsely accepted using the deployed configuration; record remaining device/language limits |

@@ -6,8 +6,8 @@
  "state": "",
  "seconds": 1899,
  "models": {
-  "fetch": "cheap-model",
-  "smart": "smart-model"
+  "fetch": "previous-cheap-model",
+  "smart": "previous-smart-model"
  },
  "targets": {
   "search_median": 0.02,

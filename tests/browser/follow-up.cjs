@@ -112,6 +112,7 @@ fs.mkdirSync(out, { recursive: true });
     "Storage",
     "People",
     "Connections",
+    "Sparrow Connect",
     "Defaults",
     "Logs",
     "Account",

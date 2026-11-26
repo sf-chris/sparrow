@@ -1228,7 +1228,7 @@
   },
   "additional_backend": {
     "description_search_result": [],
-    "description_search_failure": "describe_to_titles failed\nTraceback (most recent call last):\n  File \"/home/oem/sparrow/backend/agents/resolution.py\", line 62, in _describe_to_titles\n    msg = await asyncio.wait_for(client.create_message(\n                                 ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oem/sparrow/.venv/lib/python3.11/site-packages/provider/_utils/_utils.py\", line 282, in wrapper\n    raise TypeError(msg)\nTypeError: Missing required arguments; Expected either ('max_tokens', 'messages' and 'model') or ('max_tokens', 'messages', 'model' and 'stream') arguments to be given\n",
+    "description_search_failure": "describe_to_titles failed: the model call was sent without its required arguments (model, messages and output limit).\n",
     "unmatched_library": {
       "stored_items": 2,
       "projected_items": 1,

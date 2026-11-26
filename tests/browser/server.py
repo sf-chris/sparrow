@@ -12,7 +12,7 @@ os.environ["SPARROW_DATA_DIR"] = str(STATE)
 # The fixture's folders live in its state directory; offer it in the folder picker.
 os.environ["SPARROW_FOLDER_ROOTS"] = str(STATE)
 # Blank rather than unset: main's load_dotenv() would refill unset keys from .env.
-for _key in ("PROVIDER_API_KEY", "ALTPROVIDER_API_KEY", "TMDB_API_KEY"):
+for _key in ("ZAI_API_KEY", "TMDB_API_KEY"):
     os.environ[_key] = ""
 from backend import main as m
 from backend.agents.service import AgentService
@@ -65,6 +65,8 @@ def details(identity):
         "original_language": "en",
         "poster_path": f"/art/{identity}.svg",
         "backdrop_path": f"/art/{identity}-backdrop.svg",
+        "genres": [{"name": "Drama"}, {"name": "Mystery"}],
+        "created_by": [{"name": "Petra Lind"}] if kind == "tv" else [],
         "seasons": (
             [
                 {"season_number": 1, "episode_count": 3, "name": "Season 1"},
@@ -85,6 +87,18 @@ async def tmdb(path, **kwargs):
                 for i, (name, kind) in TITLES.items()
                 if kwargs.get("query", "").lower() in name.lower()
             ]
+        }
+    if len(parts) > 2 and parts[2] in ("credits", "aggregate_credits"):
+        # Fictional people for the fictional fixture titles.
+        return {
+            "cast": [
+                {"name": n, "character": c}
+                for n, c in (
+                    ("Mara Ellison", "Ines Varga"), ("Tomas Reyes", "Keeper Hale"), ("June Okafor", "Dr. Adaeze"),
+                    ("Ilse Brandt", "Marta"), ("Sam Whitlow", "Young Ben"), ("Noor Haddad", "Radio Voice"),
+                )
+            ],
+            "crew": [{"job": "Director", "name": "Petra Lind"}],
         }
     if len(parts) > 2 and parts[2] == "season":
         return {

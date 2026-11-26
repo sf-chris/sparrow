@@ -1,20 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
+  Airplay,
   ArrowLeft,
+  Captions,
+  Cast,
   Maximize,
   Minimize,
+  Minus,
   Pause,
   Play,
-  RefreshCw,
+  Plus,
   RotateCcw,
   RotateCw,
+  Tv,
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { api, post, type Asset, type Effective } from "./api";
-import { SubtitleRepair, type Caption } from "./SubtitleRepair";
-import { ErrorNote, Field, Loading, episodeCode, useResource } from "./ui";
+import { api, patch, post, type Asset, type Effective } from "./api";
+import { type Caption } from "./SubtitleRepair";
+import { ErrorNote, Loading, episodeCode, useResource } from "./ui";
 
 type Playback = {
   id: string;
@@ -24,7 +29,32 @@ type Playback = {
   duration: number;
   audio_index: number | null;
   subtitles: Caption[];
+  /** Addresses a TV can fetch without this browser's sign-in. */
+  cast: {
+    url: string;
+    stream: string | null;
+    subtitles: { index: number; url: string }[];
+  };
 };
+type RemotePlayback = EventTarget & {
+  state: "connecting" | "connected" | "disconnected";
+  watchAvailability(callback: (available: boolean) => void): Promise<number>;
+  cancelWatchAvailability(id?: number): Promise<void>;
+  prompt(): Promise<void>;
+};
+/** Safari's AirPlay and the standard Remote Playback API (Chrome's cast). */
+type TvVideo = HTMLVideoElement & {
+  remote?: RemotePlayback;
+  webkitShowPlaybackTargetPicker?: () => void;
+  webkitCurrentPlaybackTargetIsWireless?: boolean;
+  webkitEnterFullscreen?: () => void;
+};
+const AIRPLAY =
+  typeof window !== "undefined" && "WebKitPlaybackTargetAvailabilityEvent" in window;
+const NATIVE_HLS =
+  typeof document !== "undefined" &&
+  !!document.createElement("video").canPlayType("application/vnd.apple.mpegurl");
+const absolute = (path: string) => new URL(path, window.location.href).href;
 const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
 const stamp = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds || 0));
@@ -34,8 +64,13 @@ const stamp = (seconds: number) => {
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 };
 /** Show the chosen subtitles. Tracks are matched by element, not position:
- *  Safari also lists the text tracks inside the file, which shifts positions. */
-function showSubtitle(element: HTMLVideoElement | null, chosen: unknown) {
+ *  Safari also lists the text tracks inside the file, which shifts positions.
+ *  On a TV the stream itself carries the one chosen track; show that. */
+function showSubtitle(
+  element: HTMLVideoElement | null,
+  chosen: unknown,
+  inStream = false,
+) {
   if (!element) return;
   const own = new Set<TextTrack>();
   element.querySelectorAll("track").forEach((el) => {
@@ -43,7 +78,10 @@ function showSubtitle(element: HTMLVideoElement | null, chosen: unknown) {
     el.track.mode = el.dataset.index === String(chosen) ? "showing" : "disabled";
   });
   for (let i = 0; i < element.textTracks.length; i++) {
-    if (!own.has(element.textTracks[i])) element.textTracks[i].mode = "disabled";
+    const track = element.textTracks[i];
+    if (own.has(track)) continue;
+    const text = track.kind === "subtitles" || track.kind === "captions";
+    track.mode = inStream && text && chosen !== -1 ? "showing" : "disabled";
   }
 }
 
@@ -60,6 +98,9 @@ function trackLabel(
     return fallback;
   }
 }
+/** Watching takes the whole screen: no navigation, the picture edge to edge,
+ * and the controls over it only while they are wanted. Track choices live in
+ * a small panel; subtitle repair is on the title page. */
 export default function Watch() {
   const { assetId } = useParams();
   const resource = useResource(
@@ -70,25 +111,18 @@ export default function Watch() {
     [assetId],
   );
   const data = resource.data;
+  useEffect(() => {
+    if (data) document.title = `${data.title} · Sparrow`;
+  }, [data?.title]);
   return (
-    <main id="main-content" className="page player-page">
-      <header className="player-head">
-        <Link className="back" to={data ? `/items/${data.asset.item_id}` : "/"}>
-          <ArrowLeft size={18} strokeWidth={2.5} />
-          Back to title
-        </Link>
-        <h1>
-          {data?.title || "Player"}
-          {data?.asset.episode ? (
-            <span className="num"> {episodeCode(data.asset)}</span>
-          ) : null}
-        </h1>
-      </header>
-      <ErrorNote error={resource.error} retry={resource.refresh} />
-      {resource.loading && !data ? (
-        <Loading label="Loading" />
+    <main id="main-content" className="watch on-air">
+      {data ? (
+        <Player key={assetId} {...data} />
       ) : (
-        data && <Player key={assetId} {...data} />
+        <div className="watch-waiting">
+          <ErrorNote error={resource.error} retry={resource.refresh} />
+          {resource.loading && <Loading page label="Starting" />}
+        </div>
       )}
     </main>
   );
@@ -122,6 +156,52 @@ function Player({
   const [length, setLength] = useState(asset.facts.duration || 0);
   const [muted, setMuted] = useState(false);
   const [full, setFull] = useState(false);
+  const [panel, setPanel] = useState(false);
+  // Whether a TV is in reach, and whether this video is playing on one.
+  const [tvs, setTvs] = useState(false);
+  const [tv, setTv] = useState<"off" | "connecting" | "on">("off");
+  const applied = useRef("");
+  // The controls and title show while the pointer moves, while paused and
+  // while the panel is open; otherwise they fade after a moment.
+  const [chrome, setChrome] = useState(true);
+  const hideTimer = useRef(0);
+  const wake = useCallback(() => {
+    setChrome(true);
+    clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => setChrome(false), 2800);
+  }, []);
+  useEffect(() => () => clearTimeout(hideTimer.current), []);
+  const shown = chrome || !playing || panel || busy || tv !== "off";
+  const navigate = useNavigate();
+  const back = () =>
+    (window.history.state?.idx ?? 0) > 0
+      ? navigate(-1)
+      : navigate(`/items/${asset.item_id}`);
+  async function nudge(track: Caption, seconds: number) {
+    if (!track.id) return;
+    const value = Math.round(seconds * 4) / 4;
+    try {
+      await patch(`/subtitles/tracks/${track.id}/offset`, { seconds: value });
+      setSession((current) =>
+        current
+          ? {
+              ...current,
+              subtitles: current.subtitles.map((t) =>
+                t.id === track.id
+                  ? {
+                      ...t,
+                      offset: value,
+                      url: t.url.split("?")[0] + "?offset=" + value,
+                    }
+                  : t,
+              ),
+            }
+          : current,
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   useEffect(() => {
     const change = () => setFull(document.fullscreenElement === screen.current);
     document.addEventListener("fullscreenchange", change);
@@ -144,7 +224,11 @@ function Player({
   }
   function fullscreen() {
     if (document.fullscreenElement) void document.exitFullscreen();
-    else void screen.current?.requestFullscreen?.().catch(() => {});
+    else if (screen.current?.requestFullscreen)
+      void screen.current.requestFullscreen().catch(() => {});
+    // An iPhone has no page full screen; its own player does it instead.
+    else
+      (video.current as TvVideo | null)?.webkitEnterFullscreen?.();
   }
   const position = useRef<number | undefined>(undefined);
   const save = async (ended = false, keepalive = false) => {
@@ -239,13 +323,10 @@ function Player({
       element.currentTime = session.position;
       void element.play().catch(() => {});
     };
-    element.addEventListener("loadedmetadata", metadata);
-    if (
-      session.mode === "direct" ||
-      element.canPlayType("application/vnd.apple.mpegurl")
-    )
-      element.src = session.url;
-    else
+    // A browser that plays the address itself gets it from the source effect
+    // below, so a TV can take it over; others convert through hls.js.
+    if (session.mode !== "direct" && !NATIVE_HLS) {
+      element.addEventListener("loadedmetadata", metadata);
       void import("hls.js")
         .then(({ default: Hls }) => {
           if (disposed) return;
@@ -272,6 +353,7 @@ function Player({
           hls.attachMedia(element);
         })
         .catch(() => setError("The player didn’t load. Refresh the page."));
+    }
     const timer = window.setInterval(() => {
       if (!element.paused) void save();
     }, 5000);
@@ -287,11 +369,98 @@ function Player({
       element.removeEventListener("loadedmetadata", metadata);
       element.removeAttribute("src");
       element.load();
+      applied.current = "";
     };
   }, [session?.id]);
+  // What the video element plays. On a TV with subtitles chosen, the stream
+  // that carries them: a TV shows only what the stream itself contains.
+  const stream = session?.cast.stream;
+  const tvSubtitles = tv === "on" && subtitle !== -1 && !!stream && NATIVE_HLS;
+  const source =
+    session && (session.mode === "direct" || NATIVE_HLS)
+      ? tvSubtitles
+        ? `${stream}?subtitle=${subtitle}`
+        : session.cast.url
+      : null;
   useEffect(() => {
     const element = video.current;
-    const apply = () => showSubtitle(element, subtitle);
+    if (!element || !session || !source || applied.current === source) return;
+    // A switch keeps the place and whether it was playing.
+    const first = !applied.current;
+    const at = first ? session.position : element.currentTime;
+    const resume = first || !element.paused;
+    applied.current = source;
+    const resumed = () => {
+      setError("");
+      element.currentTime = at;
+      if (resume) void element.play().catch(() => {});
+    };
+    element.addEventListener("loadedmetadata", resumed, { once: true });
+    element.src = absolute(
+      source === session.cast.url ? source : `${source}&start=${at.toFixed(1)}`,
+    );
+    return () => element.removeEventListener("loadedmetadata", resumed);
+  }, [session?.id, source]);
+  // AirPlay (Safari) or the browser's cast: is a TV in reach, are we on it?
+  useEffect(() => {
+    const element = video.current as TvVideo | null;
+    if (!element) return;
+    if (AIRPLAY) {
+      const reach = (event: Event) =>
+        setTvs(
+          (event as Event & { availability?: string }).availability ===
+            "available",
+        );
+      const wireless = () =>
+        setTv(element.webkitCurrentPlaybackTargetIsWireless ? "on" : "off");
+      element.addEventListener("webkitplaybacktargetavailabilitychanged", reach);
+      element.addEventListener("webkitcurrentplaybacktargetiswirelesschanged", wireless);
+      return () => {
+        element.removeEventListener("webkitplaybacktargetavailabilitychanged", reach);
+        element.removeEventListener(
+          "webkitcurrentplaybacktargetiswirelesschanged",
+          wireless,
+        );
+      };
+    }
+    const remote = element.remote;
+    if (!remote) return;
+    const update = () =>
+      setTv(
+        remote.state === "connected"
+          ? "on"
+          : remote.state === "connecting"
+            ? "connecting"
+            : "off",
+      );
+    const names = ["connecting", "connect", "disconnect"];
+    names.forEach((name) => remote.addEventListener(name, update));
+    return () => names.forEach((name) => remote.removeEventListener(name, update));
+  }, []);
+  useEffect(() => {
+    const remote = (video.current as TvVideo | null)?.remote;
+    if (AIRPLAY || !remote) return;
+    // A converted stream played through hls.js can't be handed to a TV.
+    let live = true,
+      id: number | undefined;
+    remote
+      .watchAvailability((available) => live && setTvs(available))
+      .then((n) => (id = n))
+      .catch(() => live && setTvs(false));
+    return () => {
+      live = false;
+      if (id !== undefined)
+        void remote.cancelWatchAvailability(id).catch(() => {});
+    };
+  }, [source]);
+  function chooseTv() {
+    const element = video.current as TvVideo | null;
+    if (AIRPLAY) element?.webkitShowPlaybackTargetPicker?.();
+    else void element?.remote?.prompt().catch(() => {});
+  }
+  useEffect(() => {
+    const element = video.current;
+    const apply = () => showSubtitle(element, subtitle, tvSubtitles);
     apply();
     // Safari picks tracks again when one loads or appears; choose again then.
     const tracks = element ? [...element.querySelectorAll("track")] : [];
@@ -301,251 +470,305 @@ function Player({
       tracks.forEach((t) => t.removeEventListener("load", apply));
       element?.textTracks.removeEventListener("addtrack", apply);
     };
-  }, [subtitle, session]);
+  }, [subtitle, session, tvSubtitles]);
+  const selected = session?.subtitles.find((t) => t.index === subtitle);
   return (
-    <div className="player">
-      <ErrorNote error={error} retry={() => setAttempt((v) => v + 1)} />
-      <ErrorNote error={progressError} retry={() => void save()} />
-      <div
-        className={`screen ${playing ? "playing" : ""}`}
-        ref={screen}
-        onKeyDown={(event) => {
-          const target = event.target as HTMLElement;
-          if (target.matches("input, select, summary")) return;
-          const key = event.key.toLowerCase();
-          if ((key === " " || key === "enter") && target.closest("button"))
-            return;
-          const actions: Record<string, () => void> = {
-            " ": toggle,
-            k: toggle,
-            arrowleft: () => seek(time - 10),
-            arrowright: () => seek(time + 30),
-            m: () => setMuted(!muted),
-            f: fullscreen,
-          };
-          if (!actions[key]) return;
+    <div
+      className={`theatre ${shown ? "chrome" : ""} ${playing ? "playing" : ""}`}
+      ref={screen}
+      onPointerMove={(event) => event.pointerType === "mouse" && wake()}
+      onKeyDown={(event) => {
+        wake();
+        const target = event.target as HTMLElement;
+        const key = event.key.toLowerCase();
+        if (key === "escape" && panel) {
           event.preventDefault();
-          actions[key]();
+          setPanel(false);
+          return;
+        }
+        if (target.matches("input, select, summary")) return;
+        if ((key === " " || key === "enter") && target.closest("button"))
+          return;
+        const actions: Record<string, () => void> = {
+          " ": toggle,
+          k: toggle,
+          arrowleft: () => seek(time - 10),
+          arrowright: () => seek(time + 30),
+          m: () => setMuted(!muted),
+          f: fullscreen,
+          c: () => setPanel(!panel),
+        };
+        if (!actions[key]) return;
+        event.preventDefault();
+        actions[key]();
+      }}
+    >
+      <video
+        ref={video}
+        x-webkit-airplay="allow"
+        playsInline
+        tabIndex={-1}
+        onPointerUp={(event) => {
+          // A tap shows or hides the controls; a click plays or pauses.
+          if (event.pointerType === "mouse") {
+            toggle();
+            wake();
+          } else if (shown && playing) setChrome(false);
+          else wake();
+          if (panel) setPanel(false);
+        }}
+        onPlay={() => {
+          setPlaying(true);
+          wake();
+        }}
+        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+        onDurationChange={(e) =>
+          Number.isFinite(e.currentTarget.duration) &&
+          setLength(e.currentTarget.duration)
+        }
+        preload="metadata"
+        aria-label={`Watch ${title}`}
+        onPause={() => {
+          setPlaying(false);
+          void save();
+        }}
+        onEnded={() => void save(true)}
+        onWaiting={() => setWaiting(true)}
+        onCanPlay={() => setWaiting(false)}
+        onPlaying={() => setWaiting(false)}
+        onError={() => {
+          if (session && !busy)
+            setError(
+              transcode
+                ? "This copy still won’t play. Check its storage is connected, then try again."
+                : "This copy won’t play. Try another format under Audio and subtitles.",
+            );
         }}
       >
-        <video
-          ref={video}
-          playsInline
-          tabIndex={-1}
-          onClick={toggle}
-          onPlay={() => setPlaying(true)}
-          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-          onDurationChange={(e) =>
-            Number.isFinite(e.currentTarget.duration) &&
-            setLength(e.currentTarget.duration)
-          }
-          preload="metadata"
-          aria-label={`Watch ${title}`}
-          onPause={() => {
-            setPlaying(false);
-            void save();
-          }}
-          onEnded={() => void save(true)}
-          onWaiting={() => setWaiting(true)}
-          onCanPlay={() => setWaiting(false)}
-          onPlaying={() => setWaiting(false)}
-          onError={() => {
-            if (session && !busy)
-              setError(
-                transcode
-                  ? "This copy still won’t play. Check its storage is connected, then try again."
-                  : "This copy won’t play. Try another format under Playback help.",
-              );
-          }}
-        >
-          {session?.subtitles.map((t) => (
-            <track
-              key={`${session.id}-${t.index}-${t.url}`}
-              kind="subtitles"
-              src={t.url}
-              srcLang={t.language || "und"}
-              label={trackLabel(t, "Subtitles")}
-              data-index={t.index}
-            />
-          ))}
-        </video>
-        {(busy || waiting) && (
-          <div className="screen-status">
-            <Loading label={busy ? "Starting" : "Buffering"} />
-          </div>
-        )}
-        <div className="controls" role="group" aria-label="Playback controls">
-          <button
-            className="control play"
-            aria-label={playing ? "Pause" : "Play"}
-            onClick={toggle}
-          >
-            {playing ? (
-              <Pause size={24} fill="currentColor" strokeWidth={0} />
-            ) : (
-              <Play size={24} fill="currentColor" strokeWidth={0} />
-            )}
-          </button>
-          <button
-            className="control jump"
-            aria-label="Back 10 seconds"
-            onClick={() => seek(time - 10)}
-          >
-            <RotateCcw size={20} strokeWidth={2.25} />
-          </button>
-          <button
-            className="control jump"
-            aria-label="Forward 30 seconds"
-            onClick={() => seek(time + 30)}
-          >
-            <RotateCw size={20} strokeWidth={2.25} />
-          </button>
-          <span className="clock num" aria-hidden="true">
-            {stamp(time)}
-          </span>
-          <input
-            className="scrubber"
-            type="range"
-            min={0}
-            max={Math.max(1, Math.floor(length))}
-            step={1}
-            value={Math.floor(Math.min(time, length || time))}
-            aria-label="Position"
-            aria-valuetext={`${stamp(time)} of ${stamp(length)}`}
-            style={
-              {
-                "--played": `${(100 * time) / Math.max(1, length)}%`,
-              } as React.CSSProperties
-            }
-            onChange={(e) => seek(Number(e.target.value))}
+        {!tvSubtitles &&
+          session?.subtitles.map((t) => (
+          <track
+            key={`${session.id}-${t.index}-${t.url}`}
+            kind="subtitles"
+            src={t.url}
+            srcLang={t.language || "und"}
+            label={trackLabel(t, "Subtitles")}
+            data-index={t.index}
           />
-          <span className="clock num" aria-hidden="true">
-            {stamp(length)}
-          </span>
-          <button
-            className="control"
-            aria-label={muted ? "Unmute" : "Mute"}
-            aria-pressed={muted}
-            onClick={() => setMuted(!muted)}
-          >
-            {muted ? (
-              <VolumeX size={20} strokeWidth={2.25} />
-            ) : (
-              <Volume2 size={20} strokeWidth={2.25} />
-            )}
-          </button>
-          <button
-            className="control"
-            aria-label={full ? "Exit full screen" : "Full screen"}
-            onClick={fullscreen}
-          >
-            {full ? (
-              <Minimize size={20} strokeWidth={2.25} />
-            ) : (
-              <Maximize size={20} strokeWidth={2.25} />
-            )}
-          </button>
-        </div>
-      </div>
-      {session && (
-        <div className="tracks">
-          <Field label="Audio">
-            <select
-              value={session.audio_index ?? ""}
-              onChange={(e) => {
-                position.current = video.current?.currentTime;
-                setAudio(Number(e.target.value));
-              }}
-            >
-              {asset.facts.audio_tracks.map((t) => (
-                <option key={t.index} value={t.index}>
-                  {trackLabel(t, "Audio track")}
-                  {t.default ? " · default" : ""}
-                </option>
-              ))}
-              {!asset.facts.audio_tracks.length && (
-                <option value="">No audio track</option>
-              )}
-            </select>
-          </Field>
-          <Field label="Subtitles">
-            <select
-              value={subtitle}
-              onChange={(e) => setSubtitle(Number(e.target.value))}
-            >
-              <option value={-1}>Off</option>
-              {session.subtitles.map((t) => (
-                <option key={t.index} value={t.index}>
-                  {trackLabel(t, "Subtitles")}
-                </option>
-              ))}
-            </select>
-          </Field>
+          ))}
+      </video>
+      {tv !== "off" && (
+        <div className="screen-status on-tv" role="status">
+          <Tv size={40} strokeWidth={1.75} aria-hidden="true" />
+          <p>{tv === "on" ? "Playing on your TV" : "Connecting to your TV"}</p>
         </div>
       )}
-      {session?.mode === "hls" && (
-        <p className="player-note meta">Converted for this browser.</p>
+      {(busy || waiting) && tv === "off" && (
+        <div className="screen-status">
+          <Loading label={busy ? "Starting" : "Buffering"} />
+        </div>
       )}
-      {!transcode && (
-        <details className="disclosure help">
-          <summary>Playback help</summary>
-          <div className="help-body">
-            <p>
-              No picture or no sound? Play a converted stream instead. The file
-              itself isn’t changed.
-            </p>
-            <button
-              className="btn"
-              onClick={() => {
-                position.current = video.current?.currentTime;
-                setTranscode(true);
-              }}
-            >
-              <RefreshCw size={16} strokeWidth={2.5} />
-              Try another format
-            </button>
-          </div>
-        </details>
+      <header className="theatre-top">
+        <button className="control" aria-label="Back to title" onClick={back}>
+          <ArrowLeft size={22} strokeWidth={2.5} />
+        </button>
+        <h1>
+          {title}
+          {asset.episode ? (
+            <span className="num"> {episodeCode(asset)}</span>
+          ) : null}
+        </h1>
+      </header>
+      {(error || progressError) && (
+        <div className="theatre-errors">
+          <ErrorNote error={error} retry={() => setAttempt((v) => v + 1)} />
+          <ErrorNote error={progressError} retry={() => void save()} />
+        </div>
       )}
-      {session && (
-        <SubtitleRepair
-          assetId={asset.id}
-          audio={session.audio_index}
-          selected={session.subtitles.find((t) => t.index === subtitle)}
-          hasSubtitles={session.subtitles.length > 0}
-          onReady={(tracks) =>
-            setSession((current) =>
-              current
-                ? {
-                    ...current,
-                    subtitles: [
-                      ...tracks,
-                      ...current.subtitles.filter((t) => !t.id),
-                    ],
-                  }
-                : current,
-            )
+      {panel && session && (
+        <div
+          className="theatre-panel"
+          role="dialog"
+          aria-label="Audio and subtitles"
+        >
+          <fieldset className="track-choices">
+            <legend>Audio</legend>
+            {asset.facts.audio_tracks.map((t) => (
+              <label className="track-choice" key={t.index}>
+                <input
+                  type="radio"
+                  name="audio"
+                  checked={session.audio_index === t.index}
+                  onChange={() => {
+                    position.current = video.current?.currentTime;
+                    setAudio(t.index);
+                  }}
+                />
+                <span>{trackLabel(t, "Audio track")}</span>
+              </label>
+            ))}
+            {!asset.facts.audio_tracks.length && (
+              <p className="meta">No audio track</p>
+            )}
+          </fieldset>
+          <fieldset className="track-choices">
+            <legend>Subtitles</legend>
+            <label className="track-choice">
+              <input
+                type="radio"
+                name="subtitles"
+                checked={subtitle === -1}
+                onChange={() => setSubtitle(-1)}
+              />
+              <span>Off</span>
+            </label>
+            {session.subtitles.map((t) => (
+              <label className="track-choice" key={t.index}>
+                <input
+                  type="radio"
+                  name="subtitles"
+                  checked={subtitle === t.index}
+                  onChange={() => setSubtitle(t.index)}
+                />
+                <span>{trackLabel(t, "Subtitles")}</span>
+              </label>
+            ))}
+            {selected?.id && (
+              <div className="nudge" role="group" aria-label="Subtitle timing">
+                <button
+                  className="control"
+                  aria-label="Show subtitles earlier"
+                  onClick={() => void nudge(selected, (selected.offset || 0) - 0.25)}
+                >
+                  <Minus size={16} strokeWidth={2.5} />
+                </button>
+                <span className="num">
+                  {(selected.offset || 0) > 0 ? "+" : ""}
+                  {(selected.offset || 0).toFixed(2)}s
+                </span>
+                <button
+                  className="control"
+                  aria-label="Show subtitles later"
+                  onClick={() => void nudge(selected, (selected.offset || 0) + 0.25)}
+                >
+                  <Plus size={16} strokeWidth={2.5} />
+                </button>
+              </div>
+            )}
+          </fieldset>
+          <p className="panel-foot meta">
+            {session.mode === "hls" ? "Converted for this browser. " : ""}
+            {!transcode && (
+              <button
+                className="link"
+                onClick={() => {
+                  position.current = video.current?.currentTime;
+                  setTranscode(true);
+                  setPanel(false);
+                }}
+              >
+                No picture or sound? Try another format
+              </button>
+            )}
+          </p>
+        </div>
+      )}
+      <div className="controls" role="group" aria-label="Playback controls">
+        <button
+          className="control play"
+          aria-label={playing ? "Pause" : "Play"}
+          onClick={toggle}
+        >
+          {playing ? (
+            <Pause size={24} fill="currentColor" strokeWidth={0} />
+          ) : (
+            <Play size={24} fill="currentColor" strokeWidth={0} />
+          )}
+        </button>
+        <button
+          className="control jump"
+          aria-label="Back 10 seconds"
+          onClick={() => seek(time - 10)}
+        >
+          <RotateCcw size={20} strokeWidth={2.25} />
+        </button>
+        <button
+          className="control jump"
+          aria-label="Forward 30 seconds"
+          onClick={() => seek(time + 30)}
+        >
+          <RotateCw size={20} strokeWidth={2.25} />
+        </button>
+        <span className="clock num" aria-hidden="true">
+          {stamp(time)}
+        </span>
+        <input
+          className="scrubber"
+          type="range"
+          min={0}
+          max={Math.max(1, Math.floor(length))}
+          step={1}
+          value={Math.floor(Math.min(time, length || time))}
+          aria-label="Position"
+          aria-valuetext={`${stamp(time)} of ${stamp(length)}`}
+          style={
+            {
+              "--played": `${(100 * time) / Math.max(1, length)}%`,
+            } as React.CSSProperties
           }
-          onOffset={(id, seconds) =>
-            setSession((current) =>
-              current
-                ? {
-                    ...current,
-                    subtitles: current.subtitles.map((t) =>
-                      t.id === id
-                        ? {
-                            ...t,
-                            offset: seconds,
-                            url: t.url.split("?")[0] + "?offset=" + seconds,
-                          }
-                        : t,
-                    ),
-                  }
-                : current,
-            )
-          }
+          onChange={(e) => seek(Number(e.target.value))}
         />
-      )}
+        <span className="clock total num" aria-hidden="true">
+          {stamp(length)}
+        </span>
+        <button
+          className="control"
+          aria-label="Audio and subtitles"
+          aria-expanded={panel}
+          disabled={!session}
+          onClick={() => setPanel(!panel)}
+        >
+          <Captions size={22} strokeWidth={2.25} />
+        </button>
+        {(tvs || tv !== "off") && (
+          <button
+            className={`control tv${tv === "on" ? " on-tv" : ""}`}
+            aria-label={
+              tv === "on" ? "Playing on TV. Choose where to play" : "Play on TV"
+            }
+            onClick={chooseTv}
+          >
+            {AIRPLAY ? (
+              <Airplay size={20} strokeWidth={2.25} />
+            ) : (
+              <Cast size={20} strokeWidth={2.25} />
+            )}
+          </button>
+        )}
+        <button
+          className="control"
+          aria-label={muted ? "Unmute" : "Mute"}
+          aria-pressed={muted}
+          onClick={() => setMuted(!muted)}
+        >
+          {muted ? (
+            <VolumeX size={20} strokeWidth={2.25} />
+          ) : (
+            <Volume2 size={20} strokeWidth={2.25} />
+          )}
+        </button>
+        <button
+          className="control"
+          aria-label={full ? "Exit full screen" : "Full screen"}
+          onClick={fullscreen}
+        >
+          {full ? (
+            <Minimize size={20} strokeWidth={2.25} />
+          ) : (
+            <Maximize size={20} strokeWidth={2.25} />
+          )}
+        </button>
+      </div>
     </div>
   );
 }
