@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
 import { api, type User } from "./api";
-import { Empty, ErrorNote, Field, Loading, Page, useResource } from "./ui";
+import { Bar, Empty, ErrorNote, Field, Loading, Page, useResource } from "./ui";
 import { clock } from "./Collection";
 
 type LogEntry = {
@@ -53,11 +53,45 @@ function localDate(value: string | null) {
     .slice(0, 16);
 }
 
+type Spending = {
+  alerts: { kind: string; measure: string; text: string; job_id?: string }[];
+};
+
+/** Administrators only: titles and recent runs whose cost to find (or to
+ * subtitle) is over its target. Titles and money only. */
+function SpendingAlerts() {
+  const resource = useResource(() => api<Spending>("/admin/spending"));
+  const alerts = resource.data?.alerts || [];
+  if (!alerts.length) return null;
+  return (
+    <section className="spending" aria-labelledby="spending">
+      <Bar id="spending" title="Over target" />
+      <ul className="rows">
+        {alerts.map((alert) => (
+          <li className="row" key={`${alert.measure}:${alert.job_id || ""}`}>
+            <p>{alert.text}</p>
+            {alert.job_id && (
+              <Link
+                className="btn quiet"
+                to={`/activity/${alert.job_id}`}
+                state={{ from: "/settings/logs" }}
+              >
+                Open request
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Logs({ user }: { user: User }) {
   const [params, setParams] = useSearchParams();
   const query = params.toString();
   return (
     <Page title="Logs">
+      {user.role === "admin" && <SpendingAlerts />}
       <HistoryPage
         key={query}
         user={user}

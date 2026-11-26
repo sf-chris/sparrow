@@ -289,27 +289,107 @@ time {
   margin-left: auto;
   padding: 0 0.35rem 0 0.35rem;
 }
-/* Open on phone: an outlined pill beside the account, like its initial. */
-.open-on-phone {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-height: 2.5rem;
+/* Open on phone: a round phone beside the account's initial, the same
+   size. Its name shows on hover; the code drops below it. */
+.phone-menu {
+  position: relative;
   margin-left: auto;
-  padding: 0 1rem 0 0.85rem;
+}
+.open-on-phone {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
   border: 2px solid currentColor;
-  border-radius: var(--pill);
+  border-radius: 50%;
   background: transparent;
   color: inherit;
-  font-size: 1rem;
-  font-weight: 750;
 }
-.open-on-phone:hover {
+.open-on-phone:hover,
+.open-on-phone[aria-expanded="true"] {
   background: var(--on-band);
   color: var(--band);
 }
-.open-on-phone ~ .account {
-  margin-left: calc(0.6rem - clamp(1rem, 3vw, 2.5rem));
+.phone-menu ~ .account {
+  margin-left: calc(0.35rem - clamp(1rem, 3vw, 2.5rem));
+}
+.phone-tip {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  left: 50%;
+  translate: -50% -0.2rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--t-small);
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    translate 0.12s;
+}
+.open-on-phone:hover + .phone-tip,
+.open-on-phone:focus-visible + .phone-tip {
+  opacity: 1;
+  translate: -50% 0;
+}
+.phone-pop {
+  position: absolute;
+  top: calc(100% + 0.7rem);
+  right: -0.5rem;
+  z-index: 40;
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  width: 15.5rem;
+  padding: 1rem 1rem 1.1rem;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 24px 48px -20px oklch(0% 0 0 / 0.5);
+  text-align: center;
+}
+.phone-pop .qr {
+  width: 100%;
+  margin-bottom: 0.6rem;
+}
+.phone-pop p {
+  margin: 0;
+  font-weight: 750;
+}
+.phone-pop .meta {
+  font-weight: 500;
+}
+.phone-pop-wait {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: var(--paper-lift);
+}
+.phone-pop-done {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 1.5rem 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 850;
+  font-stretch: 75%;
+}
+.phone-pop-done .tick {
+  width: 3rem;
+  height: 3rem;
+}
+.phone-pop .phone-away {
+  padding: 0.5rem 0 0.25rem;
+}
+.phone-pop .phone-away h3 {
+  font-size: 1.3rem;
 }
 .account-name {
   padding-right: 0.65rem;
@@ -2647,6 +2727,14 @@ a.tonight-art:hover .still img {
 .app.on-air .primary-nav a:hover {
   background: oklch(100% 0 0 / 0.1);
 }
+.app.on-air .open-on-phone {
+  color: var(--accent);
+}
+.app.on-air .open-on-phone:hover,
+.app.on-air .open-on-phone[aria-expanded="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
 .app.on-air .initial {
   border-color: var(--on-screen);
 }
@@ -4518,7 +4606,7 @@ button.link:hover {
   }
   .primary-nav,
   .account,
-  .open-on-phone {
+  .phone-menu {
     display: none;
   }
   .tabbar {

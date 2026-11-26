@@ -235,7 +235,7 @@ Every model and tool call is recorded in the cost ledger
 `python -m backend.agents.ledger report|timelines|export|audit|backfill|tag --data <state dir> [--batch NAME]`
 gives cost per title by phase, escalations, searches, each pick's review and what
 came of it, and waste flags. Administrators read the same at `GET /api/ledger` (and
-`/api/ledger/export`); the requests page alerts them when a title or recent run is
+`/api/ledger/export`); Settings › Logs lists any title or recent run that is
 over its target (search median ≤ 2¢, p90 ≤ 10¢, escalation ≤ 15%; subtitles < $1).
 Judge acquisition and subtitle changes by a before/after ledger report on the same
 titles: `tests/evals/search_bench.py` replays fixed title sets offline and runs the
