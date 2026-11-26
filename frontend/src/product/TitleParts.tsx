@@ -12,6 +12,7 @@ import {
   duration,
   episodeCode,
   inProgress,
+  languageName,
   progress,
   transferLine,
   useResource,
@@ -26,15 +27,6 @@ type SeasonEpisode = {
   air_date?: string | null;
 };
 
-const languages = new Intl.DisplayNames(["en"], { type: "language" });
-export const languageName = (code?: string) => {
-  if (!code || code === "und") return "";
-  try {
-    return languages.of(code.replace(/_/g, "-")) || code;
-  } catch {
-    return code;
-  }
-};
 const day = (seconds?: number) =>
   seconds
     ? new Date(seconds * 1000).toLocaleDateString([], {
@@ -107,13 +99,16 @@ export function SeasonEpisodes({
     (a) => !a.episode || !episodes.some((e) => e.episode_number === a.episode),
   );
   const today = new Date().toISOString().slice(0, 10);
-  const count = (n: number) =>
-    here.filter((a) => a.episode).length
-      ? ` · ${here.filter((a) => a.episode).length} of ${n}`
-      : "";
+  const downloaded = here.filter((a) => a.episode).length;
+  const total = seasons.find((s) => s.season_number === season)?.episode_count;
   return (
     <section className="episodes" aria-labelledby="episodes">
       <Bar id="episodes" title="Episodes">
+        {downloaded > 0 && !!total && (
+          <span className="bar-note num">
+            {downloaded} of {total} downloaded
+          </span>
+        )}
         {seasons.length > 1 && (
           <select
             className="bar-select"
@@ -124,7 +119,6 @@ export function SeasonEpisodes({
             {seasons.map((s) => (
               <option key={s.season_number} value={s.season_number}>
                 {s.season_number ? `Season ${s.season_number}` : "Specials"}
-                {s.season_number === season ? count(s.episode_count) : ""}
               </option>
             ))}
           </select>
@@ -257,7 +251,10 @@ function EpisodeRow({
       )}
       <div className="ep-copy">
         <p className="ep-head">
-          <span className="ep-no num">{episode.episode_number || ""}</span>
+          {/* Without a picture, the big number in its place already says which. */}
+          {still && (
+            <span className="ep-no num">{episode.episode_number || ""}</span>
+          )}
           <strong>{episode.name || `Episode ${episode.episode_number}`}</strong>
           <span className="meta num">{minutes}</span>
         </p>

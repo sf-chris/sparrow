@@ -1,45 +1,43 @@
-import { useState } from "react";
 import { api } from "./api";
 import { ErrorNote, Field, Section, useResource } from "./ui";
-import { Tick } from "./Brand";
-export default function SubtitleProviderSettings() {
-  const resource = useResource(() =>
-    api<{ configured: boolean; account_configured: boolean }>(
-      "/admin/subtitles/provider",
-    ),
+
+export type ProviderDraft = { api_key: string; username: string; password: string };
+export const emptyProvider: ProviderDraft = { api_key: "", username: "", password: "" };
+
+/** Saves only what was typed: blank fields keep what the server has. */
+export async function saveProvider(draft: ProviderDraft) {
+  if (!Object.values(draft).some(Boolean)) return;
+  await api("/admin/subtitles/provider", {
+    method: "PUT",
+    body: JSON.stringify(draft),
+  });
+}
+
+/** OpenSubtitles sign-in. The page's own Save keeps it, with everything else. */
+export default function SubtitleProviderSettings({
+  draft,
+  onChange,
+  version = 0,
+}: {
+  draft: ProviderDraft;
+  onChange: (draft: ProviderDraft) => void;
+  /** Bumped after a save, so "Saved" hints refresh. */
+  version?: number;
+}) {
+  const resource = useResource(
+    () =>
+      api<{ configured: boolean; account_configured: boolean }>(
+        "/admin/subtitles/provider",
+      ),
+    [version],
   );
-  const [draft, setDraft] = useState({
-      api_key: "",
-      username: "",
-      password: "",
-    }),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [saved, setSaved] = useState(false);
-  async function save() {
-    setBusy(true);
-    setError("");
-    try {
-      await api("/admin/subtitles/provider", {
-        method: "PUT",
-        body: JSON.stringify(draft),
-      });
-      setDraft({ api_key: "", username: "", password: "" });
-      setSaved(true);
-      await resource.refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
     <Section
       title="Subtitles"
       description="Subtitles in or beside your files work without this. OpenSubtitles finds more, within its download limits."
     >
       <div className="form">
-        <ErrorNote error={error || resource.error} retry={resource.refresh} />
+        <ErrorNote error={resource.error} retry={resource.refresh} />
         <div className="form-grid">
           <Field
             label="OpenSubtitles API key"
@@ -53,14 +51,14 @@ export default function SubtitleProviderSettings() {
               type="password"
               autoComplete="off"
               value={draft.api_key}
-              onChange={(e) => setDraft({ ...draft, api_key: e.target.value })}
+              onChange={(e) => onChange({ ...draft, api_key: e.target.value })}
             />
           </Field>
           <Field label="OpenSubtitles username">
             <input
               autoComplete="off"
               value={draft.username}
-              onChange={(e) => setDraft({ ...draft, username: e.target.value })}
+              onChange={(e) => onChange({ ...draft, username: e.target.value })}
             />
           </Field>
           <Field
@@ -75,21 +73,9 @@ export default function SubtitleProviderSettings() {
               type="password"
               autoComplete="off"
               value={draft.password}
-              onChange={(e) => setDraft({ ...draft, password: e.target.value })}
+              onChange={(e) => onChange({ ...draft, password: e.target.value })}
             />
           </Field>
-        </div>
-        <div className="actions end">
-          <span role="status" className="done-note">
-            {saved && (
-              <>
-                <Tick /> Saved
-              </>
-            )}
-          </span>
-          <button className="btn" disabled={busy} onClick={save}>
-            {busy ? "Saving…" : "Save"}
-          </button>
         </div>
       </div>
     </Section>

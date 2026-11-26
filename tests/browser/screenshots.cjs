@@ -33,7 +33,7 @@ const out = process.env.SPARROW_SCREENSHOT_OUT || 'docs/screenshots';
       ['home', '/', owner, '.tonight-item'],
       ['library', '/?view=covers', owner, '.cover-card'],
       ['discover', '/discover', owner, '.finder'],
-      ['title', '/title/tv/101', owner, '.feature'],
+      ['title', '/title/tv/101', owner, '.hero-main'],
       ['preferences', '/settings', owner, '.preference-groups'],
     ]) {
       const page = await context.newPage();

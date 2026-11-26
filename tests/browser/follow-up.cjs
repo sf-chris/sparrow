@@ -130,7 +130,7 @@ fs.mkdirSync(out, { recursive: true });
   await page.getByRole("heading", { name: "This browser" }).waitFor();
   await audit("security");
   const changePassword = page.getByRole("button", {
-    name: "Change your password",
+    name: "Change password",
     exact: true,
   });
   await changePassword.click();

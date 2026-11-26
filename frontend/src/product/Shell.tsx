@@ -159,6 +159,7 @@ export default function Shell({
               path={settings ? "/" : pathname + search}
             />
           )}
+          {!user.welcomed && <div className="welcome-exit">{signOut}</div>}
           {user.welcomed && (
             <NavLink
               to="/settings"
@@ -194,7 +195,6 @@ export default function Shell({
             {signOut}
           </aside>
         )}
-        {!user.welcomed && <div className="welcome-exit">{signOut}</div>}
         <Outlet context={{ notice: guide ? notice : null }} />
       </div>
       {user.welcomed && (

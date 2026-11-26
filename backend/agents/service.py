@@ -874,7 +874,7 @@ class AgentService:
                 if [s.get("iso_639_1") for s in details.get("spoken_languages") or []] == ["xx"]
                 else details.get("original_language", "")
             ),
-            state_line="Starting…",
+            state_line="",  # The agent narrates once it has something to say.
         )
         session = AgentSession(
             agent=AgentKind.FETCH,

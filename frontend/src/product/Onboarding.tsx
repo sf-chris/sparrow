@@ -274,7 +274,7 @@ export default function Onboarding({
                       <h3>{check.label}</h3>
                       <p>{check.value}</p>
                     </div>
-                    {(!library || check.step === "storage") && (
+                    {!library || check.step === "storage" ? (
                       <button
                         className="btn quiet"
                         disabled={busy}
@@ -282,6 +282,13 @@ export default function Onboarding({
                       >
                         Edit<span className="sr-only"> {check.label}</span>
                       </button>
+                    ) : (
+                      // Not a step when only watching, but still one click away.
+                      !check.ok && (
+                        <Link className="btn quiet" to="/settings/server">
+                          Add<span className="sr-only"> {check.label}</span>
+                        </Link>
+                      )
                     )}
                   </li>
                 ))}

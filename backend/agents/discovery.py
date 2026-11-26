@@ -285,7 +285,7 @@ def install_discovery(app, accounts, catalogue, get_service):
         if not service.runtime.provider_ready(resolve("discovery", service.storage.get_config()).model):
             raise HTTPException(
                 503,
-                "Connect a reasoning provider in Server settings to use assisted discovery. Title search still works independently.",
+                "Searching by description needs a Z.ai key in Settings › Connections. Searching by title still works.",
             )
         if body.session_id:
             row, session, _ = lookup(request, body.session_id)

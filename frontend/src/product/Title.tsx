@@ -1,4 +1,4 @@
-import { PreferenceFields } from "./Preferences";
+import { PreferenceFields, qualityName } from "./Preferences";
 import CollectionCare from "./CollectionCare";
 import { SubtitleRepair } from "./SubtitleRepair";
 import { Still, Tick } from "./Brand";
@@ -32,6 +32,7 @@ import {
   duration,
   episodeCode,
   inProgress,
+  languageName,
   progress,
   useResource,
 } from "./ui";
@@ -430,13 +431,12 @@ function Episode({
               ? asset.episode
                 ? name || `Season ${asset.season ?? 1}, episode ${asset.episode}`
                 : "Extra"
-              : `Copy ${number}`}
+              : qualityName(asset.facts.quality) || `Copy ${number}`}
           </span>
           <span className="leader" aria-hidden="true" />
           <span className="num entry-meta">
             {[
               tv && name && asset.episode ? episodeCode(asset) : "",
-              tv ? "" : asset.facts.quality,
               duration(asset.facts.duration),
               tv ? "" : bytes(asset.facts.size_bytes),
             ]
@@ -591,7 +591,7 @@ function RequestSheet({
   );
   return (
     <Dialog
-      title={`Request ${title.title}`}
+      title={title.media_type === "tv" ? "Request episodes" : "Request"}
       coupon
       onClose={onClose}
       footer={
@@ -748,10 +748,10 @@ function RequestSheet({
                 ? "original audio"
                 : values.audio_pref === "any"
                   ? "any audio"
-                  : `${values.audio_pref} audio`}{" "}
+                  : `${languageName(values.audio_pref)} audio`}{" "}
               ·{" "}
               {values.subtitle_languages.length
-                ? `${values.subtitle_languages.join(", ")} subtitles`
+                ? `${values.subtitle_languages.map(languageName).join(", ")} subtitles`
                 : "no subtitles"}
             </summary>
             <PreferenceFields

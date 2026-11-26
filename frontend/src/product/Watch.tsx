@@ -13,11 +13,12 @@ import {
   Plus,
   RotateCcw,
   RotateCw,
+  SkipForward,
   Tv,
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { api, patch, post, type Asset, type Effective } from "./api";
+import { api, patch, post, type Asset, type Effective, type Item } from "./api";
 import { type Caption } from "./SubtitleRepair";
 import { ErrorNote, Loading, episodeCode, useResource } from "./ui";
 
@@ -171,6 +172,17 @@ function Player({
     hideTimer.current = window.setTimeout(() => setChrome(false), 2800);
   }, []);
   useEffect(() => () => clearTimeout(hideTimer.current), []);
+  const [ended, setEnded] = useState(false);
+  // A series' next playable episode, offered when this one ends.
+  const siblings = useResource(
+    async () => (asset.episode ? api<Item>(`/items/${asset.item_id}`) : null),
+    [asset.item_id],
+  );
+  const order = (a: Pick<Asset, "season" | "episode">) =>
+    (a.season ?? 1) * 10000 + (a.episode || 0);
+  const upNext = siblings.data?.assets
+    .filter((a) => a.state === "ready" && a.episode && order(a) > order(asset))
+    .sort((a, b) => order(a) - order(b))[0];
   const shown = chrome || !playing || panel || busy || tv !== "off";
   const navigate = useNavigate();
   const back = () =>
@@ -519,6 +531,7 @@ function Player({
         }}
         onPlay={() => {
           setPlaying(true);
+          setEnded(false);
           wake();
         }}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
@@ -532,7 +545,10 @@ function Player({
           setPlaying(false);
           void save();
         }}
-        onEnded={() => void save(true)}
+        onEnded={() => {
+          setEnded(true);
+          void save(true);
+        }}
         onWaiting={() => setWaiting(true)}
         onCanPlay={() => setWaiting(false)}
         onPlaying={() => setWaiting(false)}
@@ -595,6 +611,19 @@ function Player({
           </button>
         )}
       </header>
+      {ended && upNext && (
+        <div className="up-next">
+          <span className="up-next-label">Up next</span>
+          <button
+            className="up-next-play"
+            autoFocus
+            onClick={() => navigate(`/watch/${upNext.id}`, { replace: true })}
+          >
+            <SkipForward size={20} strokeWidth={2.25} aria-hidden="true" />
+            Play {episodeCode(upNext)}
+          </button>
+        </div>
+      )}
       {(error || progressError) && (
         <div className="theatre-errors">
           <ErrorNote error={error} retry={() => setAttempt((v) => v + 1)} />

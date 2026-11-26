@@ -11,7 +11,7 @@ import {
 } from "react";
 import { ArrowLeft, Scissors, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { Bird } from "./Brand";
+import { Bird, Tick } from "./Brand";
 import type { Asset, Item, Job } from "./api";
 
 export function Page({
@@ -76,7 +76,7 @@ export function Section({
 }: {
   title: string;
   description?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   action?: ReactNode;
 }) {
   return (
@@ -196,6 +196,9 @@ export function RequestProgress({ job }: { job: Job }) {
     return null;
   const t = job.transfer;
   const percent = Math.floor(100 * (t?.progress || 0));
+  // A paused request already says "Paused" beside its name; only how far it got is new.
+  const paused = job.status === "paused";
+  if (paused && !percent) return null;
   return (
     <span className={`request-progress ${t?.state || "searching"}`}>
       {t && ["downloading", "paused"].includes(t.state) ? (
@@ -207,7 +210,9 @@ export function RequestProgress({ job }: { job: Job }) {
           </span>
         )
       )}
-      <span className="meta">{transferLine(job)}</span>
+      <span className="meta">
+        {paused ? `${percent}% downloaded` : transferLine(job)}
+      </span>
     </span>
   );
 }
@@ -246,8 +251,9 @@ export function Field({
     descriptionId = id + "-hint";
   const direct =
     isValidElement(children) &&
-    typeof children.type === "string" &&
-    ["input", "select", "textarea"].includes(children.type);
+    (children.type === LimitInput ||
+      (typeof children.type === "string" &&
+        ["input", "select", "textarea"].includes(children.type)));
   const control = direct
     ? cloneElement(
         children as ReactElement<{ id: string; "aria-describedby"?: string }>,
@@ -318,6 +324,111 @@ export const inProgress = (asset: Asset) =>
   !!asset.watch && !asset.watch.watched && asset.watch.position > 5;
 export const episodeCode = (asset: Pick<Asset, "season" | "episode">) =>
   asset.episode ? `S${asset.season ?? 1} E${asset.episode}` : "";
+
+/** The end of a settings form. With unsaved changes it stays on screen and
+ * says so; a failed save says why right here, where Save was pressed. */
+export function SaveBar({
+  dirty,
+  busy,
+  saved,
+  error,
+  onSave,
+  label = "Save",
+  className = "",
+  sticky = false,
+  children,
+}: {
+  dirty: boolean;
+  /** Keep it on screen even before anything changes (a step's Continue). */
+  sticky?: boolean;
+  busy: boolean;
+  saved: boolean;
+  error?: string;
+  onSave: () => void;
+  label?: ReactNode;
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className={`savebar ${dirty || sticky ? "floating" : ""} ${className}`}>
+      {children}
+      <span className="savebar-state" role="status">
+        {error ? (
+          <span className="problem-text">{error}</span>
+        ) : dirty ? (
+          "Unsaved changes"
+        ) : (
+          saved && (
+            <span className="done-note">
+              <Tick /> Saved
+            </span>
+          )
+        )}
+      </span>
+      <button className="btn primary" disabled={busy} onClick={onSave}>
+        {busy ? "Saving…" : label}
+      </button>
+    </div>
+  );
+}
+
+/** A number where 0 means "no limit": empty, saying so, rather than a bare 0. */
+export function LimitInput({
+  value,
+  onChange,
+  min = 0,
+  max,
+  step,
+  ...rest
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  id?: string;
+  "aria-describedby"?: string;
+}) {
+  return (
+    <input
+      {...rest}
+      type="number"
+      inputMode="decimal"
+      min={min}
+      max={max}
+      step={step}
+      placeholder="No limit"
+      value={value ? value : ""}
+      onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+    />
+  );
+}
+
+const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
+/** "en" → "English"; an unknown code stays as it is. */
+export const languageName = (code?: string) => {
+  if (!code || code === "und") return "";
+  try {
+    return languageNames.of(code.replace(/_/g, "-")) || code;
+  } catch {
+    return code;
+  }
+};
+const commonLanguages =
+  "en es fr de it pt nl sv no da fi is pl cs sk hu ro bg hr sr sl el tr ru uk ar he fa hi bn ta te ur th vi id ms tl ja ko zh".split(
+    " ",
+  );
+/** "English, Spanish" or "en, es" → ["en", "es"]: names and codes both work. */
+export function parseLanguages(text: string) {
+  const byName = new Map(
+    commonLanguages.map((code) => [languageName(code).toLowerCase(), code]),
+  );
+  return text
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean)
+    .map((part) => byName.get(part) || part);
+}
 
 export function Meter({ value, label }: { value: number; label: string }) {
   return (

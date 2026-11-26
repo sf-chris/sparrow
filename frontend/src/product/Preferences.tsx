@@ -2,7 +2,6 @@ import InstallApp from "./InstallApp";
 import ThemePicker from "./ThemePicker";
 import { useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
-import { Tick } from "./Brand";
 import {
   api,
   patch,
@@ -11,7 +10,17 @@ import {
   type User,
   type Policy,
 } from "./api";
-import { ErrorNote, Field, Loading, Page, useResource } from "./ui";
+import {
+  ErrorNote,
+  Field,
+  LimitInput,
+  Loading,
+  Page,
+  SaveBar,
+  languageName,
+  parseLanguages,
+  useResource,
+} from "./ui";
 import {
   StorageOptions,
   places,
@@ -19,12 +28,15 @@ import {
   type Destinations,
 } from "./StoragePicker";
 
-const quality = [
+export const quality = [
   ["480p", "Standard · 480p"],
   ["720p", "HD · 720p"],
   ["1080p", "Full HD · 1080p"],
   ["2160p", "4K · 2160p"],
 ];
+/** "1080p" → "Full HD · 1080p"; anything else as it is. */
+export const qualityName = (value?: string) =>
+  quality.find(([key]) => key === value)?.[1] || value || "";
 export function PreferenceFields({
   values,
   onChange,
@@ -87,7 +99,7 @@ export function PreferenceFields({
           {field(
             "subtitle_auto_prepare",
             "Include subtitles",
-            <label className="check">
+            <span className="check">
               <input
                 type="checkbox"
                 checked={values.subtitle_auto_prepare ?? true}
@@ -96,19 +108,19 @@ export function PreferenceFields({
                 }
               />
               Find subtitles automatically
-            </label>,
+            </span>,
           )}
           {field(
             "verify_subtitles",
             "Subtitle agent",
-            <label className="check">
+            <span className="check">
               <input
                 type="checkbox"
                 checked={values.verify_subtitles ?? false}
                 onChange={(e) => onChange("verify_subtitles", e.target.checked)}
               />
               Check, fix or write every subtitle with AI
-            </label>,
+            </span>,
             "Needs a Z.ai key. Off: timing is still fixed automatically.",
           )}
           {field(
@@ -133,18 +145,16 @@ export function PreferenceFields({
             "Subtitle languages",
             <input
               key={values.subtitle_languages.join(",")}
-              defaultValue={values.subtitle_languages.join(", ")}
+              defaultValue={values.subtitle_languages
+                .map(languageName)
+                .join(", ")}
+              autoCapitalize="words"
+              spellCheck={false}
               onBlur={(e) =>
-                onChange(
-                  "subtitle_languages",
-                  e.target.value
-                    .split(",")
-                    .map((v) => v.trim())
-                    .filter(Boolean),
-                )
+                onChange("subtitle_languages", parseLanguages(e.target.value))
               }
             />,
-            "Language codes in order, like en, es.",
+            "In order, like English, Spanish.",
           )}
           {field(
             "subtitle_mode",
@@ -196,17 +206,13 @@ export function PreferenceFields({
           {field(
             "max_file_size_gb",
             "File size limit (GB)",
-            <input
-              type="number"
-              min={0}
+            <LimitInput
               max={1000}
               step={0.5}
               value={values.max_file_size_gb}
-              onChange={(e) =>
-                onChange("max_file_size_gb", Number(e.target.value))
-              }
+              onChange={(value) => onChange("max_file_size_gb", value)}
             />,
-            "Per file. 0 means no personal limit.",
+            "Per file.",
           )}
           {field(
             "prefer_smaller_files",
@@ -354,7 +360,7 @@ export default function Preferences({
             : "Anything you haven’t changed follows the household."
       }
     >
-      <ErrorNote error={error || resource.error} retry={resource.refresh} />
+      <ErrorNote error={resource.error} retry={resource.refresh} />
       {!ownerSetup && <ThemePicker user={user} onChanged={onChanged} />}
       {resource.loading && !values ? (
         <Loading label="Loading preferences" />
@@ -380,25 +386,24 @@ export default function Preferences({
               }
               onReset={reset}
             />
-            <div className="savebar">
-              <span role="status" className="done-note">
-                {saved && (
+            <SaveBar
+              dirty={!welcome && Object.keys(draft).length > 0}
+              sticky={welcome}
+              busy={busy}
+              saved={saved}
+              error={error}
+              onSave={save}
+              label={
+                welcome ? (
                   <>
-                    <Tick /> Saved
+                    {continueSetup ? "Continue setup" : "Continue"}
+                    <ArrowRight size={18} strokeWidth={2.5} />
                   </>
-                )}
-              </span>
-              <button className="btn primary" disabled={busy} onClick={save}>
-                {busy
-                  ? "Saving…"
-                  : welcome
-                    ? continueSetup
-                      ? "Continue setup"
-                      : "Continue"
-                    : "Save"}
-                {welcome && <ArrowRight size={18} strokeWidth={2.5} />}
-              </button>
-            </div>
+                ) : (
+                  "Save"
+                )
+              }
+            />
           </>
         )
       )}
