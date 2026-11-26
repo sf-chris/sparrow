@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Smartphone } from "lucide-react";
 import { Link } from "react-router-dom";
 import qrcode from "qrcode-generator";
@@ -121,14 +121,19 @@ function Unreachable({ admin, onClose }: { admin: boolean; onClose: () => void }
   );
 }
 
-/** Account › Devices: sign this person in on a phone by scanning, with no
- *  password to type. The dialog notices the phone arrive and says so. */
+/** Sign this person in on their phone by scanning: no password to type.
+ *  The phone opens at `path`. The dialog notices it arrive and says so.
+ *  `round` is the masthead's version: a phone in a circle, named on hover. */
 export default function AddPhone({
   onSignedIn,
   admin = true,
+  round = false,
+  path = "/",
 }: {
   onSignedIn?: () => void;
   admin?: boolean;
+  round?: boolean;
+  path?: string;
 }) {
   const [open, setOpen] = useState(false);
   const { code, done, error, fresh, unreachable } = usePhoneCode(
@@ -136,15 +141,32 @@ export default function AddPhone({
     onSignedIn,
   );
   const close = () => setOpen(false);
+  const label = round ? "Open on phone" : "Add a phone";
+  const target = new URL(path, code?.link ?? location.origin).href;
   return (
     <>
-      <button className="btn" onClick={() => setOpen(true)}>
-        <Plus size={18} strokeWidth={2.5} aria-hidden="true" />
-        Add a phone
-      </button>
+      {round ? (
+        <div className="phone-menu">
+          <button
+            className="open-on-phone"
+            aria-label={label}
+            onClick={() => setOpen(true)}
+          >
+            <Smartphone size={18} strokeWidth={2.25} aria-hidden="true" />
+          </button>
+          <span className="phone-tip" aria-hidden="true">
+            {label}
+          </span>
+        </div>
+      ) : (
+        <button className="btn" onClick={() => setOpen(true)}>
+          <Plus size={18} strokeWidth={2.5} aria-hidden="true" />
+          {label}
+        </button>
+      )}
       {open && (
         <Dialog
-          title="Add a phone"
+          title={label}
           onClose={close}
           footer={
             <button className={`btn${done ? " primary" : ""}`} onClick={close}>
@@ -165,7 +187,7 @@ export default function AddPhone({
             code && (
               <div className="phone-signin">
                 <QrCode
-                  text={`${new URL("/", code.link ?? location.origin).href}#signin=${code.code}`}
+                  text={`${target}#signin=${code.code}`}
                   label="Sign-in code for your phone"
                 />
                 <div>
@@ -190,86 +212,5 @@ export default function AddPhone({
         </Dialog>
       )}
     </>
-  );
-}
-
-/** The masthead's phone: one round button beside the account. It drops a
- *  small code that opens `path` on the phone, signed in. */
-export function OpenOnPhone({ admin, path }: { admin: boolean; path: string }) {
-  const [open, setOpen] = useState(false);
-  const { code, done, error, fresh, unreachable } = usePhoneCode(open);
-  const box = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const id = useId();
-  // Escape or a click elsewhere puts it away.
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: PointerEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const escape = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setOpen(false);
-      button.current?.focus();
-    };
-    document.addEventListener("pointerdown", away);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", away);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [open]);
-  // The phone is open: put the code away a moment later.
-  useEffect(() => {
-    if (!done) return;
-    const timer = window.setTimeout(() => setOpen(false), 2500);
-    return () => clearTimeout(timer);
-  }, [done]);
-  const target = new URL(path, code?.link ?? location.origin).href;
-  return (
-    <div className="phone-menu" ref={box}>
-      <button
-        ref={button}
-        className="open-on-phone"
-        aria-label="Open on phone"
-        aria-expanded={open}
-        aria-controls={open ? id : undefined}
-        onClick={() => setOpen(!open)}
-      >
-        <Smartphone size={18} strokeWidth={2.25} aria-hidden="true" />
-      </button>
-      {!open && (
-        <span className="phone-tip" aria-hidden="true">
-          Open on phone
-        </span>
-      )}
-      {open && (
-        <div className="phone-pop" id={id} role="dialog" aria-label="Open on phone">
-          <ErrorNote error={error} retry={() => void fresh()} />
-          {done ? (
-            <div className="phone-pop-done" role="status">
-              <Tick />
-              Open on your phone
-            </div>
-          ) : unreachable ? (
-            <Unreachable admin={admin} onClose={() => setOpen(false)} />
-          ) : code ? (
-            <>
-              <QrCode
-                text={`${target}#signin=${code.code}`}
-                label="Code that opens this page on your phone"
-              />
-              <p>Scan with your phone</p>
-              <p className="meta">
-                {path === "/" ? "Opens Sparrow" : "Opens this page"}, signed in
-                as you.
-              </p>
-            </>
-          ) : (
-            !error && <div className="phone-pop-wait" aria-hidden="true" />
-          )}
-        </div>
-      )}
-    </div>
   );
 }

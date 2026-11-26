@@ -290,7 +290,7 @@ time {
   padding: 0 0.35rem 0 0.35rem;
 }
 /* Open on phone: a round phone beside the account's initial, the same
-   size. Its name shows on hover; the code drops below it. */
+   size. Its name shows on hover. */
 .phone-menu {
   position: relative;
   margin-left: auto;
@@ -306,8 +306,7 @@ time {
   background: transparent;
   color: inherit;
 }
-.open-on-phone:hover,
-.open-on-phone[aria-expanded="true"] {
+.open-on-phone:hover {
   background: var(--on-band);
   color: var(--band);
 }
@@ -336,60 +335,6 @@ time {
 .open-on-phone:focus-visible + .phone-tip {
   opacity: 1;
   translate: -50% 0;
-}
-.phone-pop {
-  position: absolute;
-  top: calc(100% + 0.7rem);
-  right: -0.5rem;
-  z-index: 40;
-  display: grid;
-  justify-items: center;
-  gap: 0.2rem;
-  width: 15.5rem;
-  padding: 1rem 1rem 1.1rem;
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 24px 48px -20px oklch(0% 0 0 / 0.5);
-  text-align: center;
-}
-.phone-pop .qr {
-  width: 100%;
-  margin-bottom: 0.6rem;
-}
-.phone-pop p {
-  margin: 0;
-  font-weight: 750;
-}
-.phone-pop .meta {
-  font-weight: 500;
-}
-.phone-pop-wait {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 4px;
-  background: var(--paper-lift);
-}
-.phone-pop-done {
-  display: grid;
-  justify-items: center;
-  gap: 0.6rem;
-  padding: 1.5rem 0;
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 850;
-  font-stretch: 75%;
-}
-.phone-pop-done .tick {
-  width: 3rem;
-  height: 3rem;
-}
-.phone-pop .phone-away {
-  padding: 0.5rem 0 0.25rem;
-}
-.phone-pop .phone-away h3 {
-  font-size: 1.3rem;
 }
 .account-name {
   padding-right: 0.65rem;
@@ -2730,8 +2675,7 @@ a.tonight-art:hover .still img {
 .app.on-air .open-on-phone {
   color: var(--accent);
 }
-.app.on-air .open-on-phone:hover,
-.app.on-air .open-on-phone[aria-expanded="true"] {
+.app.on-air .open-on-phone:hover {
   background: var(--accent);
   color: var(--on-accent);
 }
