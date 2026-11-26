@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from contextlib import contextmanager
 from weakref import WeakValueDictionary
 
+from .durations import frame_rate
 from .media_state import file_version
 
 PROTOCOL = 1
@@ -168,6 +169,7 @@ async def probe_file(path):
         "width": video.get("width", 0),
         "height": video.get("height", 0),
         "video_codec": video.get("codec_name", ""),
+        "fps": frame_rate(video),
         "video_index": video["index"],
         "format": payload.get("format", {}).get("format_name", ""),
         "quality": quality,

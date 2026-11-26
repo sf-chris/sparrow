@@ -18,12 +18,10 @@ opt-in Sparrow Connect are current work
 Emby and native TV apps stay parked, so don't treat retained TV option notes as
 active implementation requirements. Follow the delivery sequence at the top of ROADMAP.md.
 
-The next agentic reliability phase is tracked in
-[issue #3](https://github.com/sf-chris/sparrow/issues/3), with the source audit and
-reproductions in [docs/AGENTIC_PLAN.md](docs/AGENTIC_PLAN.md). Read that handoff
-before changing the runtime or retiring legacy paths. It includes model-evaluation
-work and the owner's required cleanup of obsolete docs, issues/dependencies and
-dead code; its proposed model profiles are not completed evaluations.
+The agentic reliability phase, [issue #3](https://github.com/sf-chris/sparrow/issues/3),
+closed on 26 November 2026. Its audit is [docs/AGENTIC_PLAN.md](docs/AGENTIC_PLAN.md);
+what it delivered and left out is in
+[the implementation ledger](docs/agentic-audit/IMPLEMENTATION.md).
 
 ## Architecture (v3 — agentic)
 
@@ -230,7 +228,7 @@ Startup logs also show the code until setup is complete. The command reads the
 existing code and does not create an account or rotate it. Return this handoff
 privately to the owner; household invitations are generated separately in People.
 
-## Issue #3 implementation evidence
+## Implementation evidence
 
 Every model and tool call is recorded in the cost ledger
 ([issue #15](https://github.com/sf-chris/sparrow/issues/15)):

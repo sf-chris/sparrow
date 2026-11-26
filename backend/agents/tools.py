@@ -33,6 +33,7 @@ from .accounts import Accounts
 
 logger = logging.getLogger("sparrow.agents")
 from .media_state import media_state, file_version, audio_satisfies
+from .durations import at_film_speed, episode_runtime, frame_rate, mismatch, names_cut, runtime_matches
 
 TMDB = "https://api.themoviedb.org/3"
 
@@ -63,7 +64,8 @@ async def _probe_media_facts(path: Path) -> dict:
     try:
         proc = await asyncio.create_subprocess_exec(
             "ffprobe", "-v", "error", "-show_entries",
-            "format=duration:stream=index,codec_name,codec_type,width,height:stream_tags=language,title", "-of", "json", str(path),
+            "format=duration:stream=index,codec_name,codec_type,width,height,avg_frame_rate,r_frame_rate"
+            ":stream_tags=language,title", "-of", "json", str(path),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
@@ -100,18 +102,13 @@ async def _probe_media_facts(path: Path) -> dict:
     else:
         quality = "unknown"
     return {"duration_seconds": duration, "width": width, "height": height,
-            "quality": quality,
+            "quality": quality, "fps": frame_rate(video),
             "audio_languages": [(s.get("tags") or {}).get("language", "und")
                                 for s in payload.get("streams", []) if s.get("codec_type") == "audio"],
             "audio_tracks": [{"index": s.get("index"), "codec": s.get("codec_name"),
                               "language": (s.get("tags") or {}).get("language", "und"),
                               "title": (s.get("tags") or {}).get("title", "")}
                              for s in payload.get("streams", []) if s.get("codec_type") == "audio"]}
-
-
-async def _probe_duration_seconds(path: Path) -> float:
-    """Read a media duration for a destructive guardrail, not agent judgment."""
-    return float((await _probe_media_facts(path))["duration_seconds"])
 
 
 def remove_download_staging(staging_dir: str, download) -> None:
@@ -1199,12 +1196,15 @@ def media_tools(tb: Toolbox) -> list[ToolDef]:
             raise ToolError("new_path must be the incoming file in staging.")
         if new.suffix.lower() not in VIDEO_EXT or old.suffix.lower() not in VIDEO_EXT:
             raise ToolError("Swap is for video files only.")
-        old_duration, new_duration = await asyncio.gather(
-            _probe_duration_seconds(old), _probe_duration_seconds(new))
+        old_facts, new_facts = await asyncio.gather(
+            _probe_media_facts(old), _probe_media_facts(new))
+        # Two copies of one cut, one of them at 25 fps, differ by about 4%.
+        old_duration, new_duration = (
+            at_film_speed(f["duration_seconds"], f.get("fps")) for f in (old_facts, new_facts))
         if abs(old_duration - new_duration) > 120:
             raise ToolError(
                 "Replacement refused: ffprobe durations differ by more than two minutes "
-                f"({old_duration / 60:.1f} vs {new_duration / 60:.1f})."
+                f"({old_duration / 60:.1f} vs {new_duration / 60:.1f}, at film speed)."
             )
         target = old.parent / (args.get("new_name") or new.name)
         if target != old and target.exists():
@@ -1244,10 +1244,14 @@ def media_tools(tb: Toolbox) -> list[ToolDef]:
         if media_type == MediaType.MOVIE:
             details = await tb.tmdb_get(f"/movie/{tmdb_id}")
             expected_runtime = float(details.get("runtime") or 0)
-            if verified and (not expected_runtime or abs(actual_duration - expected_runtime) > 2):
-                raise ToolError(
-                    "Movie verification refused: ffprobe duration does not match TMDB runtime."
-                )
+            if verified:
+                # Names the agent cannot choose: the release, not the library file it named.
+                download = tb.storage.get_download(ctx.session.download_id or "")
+                cut = names_cut(download.name if download else "")
+                if not runtime_matches(facts["duration_seconds"], expected_runtime,
+                                       fps=facts.get("fps"), cut=cut):
+                    raise ToolError("Movie verification refused. " + mismatch(
+                        facts["duration_seconds"], expected_runtime, fps=facts.get("fps")))
             item = tb.library_item_for(tmdb_id, MediaType.MOVIE)
             if not item:
                 year_text = (details.get("release_date") or "")[:4]
@@ -1298,18 +1302,14 @@ def media_tools(tb: Toolbox) -> list[ToolDef]:
         season, episode = int(args["season"]), int(args["episode"])
         if verified:
             season_data = await tb.tmdb_get(f"/tv/{tmdb_id}/season/{season}")
-            episode_data = next(
-                (entry for entry in season_data.get("episodes", [])
-                 if int(entry.get("episode_number") or 0) == episode), None)
-            expected_runtime = float((episode_data or {}).get("runtime") or 0)
+            expected_runtime, approximate = episode_runtime(season_data, episode)
             if not expected_runtime:
                 show_data = await tb.tmdb_get(f"/tv/{tmdb_id}")
                 runtimes = show_data.get("episode_run_time") or []
                 expected_runtime = float(runtimes[0]) if runtimes else 0
-            if not expected_runtime or abs(actual_duration - expected_runtime) > 2:
-                raise ToolError(
-                    "Episode verification refused: ffprobe duration does not match TMDB runtime."
-                )
+            if not runtime_matches(facts["duration_seconds"], expected_runtime, approximate, facts.get("fps")):
+                raise ToolError("Episode verification refused. " + mismatch(
+                    facts["duration_seconds"], expected_runtime, approximate, facts.get("fps")))
         item.set_episode_file(season, episode, {
             "quality": actual_quality,
             "path": str(path),
