@@ -50,12 +50,12 @@ EXPIRED = {
     "sh": (
         "#!/bin/sh\n"
         "printf '%s\\n' \"This pairing command expired or was already used. "
-        "In Sparrow, open Settings > Storage > Pair a computer for a fresh one.\" >&2\n"
+        "In Sparrow, open Settings > Computers > Add a computer for a fresh one.\" >&2\n"
         "exit 1\n"
     ),
     "ps1": (
         "Write-Host 'This pairing command expired or was already used. "
-        "In Sparrow, open Settings > Storage > Pair a computer for a fresh one.' -ForegroundColor Red\n"
+        "In Sparrow, open Settings > Computers > Add a computer for a fresh one.' -ForegroundColor Red\n"
     ),
 }
 

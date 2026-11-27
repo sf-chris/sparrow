@@ -157,7 +157,7 @@ What it sets up:
 - **Windows:** a scheduled task. From PowerShell run as administrator it starts
   with Windows; otherwise when you sign in.
 
-Running the command again on a paired computer (**Reconnect**, or **Fix** on its
+Running the command again on a paired computer (**Set up again**, or **Fix** on its
 card) updates Sparrow Node and its tools in place. It keeps the computer's
 folders, jobs and download app, so transfers carry on.
 
