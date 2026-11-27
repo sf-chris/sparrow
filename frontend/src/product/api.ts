@@ -222,6 +222,15 @@ export type NodeInfo = {
   /** Sparrow's verified library files on this computer. */
   library_bytes?: number;
   health?: Health;
+  /** Titles moving to its new library folder, until the old one is empty. */
+  relocation?: {
+    from_root: string;
+    from_path: string;
+    to_path: string;
+    done: number;
+    total: number;
+    problem: string;
+  } | null;
   capabilities: {
     platform: string;
     hostname?: string;
@@ -246,6 +255,8 @@ export type NodeInfo = {
       total_bytes?: number;
       /** Sparrow's verified library files in this folder. */
       library_bytes?: number;
+      /** How many titles those files make. */
+      library_titles?: number;
       /** Folders that share a disk share this. */
       disk?: string;
       writable?: boolean;

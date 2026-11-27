@@ -2,6 +2,8 @@
 
 The original stays until every file has a verified copy and the catalogue
 points at it. Asset identities survive, so progress and subtitles follow.
+Between two folders on one disk the copy is a second name for the same bytes
+(a hard link), so nothing is read or written and the move is instant.
 """
 
 import asyncio
@@ -27,6 +29,7 @@ class Moves:
         self.accounts, self.nodes, self.storage = accounts, nodes, storage
         self.catalogue, self.placement, self.get_service = catalogue, placement, get_service
         self.wake = asyncio.Event()
+        self.relocations = None  # Library folders changing (relocation.py).
         with self.accounts.connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS storage_moves(id TEXT PRIMARY KEY, item_id TEXT NOT NULL, "
@@ -40,9 +43,15 @@ class Moves:
 
     def list(self, item_id=None):
         with self.accounts.connect() as db:
+            # A library folder changing moves every title in it: the computer
+            # shows that progress, so the household's list stays readable.
             rows = db.execute(
                 "SELECT * FROM storage_moves"
-                + (" WHERE item_id=?" if item_id else "")
+                + (
+                    " WHERE item_id=?"
+                    if item_id
+                    else " WHERE json_extract(data, '$.relocation') IS NULL"
+                )
                 + " ORDER BY created DESC LIMIT 50",
                 (item_id,) if item_id else (),
             ).fetchall()
@@ -114,8 +123,13 @@ class Moves:
         )
         return self._begin(item, assets, choice["node_id"], choice["root_id"], user["id"])
 
-    def _begin(self, item, assets, to_node, to_root, user_id, *, job_id=""):
-        """Record a move of these files to one disk, after checking it has room."""
+    def _begin(self, item, assets, to_node, to_root, user_id, *, job_id="", relocation=""):
+        """Record a move of these files to one disk, after checking it has room.
+
+        Files already on the destination's disk only gain a new name, so they
+        need no room. `relocation` names the computer whose library folder is
+        changing: its own card shows those moves.
+        """
         library = item.metadata.get("library_id", "local")
         moving = [a for a in assets if (a["node_id"], a["root_id"]) != (to_node, to_root)]
         if not moving:
@@ -127,7 +141,12 @@ class Moves:
             raise PlacementError("That storage is no longer paired.")
         total = sum(a["facts"]["size_bytes"] for a in assets)
         need = sum(a["facts"]["size_bytes"] for a in moving)
-        if disk["free_bytes"] is not None and disk["free_bytes"] < need + headroom(disk["total_bytes"]):
+        linking = self._same_disk(to_node, to_root, moving)
+        if (
+            not linking
+            and disk["free_bytes"] is not None
+            and disk["free_bytes"] < need + headroom(disk["total_bytes"])
+        ):
             raise PlacementError(
                 f"{disk['name']} has {plain_size(disk['free_bytes'])} free. This title needs {plain_size(need)}."
             )
@@ -171,6 +190,8 @@ class Moves:
             ],
             "message": f"Copying to {disk['name']}.",
         }
+        if relocation:
+            data["relocation"] = relocation
         with self.accounts.connect() as db:
             db.execute(
                 "INSERT INTO storage_moves VALUES (?, ?, 'copying', ?, ?, ?)",
@@ -179,7 +200,41 @@ class Moves:
         self.wake.set()
         return self.get(move_id)
 
+    def _same_disk(self, node_id, root_id, assets):
+        """Whether every file is already on the disk it's moving to."""
+        node = self.nodes.info(node_id)
+        roots = {
+            r.get("id"): r.get("disk")
+            for r in (node["capabilities"].get("roots") or [] if node else [])
+            if isinstance(r, dict)
+        }
+        disk = roots.get(root_id)
+        return bool(disk) and all(
+            a["node_id"] == node_id and roots.get(a["root_id"]) == disk for a in assets
+        )
+
     # ─── Running ─────────────────────────────────────────────────────
+
+    async def _link(self, move_id, asset, number, file, to_node, to_root):
+        """Give a file its new name on the same disk. False: it has to be copied."""
+        try:
+            result = await self.nodes.execute(
+                to_node,
+                "link",
+                {
+                    "root_id": to_root,
+                    "path": file["path"],
+                    "from_root": asset["root_id"],
+                    "version": file["version"],
+                },
+                operation_id=f"ln-{move_id}-{asset['id'][:24]}-{number}",
+                timeout=120,
+            )
+        except NodeError:
+            # Another disk, a disk without links, or a computer from before links.
+            return False
+        file.update(copied=True, placed=result["placed"], arrived=result["version"])
+        return True
 
     def online(self, node_id):
         node = self.nodes.info(node_id)
@@ -200,14 +255,19 @@ class Moves:
                         self._save(move_id, state, data)
                         return False
                 first = asset["files"][0]
-                if "sha256" not in first:
-                    facts = await self.nodes.execute(
-                        asset["node_id"],
-                        "checksum",
-                        {"root_id": asset["root_id"], "path": first["path"], "version": first["version"]},
-                        timeout=3600,
-                    )
-                    first["sha256"] = facts["sha256"]
+                same = asset["node_id"] == to_node
+                # Records from before links listed companions with the checksum.
+                if "listed" not in asset and "sha256" not in first:
+                    if same:
+                        first["linked"] = await self._link(move_id, asset, 0, first, to_node, to_root)
+                    if not first.get("linked"):
+                        facts = await self.nodes.execute(
+                            asset["node_id"],
+                            "checksum",
+                            {"root_id": asset["root_id"], "path": first["path"], "version": first["version"]},
+                            timeout=3600,
+                        )
+                        first["sha256"] = facts["sha256"]
                     companions = await self.nodes.execute(
                         asset["node_id"],
                         "companions",
@@ -218,10 +278,24 @@ class Moves:
                         {k: c[k] for k in ("path", "size_bytes", "version", "sha256")}
                         for c in companions
                     ]
+                    asset["listed"] = True
                     self._save(move_id, state, data)
                 for number, file in enumerate(asset["files"]):
                     if file.get("copied"):
                         continue
+                    if same and "linked" not in file:
+                        file["linked"] = await self._link(move_id, asset, number, file, to_node, to_root)
+                        self._save(move_id, state, data)
+                        if file["linked"]:
+                            continue
+                    if "sha256" not in file:  # Its link failed after all.
+                        facts = await self.nodes.execute(
+                            asset["node_id"],
+                            "checksum",
+                            {"root_id": asset["root_id"], "path": file["path"], "version": file["version"]},
+                            timeout=3600,
+                        )
+                        file["sha256"] = facts["sha256"]
                     data["message"] = f"Copying to {data['to_name']}: {file['path']}"
                     self._save(move_id, state, data)
                     operation = f"mv-{move_id}-{asset['id'][:24]}-{number}"
@@ -261,10 +335,16 @@ class Moves:
                     self._save(move_id, state, data)
                     return False
                 for number, file in enumerate(asset["files"]):
+                    release = {"root_id": asset["root_id"], "path": file["path"]}
+                    if file.get("linked"):
+                        # The same bytes under their new name: no checksum to read.
+                        release["linked"] = {"root_id": to_root, "path": file["path"]}
+                    else:
+                        release["sha256"] = file["sha256"]
                     await self.nodes.execute(
                         asset["node_id"],
                         "release",
-                        {"root_id": asset["root_id"], "path": file["path"], "sha256": file["sha256"]},
+                        release,
                         operation_id=f"rm-{move_id}-{asset['id'][:24]}-{number}",
                         timeout=600,
                     )
@@ -399,6 +479,11 @@ class Moves:
             self.keep_finished()
         except Exception:  # A finished request waits for the next pass.
             logger.exception("moving finished requests failed")
+        if self.relocations:
+            try:
+                await self.relocations.advance()
+            except Exception:  # A changing library folder waits for the next pass.
+                logger.exception("moving titles to a new library folder failed")
         with self.accounts.connect() as db:
             rows = db.execute(
                 "SELECT id FROM storage_moves WHERE state IN ('copying','switching','cleaning') ORDER BY created"
@@ -452,4 +537,7 @@ def install_moves(app, accounts, nodes, storage, catalogue, placement, get_servi
             raise HTTPException(422, str(exc)) from exc
 
     app.include_router(router)
+    from .relocation import install_relocations
+
+    install_relocations(app, moves)
     return moves

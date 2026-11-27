@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Copy } from "lucide-react";
 import { post, api, type Jobs, type NodeInfo } from "./api";
-import { JobChoices, defaultJobs, folderSlots, jobsProblem, saveJobs } from "./ComputerJobs";
-import { FolderPicker, overlap, type Slot } from "./FolderBrowser";
+import { JobChoices, defaultJobs, jobsProblem, saveJobs } from "./ComputerJobs";
+import { FolderChooser } from "./FolderBrowser";
 import { Dialog } from "./ui";
 
 type System = "macos" | "windows" | "linux";
@@ -90,7 +90,8 @@ export default function PairComputer({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [paired, setPaired] = useState<NodeInfo | null>(null);
-  const [slots, setSlots] = useState<Slot[]>([]);
+  // Storage and Downloads need a library folder, chosen once the jobs are.
+  const [needsFolder, setNeedsFolder] = useState(false);
   const [jobs, setJobs] = useState<Jobs | null>(null);
   const [saving, setSaving] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -152,7 +153,7 @@ export default function PairComputer({
   }, [nodeId, code, paired]);
 
   const name = paired?.name || node?.name || "the computer";
-  if (paired && jobs && !slots.length) {
+  if (paired && jobs && !needsFolder) {
     const problem = jobsProblem(jobs, paired, all);
     return (
       <Dialog
@@ -173,11 +174,20 @@ export default function PairComputer({
                 setError("");
                 try {
                   const saved = await saveJobs(paired, jobs);
-                  const needed = paired.capabilities.folders
-                    ? folderSlots(saved, jobs).filter((s) => !s.value)
-                    : [];
-                  if (needed.length) setSlots(folderSlots(saved, jobs));
-                  else onPaired(paired.id);
+                  const label = (id: string) =>
+                    saved.capabilities.roots.find((r) => r.id === id)?.label || "";
+                  if (!paired.capabilities.folders || !(jobs.storage || jobs.downloads))
+                    onPaired(paired.id);
+                  else if (!label("library")) setNeedsFolder(true);
+                  else {
+                    if (jobs.downloads && !label("staging"))
+                      // Set up again with Downloads newly on: Incoming goes beside the library.
+                      await post(`/admin/nodes/${paired.id}/folders`, {
+                        libraries: [label("library")],
+                        staging: "auto",
+                      });
+                    onPaired(paired.id);
+                  }
                 } catch (e) {
                   setError((e as Error).message);
                 } finally {
@@ -195,52 +205,28 @@ export default function PairComputer({
       </Dialog>
     );
   }
-  if (paired && slots.length) {
-    const problem = overlap(slots);
+  if (paired && needsFolder) {
     return (
-      <Dialog
-        title={`Folders on ${paired.name}`}
-        onClose={onClose}
-        footer={
-          <>
-            {(problem || error) && (
-              <p className="sheet-problem problem-text" role="alert">
-                {problem || error}
-              </p>
-            )}
-            <button
-              className="btn primary"
-              disabled={saving || !!problem || !slots.every((s) => s.value)}
-              onClick={async () => {
-                setSaving(true);
-                setError("");
-                try {
-                  const value = (key: string) =>
-                    slots.find((s) => s.key === key)?.value || "";
-                  await post(`/admin/nodes/${paired.id}/folders`, {
-                    libraries: [value("library")],
-                    staging: value("staging"),
-                  });
-                  onPaired(paired.id);
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              {saving ? "Saving…" : "Save folders"}
-            </button>
-          </>
+      <FolderChooser
+        nodeId={paired.id}
+        title={`Where ${paired.name} keeps titles`}
+        intro={
+          !jobs?.downloads
+            ? undefined
+            : jobs.storage
+              ? "Downloads go in a folder beside it."
+              : "Finished downloads wait here, then move to where titles are kept. Downloads in progress go in a folder beside it."
         }
-      >
-        <p className="muted picker-intro">
-          {slots.some((s) => s.key === "staging")
-            ? "Choose where its films and series go, and a separate folder for downloads."
-            : "Choose where its films and series go."}
-        </p>
-        <FolderPicker nodeId={paired.id} slots={slots} onChange={setSlots} />
-      </Dialog>
+        verb={(name) => `Keep titles in ${name}`}
+        onChoose={async (path) => {
+          await post(`/admin/nodes/${paired.id}/folders`, {
+            libraries: [path],
+            staging: jobs?.downloads ? "auto" : "",
+          });
+          onPaired(paired.id);
+        }}
+        onClose={onClose}
+      />
     );
   }
 

@@ -129,7 +129,12 @@ between titles, rows and covers anywhere they are listed.
   (Storage, Playback, Downloads, Subtitles) ending in a biro tick and Ready,
   a quiet Off, or the problem in red with a Fix pill, then a Version line
   (date · commit) ending in Up to date, Latest is … with an Update pill in
-  print black, Updating…, or Update didn't work with Try again. Change jobs is a
+  print black, Updating…, or Update didn't work with Try again. A folder's path
+  on its line is underlined and chooses another folder: a one-folder chooser
+  that opens beside the folder in use with it selected, selects on click, opens
+  a folder with its arrow, and names the result on its one button ("Keep titles
+  in Films"). A library holding titles then asks whether they move (shown on the
+  card as "Moving from" with a count) or both folders stay. Change jobs is a
   checklist with a consequence under each job; Add a computer pairs, asks what
   it does, then asks only for the folders those jobs need; Set up again shows
   the same command, which repairs without touching folders or jobs. Sparrow

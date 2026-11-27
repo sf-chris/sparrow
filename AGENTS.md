@@ -84,7 +84,15 @@ Everything new lives in `backend/agents/`:
   person's storage or one disk) and, separately, which computer downloads it,
   pinned when it starts with a plain reason; verified copy-then-remove moves of
   a title between disks and computers, including moving a finished request from
-  the computer that downloaded it to where it's kept.
+  the computer that downloaded it to where it's kept. Between folders on one
+  disk a move is a hard link (`link`, then a release that checks it's the same
+  file), so nothing is copied.
+- `relocation.py` — changing a computer's library folder from its card: an empty
+  or missing one just points elsewhere; "both" adds the new folder; "move" makes
+  the new folder the library at once, puts the old one last (library folders are
+  numbered by position), moves every title in it across with ordinary moves
+  that stay out of the household's Moves list, and drops it once empty.
+  Placement sends new titles, and choices of the old folder, to the new one.
 - `node_update.py`, `release.py` — Sparrow Node updating itself, like spawnd: each
   check-in carries the current version and whether to take it (Update by itself,
   on by default, or Update); the node fetches `/api/v1/node/package.tar.gz`,

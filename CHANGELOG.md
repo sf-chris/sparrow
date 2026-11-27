@@ -4,6 +4,14 @@ All notable changes to Sparrow are documented here.
 
 ## Unreleased — the household guide and product foundation
 
+- Folders change from the computer's card: click a folder's path. The chooser
+  shows one folder at a time, opens beside the one in use, and its button says
+  what happens ("Keep titles in Films"). A library that holds titles asks
+  whether they move or both folders stay; moving keeps every title playable,
+  is instant on the same disk, and drops the old folder once it's empty.
+  Change folders and the two-step slot picker are gone, and a computer that
+  downloads gets its incoming folder chosen for it.
+
 - Sparrow Node updates itself. Each computer's card shows the date and commit
   it runs; with Update by itself on (the default) it takes each new version
   when the server gets one, checks it starts, swaps it in and restarts, going

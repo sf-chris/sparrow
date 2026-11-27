@@ -139,44 +139,60 @@ const out =
       .getByRole("heading", { name: "Storage", exact: true })
       .waitFor();
     assert.equal((await state()).step, "storage");
+    // Each folder is a line on this server's card: its path chooses another.
     await page
-      .getByRole("button", { name: /^(Choose|Change) folders$/ })
+      .getByRole("button", { name: /Change where this server downloads to/ })
       .click();
     // Folders are chosen by browsing this server's places (the fixture's state).
-    const sheet = page.getByRole("dialog");
-    const rows = sheet.locator(".picker-list button");
-    await sheet.getByRole("button", { name: /^Incoming/ }).first().click();
+    const sheet = page.getByRole("dialog", { name: "Where this server downloads to" });
+    const rows = sheet.locator(".picker-row");
+    const selected = (name) =>
+      sheet.locator(".picker-list li.selected").filter({ hasText: name }).waitFor();
     const here = (name) =>
       sheet.locator("[aria-current=location]").filter({ hasText: name }).waitFor();
-    await rows.filter({ hasText: /^library$/ }).first().click();
+    // The folder in use opens beside its neighbours, selected and named on the button.
+    await selected(/^incoming/);
+    assert.equal(
+      await sheet.getByRole("button", { name: "Download to incoming", exact: true }).isDisabled(),
+      true,
+    );
+    // Selecting a folder only selects it; opening it is its own button.
+    await rows.filter({ hasText: /^library/ }).first().click();
+    await selected(/^library/);
+    await sheet.getByRole("button", { name: "Download to library", exact: true }).waitFor();
+    await sheet.getByRole("button", { name: "Open library", exact: true }).click();
     await here(/^library$/);
-    await sheet.getByRole("button", { name: "New folder", exact: true }).click();
+    await sheet.getByRole("button", { name: "New folder in library", exact: true }).click();
     await sheet.getByLabel("New folder name").fill("bad/name");
     await sheet
       .getByText('Folder names can’t contain / \\ : * ? " < > |', { exact: true })
       .waitFor();
     await sheet.getByLabel("New folder name").fill("nested");
     await sheet.getByRole("button", { name: "Create", exact: true }).click();
-    await here(/^nested$/);
-    await sheet.getByRole("button", { name: "Use this folder for Incoming" }).click();
+    // A new folder is selected where it was made, so one press would use it.
+    await selected(/^nested/);
     await sheet
       .getByRole("alert")
       .filter({ hasText: "Incoming can’t be inside Library" })
       .waitFor();
     assert.equal(
-      await sheet.getByRole("button", { name: "Save folders", exact: true }).isDisabled(),
+      await sheet.getByRole("button", { name: "Download to nested", exact: true }).isDisabled(),
       true,
     );
     await audit("setup-folder-error");
+    // Going up selects the folder just left.
     await sheet.locator(".crumbs button").last().click();
-    await here(/^library$/);
-    await sheet.locator(".crumbs button").last().click();
-    await rows.filter({ hasText: /^incoming$/ }).first().waitFor();
-    await rows.filter({ hasText: /^incoming$/ }).first().click();
-    await here(/^incoming$/);
-    await sheet.getByRole("button", { name: "Use this folder for Incoming" }).click();
-    await sheet.getByRole("button", { name: "Save folders", exact: true }).click();
+    await selected(/^library/);
+    await sheet.locator(".picker-actions .btn").first().click();
+    await sheet.getByLabel("New folder name").fill("downloads");
+    await sheet.getByRole("button", { name: "Create", exact: true }).click();
+    await selected(/^downloads/);
+    await sheet.getByRole("button", { name: "Download to downloads", exact: true }).click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
+    // Folders that already work change one at a time, saved as they're chosen.
+    await page
+      .getByRole("button", { name: /\/downloads\W+Change where this server downloads to$/ })
+      .waitFor();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
       .getByRole("heading", { name: "Download app", exact: true })

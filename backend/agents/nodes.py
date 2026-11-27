@@ -104,6 +104,18 @@ class Nodes:
             return {}
         return {(r["node_id"], r["root_id"]): int(r["used"] or 0) for r in rows}
 
+    def library_titles(self, node_id):
+        """How many titles each of a computer's library folders holds."""
+        try:
+            with self.accounts.connect() as db:
+                rows = db.execute(
+                    "SELECT root_id, COUNT(DISTINCT item_id) AS n FROM assets WHERE node_id=? GROUP BY root_id",
+                    (node_id,),
+                ).fetchall()
+        except Exception:  # No catalogue yet.
+            return {}
+        return {r["root_id"]: int(r["n"]) for r in rows}
+
     def observe_availability(self):
         for node in self.list():
             if node["disabled"]:
@@ -142,11 +154,17 @@ class Nodes:
         if used is None:
             used = self.library_usage()
         kept = sum(v for (n, _), v in used.items() if n == node["id"])
+        titles = self.library_titles(node["id"])
         for root in node["capabilities"].get("roots", []):
             if isinstance(root, dict) and is_library(root.get("id")):
                 root["library_bytes"] = used.get((node["id"], root["id"]), 0)
+                root["library_titles"] = titles.get(root["id"], 0)
         jobs = self.jobs(node["id"], node["capabilities"])
         node["library_bytes"] = kept
+        from .relocation import status
+
+        # Titles moving to a new library folder, shown on the computer's card.
+        node["relocation"] = status(self.accounts, node["id"])
         from .release import current
 
         update = computers.update_status(

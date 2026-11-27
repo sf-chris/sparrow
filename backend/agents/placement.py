@@ -74,6 +74,11 @@ class Placement:
 
     def disks(self):
         """Every library folder on every paired computer, in a stable order."""
+        from .relocation import retiring
+
+        # A folder titles are moving out of takes nothing new: new titles go
+        # to the folder they're moving to.
+        leaving = retiring(self.accounts)
         out = []
         for node in self.nodes.list():
             if node["disabled"]:
@@ -108,10 +113,21 @@ class Placement:
                         "total_bytes": root.get("total_bytes"),
                         "download": downloads,
                         # Storage off: keeps what it has, takes nothing new.
-                        "storage": bool(jobs.get("storage")),
+                        "storage": bool(jobs.get("storage"))
+                        and (node["id"], root["id"]) not in leaving,
                     }
                 )
+                moving_to = leaving.get((node["id"], root["id"]))
+                if moving_to:
+                    out[-1]["moving_to"] = f"{node['id']}/{moving_to}"
         return out
+
+    def forward(self, key, disks=None):
+        """Where a folder's titles are going, for a folder they're leaving."""
+        for disk in disks if disks is not None else self.disks():
+            if disk["key"] == key and disk.get("moving_to"):
+                return disk["moving_to"]
+        return key
 
     def settings(self):
         with self.accounts.connect() as db:
@@ -288,7 +304,15 @@ class Placement:
                 else:
                     key = f"{job.node_id or 'local'}/{job.root_id or 'library'}"
                 counts[key] = counts.get(key, 0) + 1
-        return sorted(counts, key=lambda k: -counts[k])
+        disks = self.disks()
+        if not any(d.get("moving_to") for d in disks):
+            return sorted(counts, key=lambda k: -counts[k])
+        # A show whose folder is being emptied is at home where its titles are going.
+        merged = {}
+        for key, n in counts.items():
+            key = self.forward(key, disks)
+            merged[key] = merged.get(key, 0) + n
+        return sorted(merged, key=lambda k: -merged[k])
 
     def members(self, destination):
         """(disks, rule, scope words, explicit single disk?) for a destination."""
@@ -384,6 +408,16 @@ class Placement:
         if destination == "ask":
             raise PlacementError("Choose where to store this.")
         candidates, rule, scope, single = self.members(destination)
+        every = self.disks()
+        if any(d.get("moving_to") for d in candidates):
+            # Chosen before its titles began moving: it means the folder they go to.
+            by_key = {d["key"]: d for d in every}
+            forwarded = []
+            for disk in candidates:
+                disk = by_key.get(self.forward(disk["key"], every), disk)
+                if disk["key"] not in {d["key"] for d in forwarded}:
+                    forwarded.append(disk)
+            candidates = forwarded
         candidates = [
             d
             for d in candidates
