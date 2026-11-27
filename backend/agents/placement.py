@@ -11,6 +11,7 @@ import secrets
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import computers
 from .account_api import administrator
 from .accounts import DESTINATION
 from .node_executor import is_library as is_library_root
@@ -77,6 +78,9 @@ class Placement:
         for node in self.nodes.list():
             if node["disabled"]:
                 continue
+            jobs = computers.wanted(self.accounts, node["id"], node["capabilities"])
+            # Downloads count only where they're on and working right now.
+            downloads = computers.can(node, jobs, "downloads")
             roots = [
                 r
                 for r in node["capabilities"].get("roots") or []
@@ -102,7 +106,9 @@ class Placement:
                         "writable": root.get("writable", True) is not False,
                         "free_bytes": root.get("free_bytes"),
                         "total_bytes": root.get("total_bytes"),
-                        "download": bool(node["capabilities"].get("download")),
+                        "download": downloads,
+                        # Storage off: keeps what it has, takes nothing new.
+                        "storage": bool(jobs.get("storage")),
                     }
                 )
         return out
@@ -187,11 +193,15 @@ class Placement:
 
     def destinations(self, user):
         """What a person can choose in Store on, Preferences and Defaults."""
-        disks = [d for d in self.disks() if self.accounts.can_access(user, d["node_id"])]
-        computers = []
+        disks = [
+            d
+            for d in self.disks()
+            if d["storage"] and self.accounts.can_access(user, d["node_id"])
+        ]
+        listed = []
         for disk in disks:
             computer = next(
-                (c for c in computers if c["value"] == disk["node_id"]), None
+                (c for c in listed if c["value"] == disk["node_id"]), None
             )
             if not computer:
                 computer = {
@@ -201,7 +211,7 @@ class Placement:
                     "online": disk["online"],
                     "disks": [],
                 }
-                computers.append(computer)
+                listed.append(computer)
             computer["disks"].append(
                 {
                     "value": disk["key"],
@@ -216,7 +226,7 @@ class Placement:
         visible = {d["key"] for d in disks}
         return {
             "rule": self.settings()["rule"],
-            "computers": computers,
+            "computers": listed,
             "pools": [
                 {
                     "value": f"pool:{p['id']}",
@@ -272,7 +282,11 @@ class Placement:
                 and job.media_type == media_type
                 and job.status.value in ("active", "paused")
             ):
-                key = f"{job.node_id or 'local'}/{job.root_id or 'library'}"
+                if getattr(job, "keep_node_id", ""):
+                    # Downloading elsewhere, kept here once it's done.
+                    key = f"{job.keep_node_id}/{job.keep_root_id or 'library'}"
+                else:
+                    key = f"{job.node_id or 'local'}/{job.root_id or 'library'}"
                 counts[key] = counts.get(key, 0) + 1
         return sorted(counts, key=lambda k: -counts[k])
 
@@ -319,7 +333,8 @@ class Placement:
                     "writable": True,
                     "free_bytes": None,
                     "total_bytes": None,
-                    "download": bool(node["capabilities"].get("download")),
+                    "download": False,
+                    "storage": True,
                 }
             ]
         if not chosen:
@@ -335,7 +350,8 @@ class Placement:
                     "writable": True,
                     "free_bytes": None,
                     "total_bytes": None,
-                    "download": bool(node["capabilities"].get("download")),
+                    "download": False,
+                    "storage": True,
                 }
             ]
         return chosen, "most_free", node["name"], bool(root_id) or len(chosen) == 1
@@ -356,7 +372,12 @@ class Placement:
         together=True,
         exclude=(),
     ):
-        """Pick one disk for new work and say why, in one plain line."""
+        """Pick one disk to keep new work on, where to download it, and say why.
+
+        The kept disk answers node_id/root_id unless another computer has to
+        download it: then node_id/root_id is where it downloads and lands, and
+        keep_node_id/keep_root_id is where it moves once the request is done.
+        """
         destination = destination or "auto"
         if not DESTINATION.fullmatch(destination):
             raise PlacementError("Choose a storage place from the list.")
@@ -371,56 +392,91 @@ class Placement:
         ]
         if not candidates:
             raise PlacementError("None of this storage is available to your account.")
+        resting = [d for d in candidates if not d.get("storage", True)]
+        candidates = [d for d in candidates if d.get("storage", True)]
+        if not candidates:
+            names = " and ".join(sorted({d["computer"] for d in resting}))
+            raise PlacementError(
+                f"Storage is off on {names}. Turn it on in Storage, or choose another place."
+            )
         if needed is None:
             needed = expected_bytes(values or {}, media_type, count)
         film = media_type == "movie"
 
-        def problem(disk, download=acquire):
+        def problem(disk):
             if not disk["available"]:
                 return f"{disk['name']} is offline"
             if not disk["writable"]:
                 return f"Sparrow can't save to {disk['name']}"
-            if download and not disk["download"]:
-                return f"{disk['name']} has no download app"
             free = disk["free_bytes"]
             if free is not None and free < needed + headroom(disk["total_bytes"]):
                 return f"{disk['name']} is nearly full ({plain_size(free)} free)"
             return ""
 
-        def picked(disk, reason):
-            return {
+        def downloader(keep):
+            """Where to download for a title kept on `keep`: there, or the roomiest computer that can."""
+            if not acquire or keep["download"]:
+                return None
+            others = [
+                d
+                for d in self.disks()
+                if d["download"]
+                and d["node_id"] != keep["node_id"]
+                and self.accounts.can_access(user, d["node_id"])
+                and not problem(d)
+            ]
+            return max(others, key=lambda d: d["free_bytes"] or 0) if others else None
+
+        def picked(disk, reason, landing=None):
+            choice = {
                 "node_id": disk["node_id"],
                 "root_id": disk["root_id"],
                 "name": disk["name"],
                 "destination": destination,
                 "reason": reason,
             }
+            if landing:
+                choice.update(
+                    node_id=landing["node_id"],
+                    root_id=landing["root_id"],
+                    keep_node_id=disk["node_id"],
+                    keep_root_id=disk["root_id"],
+                    download_name=landing["computer"],
+                )
+            return choice
+
+        def with_downloads(disk, reason, waiting=False):
+            """Add who downloads it when the kept disk can't."""
+            if not acquire or disk["download"]:
+                return picked(disk, reason)
+            landing = downloader(disk)
+            if landing:
+                then = "moves it there when it's back" if waiting else "then moves it there"
+                return picked(disk, f"{reason} {landing['computer']} downloads it and {then}.", landing)
+            if waiting:
+                return picked(disk, f"{reason} It's offline, so this starts when it's back.")
+            return picked(disk, f"{reason} Nothing here can download yet, so this waits.")
 
         if single:
             disk = candidates[0]
-            why = problem(disk, download=False)
+            why = problem(disk)
             whose = {
                 "request": "as chosen",
                 "personal": "your storage",
                 "server": "the household's storage",
             }.get(source, "as chosen")
             if not disk["online"] or why.endswith("is offline"):
-                return picked(
-                    disk,
-                    f"On {disk['name']}, {whose}. It's offline, so this starts when it's back.",
-                )
+                return with_downloads(disk, f"On {disk['name']}, {whose}.", waiting=True)
             if why:
                 raise PlacementError(
                     f"{why}, and this needs about {plain_size(needed)}. Free some space or choose another place."
                     if "full" in why
                     else f"{why}. Choose another place."
                 )
-            # A place someone chose is used; the request says if it can't download.
-            later = " It has no download app yet." if acquire and not disk["download"] else ""
-            return picked(disk, f"On {disk['name']}, {whose}.{later}")
+            return with_downloads(disk, f"On {disk['name']}, {whose}.")
 
         by_key = {d["key"]: d for d in candidates}
-        notes = []
+        notes = [f"Storage is off on {d['computer']}." for d in resting if d["key"] in self.home(tmdb_id, media_type)] if together else []
         for key in self.home(tmdb_id, media_type) if together else ():
             disk = by_key.get(key)
             if not disk:
@@ -428,33 +484,22 @@ class Placement:
             beside = "with the other copy" if film else "with the rest of the show"
             why = problem(disk)
             if not why:
-                return picked(disk, f"Kept {beside} on {disk['name']}.")
+                return with_downloads(disk, f"Kept {beside} on {disk['name']}.")
             if not disk["online"]:
                 # Waiting keeps a show in one place; a new copy elsewhere splits it.
-                return picked(
-                    disk,
-                    f"Kept {beside} on {disk['name']}. It's offline, so this starts when it's back.",
-                )
-            notes.append(why)
+                return with_downloads(disk, f"Kept {beside} on {disk['name']}.", waiting=True)
+            notes.append(why + ".")
             break
         eligible = [d for d in candidates if not problem(d)]
-        if not eligible and acquire:
-            # Nowhere can download yet: place it anyway and say so.
-            eligible = [d for d in candidates if not problem(d, download=False)]
-            if eligible:
-                notes.append("no storage here has a download app yet")
-                acquire = False
         if not eligible:
-            reasons = "; ".join(problem(d) for d in candidates)
-            raise PlacementError(
-                f"No storage in {scope} can take this right now: {reasons}."
-            )
+            reasons = " ".join(problem(d) + "." for d in candidates)
+            raise PlacementError(f"No storage in {scope} can take this right now. {reasons}")
         if len(candidates) == 1:
             chosen, reason = eligible[0], f"On {eligible[0]['name']}."
         elif rule == "fill":
             chosen = eligible[0]
             skipped = [problem(d) for d in candidates[: candidates.index(chosen)]]
-            notes += [s for s in skipped if s not in notes]
+            notes += [s + "." for s in skipped if s]
             reason = f"On {chosen['name']}, the first in order with room."
         elif rule == "round_robin":
             pool_id = destination[5:] if destination.startswith("pool:") else "auto"
@@ -466,16 +511,45 @@ class Placement:
             order = candidates[cursor + 1 :] + candidates[: cursor + 1]
             chosen = next(d for d in order if d in eligible)
             skipped = [problem(d) for d in order[: order.index(chosen)]]
-            notes += [s for s in skipped if s not in notes]
+            notes += [s + "." for s in skipped if s]
             if commit:
                 self._update(pool_id, cursor=candidates.index(chosen))
             reason = f"On {chosen['name']}, next in turn."
         else:
             chosen = max(eligible, key=lambda d: d["free_bytes"] or 0)
             reason = f"On {chosen['name']}, which has the most free space."
+            notes += [
+                problem(d) + "."
+                for d in candidates
+                if problem(d) and d["computer"] != chosen["computer"]
+            ]
+        choice = with_downloads(chosen, reason)
+        notes = list(dict.fromkeys(notes))
         if notes:
-            reason = reason[:-1] + " — " + "; ".join(notes) + "."
-        return picked(chosen, reason)
+            choice["reason"] = choice["reason"] + " " + " ".join(notes)
+        return choice
+
+    def landing(self, user, node_id, root_id, *, tmdb_id, media_type, count=1, values=None):
+        """For work pinned to one computer: download there, or elsewhere and move it there."""
+        disk = next(
+            (d for d in self.disks() if d["node_id"] == (node_id or "local") and d["root_id"] == (root_id or "library")),
+            None,
+        )
+        if not disk or disk["download"]:
+            return None
+        try:
+            choice = self.choose(
+                user,
+                f"{disk['node_id']}/{disk['root_id']}",
+                tmdb_id=tmdb_id,
+                media_type=media_type,
+                count=count,
+                values=values,
+                together=False,
+            )
+        except PlacementError:
+            return None
+        return choice if choice.get("keep_node_id") else None
 
     def root_on(self, node_id, tmdb_id, media_type):
         """A disk on one computer for follow-up work, such as new episodes."""

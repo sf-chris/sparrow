@@ -112,15 +112,24 @@ class Moves:
             together=False,
             exclude={f"{a['node_id']}/{a['root_id']}" for a in assets},
         )
-        to_node, to_root = choice["node_id"], choice["root_id"]
+        return self._begin(item, assets, choice["node_id"], choice["root_id"], user["id"])
+
+    def _begin(self, item, assets, to_node, to_root, user_id, *, job_id=""):
+        """Record a move of these files to one disk, after checking it has room."""
+        library = item.metadata.get("library_id", "local")
         moving = [a for a in assets if (a["node_id"], a["root_id"]) != (to_node, to_root)]
         if not moving:
-            raise PlacementError(f"It's already on {choice['name']}.")
-        disk = next(d for d in self.placement.disks() if d["key"] == f"{to_node}/{to_root}")
+            raise PlacementError(f"It's already on {self.placement.describe(f'{to_node}/{to_root}')}.")
+        disk = next(
+            (d for d in self.placement.disks() if d["key"] == f"{to_node}/{to_root}"), None
+        )
+        if not disk:
+            raise PlacementError("That storage is no longer paired.")
+        total = sum(a["facts"]["size_bytes"] for a in assets)
         need = sum(a["facts"]["size_bytes"] for a in moving)
         if disk["free_bytes"] is not None and disk["free_bytes"] < need + headroom(disk["total_bytes"]):
             raise PlacementError(
-                f"{disk['name']} has {plain_size(disk['free_bytes'])} free; this title needs {plain_size(need)}."
+                f"{disk['name']} has {plain_size(disk['free_bytes'])} free. This title needs {plain_size(need)}."
             )
         with self.accounts.connect() as db:
             taken = [
@@ -142,7 +151,8 @@ class Moves:
             "to_node": to_node,
             "to_root": to_root,
             "to_name": disk["name"],
-            "user_id": user["id"],
+            "user_id": user_id,
+            "job_id": job_id,
             "total": total,
             "assets": [
                 {
@@ -164,7 +174,7 @@ class Moves:
         with self.accounts.connect() as db:
             db.execute(
                 "INSERT INTO storage_moves VALUES (?, ?, 'copying', ?, ?, ?)",
-                (move_id, item_id, json.dumps(data), time.time(), time.time()),
+                (move_id, item.id, json.dumps(data), time.time(), time.time()),
             )
         self.wake.set()
         return self.get(move_id)
@@ -340,7 +350,55 @@ class Moves:
             item.metadata["library_id"] = to_node
             await self.storage.add_library_item(item)
 
+    def keep_finished(self):
+        """Move finished requests from the computer that downloaded them to where they're kept."""
+        service = self.get_service()
+        if not service:
+            return
+        jobs = service.store.get_jobs()
+        for job in jobs:
+            if (
+                not job.keep_node_id
+                or job.keep_move_id
+                or job.status.value not in ("complete", "abandoned")
+            ):
+                continue
+            library = job.library_id or "local"
+            if any(
+                j.tmdb_id == job.tmdb_id
+                and j.media_type == job.media_type
+                and (j.library_id or "local") == library
+                and j.status.value in ("active", "paused")
+                for j in jobs
+            ):
+                continue  # Another request is still working on it there.
+            item = self.catalogue.item_for(library, job.media_type, job.tmdb_id)
+            assets = self.catalogue.assets(None, item.id) if item else []
+            keep_root = job.keep_root_id or "library"
+            if not assets or all(
+                (a["node_id"], a["root_id"]) == (job.keep_node_id, keep_root) for a in assets
+            ):
+                job.keep_move_id = "nothing"
+                service.store.save_job(job)
+                continue
+            if any(a["state"] != "ready" for a in assets) or not self.online(job.keep_node_id):
+                continue  # Starts when both computers are there.
+            try:
+                move = self._begin(item, assets, job.keep_node_id, keep_root, job.user_id, job_id=job.id)
+            except PlacementError as exc:
+                message = f"Stays on {self.placement.describe(library)} for now. {exc}"
+                if job.state_line != message:
+                    job.state_line = message
+                    service.store.save_job(job)
+                continue
+            job.keep_move_id = move["id"]
+            service.store.save_job(job)
+
     async def run_pending(self):
+        try:
+            self.keep_finished()
+        except Exception:  # A finished request waits for the next pass.
+            logger.exception("moving finished requests failed")
         with self.accounts.connect() as db:
             rows = db.execute(
                 "SELECT id FROM storage_moves WHERE state IN ('copying','switching','cleaning') ORDER BY created"
