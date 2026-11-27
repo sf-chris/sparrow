@@ -4247,6 +4247,14 @@ button.link:hover {
 .picker-free {
   margin-left: auto;
 }
+/* "New folder in Films and series" wraps rather than widening the sheet. */
+.picker-actions .btn {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
 .picker-new input {
   flex: 1 1 12rem;
   min-height: var(--control);
