@@ -380,7 +380,7 @@ export default function Storage({
       ) : (
         <section aria-labelledby={onboarding ? undefined : "devices"}>
           {!onboarding && (
-            <Bar id="devices" title="Computers">
+            <Bar id="devices" title="All computers">
               <button
                 className="bar-button"
                 onClick={() => {
