@@ -1,11 +1,15 @@
 """What a computer downloads to become Sparrow storage: this server's own code,
-the few pure-Python libraries Sparrow Node needs, and the setup scripts that
-install, pair and start it from one pasted command."""
+the few pure-Python libraries Sparrow Node needs, the media tools and download
+app built for its kind of computer, and the setup scripts that install, pair
+and start it from one pasted command."""
 
 from __future__ import annotations
 
 import functools
+import hashlib
 import io
+import json
+import os
 import re
 import tarfile
 import time
@@ -26,8 +30,21 @@ import sys
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [here, os.path.join(here, "vendor")]
+# The media tools and download app installed beside this folder come first.
+tools = os.path.join(os.path.dirname(here), "tools")
+if os.path.isdir(tools):
+    os.environ.setdefault("SPARROW_TOOLS_DIR", tools)
+try:
+    with open(os.path.join(here, "VERSION")) as stamp:
+        os.environ.setdefault("SPARROW_NODE_VERSION", stamp.read().strip())
+except OSError:
+    pass
 runpy.run_module("backend.agents.node_client", run_name="__main__", alter_sys=True)
 '''
+# Media tools and the download app, one self-contained archive per platform,
+# made when the server image is built (packaging/node_tools).
+TOOLS = Path(os.getenv("SPARROW_NODE_TOOLS", "/opt/sparrow/node-tools"))
+PLATFORM = re.compile(r"linux-(x86_64|aarch64)")
 CODE = re.compile(r"[A-Za-z0-9_-]{20,100}")
 EXPIRED = {
     "sh": (
@@ -61,11 +78,51 @@ def files():
                 yield "vendor/" + entry.as_posix(), path
 
 
+@functools.lru_cache(maxsize=1)
+def contents():
+    entries = [("sparrow-node.py", LAUNCHER.encode())]
+    entries += [(name, path.read_bytes()) for name, path in files()]
+    return entries
+
+
+@functools.lru_cache(maxsize=1)
+def version() -> str:
+    """This server's Sparrow Node, as a short fingerprint of everything in it.
+
+    A computer reports the version it runs; a different one means it's out of
+    date and running its setup command again updates it.
+    """
+    digest = hashlib.sha256()
+    for name, data in contents():
+        digest.update(name.encode() + b"\0" + hashlib.sha256(data).digest())
+    return digest.hexdigest()[:16]
+
+
+def tools(platform: str) -> Path | None:
+    """The media tools archive for a kind of computer, if this server has one."""
+    if not PLATFORM.fullmatch(platform or ""):
+        return None
+    path = TOOLS / f"tools-{platform}.tar.gz"
+    return path if path.is_file() else None
+
+
+@functools.lru_cache(maxsize=4)
+def tools_manifest(platform: str) -> dict | None:
+    """What a platform's tools archive holds: its version and tool versions."""
+    path = tools(platform)
+    if not path:
+        return None
+    with tarfile.open(path) as archive:
+        for member in archive:
+            if member.name.lstrip("./") == "manifest.json":
+                return json.loads(archive.extractfile(member).read())
+    return None
+
+
 @functools.lru_cache(maxsize=4)
 def package(kind: str = "tar.gz") -> bytes:
     stamp = time.time()
-    entries = [("sparrow-node.py", LAUNCHER.encode())]
-    entries += [(name, path.read_bytes()) for name, path in files()]
+    entries = [*contents(), ("VERSION", version().encode())]
     buffer = io.BytesIO()
     if kind == "zip":
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:

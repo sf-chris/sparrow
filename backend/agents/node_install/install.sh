@@ -1,8 +1,10 @@
 #!/bin/sh
 # Sparrow Node setup for Linux and macOS. It installs Sparrow Node on this
-# computer, pairs it with the Sparrow server below and keeps it running in the
-# background. Folders are chosen afterwards in Sparrow. Made for one pairing:
-# the code expires ten minutes after Sparrow showed it.
+# computer with its own media tools and download app, pairs it with the Sparrow
+# server below and keeps it running in the background. Nothing needs sudo or a
+# password. Running it again on a paired computer updates it and keeps its
+# folders. Folders are chosen afterwards in Sparrow. Made for one pairing: the
+# code expires ten minutes after Sparrow showed it.
 set -eu
 
 SERVER='__SPARROW_SERVER__'
@@ -64,23 +66,15 @@ else
   pkill -f "$dir/app/sparrow-node.py" >/dev/null 2>&1 || true
 fi
 
-# Media checks and downloads use ffmpeg and Transmission when they're here.
-if [ "$(id -u)" -eq 0 ] && has apt-get; then
-  need=""
-  has ffprobe || need="$need ffmpeg"
-  has transmission-daemon || need="$need transmission-daemon"
-  if [ -n "$need" ]; then
-    report tools
-    say "Installing$need"
-    export DEBIAN_FRONTEND=noninteractive
-    # shellcheck disable=SC2086 # $need is a list of package names.
-    { apt-get install -y -qq $need || { apt-get update -qq && apt-get install -y -qq $need; }; } >/dev/null 2>&1 \
-      || say "Couldn't install$need. Sparrow Node will run without it."
-    case "$need" in
-      # Sparrow Node runs its own Transmission; the system copy isn't needed.
-      *transmission*) systemctl disable --now transmission-daemon >/dev/null 2>&1 || true ;;
-    esac
-  fi
+# Media tools and the download app come from the server, built for this kind
+# of computer. Without a bundle (a Mac, or a server without one) the computer
+# still pairs, and Sparrow shows what it's missing.
+platform=""
+if [ "$system" = linux ]; then
+  case "$(uname -m)" in
+    x86_64|amd64) platform=linux-x86_64 ;;
+    aarch64|arm64) platform=linux-aarch64 ;;
+  esac
 fi
 
 report installing
@@ -93,6 +87,24 @@ rm -rf "$dir/app.old"
 [ -d "$dir/app" ] && mv "$dir/app" "$dir/app.old"
 mv "$dir/app.new" "$dir/app"
 rm -rf "$dir/app.old"
+
+tools=""
+if [ -n "$platform" ]; then
+  report tools
+  say "Downloading media tools and the download app"
+  rm -rf "$dir/tools.new"
+  mkdir -p "$dir/tools.new"
+  if curl -fsSL "$SERVER/api/v1/node/setup/$CODE/tools-$platform.tar.gz" | tar -xzf - -C "$dir/tools.new" 2>/dev/null \
+    && "$dir/tools.new/bin/ffprobe" -version >/dev/null 2>&1; then
+    rm -rf "$dir/tools.old"
+    [ -d "$dir/tools" ] && mv "$dir/tools" "$dir/tools.old"
+    mv "$dir/tools.new" "$dir/tools"
+    rm -rf "$dir/tools.old"
+  else
+    rm -rf "$dir/tools.new"
+  fi
+fi
+[ -x "$dir/tools/bin/ffprobe" ] && tools=yes
 
 python=""
 for candidate in python3.13 python3.12 python3.11 python3; do
@@ -122,7 +134,8 @@ fi
 report pairing
 set -- --config "$dir/node.json" configure "--server=$SERVER" "--code=$CODE"
 case "$SERVER" in http://*) set -- "$@" --allow-private-http ;; esac
-if has transmission-daemon || [ -x /opt/homebrew/bin/transmission-daemon ] || [ -x /usr/local/bin/transmission-daemon ]; then
+if [ -x "$dir/tools/bin/transmission-daemon" ] || has transmission-daemon \
+  || [ -x /opt/homebrew/bin/transmission-daemon ] || [ -x /usr/local/bin/transmission-daemon ]; then
   set -- "$@" --managed-downloader
 fi
 (cd "$dir/app" && "$python" sparrow-node.py "$@") || fail pair "Pairing didn't work. Get a fresh command in Sparrow and run it again."
@@ -178,8 +191,8 @@ RestartSec=10"
       printf '%s\n\n[Install]\nWantedBy=default.target\n' "$unit" > "$home/.config/systemd/user/sparrow-node.service"
       systemctl --user daemon-reload && systemctl --user enable --now sparrow-node >/dev/null 2>&1 && started=systemd-user
     else
+      # Without lingering a user service stops at sign-out; the fallback below doesn't.
       systemctl --user disable --now sparrow-node >/dev/null 2>&1 || true
-      say "(For a systemd service instead, run: sudo loginctl enable-linger $owner, then this command again.)"
     fi
   fi
 fi
@@ -197,11 +210,7 @@ fi
 report running
 say ""
 say "Sparrow Node is running. Choose its folders in Sparrow."
-if ! has ffprobe; then
-  if [ "$system" = macos ]; then say "For media checks, also run: brew install ffmpeg"
-  else say "For media checks, also install ffmpeg (for example: sudo apt install ffmpeg)."; fi
-fi
-if ! has transmission-daemon && [ ! -x /opt/homebrew/bin/transmission-daemon ] && [ ! -x /usr/local/bin/transmission-daemon ]; then
-  if [ "$system" = macos ]; then say "To download here, also run: brew install transmission-cli, then run this command again."
-  else say "To download here, also install transmission-daemon (for example: sudo apt install transmission-daemon), then pair again."; fi
+if [ -z "$tools" ] && ! has ffprobe; then
+  if [ "$system" = macos ]; then say "Downloads and media checks need Homebrew's ffmpeg and transmission-cli on this Mac."
+  else say "This server has no media tools for this computer yet. Downloads and some playback wait for them."; fi
 fi
