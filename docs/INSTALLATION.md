@@ -137,6 +137,32 @@ Subtitles, and choose its library folder. **Change jobs** changes them later.
 **Set up again** gives the same one-line command, which updates Sparrow Node and
 adds anything missing without touching its folders or jobs.
 
+### Titles already on a computer
+
+Sparrow looks in every library folder by itself: when a folder is chosen, when a
+computer is first seen, every six hours, and when someone presses **Look again**
+on the computer's **Found** line. A file counts once it has looked the same on
+two looks at least ten minutes apart, so a copy still arriving is left alone.
+
+Sparrow names each file from its name and folders, TMDB, and the length ffprobe
+measures, and adds it by itself only when they agree:
+
+- a film: its name, and year when the file has one, match exactly one film on
+  TMDB, and its length is within eight minutes (or a tenth) of that film's;
+- an episode: the series name matches exactly one series and that season and
+  episode exist (and the length agrees when TMDB knows it).
+
+Anything else waits on the Found line ("3 need a name"). **Review** lists those
+files with what Sparrow guessed and why it wasn't sure: name each one to add it,
+or set it aside with **Not a title**. Extras such as samples, trailers and
+featurettes are passed over. Files are never moved or renamed. Titles someone names get subtitles
+prepared as their preferences say; those Sparrow adds by itself don't, so a
+whole NAS doesn't queue hours of listening. A title's Subtitles button
+prepares them any time.
+
+Folders laid out the usual way name themselves best: `Films/Arrival (2016)/
+Arrival.mkv` and `Series/Severance/Season 1/Severance S01E01.mkv`.
+
 ### Changing folders
 
 Each folder is on a line of the computer's card: click its path to choose
@@ -244,8 +270,9 @@ machine that should run as a Windows service with its own account.
 5. Choose **Pair storage & start service**. Close setup after it confirms success.
    The node runs as Windows LocalService with access granted to its own service
    SID for your selected folders, and starts automatically with Windows.
-6. Refresh Storage in the web app, choose **Import files**, review the
-   title/episode matches and import. Open the title to play or resume it.
+6. Refresh Computers in the web app. Titles Sparrow is sure of appear by
+   themselves, and any that need a name wait under **Review** on its **Found**
+   line. Open a title to play or resume it.
 
 No Python installation or separate subtitle service is needed on the storage
 machine. Keep its drive connected and the machine awake while watching. Sleeping

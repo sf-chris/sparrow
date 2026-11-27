@@ -317,7 +317,7 @@ export default function Onboarding({
                     disabled={busy || !state.can_finish}
                     onClick={() => void leave(true)}
                   >
-                    {library ? "Finish and import" : "Finish and find something"}
+                    {library ? "Finish and find my titles" : "Finish and find something"}
                   </button>
                 </>,
               )}

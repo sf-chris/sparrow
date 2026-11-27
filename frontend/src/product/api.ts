@@ -222,6 +222,16 @@ export type NodeInfo = {
   /** Sparrow's verified library files on this computer. */
   library_bytes?: number;
   health?: Health;
+  /** What Sparrow found in its library folders (see found.py). */
+  found?: {
+    checked: number;
+    looking: boolean;
+    /** Files waiting for someone to say what they are. */
+    unsure: number;
+    /** Titles it added by itself or was told, this week. */
+    added: number;
+    error: string;
+  } | null;
   /** Titles moving to its new library folder, until the old one is empty. */
   relocation?: {
     from_root: string;

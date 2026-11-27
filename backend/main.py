@@ -275,12 +275,14 @@ async def lifespan(app: FastAPI):
     log_setup(DATA_DIR)
     migration_task=asyncio.create_task(catalogue.migrate_verified_legacy(broadcast))
     moves_task = asyncio.create_task(moves.loop())
+    found_task = asyncio.create_task(found.loop())
     await connect.start()
     yield
     await connect.stop()
     await subtitles.stop()
     migration_task.cancel()
     moves_task.cancel()
+    found_task.cancel()
     await agent_service.shutdown()
     await nodes.local().shutdown()
     downloader_task.cancel()
@@ -1371,6 +1373,10 @@ from .agents.placement import install_placement
 placement = install_placement(app, accounts, nodes, storage, lambda: agent_service)
 from .agents.moves import install_moves
 moves = install_moves(app, accounts, nodes, storage, catalogue, placement, lambda: agent_service)
+from .agents.found import install_found
+found = install_found(app, accounts, nodes, storage, catalogue, lambda: agent_service)
+# A folder that changes is looked in straight away.
+moves.relocations.on_change = found.request
 from .agents.subtitles import install_subtitles
 from .agents.curation import install_curation
 install_curation(app, accounts, lambda: agent_service)

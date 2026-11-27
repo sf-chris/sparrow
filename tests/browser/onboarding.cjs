@@ -279,11 +279,11 @@ const out =
     );
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
-      .getByRole("button", { name: "Finish and import", exact: true })
+      .getByRole("button", { name: "Finish and find my titles", exact: true })
       .waitFor();
     await audit("setup-import-ready");
     await page
-      .getByRole("button", { name: "Finish and import", exact: true })
+      .getByRole("button", { name: "Finish and find my titles", exact: true })
       .click();
     await page
       .getByRole("heading", { name: "Computers", exact: true })

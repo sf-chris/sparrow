@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { HardDrive, Plus, RefreshCw, FolderOpen, Check } from "lucide-react";
+import { HardDrive, Plus, RefreshCw } from "lucide-react";
 import {
   api,
   patch,
@@ -14,6 +14,7 @@ import { ago } from "./Collection";
 import JobsDialog from "./ComputerJobs";
 import { Tick } from "./Brand";
 import { FolderChooser, folderName, overlap, type Question } from "./FolderBrowser";
+import { FoundSheet, foundLine } from "./Found";
 import PairComputer from "./PairComputer";
 import Placement from "./Placement";
 import {
@@ -27,16 +28,6 @@ import {
   useResource,
 } from "./ui";
 
-type Candidate = {
-  id: string;
-  path: string;
-  suggested_title: string;
-  media_type: "tv" | "movie";
-  season: number | null;
-  episode: number | null;
-  size_bytes: number;
-};
-type Scan = { id: string; node_id: string; candidates: Candidate[] };
 type Root = NodeInfo["capabilities"]["roots"][number];
 type Disk = { names: string[]; total: number; free: number; sparrow: number };
 
@@ -124,14 +115,6 @@ function DiskMeter({ disk, named }: { disk: Disk; named: boolean }) {
     </div>
   );
 }
-type Selection = {
-  id: string;
-  title: string;
-  tmdb_id?: number;
-  media_type: "movie" | "tv";
-  season: number | null;
-  episode: number | null;
-};
 type Config = {
   library_dir: string;
   staging_dir: string;
@@ -143,6 +126,8 @@ type Line = {
   key: string;
   label: string;
   path?: string;
+  /** Something other than a path in the middle of the line. */
+  detail?: ReactNode;
   suggested?: boolean;
   /** Choose another folder for this line, by clicking its path. */
   change?: { onClick: () => void; label: string };
@@ -319,7 +304,7 @@ export default function Storage({
   const [highlight, setHighlight] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
-  const [scan, setScan] = useState<Scan | null>(null);
+  const [foundOn, setFoundOn] = useState<NodeInfo | null>(null);
   const suggested = useResource(() =>
     api<{ library: string; incoming: string }>("/admin/storage/suggestions"),
   );
@@ -338,6 +323,7 @@ export default function Storage({
         n.online &&
         (n.health?.rows.some((r) => r.state === "waiting") ||
           Boolean(n.relocation) ||
+          Boolean(n.found?.looking) ||
           ["starting", "updating"].includes(n.health?.update?.state || "")),
     ),
   );
@@ -455,15 +441,14 @@ export default function Storage({
       setBusy("");
     }
   }
-  async function preview(node: NodeInfo) {
-    setBusy(node.id);
+  /** Look in a computer's library folders now, for files copied there. */
+  async function look(node: NodeInfo) {
     setError("");
     try {
-      setScan(await post<Scan>("/admin/imports/preview", { node_id: node.id }));
+      await post(`/admin/found/${node.id}/look`);
+      await nodes.refresh();
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setBusy("");
     }
   }
   async function updateNow(node: NodeInfo) {
@@ -640,6 +625,12 @@ export default function Storage({
                     ) : undefined,
                 })),
               ];
+              // What Sparrow found in its folders, by itself or waiting for a name.
+              const found =
+                !onboarding && health?.jobs.storage && disks.length > 0 && !choosing
+                  ? foundLine(node, { onLook: () => void look(node), onReview: () => setFoundOn(node) })
+                  : null;
+              if (found) lines.push({ key: "found", label: "Found", detail: found.path, end: found.end });
               if (!onboarding && rowOf("playback"))
                 lines.push({ key: "playback", label: "Playback", end: state("playback") });
               const downloading = Boolean(health?.jobs.downloads);
@@ -745,7 +736,9 @@ export default function Storage({
                             <span className={`path ${line.suggested ? "suggested" : ""}`}>
                               {line.path}
                             </span>
-                          ) : null}
+                          ) : (
+                            line.detail || null
+                          )}
                           <span className="leader" aria-hidden="true" />
                           {line.action}
                           {line.end}
@@ -823,20 +816,6 @@ export default function Storage({
                           )}
                         </>
                       )}
-                      {!onboarding && (local || disks.length > 0) && (
-                        <button
-                          className="btn"
-                          disabled={
-                            busy === node.id ||
-                            !node.online ||
-                            !rootOf("library")?.available
-                          }
-                          onClick={() => preview(node)}
-                        >
-                          <FolderOpen size={17} strokeWidth={2.25} />
-                          {busy === node.id ? "Scanning…" : "Import files"}
-                        </button>
-                      )}
                     </div>
                   </div>
                 </li>
@@ -854,8 +833,8 @@ export default function Storage({
         </p>
       ) : (
         <p className="muted storage-note">
-          Import shows what it found before adding anything. Files aren’t
-          moved.
+          Sparrow looks in library folders by itself and adds the titles it’s
+          sure of. Files stay where they are.
         </p>
       )}
       {!onboarding && <Placement />}
@@ -894,7 +873,13 @@ export default function Storage({
           onClose={() => setChoosing(null)}
         />
       )}
-      {scan && <ImportPreview scan={scan} onClose={() => setScan(null)} />}
+      {foundOn && (
+        <FoundSheet
+          node={foundOn}
+          onClose={() => setFoundOn(null)}
+          onChanged={() => nodes.refresh()}
+        />
+      )}
     </Page>
   );
 }
@@ -1010,286 +995,5 @@ function Chooser({
       onChoose={onChoose}
       onClose={onClose}
     />
-  );
-}
-
-function ImportPreview({ scan, onClose }: { scan: Scan; onClose: () => void }) {
-  const [selected, setSelected] = useState<Record<string, Selection>>({});
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<number | null>(null);
-  const [matching, setMatching] = useState<Candidate | null>(null);
-  const candidateSelection = (c: Candidate): Selection => ({
-    id: c.id,
-    title: c.suggested_title,
-    media_type: c.media_type,
-    season: c.season,
-    episode: c.episode,
-  });
-  async function confirm() {
-    setBusy(true);
-    setError("");
-    try {
-      const result = await post<{
-        imported: { id: string }[];
-        failed: { id: string; message: string }[];
-      }>(`/admin/imports/${scan.id}/confirm`, {
-        selections: Object.values(selected),
-      });
-      if (result.failed.length) {
-        setError(
-          `${result.imported.length} files imported. ${result.failed.map((f) => f.message).join(" ")}`,
-        );
-        setSelected(
-          Object.fromEntries(
-            Object.entries(selected).filter(([id]) =>
-              result.failed.some((f) => f.id === id),
-            ),
-          ),
-        );
-      } else setDone(result.imported.length);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Dialog
-      title={done === null ? "Import" : "Imported"}
-      onClose={onClose}
-      footer={
-        done === null &&
-        scan.candidates.length > 0 && (
-          <button
-            className="btn primary"
-            disabled={busy || !Object.keys(selected).length}
-            onClick={confirm}
-          >
-            {busy
-              ? "Checking and importing…"
-              : !Object.keys(selected).length
-                ? "Choose files to import"
-                : `Import ${Object.keys(selected).length} ${Object.keys(selected).length === 1 ? "file" : "files"}`}
-          </button>
-        )
-      }
-    >
-      <div className="form">
-        <ErrorNote error={error} />
-        {done !== null ? (
-          <>
-            <p>
-              {done} {done === 1 ? "file" : "files"} added to your collection.
-            </p>
-            <Link className="btn primary" to="/">
-              Open the guide
-            </Link>
-          </>
-        ) : (
-          <>
-            <p className="muted">
-              {scan.candidates.length === 0
-                ? "No video files found."
-                : `${scan.candidates.length} video ${scan.candidates.length === 1 ? "file" : "files"} found. Titles are guessed from file names, so check each one you select.`}
-            </p>
-            <div className="actions">
-              <button
-                className="btn"
-                disabled={busy}
-                onClick={() =>
-                  setSelected(
-                    Object.fromEntries(
-                      scan.candidates
-                        .slice(0, 100)
-                        .map((c) => [c.id, candidateSelection(c)]),
-                    ),
-                  )
-                }
-              >
-                {scan.candidates.length > 100 ? "Select the first 100" : "Select all"}
-              </button>
-              <button
-                className="btn quiet"
-                disabled={!Object.keys(selected).length}
-                onClick={() => setSelected({})}
-              >
-                Clear
-              </button>
-            </div>
-            <div className="import-list">
-              {scan.candidates.map((candidate) => (
-                <div className="import-row" key={candidate.id}>
-                  <div>
-                    <label className="check">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(selected[candidate.id])}
-                        onChange={(e) =>
-                          setSelected((previous) => {
-                            const next = { ...previous };
-                            if (e.target.checked)
-                              next[candidate.id] =
-                                candidateSelection(candidate);
-                            else delete next[candidate.id];
-                            return next;
-                          })
-                        }
-                      />
-                      <span className="path">{candidate.path}</span>
-                    </label>
-                    {selected[candidate.id] && (
-                      <div className="form import-match">
-                        <Field label="Title">
-                          <input
-                            value={selected[candidate.id].title}
-                            onChange={(e) =>
-                              setSelected({
-                                ...selected,
-                                [candidate.id]: {
-                                  ...selected[candidate.id],
-                                  title: e.target.value,
-                                  tmdb_id: undefined,
-                                },
-                              })
-                            }
-                          />
-                        </Field>
-                        <div className="actions">
-                          <button
-                            className="btn"
-                            onClick={() => setMatching(candidate)}
-                          >
-                            Find title
-                          </button>
-                          <span className="muted">
-                            {selected[candidate.id].tmdb_id
-                              ? "Matched"
-                              : "Not matched"}
-                          </span>
-                        </div>
-                        {selected[candidate.id].media_type === "tv" && (
-                          <div className="form-grid">
-                            <Field label="Season">
-                              <input
-                                type="number"
-                                min={0}
-                                value={selected[candidate.id].season ?? 1}
-                                onChange={(e) =>
-                                  setSelected({
-                                    ...selected,
-                                    [candidate.id]: {
-                                      ...selected[candidate.id],
-                                      season: Number(e.target.value),
-                                    },
-                                  })
-                                }
-                              />
-                            </Field>
-                            <Field label="Episode">
-                              <input
-                                type="number"
-                                min={1}
-                                value={selected[candidate.id].episode ?? 1}
-                                onChange={(e) =>
-                                  setSelected({
-                                    ...selected,
-                                    [candidate.id]: {
-                                      ...selected[candidate.id],
-                                      episode: Number(e.target.value),
-                                    },
-                                  })
-                                }
-                              />
-                            </Field>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        {matching && (
-          <MatchTitle
-            query={matching.suggested_title}
-            onClose={() => setMatching(null)}
-            onSelect={(card) => {
-              setSelected({
-                ...selected,
-                [matching.id]: {
-                  ...selected[matching.id],
-                  title: card.title,
-                  tmdb_id: card.tmdb_id,
-                  media_type: card.media_type,
-                },
-              });
-              setMatching(null);
-            }}
-          />
-        )}
-      </div>
-    </Dialog>
-  );
-}
-function MatchTitle({
-  query: initial,
-  onSelect,
-  onClose,
-}: {
-  query: string;
-  onSelect: (card: any) => void;
-  onClose: () => void;
-}) {
-  const [query, setQuery] = useState(initial);
-  const [results, setResults] = useState<any[]>([]);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function search() {
-    setBusy(true);
-    try {
-      setResults(await api<any[]>(`/suggest?q=${encodeURIComponent(query)}`));
-      setError("");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Dialog title="Find title" onClose={onClose}>
-      <div className="form">
-        <Field label="Film or series">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} />
-        </Field>
-        <button
-          className="btn primary"
-          disabled={busy || query.trim().length < 2}
-          onClick={search}
-        >
-          {busy ? "Searching…" : "Search"}
-        </button>
-        <ErrorNote error={error} />
-        {results.map((card) => (
-          <button
-            className="match-row"
-            key={`${card.media_type}-${card.tmdb_id}`}
-            onClick={() => onSelect(card)}
-          >
-            <div>
-              <h3>{card.title}</h3>
-              <p>
-                {[card.year, card.media_type === "tv" ? "Series" : "Film"]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </div>
-            <Check size={18} strokeWidth={2.5} />
-          </button>
-        ))}
-      </div>
-    </Dialog>
   );
 }

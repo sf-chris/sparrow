@@ -87,6 +87,12 @@ Everything new lives in `backend/agents/`:
   the computer that downloaded it to where it's kept. Between folders on one
   disk a move is a hard link (`link`, then a release that checks it's the same
   file), so nothing is copied.
+- `found.py` — Found: every library folder is looked in by itself (on a change,
+  first sight, every six hours, or Look again); a file seen unchanged on two
+  looks ten minutes apart is named from its name, folders, TMDB and ffprobe's
+  length, and added only when they agree on one title. The rest wait on the
+  card's Found line for a person (Review). It replaces Import files; the
+  `/admin/imports` routes stay for the Windows installer checks.
 - `relocation.py` — changing a computer's library folder from its card: an empty
   or missing one just points elsewhere; "both" adds the new folder; "move" makes
   the new folder the library at once, puts the old one last (library folders are

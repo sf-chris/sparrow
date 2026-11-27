@@ -269,17 +269,18 @@ fs.mkdirSync(out, { recursive: true });
   await page.locator("dialog[open] .picker-list li.selected").waitFor();
   await snapshot("storage-folders", true);
   await closeDialog();
+  // The fixture's own sample video isn't a title Sparrow knows: Found asks about it.
   await page
-    .getByRole("button", { name: "Import files", exact: true })
-    .first()
-    .click();
+    .locator("#device-local")
+    .getByRole("button", { name: "Review", exact: true })
+    .click({ timeout: 30000 });
   await page
-    .getByRole("dialog", { name: "Import", exact: true })
+    .getByRole("dialog", { name: "Found on this server", exact: true })
     .waitFor();
-  await page.getByRole("checkbox").first().check();
-  await snapshot("import-preview", true);
+  await page.getByText("It's under a minute long.", { exact: false }).waitFor();
+  await snapshot("found-review", true);
   await page
-    .getByRole("button", { name: "Find title", exact: true })
+    .getByRole("button", { name: "Which title is this?", exact: true })
     .first()
     .click();
   await page.getByLabel("Film or series", { exact: true }).fill("quiet");
@@ -287,8 +288,11 @@ fs.mkdirSync(out, { recursive: true });
     .getByRole("button", { name: "Search", exact: true })
     .click();
   await page.getByRole("button", { name: /The Quiet Planet/ }).waitFor();
-  await snapshot("import-match", true);
-  await page.keyboard.press("Escape");
+  await snapshot("found-match", true);
+  await page.getByRole("button", { name: /The Quiet Planet/ }).click();
+  await page
+    .getByRole("button", { name: "Add 1 title to the collection", exact: true })
+    .waitFor();
   await page.keyboard.press("Escape");
 
   await go("/settings/people");
