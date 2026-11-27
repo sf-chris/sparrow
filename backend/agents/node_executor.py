@@ -403,7 +403,17 @@ class Executor:
             "download": bool(self.downloader and self.downloader.get("type") != "none"),
             "downloader_state": self.downloader_state
             or ("running" if self.downloader and self.downloader.get("type") != "none" else "none"),
+            "speech": self.speech_status(),
         }
+
+    def speech_status(self):
+        """Whether this computer can listen to soundtracks, and on what (see speech_setup)."""
+        try:
+            from .speech_setup import status
+
+            return status(self.data_dir)
+        except Exception as exc:  # Never let a speech check stop a heartbeat.
+            return {"ready": False, "device": "cpu", "gpu": None, "error": f"Subtitle check failed: {type(exc).__name__}"}
 
     def pending_results(self):
         with self.db() as db:
@@ -640,6 +650,10 @@ class Executor:
             from .subtitle_node import listen
 
             return await listen(self, path, args)
+        if kind == "subtitle_audio":
+            from .subtitle_node import audio_copy
+
+            return await audio_copy(self, path, args)
         if kind == "hls_segment":
             if self._hls_cache is None:
                 from .hls_cache import HLSCache
@@ -692,8 +706,9 @@ class Executor:
         if kind in ("stat", "read"):
             # Saved dialogue evidence is the one non-media document readable,
             # and only at its exact cache location.
+            # So is a soundtrack decoded for another computer to listen to.
             evidence = root_id == "cache" and re.fullmatch(
-                r"subtitle-evidence/[a-f0-9]{32}/evidence\.json",
+                r"subtitle-evidence/[a-f0-9]{32}/evidence\.json|subtitle-audio/[a-f0-9]{32}/audio\.wav",
                 str(args.get("path", "")),
             )
             if not path.is_file() or (

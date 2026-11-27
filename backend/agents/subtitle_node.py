@@ -85,6 +85,152 @@ def listen_model(data_dir, choice):
     )
 
 
+def speech_command(executor, *arguments):
+    """(command, environment) for a speech worker on this computer.
+
+    The worker runs with this computer's speech engine: the server's own
+    Python, or the private environment a paired computer set up for Subtitles.
+    """
+    from . import speech_setup
+
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--subtitle-evidence", *arguments], None
+    return (
+        [speech_setup.python(executor.data_dir), "-m", "backend.agents.subtitle_evidence", *arguments],
+        speech_setup.environment(executor.data_dir),
+    )
+
+
+async def run_speech(executor, command, env, timeout, lock_name):
+    """Run one speech worker at a time per kind; kill it if the wait ends."""
+    lock = getattr(executor, lock_name, None)
+    if lock is None:
+        lock = asyncio.Lock()
+        setattr(executor, lock_name, lock)
+    async with lock:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            env=env,
+        )
+        try:
+            await asyncio.wait_for(process.wait(), timeout=timeout)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            raise
+
+
+AUDIO_COPY = "subtitle-audio"
+AUDIO_PIPELINE = 1
+
+
+def audio_key(version, audio_index):
+    identity = {"pipeline": AUDIO_PIPELINE, "version": version, "audio_index": audio_index}
+    return hashlib.sha256(canonical(identity).encode()).hexdigest()[:32]
+
+
+async def audio_copy(executor, path, args):
+    """Decode one audio track onto the playback clock for another computer to hear.
+
+    The copy is 16 kHz mono, a few per cent of the video's size. It is checked
+    against the video's version here, made once and reused; copies untouched
+    for a week are removed.
+    """
+    from .subtitle_evidence import extract, load, save
+    from .node_executor import sha256_file
+
+    if file_version(path) != args["version"]:
+        raise NodeError("The video changed before its dialogue could be analysed.")
+    audio_index = args.get("audio_index")
+    facts = await probe_file(path)
+    if not any(t["index"] == audio_index for t in facts["audio_tracks"]):
+        raise NodeError("Choose an audio track from this video.")
+    if facts["duration"] > 6 * 3600:
+        raise NodeError("Dialogue analysis currently supports videos up to six hours.")
+    home = executor.cache_root / AUDIO_COPY
+    key = audio_key(args["version"], audio_index)
+    folder = home / key
+    lock = getattr(executor, "_audio_copy_lock", None)
+    if lock is None:
+        executor._audio_copy_lock = lock = asyncio.Lock()
+    async with lock:
+        cutoff = time.time() - 7 * 86400
+        for old in home.glob("*") if home.is_dir() else ():
+            if old.name != key and old.is_dir() and old.stat().st_mtime < cutoff:
+                import shutil
+
+                shutil.rmtree(old, ignore_errors=True)
+        audio, about = folder / "audio.wav", folder / "copy.json"
+        if not about.is_file() or not audio.is_file():
+            folder.mkdir(parents=True, exist_ok=True)
+            ffmpeg, ffprobe = executable("ffmpeg"), executable("ffprobe")
+            if not ffmpeg or not ffprobe:
+                raise NodeError("ffmpeg is missing. Run the setup command again on this computer.")
+            try:
+                source = await asyncio.to_thread(extract, path, audio, audio_index, ffmpeg, ffprobe)
+            except Exception as exc:
+                raise NodeError(f"The audio couldn't be decoded: {str(exc)[:200]}") from None
+            if file_version(path) != args["version"]:
+                audio.unlink(missing_ok=True)
+                raise NodeError("The video changed while its audio was decoded.")
+            save(
+                about,
+                {
+                    "audio": source,
+                    "sha256": await asyncio.to_thread(sha256_file, audio),
+                    "media_version": args["version"],
+                },
+            )
+        os.utime(folder)
+        value = load(about)
+    return {
+        "path": f"{AUDIO_COPY}/{key}/audio.wav",
+        "version": file_version(audio),
+        "sha256": value["sha256"],
+        "size_bytes": audio.stat().st_size,
+        "audio": value["audio"],
+    }
+
+
+async def receive_audio(executor, folder, remote):
+    """Fetch another computer's decoded audio into an evidence folder, resuming."""
+    from .subtitle_evidence import save
+    from .node_executor import sha256_file
+
+    audio = folder / "audio.wav"
+    if (folder / "audio.json").is_file() and audio.is_file():
+        return
+    if not executor.fetcher:
+        raise NodeError("This computer can't receive audio. Run the setup command again.")
+    size, expected = int(remote["size_bytes"]), str(remote["sha256"])
+    if not 0 < size <= 2 * 1024**3 or not re.fullmatch("[a-f0-9]{64}", expected):
+        raise NodeError("Invalid audio copy.")
+    folder.mkdir(parents=True, exist_ok=True)
+    partial = folder / "audio.wav.part"
+    have = partial.stat().st_size if partial.exists() else 0
+    if have > size:
+        partial.unlink()
+        have = 0
+    if have < size:
+        with partial.open("ab") as output:
+            async for chunk in executor.fetcher(remote["source"], have):
+                have += len(chunk)
+                if have > size:
+                    break
+                await asyncio.to_thread(output.write, chunk)
+            output.flush()
+            os.fsync(output.fileno())
+    if partial.stat().st_size != size or await asyncio.to_thread(sha256_file, partial) != expected:
+        partial.unlink(missing_ok=True)
+        raise NodeError("The audio didn't arrive intact. It will be fetched again.")
+    os.replace(partial, audio)
+    save(folder / "audio.json", remote["audio"])
+
+
 def evidence_threads():
     # A quarter of the machine, between two and four threads: fast enough for
     # background work without starving playback or transcoding.
@@ -100,15 +246,25 @@ async def evidence(executor, path, args):
     """
     from .subtitle_evidence import evidence_key, load, model_identity
 
-    if file_version(path) != args["version"]:
-        raise NodeError("The video changed before its dialogue could be analysed.")
-    facts = await probe_file(path)
+    remote = args.get("remote")
     audio_index = args.get("audio_index")
-    track = next((t for t in facts["audio_tracks"] if t["index"] == audio_index), None)
-    if not track:
-        raise NodeError("Choose an audio track from this video.")
-    if facts["duration"] > 6 * 3600:
-        raise NodeError("Dialogue analysis currently supports videos up to six hours.")
+    if remote:
+        # Another computer holds the video and decoded its audio for us.
+        tags = (remote.get("audio") or {}).get("audio_tags") or {}
+        track = {"index": audio_index, "language": tags.get("language") or "und"}
+        if float((remote.get("audio") or {}).get("audio_seconds", 0)) > 6 * 3600:
+            raise NodeError("Dialogue analysis currently supports videos up to six hours.")
+        if (remote.get("audio") or {}).get("audio_index") != audio_index:
+            raise NodeError("That audio belongs to another track.")
+    else:
+        if file_version(path) != args["version"]:
+            raise NodeError("The video changed before its dialogue could be analysed.")
+        facts = await probe_file(path)
+        track = next((t for t in facts["audio_tracks"] if t["index"] == audio_index), None)
+        if not track:
+            raise NodeError("Choose an audio track from this video.")
+        if facts["duration"] > 6 * 3600:
+            raise NodeError("Dialogue analysis currently supports videos up to six hours.")
     model = evidence_model(executor.data_dir)
     if not model:
         raise NodeError(
@@ -121,12 +277,14 @@ async def evidence(executor, path, args):
     if not finished.is_file():
         language = language_code(track["language"])
         folder.mkdir(parents=True, exist_ok=True)
+        if remote:
+            await receive_audio(executor, folder, remote)
         request = folder / "request.json"
         request.write_text(
             canonical(
                 {
                     "folder": str(folder),
-                    "video": str(path),
+                    "video": None if remote else str(path),
                     "version": args["version"],
                     "audio_index": audio_index,
                     "language": language if re.fullmatch("[a-z]{2}", language) else None,
@@ -141,62 +299,34 @@ async def evidence(executor, path, args):
             encoding="utf8",
         )
         budget = min(max(float(args.get("budget", 540)), 60.0), 840.0)
-        command = (
-            [sys.executable, "--subtitle-evidence", str(request), str(budget)]
-            if getattr(sys, "frozen", False)
-            else [
-                sys.executable,
-                "-m",
-                "backend.agents.subtitle_evidence",
-                str(request),
-                str(budget),
-            ]
-        )
-        lock = getattr(executor, "_evidence_lock", None)
-        if lock is None:
-            executor._evidence_lock = lock = asyncio.Lock()
-        async with lock:
-            result_path = folder / "result.json"
-            result_path.unlink(missing_ok=True)
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            try:
-                # Extraction and speech detection run before the first chunk,
-                # so allow them time beyond the transcription budget.
-                await asyncio.wait_for(process.wait(), timeout=budget + 600)
-            except asyncio.CancelledError:
-                if process.returncode is None:
-                    process.kill()
-                    await process.wait()
-                raise
-            except asyncio.TimeoutError:
-                if process.returncode is None:
-                    process.kill()
-                    await process.wait()
-                if not result_path.is_file():
-                    # Completed chunks are checkpointed; the next call resumes.
-                    status = folder / "status.json"
-                    return {
-                        "state": "partial",
-                        "progress": (
-                            load(status).get("progress", 0) if status.is_file() else 0
-                        ),
-                    }
+        command, env = speech_command(executor, str(request), str(budget))
+        result_path = folder / "result.json"
+        result_path.unlink(missing_ok=True)
+        try:
+            # Extraction and speech detection run before the first chunk,
+            # so allow them time beyond the transcription budget.
+            await run_speech(executor, command, env, budget + 600, "_evidence_lock")
+        except asyncio.TimeoutError:
             if not result_path.is_file():
-                raise NodeError(
-                    "The speech worker stopped unexpectedly. Check the node's media components."
-                )
-            result = load(result_path)
-            if not result["ok"]:
-                raise NodeError(result["error"])
+                # Completed chunks are checkpointed; the next call resumes.
+                status = folder / "status.json"
+                return {
+                    "state": "partial",
+                    "progress": (
+                        load(status).get("progress", 0) if status.is_file() else 0
+                    ),
+                }
+        if not result_path.is_file():
+            raise NodeError(
+                "The speech worker stopped unexpectedly. Run the setup command again on this computer."
+            )
+        result = load(result_path)
+        if not result["ok"]:
+            raise NodeError(result["error"])
     status = load(folder / "status.json")
     if status["state"] != "complete" or not finished.is_file():
         return {"state": "partial", "progress": status.get("progress", 0)}
-    if file_version(path) != args["version"]:
+    if not remote and file_version(path) != args["version"]:
         raise NodeError("The video changed during dialogue analysis.")
     return {
         "state": "complete",
@@ -496,33 +626,8 @@ async def listen(executor, path, args):
     result_path = work / "result.json"
     if not result_path.is_file():
         (work / "request.json").write_text(canonical(request), encoding="utf8")
-        command = (
-            [sys.executable, "--subtitle-evidence", str(work / "request.json")]
-            if getattr(sys, "frozen", False)
-            else [
-                sys.executable,
-                "-m",
-                "backend.agents.subtitle_evidence",
-                str(work / "request.json"),
-            ]
-        )
-        lock = getattr(executor, "_listen_lock", None)
-        if lock is None:
-            executor._listen_lock = lock = asyncio.Lock()
-        async with lock:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            try:
-                await asyncio.wait_for(process.wait(), timeout=600)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                if process.returncode is None:
-                    process.kill()
-                    await process.wait()
-                raise
+        command, env = speech_command(executor, str(work / "request.json"))
+        await run_speech(executor, command, env, 600, "_listen_lock")
     if not result_path.is_file():
         raise NodeError("The speech worker stopped unexpectedly.")
     result = load(result_path)

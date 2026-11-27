@@ -240,15 +240,11 @@ def transcribe(
             "No independent listening or playback review has occurred.",
         ],
     }
+    from .speech_device import load
+
+    model, compute = load(model_path, threads, factory=WhisperModel)
+    manifest["model"]["device"], _, manifest["model"]["compute_type"] = compute.partition(" ")
     save(folder / "manifest.json", manifest)
-    model = WhisperModel(
-        str(model_path),
-        device="cpu",
-        compute_type="int8",
-        cpu_threads=threads,
-        num_workers=1,
-        local_files_only=True,
-    )
     if not model.model.is_multilingual:
         raise ValueError("An English-only model cannot test multilingual subtitles.")
     with wave.open(str(folder / "audio.wav")) as audio:

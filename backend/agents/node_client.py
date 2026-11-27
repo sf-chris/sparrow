@@ -226,6 +226,30 @@ def fetcher(config):
     return fetch
 
 
+def speech_fetchers(config):
+    """Read this server's shared speech models with the node's own credential."""
+    headers = {"Authorization": "Bearer " + config["credential"]}
+
+    async def models():
+        async with httpx.AsyncClient(base_url=config["server"], timeout=60, headers=headers) as client:
+            response = await client.get("/api/v1/node/models")
+            response.raise_for_status()
+            return response.json()
+
+    async def model_file(name, file, offset):
+        async with httpx.AsyncClient(
+            base_url=config["server"], timeout=httpx.Timeout(120), headers=headers
+        ) as client:
+            async with client.stream(
+                "GET", f"/api/v1/node/models/{name}/{file}", params={"offset": offset}
+            ) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes(1024 * 1024):
+                    yield chunk
+
+    return models, model_file
+
+
 async def managed_downloader(config_path, config):
     """Start this node's own Transmission, saving the port it listens on.
 
@@ -323,6 +347,28 @@ async def run(config_path):
     jobs_hooks = []  # Called with (before, after) when the server changes this computer's jobs.
     executor.jobs_hooks = jobs_hooks
 
+    # Subtitles: the speech engine sets itself up while the job is on.
+    from .speech_setup import NodeSpeech
+
+    speech = NodeSpeech(config_path.parent, *speech_fetchers(config))
+
+    async def follow_subtitles(before, after):
+        if after.get("subtitles"):
+            speech.ensure()
+        elif before.get("subtitles"):
+            await speech.stop()
+
+    jobs_hooks.append(follow_subtitles)
+    if wants(config, "subtitles"):
+        speech.ensure()
+
+    async def keep_speech():
+        """Retry a stopped setup now and then while Subtitles stays on."""
+        while True:
+            await asyncio.sleep(1800)
+            if wants(config, "subtitles"):
+                speech.ensure()
+
     async def apply_jobs(jobs):
         if not isinstance(jobs, dict) or jobs == config.get("jobs"):
             return
@@ -405,10 +451,12 @@ async def run(config_path):
                 async with asyncio.TaskGroup() as group:
                     for number in range(4):
                         group.create_task(worker(number))
+                    group.create_task(keep_speech())
             except* PermissionError:
                 await executor.stop_owned_downloads()
                 raise
         finally:
+            await speech.stop()
             await executor.shutdown()
             if daemon:
                 await daemon.stop()
