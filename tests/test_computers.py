@@ -74,6 +74,8 @@ class HealthTests(unittest.TestCase):
         report = computers.health(node(roots=[], speech=gpu), jobs)
         self.assertEqual(rows(report)["subtitles"], ("ready", "Uses the GeForce RTX 4080", None))
         self.assertNotIn("playback", rows(report))  # Nothing kept, nothing to play.
+        failed = computers.health(node(roots=[], speech={"ready": True, "device": "cpu", "gpu": "GeForce RTX 4080"}), jobs)
+        self.assertEqual(rows(failed)["subtitles"][1], "Uses the processor. The graphics card didn't work")
         busy = computers.health(node(roots=[], speech={"installing": True, "progress": 40}), jobs)
         self.assertEqual(rows(busy)["subtitles"], ("waiting", "Setting up. 40%", None))
         # A graphics card turns Subtitles on by default.

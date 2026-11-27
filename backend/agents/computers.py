@@ -217,8 +217,11 @@ def health(node: dict, jobs: dict) -> dict:
         rows.append(row("subtitles", True, "attention", str(speech["error"])[:120], repair))
     elif not speech.get("ready"):
         rows.append(row("subtitles", True, "waiting" if not local else "attention", "Setting up" if not local else "Speech model missing"))
-    elif speech.get("gpu"):
+    elif speech.get("gpu") and speech.get("device") == "cuda":
         rows.append(row("subtitles", True, "ready", f"Uses the {speech['gpu']}"))
+    elif speech.get("gpu"):
+        # The card is there but failed, so the processor listens for now.
+        rows.append(row("subtitles", True, "ready", "Uses the processor. The graphics card didn't work"))
     else:
         rows.append(row("subtitles", True, "ready", "Uses the processor"))
 
