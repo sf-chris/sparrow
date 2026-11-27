@@ -468,8 +468,10 @@ def build(request, budget=None):
     started = time.monotonic()
     folder = Path(request["folder"])
     folder.mkdir(parents=True, exist_ok=True)
-    video = Path(request["video"])
-    if file_version(video) != request["version"]:
+    # Another computer may hold the video: then its audio arrives already
+    # decoded (audio.wav and audio.json), checked against the video there.
+    video = Path(request["video"]) if request.get("video") else None
+    if video and file_version(video) != request["version"]:
         raise ValueError("The video changed; its speech evidence must be rebuilt.")
     status_path = folder / "status.json"
     evidence_path = folder / "evidence.json"
@@ -477,6 +479,8 @@ def build(request, budget=None):
         return load(status_path)
     audio = folder / "audio.wav"
     if not (folder / "audio.json").is_file() or not audio.is_file():
+        if video is None:
+            raise ValueError("The decoded audio for this video is missing.")
         save(folder / "status.json", {"state": "extracting", "progress": 0})
         save(
             folder / "audio.json",
@@ -510,28 +514,29 @@ def build(request, budget=None):
         c for c in chunks if not (results_folder / f"c{c['index']:05d}.json").is_file()
     ]
     timings = load(folder / "timings.json") if (folder / "timings.json").is_file() else []
+    compute = load(folder / "compute.json") if (folder / "compute.json").is_file() else {}
     if remaining:
-        from faster_whisper import WhisperModel
+        from .speech_device import Recogniser
 
-        model = WhisperModel(
-            request["model_path"],
-            device="cpu",
-            compute_type="int8",
-            cpu_threads=request["threads"],
-            num_workers=1,
-            local_files_only=True,
-        )
-        if not model.model.is_multilingual:
+        recogniser = Recogniser(request["model_path"], request["threads"])
+        if not recogniser.model.model.is_multilingual:
             raise ValueError("Foreign-dialogue evidence needs a multilingual speech model.")
+        compute = {"compute": recogniser.compute}
+        save(folder / "compute.json", compute)
         for number, chunk in enumerate(remaining):
             elapsed = time.monotonic() - started
             average = sum(t["seconds"] for t in timings[-20:]) / max(1, len(timings[-20:]))
             if number and budget is not None and elapsed + 1.2 * average > budget:
                 break
             tick = time.monotonic()
-            result = transcribe_chunk(
-                model, audio, chunk, request.get("language"), request["options"]
+            result = recogniser.run(
+                lambda model: transcribe_chunk(
+                    model, audio, chunk, request.get("language"), request["options"]
+                )
             )
+            if recogniser.fallback and compute.get("compute") != recogniser.compute:
+                compute = {"compute": recogniser.compute, "fallback": recogniser.fallback}
+                save(folder / "compute.json", compute)
             save(results_folder / f"c{chunk['index']:05d}.json", result)
             timings.append(
                 {
@@ -558,14 +563,14 @@ def build(request, budget=None):
         ]
     if remaining:
         return load(status_path)
-    if file_version(video) != request["version"]:
+    if video and file_version(video) != request["version"]:
         raise ValueError("The video changed during transcription; evidence discarded.")
     results = [load(results_folder / f"c{c['index']:05d}.json") for c in chunks]
     utterances = assemble(results, probabilities, duration)
     strict = speech["strict"]
     speech_seconds = sum(b - a for a, b in strict)
     transcribed = sum(c["end"] - c["start"] for c in chunks)
-    compute = sum(t["seconds"] for t in timings)
+    seconds = sum(t["seconds"] for t in timings)
     languages = {}
     for utterance in utterances:
         languages[utterance["language"]] = languages.get(utterance["language"], 0) + 1
@@ -577,7 +582,8 @@ def build(request, budget=None):
         "recogniser": {
             "engine": "faster-whisper",
             "model": request["model"],
-            "compute": "cpu int8",
+            "compute": compute.get("compute", "cpu int8"),
+            **({"fallback": compute["fallback"]} if compute.get("fallback") else {}),
             "threads": request["threads"],
             "options": request["options"],
             "language_label": request.get("language"),
@@ -597,8 +603,8 @@ def build(request, budget=None):
             "clean_onsets": sum(u["clean_onset"] for u in utterances),
             "flagged_utterances": sum(bool(u["flags"]) for u in utterances),
             "languages": languages,
-            "transcription_seconds": round(compute, 3),
-            "real_time_factor": round(compute / max(transcribed, 1e-9), 3),
+            "transcription_seconds": round(seconds, 3),
+            "real_time_factor": round(seconds / max(transcribed, 1e-9), 3),
         },
         "speech": strict,
         "no_speech_detected": uncovered(strict, duration),
@@ -620,19 +626,14 @@ def build(request, budget=None):
 
 def listen(request):
     """Re-recognise one passage of saved evidence audio; nothing is replaced."""
-    from faster_whisper import WhisperModel
+    from .speech_device import Recogniser
 
-    model = WhisperModel(
-        request["model_path"],
-        device="cpu",
-        compute_type="int8",
-        cpu_threads=request["threads"],
-        num_workers=1,
-        local_files_only=True,
-    )
+    recogniser = Recogniser(request["model_path"], request["threads"])
     chunk = {"index": 0, "start": request["start"], "end": request["end"]}
-    result = transcribe_chunk(
-        model, Path(request["audio"]), chunk, request.get("language"), request["options"]
+    result = recogniser.run(
+        lambda model: transcribe_chunk(
+            model, Path(request["audio"]), chunk, request.get("language"), request["options"]
+        )
     )
     probabilities = [v / 255 for v in Path(request["speech"]).read_bytes()]
     utterances = assemble([result], probabilities, request["duration"])

@@ -87,6 +87,15 @@ Everything new lives in `backend/agents/`:
   track; `subtitle_evidence.py` (whole-soundtrack speech evidence on the storage
   node), `subtitle_sync.py` (measured timing and correction) and
   `subtitle_review.py` (page-by-page reviewer tools and approval gate).
+- `speech_setup.py`, `speech_device.py` — the Subtitles job's speech engine. Speech
+  work runs on the best computer with Subtitles on and ready (a working NVIDIA
+  card first, then the one holding the file, then this server); another computer
+  gets the soundtrack decoded where the file is (`subtitle_audio`) over the
+  transfer path. A paired computer sets the engine up itself when the job is on
+  (uv environment pinned from `speech_requirements.txt`, CUDA libraries with a
+  card, the model copied from this server via `/api/v1/node/models`). CUDA is
+  used when it works and set aside for a week when it fails; the Windows
+  installer stays on its bundled processor engine.
 
 ### The agents
 

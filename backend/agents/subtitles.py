@@ -916,33 +916,112 @@ class Subtitles:
         # analysed only when checking or fixing is requested.
         return spoken in ("", "und") or spoken != values["language"]
 
+    def listener(self, asset):
+        """(computer, reason) for who listens to this title's soundtrack.
+
+        Computers with Subtitles on and ready, best first: one using its
+        graphics card, then the one holding the file, then this server. The
+        reason explains a None.
+        """
+        here = asset["node_id"] or "local"
+        nodes = self.nodes
+        if not all(hasattr(nodes, name) for name in ("able", "jobs", "list")):
+            return here, ""
+        try:
+            computers = [n for n in nodes.list() if not n.get("disabled")]
+        except Exception:
+            return here, ""
+        able = [n for n in computers if nodes.able(n["id"], "subtitles")]
+        if able:
+            def rank(node):
+                speech = (node.get("capabilities") or {}).get("speech") or {}
+                return (speech.get("device") != "cuda", node["id"] != here, node["id"] != "local")
+
+            return min(able, key=rank)["id"], ""
+        wanted = [
+            n["id"] for n in computers
+            if nodes.jobs(n["id"], n.get("capabilities") or {}).get("subtitles")
+        ]
+        if not wanted:
+            return None, "No computer is set to do subtitles. Turn on Subtitles for one in Storage."
+        # None is ready: ask one that should be, so its own answer says why.
+        for choice in (here, "local"):
+            if choice in wanted:
+                return choice, ""
+        return wanted[0], ""
+
+    async def audio_for(self, task, asset, listener):
+        """Decode the soundtrack where the file is and let the listener fetch it."""
+        node = self.nodes.info(listener) if hasattr(self.nodes, "info") else None
+        self.update(
+            task, "measuring", f"Preparing the soundtrack for {node['name'] if node else 'another computer'}."
+        )
+        copy = await self.nodes.execute(
+            asset["node_id"],
+            "subtitle_audio",
+            {
+                "root_id": asset["root_id"],
+                "path": asset["path"],
+                "version": task["data"]["version"],
+                "audio_index": task["data"]["audio_index"],
+            },
+            timeout=3600,
+        )
+        key = copy["path"].split("/")[1]
+        token = f"sa-{key}-{listener}"[:80]
+        # A copy remade since the last attempt has a new version: start afresh.
+        self.nodes.close_transfers(token)
+        self.nodes.open_transfer(token, listener, asset["node_id"], "cache", copy["path"], copy["version"])
+        return {
+            "source": token,
+            "size_bytes": copy["size_bytes"],
+            "sha256": copy["sha256"],
+            "audio": copy["audio"],
+        }
+
     async def evidence(self, task, asset):
-        """Drive the node's resumable dialogue analysis; None if unavailable."""
-        lock = self.evidence_locks.setdefault(asset["node_id"], asyncio.Lock())
+        """Drive resumable dialogue analysis on the listening computer; None if unavailable."""
+        listener, reason = self.listener(asset)
+        if not listener:
+            return {"error": reason}
+        lock = self.evidence_locks.setdefault(listener, asyncio.Lock())
         if lock.locked():
             self.update(
                 task, "measuring", "Waiting to listen to the dialogue (another title is being analysed)."
             )
         async with lock:
+            remote = None
             for _ in range(400):
                 self.authority(task)
                 try:
-                    result = await self.nodes.execute(
-                        asset["node_id"],
-                        "subtitle_evidence",
-                        {
+                    if listener == asset["node_id"]:
+                        args = {
                             "root_id": asset["root_id"],
                             "path": asset["path"],
                             "version": task["data"]["version"],
                             "audio_index": task["data"]["audio_index"],
                             "budget": EVIDENCE_SLICE,
-                        },
-                        timeout=EVIDENCE_SLICE + 660,
+                        }
+                    else:
+                        if remote is None:
+                            remote = await self.audio_for(task, asset, listener)
+                        args = {
+                            "root_id": "cache",
+                            "path": "",
+                            "version": task["data"]["version"],
+                            "audio_index": task["data"]["audio_index"],
+                            "budget": EVIDENCE_SLICE,
+                            "remote": remote,
+                        }
+                    result = await self.nodes.execute(
+                        listener, "subtitle_evidence", args, timeout=EVIDENCE_SLICE + 660
                     )
                 except NodeError as exc:
                     return {"error": str(exc)[:500]}
                 if result["state"] == "complete":
-                    return result
+                    if remote:
+                        self.nodes.close_transfers(remote["source"])
+                    return {**result, "node": listener}
                 self.update(
                     task,
                     "measuring",
@@ -962,9 +1041,9 @@ class Subtitles:
             self.save_track(track["id"], timing={"measurable": False, "reason": reason})
             self.update(task, "measuring", "Dialogue analysis is unavailable.", speech=None, measured=track["id"])
             return "unavailable"
-        info = {k: info[k] for k in ("path", "version", "model", "coverage")}
+        info = {k: info[k] for k in ("path", "version", "model", "coverage", "node") if k in info}
         self.update(task, "measuring", "Comparing caption timing with the voice.", speech=info)
-        evidence = await self.speech(asset["node_id"], info)
+        evidence = await self.speech(info.get("node", asset["node_id"]), info)
         data = track["data"]
         original = await self.cues(asset["node_id"], data["original_path"], data["original_version"])
         measured = estimate(original, evidence)
@@ -1026,7 +1105,9 @@ class Subtitles:
         if not info:
             return None
         node = asset["node_id"]
-        evidence = await self.speech(node, info)
+        # The evidence lives on the computer that listened, which may not hold the file.
+        speech_node = info.get("node", node)
+        evidence = await self.speech(speech_node, info)
         utterances = evidence["utterances"]
         duration = evidence["source"]["audio_seconds"]
         track = self.track(task["data"].get("track_id"))
@@ -1054,6 +1135,7 @@ class Subtitles:
             "task": task,
             "asset": asset,
             "node": node,
+            "speech_node": speech_node,
             "info": info,
             "track": track,
             "evidence": evidence,
@@ -1766,13 +1848,15 @@ class Subtitles:
                 raise ToolError(str(exc)) from exc
             asset = context["asset"]
             key = context["info"]["path"].split("/")[1]
+            listener = context.get("speech_node", context["node"])
+            elsewhere = listener != context["node"]
             try:
                 heard = await self.nodes.execute(
-                    context["node"],
+                    listener,
                     "subtitle_listen",
                     {
-                        "root_id": asset["root_id"],
-                        "path": asset["path"],
+                        "root_id": "cache" if elsewhere else asset["root_id"],
+                        "path": "" if elsewhere else asset["path"],
                         "evidence": key,
                         "start": start,
                         "end": end,
@@ -2461,7 +2545,7 @@ class Subtitles:
                         task,
                         "measuring",
                         "Listening complete.",
-                        speech={k: info[k] for k in ("path", "version", "model", "coverage")},
+                        speech={k: info[k] for k in ("path", "version", "model", "coverage", "node") if k in info},
                     )
                     continue
                 outcome = data.get("review_outcome")

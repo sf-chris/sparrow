@@ -13,6 +13,7 @@ import json
 import math
 import os
 import resource
+import sys
 import time
 import wave
 from pathlib import Path
@@ -123,13 +124,12 @@ def run(request, output):
     if backend == "whisper":
         from faster_whisper import WhisperModel
 
-        model = WhisperModel(
-            str(model_path),
-            device="cpu",
-            compute_type="int8",
-            cpu_threads=threads,
-            local_files_only=True,
-        )
+        try:
+            from backend.agents.speech_device import load
+        except ImportError:  # Run as a loose script: the module sits beside it.
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+            from backend.agents.speech_device import load
+        model, _compute = load(model_path, threads, factory=WhisperModel)
         model_hash = digest(model_path / "model.bin")
     elif backend == "qwen":
         import torch

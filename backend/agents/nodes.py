@@ -738,6 +738,38 @@ def install_nodes(app, storage, get_service):
 
         return StreamingResponse(body(), media_type="application/octet-stream")
 
+    @router.get("/node/models")
+    async def node_models(request: Request):
+        """Speech models this server shares with a computer setting up Subtitles."""
+        from .speech_setup import shared_models
+
+        identity(request)
+        models = await asyncio.to_thread(shared_models, nodes.local().data_dir)
+        return [{k: m[k] for k in ("name", "files")} for m in models]
+
+    @router.get("/node/models/{name}/{file}")
+    async def node_model_file(name: str, file: str, request: Request, offset: int = 0):
+        from fastapi.responses import StreamingResponse
+        from .speech_setup import shared_file
+
+        identity(request)
+        path = await asyncio.to_thread(shared_file, nodes.local().data_dir, name, file)
+        if not path:
+            raise HTTPException(404, "This server doesn't share that model file.")
+        size = path.stat().st_size
+        offset = max(0, min(int(offset), size))
+
+        async def body():
+            with path.open("rb") as source:
+                source.seek(offset)
+                while chunk := await asyncio.to_thread(source.read, 1024 * 1024):
+                    yield chunk
+
+        return StreamingResponse(
+            body(), media_type="application/octet-stream",
+            headers={"Content-Length": str(size - offset)},
+        )
+
     @router.post("/node/results/{operation_id}")
     def result(operation_id: str, body: Result, request: Request):
         node_id = identity(request)
