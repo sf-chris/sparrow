@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams, useLocation } from "react-router-dom";
-import { Search, ArrowRight } from "lucide-react";
-import { api, post, type Item } from "./api";
+import { Search } from "lucide-react";
+import { api, type Item } from "./api";
 import { Tick } from "./Brand";
-import { Bar, Cover, ErrorNote, Loading, useResource } from "./ui";
+import { Bar, Cover, ErrorNote, useResource } from "./ui";
 
 type Card = {
   tmdb_id: number;
@@ -14,58 +14,16 @@ type Card = {
   poster_path?: string;
   poster_url?: string;
 };
-type Research = {
-  id: string;
-  query: string;
-  message: string;
-  cards: Card[];
-  state: string;
-  status_line: string;
-};
-/** Lowercase letters and digits only, accents dropped. */
-const plain = (text: string) =>
-  text
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
 
-/** Whether the text names one of these titles (or the start of one, as while
- * typing, or a title plus a little more, like "breaking bad season 2").
- * Anything else reads as a description, which goes to Sparrow. */
-function namesTitle(cards: Card[], text: string) {
-  const query = plain(text);
-  const words = query.split(" ").length;
-  return cards.some((card) => {
-    const name = plain(card.title);
-    return (
-      name.startsWith(query) ||
-      (query.startsWith(name + " ") && name.split(" ").length * 2 >= words)
-    );
-  });
-}
-
-const ideas = [
-  "A mystery we can finish tonight",
-  "Funny and under 90 minutes",
-  "A film for a Sunday afternoon",
-];
-
+/** Find: a title search. Matches appear as you type. */
 export default function Discover() {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState(params.get("q") || "");
-  const [identity, setIdentity] = useState(params.get("session") || "");
   const [titles, setTitles] = useState<Card[]>([]);
-  const [research, setResearch] = useState<Research | null>(null);
-  const [pollVersion, setPollVersion] = useState(0);
   const [searching, setSearching] = useState(false);
-  const [asking, setAsking] = useState(false);
   const [searched, setSearched] = useState("");
   const [error, setError] = useState("");
-  // The text Sparrow was last asked about, so a pause never asks twice.
-  const [asked, setAsked] = useState(params.get("session") ? query.trim() : "");
   const input = useRef<HTMLInputElement>(null);
   const owned = useResource(() => api<Item[]>("/catalogue"));
   const inGuide = useMemo(
@@ -79,31 +37,6 @@ export default function Discover() {
     if (!params.get("q") && matchMedia("(pointer: fine)").matches)
       input.current?.focus();
   }, []);
-  useEffect(() => {
-    if (!identity) return;
-    let cancelled = false,
-      timer: number;
-    const poll = async () => {
-      try {
-        const result = await api<Research>(`/discovery/${identity}`);
-        if (cancelled) return;
-        setResearch(result);
-        setAsking(result.state === "running");
-        setError("");
-        if (result.state === "running") timer = window.setTimeout(poll, 1500);
-      } catch (e) {
-        if (!cancelled) {
-          setAsking(false);
-          setError((e as Error).message);
-        }
-      }
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [identity, pollVersion]);
   useEffect(() => {
     const text = query.trim();
     if (text.length < 2) {
@@ -135,113 +68,10 @@ export default function Discover() {
       clearTimeout(timer);
     };
   }, [query]);
-  function remember(text: string, session = identity) {
-    setParams(
-      {
-        ...(text ? { q: text } : {}),
-        ...(session ? { mode: "assisted", session } : {}),
-      },
-      { replace: true },
-    );
-  }
-  // A description (no title matches what was typed) goes to Sparrow once
-  // typing pauses, rather than ending at "no title called…".
-  useEffect(() => {
-    const text = query.trim();
-    if (
-      text.length < 3 ||
-      searching ||
-      searched !== text ||
-      asking ||
-      asked === text ||
-      namesTitle(titles, text)
-    )
-      return;
-    const timer = window.setTimeout(() => void ask(text), 700);
-    return () => clearTimeout(timer);
-  }, [query, searched, searching, titles, asking, asked]);
-  async function ask(text = query.trim()) {
-    setError("");
-    setAsked(text);
-    setAsking(true);
-    remember(text);
-    try {
-      const result = await post<{ id: string }>("/discovery", {
-        message: text,
-        session_id: identity || undefined,
-      });
-      setResearch(null);
-      setIdentity(result.id);
-      setPollVersion((v) => v + 1);
-      remember(text, result.id);
-    } catch (e) {
-      setError((e as Error).message);
-      setAsking(false);
-    }
-  }
-  async function stop() {
-    try {
-      await api(`/discovery/${identity}`, { method: "DELETE" });
-      setAsking(false);
-      setResearch((previous) =>
-        previous
-          ? { ...previous, state: "closed", status_line: "Stopped." }
-          : previous,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  function startOver() {
-    if (asking) void stop();
-    setIdentity("");
-    setResearch(null);
-    setAsking(false);
-    remember(query, "");
-  }
   const from = { from: location.pathname + location.search };
-  function rows(cards: Card[]) {
-    return (
-      <ul className="results">
-        {cards.map((card) => (
-          <li key={`${card.media_type}:${card.tmdb_id}`}>
-            <Link
-              className="entry"
-              data-nav
-              to={`/title/${card.media_type}/${card.tmdb_id}`}
-              state={from}
-            >
-              <Cover
-                title={card.title}
-                src={
-                  card.poster_url ||
-                  (card.poster_path
-                    ? `https://image.tmdb.org/t/p/w342${card.poster_path}`
-                    : undefined)
-                }
-              />
-              <span className="entry-line">
-                <span className="entry-title">{card.title}</span>
-                {inGuide.has(`${card.media_type}:${card.tmdb_id}`) && (
-                  <span className="owned" title="In your collection">
-                    <Tick />
-                    <span className="sr-only">In your collection</span>
-                  </span>
-                )}
-                <span className="leader" aria-hidden="true" />
-                <span className="entry-meta num">
-                  {[card.year, card.media_type === "tv" ? "Series" : "Film"]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    );
-  }
-  const typed = query.trim().length >= 2;
+  const text = query.trim();
+  const typed = text.length >= 2;
+  const nothing = typed && !searching && searched === text && !titles.length;
   return (
     <main id="main-content" className="page find">
       <header className="page-head">
@@ -252,13 +82,9 @@ export default function Discover() {
         role="search"
         onSubmit={(event) => {
           event.preventDefault();
-          const text = query.trim();
-          if (text.length >= 2 && !namesTitle(titles, text)) {
-            if (asked !== text && !asking) void ask(text);
-          } else
-            document
-              .querySelector<HTMLElement>('section[aria-labelledby="titles"] .results [data-nav]')
-              ?.focus();
+          document
+            .querySelector<HTMLElement>(".find .results [data-nav]")
+            ?.focus();
         }}
       >
         <label className="finder-field">
@@ -267,79 +93,68 @@ export default function Discover() {
             ref={input}
             type="search"
             data-search
-            aria-label="Find a title or describe a mood"
-            placeholder="A title, or a mood"
-            maxLength={2000}
+            aria-label="Find a film or series"
+            placeholder="A film or series"
+            maxLength={500}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
-              remember(e.target.value);
+              setParams(e.target.value ? { q: e.target.value } : {}, {
+                replace: true,
+              });
             }}
           />
         </label>
-        <button
-          type="button"
-          className="btn primary"
-          disabled={asking || !typed}
-          onClick={() => void ask()}
-        >
-          {identity ? "Ask again" : "Ask Sparrow"}
-          <ArrowRight size={18} strokeWidth={2.5} />
-        </button>
       </form>
       <ErrorNote error={error} />
-      {identity && (
-        <section className="picks" aria-labelledby="picks">
-          <Bar id="picks" title="Sparrow’s picks">
-            {asking && (
-              <button className="bar-button" onClick={() => void stop()}>
-                Stop
-              </button>
-            )}
-            <button className="bar-button" onClick={startOver}>
-              Start over
-            </button>
-          </Bar>
-          {asking && <Loading label="Sparrow is looking" />}
-          {research?.message && <p className="pick-note">{research.message}</p>}
-          {research && !asking && !research.message && (
-            <p className="muted pick-status" role="status">
-              {research.status_line}
-            </p>
-          )}
-          {!!research?.cards.length && rows(research.cards)}
-        </section>
-      )}
-      {typed && (titles.length > 0 || (searching && !identity)) && (
+      {typed && (titles.length > 0 || searching) && (
         <section aria-labelledby="titles">
           <Bar id="titles" title="Titles">
             {searching && <span>Searching…</span>}
           </Bar>
-          {rows(titles)}
-        </section>
-      )}
-      {!query && !identity && (
-        <section aria-labelledby="ideas" className="ideas">
-          <Bar id="ideas" title="Ideas" />
-          <ul>
-            {ideas.map((idea) => (
-              <li key={idea}>
-                <button
-                  className="idea"
+          <ul className="results">
+            {titles.map((card) => (
+              <li key={`${card.media_type}:${card.tmdb_id}`}>
+                <Link
+                  className="entry"
                   data-nav
-                  onClick={() => {
-                    setQuery(idea);
-                    void ask(idea);
-                  }}
+                  to={`/title/${card.media_type}/${card.tmdb_id}`}
+                  state={from}
                 >
-                  <span>{idea}</span>
-                  <span className="leader" aria-hidden="true" />
-                  <ArrowRight size={18} strokeWidth={2.5} aria-hidden="true" />
-                </button>
+                  <Cover
+                    title={card.title}
+                    src={
+                      card.poster_url ||
+                      (card.poster_path
+                        ? `https://image.tmdb.org/t/p/w342${card.poster_path}`
+                        : undefined)
+                    }
+                  />
+                  <span className="entry-line">
+                    <span className="entry-title">{card.title}</span>
+                    {inGuide.has(`${card.media_type}:${card.tmdb_id}`) && (
+                      <span className="owned" title="In your collection">
+                        <Tick />
+                        <span className="sr-only">In your collection</span>
+                      </span>
+                    )}
+                    <span className="leader" aria-hidden="true" />
+                    <span className="entry-meta num">
+                      {[card.year, card.media_type === "tv" ? "Series" : "Film"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
         </section>
+      )}
+      {nothing && !error && (
+        <p className="muted find-nothing" role="status">
+          No film or series called “{text}”. Check the spelling.
+        </p>
       )}
     </main>
   );

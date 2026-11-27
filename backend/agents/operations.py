@@ -364,7 +364,7 @@ class Operations:
             elif row["job_id"]:
                 entry["action"] = {
                     "label": "See request",
-                    "href": "/activity?request=" + quote(row["job_id"], safe=""),
+                    "href": "/request/" + quote(row["job_id"], safe=""),
                 }
             elif user["role"] == "admin":
                 entry["action"] = {

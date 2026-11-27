@@ -132,7 +132,6 @@ export function Loading({
 
 const backNames: [RegExp, string][] = [
   [/^\/discover/, "Find"],
-  [/^\/activity/, "Requests"],
   [/^\/settings/, "Settings"],
   [/^\/(\?|$)/, "Guide"],
 ];

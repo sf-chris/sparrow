@@ -1,21 +1,12 @@
-import CollectionCare from "./CollectionCare";
 import { useState } from "react";
-import {
-  Link,
-  Navigate,
-  useLocation,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
-import { ArrowRight, Info, Pause, Play } from "lucide-react";
-import { api, post, type Job, type User } from "./api";
-import { Circled } from "./Brand";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { Info, Pause, Play } from "lucide-react";
+import { api, post, type Job } from "./api";
 import {
   BackLink,
   Bar,
   Cover,
   Dialog,
-  Empty,
   ErrorNote,
   Flag,
   Loading,
@@ -24,126 +15,9 @@ import {
   bytes,
   useResource,
 } from "./ui";
-import { Age, scope } from "./Collection";
+import { scope } from "./Collection";
 import { useWebSocket } from "../hooks/useWebSocket";
 
-export default function Activity({ user }: { user: User }) {
-  const [params] = useSearchParams();
-  const selectedRequest = params.get("request");
-  const resource = useResource(() => api<Job[]>("/jobs"));
-  const [error, setError] = useState("");
-  const [filter, setFilter] = useState("current");
-  const location = useLocation();
-  const from = { from: location.pathname + location.search };
-  useWebSocket(() => {
-    void resource.refresh();
-  });
-  const jobs = (resource.data || [])
-    .filter((j) => filter === "all" || j.status !== "complete")
-    .sort((a, b) => b.updated_at - a.updated_at);
-  // Older links (alerts, logs) name one request: open its details page.
-  if (selectedRequest)
-    return <Navigate to={`/activity/${selectedRequest}`} replace />;
-  const titles = Object.fromEntries(
-    (resource.data || []).map((j) => [`${j.media_type}:${j.tmdb_id}`, j.title]),
-  );
-  return (
-    <Page
-      className="requests-page"
-      title="Requests"
-      action={
-        <Link className="btn quiet" to="/settings/logs">
-          Logs
-        </Link>
-      }
-    >
-      <ErrorNote error={error || resource.error} retry={resource.refresh} />
-      <div className="request-tools">
-        <div className="tabs" role="tablist" aria-label="Which requests">
-          {[
-            ["current", "Current"],
-            ["all", "All"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              role="tab"
-              aria-selected={filter === value}
-              onClick={() => setFilter(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {!resource.data && resource.error ? null : resource.loading &&
-        !resource.data ? (
-        <Loading page label="Loading requests" />
-      ) : jobs.length ? (
-        <ol className="requests">
-          {jobs.map((job) => {
-            const open = job.status !== "complete";
-            return (
-              <li
-                id={`request-${job.id}`}
-                className={`request ${job.status}`}
-                key={job.id}
-              >
-                <Age seconds={job.updated_at} />
-                <div className="request-body">
-                  <div className="request-top">
-                    <h2>
-                      <Link
-                        to={`/title/${job.media_type}/${job.tmdb_id}`}
-                        state={from}
-                      >
-                        {open ? <Circled>{job.title}</Circled> : job.title}
-                      </Link>
-                    </h2>
-                    <Flag
-                      value={job.needs_attention ? "attention" : job.status}
-                    />
-                  </div>
-                  <p className="meta">{scope(job)}</p>
-                  <RequestProgress job={job} />
-                  {job.status !== "paused" && job.state_line && (
-                    <p className="request-note">{job.state_line}</p>
-                  )}
-                  <div className="actions">
-                    {open && (
-                      <RequestActions
-                        job={job}
-                        onDone={resource.refresh}
-                        onError={setError}
-                      />
-                    )}
-                    <Link
-                      className="details-link"
-                      to={`/activity/${job.id}`}
-                      state={from}
-                    >
-                      Details
-                      <ArrowRight size={16} strokeWidth={2.5} />
-                    </Link>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      ) : (
-        <Empty
-          title="Nothing coming up."
-          action={
-            <Link to="/discover" className="btn">
-              Find something
-            </Link>
-          }
-        />
-      )}
-      <CollectionCare titles={titles} />
-    </Page>
-  );
-}
 /** Retry, pause/resume and cancel for an open request. */
 function RequestActions({
   job,
@@ -347,7 +221,7 @@ export function RequestDetail() {
   useWebSocket(() => {
     void resource.refresh();
   });
-  const back = <BackLink from={location.state?.from} fallback="/activity" />;
+  const back = <BackLink from={location.state?.from} fallback="/" />;
   const detail = resource.data;
   if (!detail)
     return (

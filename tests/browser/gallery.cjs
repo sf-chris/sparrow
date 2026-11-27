@@ -125,7 +125,7 @@ async function playFrame(page) {
     await capture(household, 'title-movie', '/title/movie/102');
     await capture(household, 'request', '/title/tv/104', open(/^(Choose episodes|Get episodes|Request)/));
     await capture(household, 'player', `/watch/${asset('The Quiet Planet')}`, playFrame);
-    await capture(household, 'activity', '/activity');
+    await capture(household, 'following', '/settings/following');
     await capture(household, 'preferences', '/settings');
     await capture(household, 'account', '/settings/security');
     await capture(household, 'logs', '/settings/logs');

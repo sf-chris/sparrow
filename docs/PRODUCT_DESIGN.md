@@ -65,7 +65,7 @@ English. Apple TV, BBC iPlayer and printed TV guides are the reference.
 - Hints state consequences people can't see: cost, sign-outs, expiry, what is
   left unchanged. Never reassurance, and never an explanation of the product.
 - State, not narration: “Starting…”, “Paused”, “Stuck”. Sparrow never speaks
-  in the first person; only Ask Sparrow and Sparrow's picks name it.
+  in the first person.
 - Errors say what happened and what to do, in two short sentences at most:
   “This copy won't play. Try another format under Playback help.” No “please”
   and no apologies.
@@ -80,8 +80,10 @@ Failed and Arrived. Title flags are Offline, Needs subtitles and Checking.
 
 ## Structure
 
-Navigation is **Guide · Find · Requests**, plus the account initial for
-settings. Phones use a four-item tab bar (Guide, Find, Requests, You).
+Navigation is **Guide · Find**, plus the account initial for settings.
+Phones use a three-item tab bar (Guide, Find, You). There is no requests
+page: open requests live in the Guide's Coming up, and each opens its own
+page.
 `Ctrl/Cmd+K` opens Find; `/` focuses the page's search field; arrow keys move
 between titles, rows and covers anywhere they are listed.
 
@@ -93,21 +95,22 @@ between titles, rows and covers anywhere they are listed.
   name, set huge in the teal band that continues from the masthead, is the
   heading and the only display-size title in the app besides a title's own name. **Tonight** lists up to four resumable items (twelve on
   demand) with a still, time left and a direct play button. **Coming up** lists
-  open requests with their last update time, circled title and status.
+  every open request with its last update time, circled title and status, and
+  is absent when nothing is open.
   **Collection** is an A–Z listing with cover thumbnails, or a covers view.
   Search, type, sort, availability and view persist in the URL. `/library`
   redirects here with its filters.
-- **Find (`/discover`):** one box for a title or a mood. Title matches appear
-  as you type and are marked when already in your collection. **Ask Sparrow** is the
-  only way to start paid discovery; its answer appears as Sparrow's picks. Ideas
-  fill the box without starting anything. Drafts and sessions persist in the URL.
+- **Find (`/discover`):** a title search. Matches appear as you type and are
+  marked when already in your collection. Text that names no title gets one
+  line (“No film or series called …”) and is never sent to an agent. The draft
+  persists in the URL. Describing a mood is not part of Find.
 - **Title:** a feature spread. Big condensed title, facts line, synopsis, one
   primary action (Play or Resume with the episode) and Request. Open requests
   show as a circled “Coming up”. Following is a single line with Edit and
   Check now. Episodes and copies are listed below with progress and ticks.
-- **Requests (`/activity`):** a timed listing of requests with scope, the
-  agent's latest note, recovery actions and expandable notes, then Following.
-  `?request=` narrows to one request, including completed work.
+- **A request (`/request/:id`):** one request's scope, the agent's latest
+  note, recovery actions (Pause, Resume, Try again, Cancel), what Sparrow
+  picked and its notes. Opened from Coming up, a title's “Details” and Logs.
 - **Player:** the black TV screen with Sparrow's own controls: a large marigold
   play button, back 10s and forward 30s, a marigold scrubber, tabular times, mute
   and full screen (Space/K, ←/→, M, F). When a TV is in reach, a named Play on
@@ -116,7 +119,7 @@ between titles, rows and covers anywhere they are listed.
   Get subtitles, optional Check subtitle sync, and Fix subtitle timing. Each
   title/episode also opens those controls. Available tracks are distinguished
   from sync-checked tracks; paid checking is optional in shared preferences.
-- **Settings:** a left index grouped You (Preferences, Account, Logs),
+- **Settings:** a left index grouped You (Preferences, Following, Account, Logs),
   Household (People, Defaults) and Server (Computers, Connections, Sparrow
   Connect, Setup), with Sign out beneath. On phones the index becomes a
   scrolling strip with Sign out beside it. People is a cast list; Computers
@@ -136,7 +139,8 @@ between titles, rows and covers anywhere they are listed.
   opens the same dialog; the phone opens on the page it was shown from. Logs is a
   timed listing (time, title, summary, action) whose filters persist through
   pagination and reload; administrators see titles over their cost target
-  above it, never on Requests. Preferences label only personal or server-limited values.
+  above it. Following lists every title you follow with its controls (not
+  shown to viewers). Preferences label only personal or server-limited values.
 - **Setup:** numbered steps with the current step circled; two start choices;
   a check list with ticks for what is ready.
 - **Dialogs:** paper sheets headed by a black bar; bottom sheets on phones.

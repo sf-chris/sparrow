@@ -13,9 +13,9 @@ video. They contain no personal library, credentials or paid-provider results.
 
 ![The Guide with Tonight, Coming up and the A–Z collection](home-desktop.png)
 
-## A title, or a mood
+## Type a title
 
-![Find with one search box and ideas](discover-desktop.png)
+![Find with one search box](discover-desktop.png)
 
 ## Exactly the episodes you want
 
