@@ -4128,6 +4128,55 @@ button.link:hover {
   margin-top: 1.25rem;
 }
 
+/* ─── Found: titles in a computer's folders, added by themselves or named here ─── */
+.found-path {
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  font-weight: 500;
+}
+.found-path .link {
+  font-weight: 650;
+}
+.found-rows {
+  border-top: 1.5px solid var(--ink);
+}
+.found-rows > li {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.8rem 0.1rem;
+  border-bottom: 1px solid var(--rule);
+}
+.found-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.found-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 750;
+}
+.found-where {
+  overflow-wrap: anywhere;
+}
+.found-actions,
+.found-named {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 0.2rem;
+}
+.found-episode {
+  display: flex;
+  gap: 0.5rem;
+}
+.found-episode .field {
+  width: 6.5rem;
+}
+
 /* ─── Folder chooser: one folder, selected in a listing, named on the button ─── */
 .picker {
   display: grid;

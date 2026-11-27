@@ -59,7 +59,7 @@ Sparrow reads like a listings page, not an assistant: short, factual, British
 English. Apple TV, BBC iPlayer and printed TV guides are the reference.
 
 - Sections are nouns (Tonight, Coming up, Collection, Following). Buttons say
-  what happens (Play, Resume S1 E3, Request, Follow this series, Import files).
+  what happens (Play, Resume S1 E3, Request, Follow this series, Look again).
 - No lede under a page title. Keep one only when it changes what someone will
   do, as on Defaults and Preferences.
 - Hints state consequences people can't see: cost, sign-outs, expiry, what is
@@ -134,7 +134,11 @@ between titles, rows and covers anywhere they are listed.
   that opens beside the folder in use with it selected, selects on click, opens
   a folder with its arrow, and names the result on its one button ("Keep titles
   in Films"). A library holding titles then asks whether they move (shown on the
-  card as "Moving from" with a count) or both folders stay. Change jobs is a
+  card as "Moving from" with a count) or both folders stay. A Found line under
+  Storage says when Sparrow last looked in its folders, with Look again, and
+  ends in a tick and "Added 23", a quiet Nothing new, or "3 need a name" with a
+  Review pill (print black: a question, not a problem). Review lists each file
+  with Sparrow's reason, "Which title is this?" and Not a title. Change jobs is a
   checklist with a consequence under each job; Add a computer pairs, asks what
   it does, then asks only for the folders those jobs need; Set up again shows
   the same command, which repairs without touching folders or jobs. Sparrow

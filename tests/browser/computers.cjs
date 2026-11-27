@@ -132,6 +132,11 @@ const disk = (id, label, free, total, key) => ({ id, available: true, writable: 
       await p.getByRole('button', { name: 'Add a computer' }).click();
       await p.locator('dialog[open]').waitFor();
     });
+    // Found: the fixture's own short sample video waits for a name on this server's card.
+    await shoot('found', async (p) => {
+      await p.locator('#device-local').getByRole('button', { name: 'Review', exact: true }).click({ timeout: 30000 });
+      await p.getByRole('dialog', { name: 'Found on this server' }).getByText("It's under a minute long.", { exact: false }).waitFor();
+    });
     // A folder's path chooses another: the chooser opens with the one in use selected.
     const keepsTitles = (p) =>
       p.locator('#device-local').getByRole('button', { name: /Change where this server keeps titles/ });

@@ -165,6 +165,10 @@ class Nodes:
 
         # Titles moving to a new library folder, shown on the computer's card.
         node["relocation"] = status(self.accounts, node["id"])
+        from .found import summary
+
+        # Titles found in its folders: added by themselves, or waiting for a name.
+        node["found"] = summary(self.accounts, node["id"])
         from .release import current
 
         update = computers.update_status(

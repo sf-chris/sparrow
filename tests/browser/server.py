@@ -1,5 +1,6 @@
 """Real app/UI/media with isolated catalogue fixtures and no model or acquisition traffic."""
 
+import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -11,6 +12,8 @@ STATE = Path(os.environ.get("SPARROW_BROWSER_STATE", "/tmp/sparrow-browser-check
 os.environ["SPARROW_DATA_DIR"] = str(STATE)
 # The fixture's folders live in its state directory; offer it in the folder picker.
 os.environ["SPARROW_FOLDER_ROOTS"] = str(STATE)
+os.environ.setdefault("SPARROW_FOUND_SETTLE", "0")
+os.environ.setdefault("SPARROW_FOUND_TICK", "1")
 # Blank rather than unset: main's load_dotenv() would refill unset keys from .env.
 for _key in ("ZAI_API_KEY", "TMDB_API_KEY"):
     os.environ[_key] = ""
@@ -153,6 +156,7 @@ async def lifespan(app):
     m.agent_service.emit = AsyncMock()
     m.subtitles.attach(m.agent_service)
     m.discovery.register()
+    found_task = asyncio.create_task(m.found.loop())
     # A generated video with two actual audio tracks and three embedded captions.
     source = library / "fixture.mp4"
     if not source.exists():
@@ -189,6 +193,7 @@ async def lifespan(app):
         (art_dir / f"{identity}.svg").write_text(fixture_art(identity, title))
         (art_dir / f"{identity}-backdrop.svg").write_text(fixture_art(identity, title, wide=True))
     yield
+    found_task.cancel()
     if m.nodes.local()._hls_cache:
         for identity in list(m.nodes.local()._hls_cache.jobs):
             await m.nodes.local()._hls_cache.stop(identity)

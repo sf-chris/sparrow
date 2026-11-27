@@ -93,6 +93,7 @@ class Relocations:
         self.moves = moves
         self.accounts, self.nodes, self.storage = moves.accounts, moves.nodes, moves.storage
         self.catalogue, self.get_service = moves.catalogue, moves.get_service
+        self.on_change = None  # Called with a computer whose folders changed (Found looks).
         with self.accounts.connect() as db:
             db.execute(TABLE)
 
@@ -190,6 +191,8 @@ class Relocations:
                 raise FolderChange(str(exc)) from None
             self.nodes.heartbeat(node_id, capabilities)
         self.nodes.observe_availability()
+        if self.on_change:
+            self.on_change(node_id)
 
     # ─── Changing them ───────────────────────────────────────────────
 

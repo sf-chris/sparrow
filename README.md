@@ -90,8 +90,9 @@ subtitle processing; there is no separate subtitle application to run.
 
 ### Bring your collection
 
-Add storage in **Settings → Computers**, choose **Import files**,
-review the matches, and open a title to play it. Media can stay on its storage
+Add storage in **Settings → Computers**. Sparrow finds the titles already in
+its library folder, adds the ones it's sure of and asks about the rest, then
+open a title to play it. Media can stay on its storage
 machine while the Linux server coordinates your collection.
 
 Add only the services you need in **Settings → Server settings**:
