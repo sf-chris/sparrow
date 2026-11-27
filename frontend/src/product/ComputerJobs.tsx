@@ -102,10 +102,14 @@ export default function JobsDialog({
   onSaved: () => void | Promise<void>;
 }) {
   const [jobs, setJobs] = useState<Jobs>(defaultJobs(node));
+  const updatable = node.id !== "local" && node.health?.update?.auto != null;
+  const wasAuto = node.health?.update?.auto ?? true;
+  const [auto, setAuto] = useState(wasAuto);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const problem = jobsProblem(jobs, node, all);
-  const same = JSON.stringify(jobs) === JSON.stringify(defaultJobs(node));
+  const same =
+    JSON.stringify(jobs) === JSON.stringify(defaultJobs(node)) && auto === wasAuto;
   return (
     <Dialog
       title={`Jobs for ${node.name}`}
@@ -125,6 +129,11 @@ export default function JobsDialog({
               setError("");
               try {
                 await saveJobs(node, jobs);
+                if (updatable && auto !== wasAuto)
+                  await api(`/admin/nodes/${node.id}/settings`, {
+                    method: "PUT",
+                    body: JSON.stringify({ auto_update: auto }),
+                  });
                 await onSaved();
               } catch (e) {
                 setError((e as Error).message);
@@ -139,6 +148,26 @@ export default function JobsDialog({
       }
     >
       <JobChoices node={node} jobs={jobs} onChange={setJobs} all={all} />
+      {updatable && (
+        <fieldset className="job-choices job-updates">
+          <legend className="sr-only">Updates</legend>
+          <label className="check job-choice">
+            <input
+              type="checkbox"
+              checked={auto}
+              onChange={(e) => setAuto(e.target.checked)}
+              aria-describedby={`job-${node.id}-updates`}
+            />
+            <span>
+              <strong>Update by itself</strong>
+              <span className="muted" id={`job-${node.id}-updates`}>
+                Takes each new version when this server gets one, then restarts.
+                Downloads pause for a moment and carry on.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+      )}
     </Dialog>
   );
 }

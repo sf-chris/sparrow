@@ -4060,6 +4060,16 @@ button.link:hover {
 .btn.fix:hover {
   background: var(--red-wash);
 }
+/* Update is an offer, not a problem: print black, not red. */
+.btn.fix.update {
+  color: var(--ink);
+}
+.btn.fix.update:hover {
+  background: var(--paper-sink);
+}
+.job-rows .folder-state {
+  gap: 0.6rem;
+}
 .job-choices {
   display: grid;
   gap: 0;
@@ -4086,6 +4096,9 @@ button.link:hover {
 }
 .job-note {
   margin-top: 0.75rem;
+}
+.job-updates {
+  margin-top: 1.25rem;
 }
 
 /* ─── Folder picker: chosen folders, then a listing to choose from ─── */

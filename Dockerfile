@@ -60,4 +60,10 @@ USER 10001:10001
 VOLUME ["/data"]
 EXPOSE 8888
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8888/api/v1/auth/status',timeout=3)"
+# Which commit this image is, for the version each computer shows. Pass them
+# when building: SPARROW_COMMIT=$(git rev-parse --short HEAD) and
+# SPARROW_COMMIT_DATE=$(git log -1 --format=%cI). Last, so the cache holds.
+ARG SPARROW_COMMIT=""
+ARG SPARROW_COMMIT_DATE=""
+ENV SPARROW_COMMIT=$SPARROW_COMMIT SPARROW_COMMIT_DATE=$SPARROW_COMMIT_DATE
 ENTRYPOINT ["python","/app/entrypoint.py"]

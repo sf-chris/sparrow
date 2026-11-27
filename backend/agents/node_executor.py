@@ -110,6 +110,24 @@ def node_version():
         return None
 
 
+def node_release():
+    """The commit and date of the Sparrow Node this runs, as people recognise it."""
+    stamped = os.getenv("SPARROW_NODE_RELEASE")
+    if stamped:
+        try:
+            label = json.loads(stamped)
+            return {"commit": str(label.get("commit") or ""), "date": str(label.get("date") or "")}
+        except (ValueError, AttributeError):
+            pass
+    try:
+        from .release import current
+
+        label = current()
+        return {"commit": label["commit"], "date": label["date"]}
+    except Exception:  # A frozen Windows node carries no release label.
+        return {"commit": "", "date": ""}
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -237,6 +255,8 @@ class Executor:
         self.downloader_state = None
         # The jobs the household wants this computer to do (see computers.py).
         self.jobs = {}
+        # More for capabilities(), from whoever runs this computer (updates).
+        self.extra = None
         self._mutation_lock = asyncio.Lock()
         self._operation_locks = WeakValueDictionary()
         self._last_prune = 0
@@ -399,11 +419,13 @@ class Executor:
             ).is_file(),
             # Which Sparrow Node this is, and which media tools it carries.
             "version": node_version(),
+            "release": node_release(),
             "tools": tools_manifest(),
             "download": bool(self.downloader and self.downloader.get("type") != "none"),
             "downloader_state": self.downloader_state
             or ("running" if self.downloader and self.downloader.get("type") != "none" else "none"),
             "speech": self.speech_status(),
+            **(self.extra() if self.extra else {}),
         }
 
     def speech_status(self):
