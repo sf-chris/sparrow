@@ -671,6 +671,27 @@ def install_nodes(app, storage, get_service):
             headers={"Cache-Control": "no-store"},
         )
 
+    def tools_response(platform):
+        from fastapi.responses import FileResponse
+
+        path = node_package.tools(platform)
+        if not path:
+            raise HTTPException(404, "This server has no media tools for this kind of computer.")
+        return FileResponse(path, media_type="application/gzip", headers={"Cache-Control": "no-store"})
+
+    @router.get("/node/setup/{code}/tools-{platform}.tar.gz")
+    def setup_tools(code: str, platform: str):
+        """Media tools and the download app for the computer running a setup command."""
+        if not node_package.CODE.fullmatch(code) or not nodes.enrollment(code):
+            raise HTTPException(404, "This setup command expired. Get a fresh one in Sparrow.")
+        return tools_response(platform)
+
+    @router.get("/node/tools/{platform}.tar.gz")
+    def node_tools(platform: str, request: Request):
+        """The same tools for a paired computer that is missing them."""
+        identity(request)
+        return tools_response(platform)
+
     @router.post("/node/setup/{code}/progress")
     def setup_progress(code: str, body: Progress):
         if node_package.CODE.fullmatch(code):

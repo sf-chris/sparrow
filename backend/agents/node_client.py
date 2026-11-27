@@ -90,20 +90,15 @@ async def configure(args):
         "downloader": (
             json.loads(Path(args.downloader_config).read_text())
             if args.downloader_config
-            else {
-                # Sparrow Node runs its own Transmission, like the server can.
-                "type": "transmission",
-                "managed": True,
-                "host": "127.0.0.1",
-                "port": 0,
-                "username": "sparrow",
-                "password": secrets.token_urlsafe(24),
-            }
+            else own_downloader(previous.get("downloader"))
             if getattr(args, "managed_downloader", False)
             else previous.get("downloader")
         ),
         "node_id": args.node_id or previous.get("node_id"),
     }
+    if previous.get("jobs"):
+        # Setting up again keeps the jobs Sparrow gave this computer.
+        config["jobs"] = previous["jobs"]
     atomic_config(path, config)
     executor = Executor(
         path.parent, config["roots"], config["markers"], config["downloader"],
@@ -128,6 +123,84 @@ async def configure(args):
         config["node_id"] = response.json()["node_id"]
     atomic_config(path, config)
     print("Paired with Sparrow.")
+
+
+def own_downloader(previous=None):
+    """Sparrow Node runs its own Transmission, like the server can.
+
+    Setting up again keeps the one it already has, so its transfers carry on.
+    """
+    if isinstance(previous, dict) and previous.get("managed"):
+        return previous
+    return {
+        "type": "transmission",
+        "managed": True,
+        "host": "127.0.0.1",
+        "port": 0,
+        "username": "sparrow",
+        "password": secrets.token_urlsafe(24),
+    }
+
+
+def platform_name():
+    """This computer as the server names its tools archives, or None."""
+    import platform
+
+    if not sys.platform.startswith("linux"):
+        return None
+    machine = platform.machine().lower()
+    return {"x86_64": "linux-x86_64", "amd64": "linux-x86_64", "aarch64": "linux-aarch64",
+            "arm64": "linux-aarch64"}.get(machine)
+
+
+def has_tools(folder):
+    return all(os.access(Path(folder) / "bin" / name, os.X_OK) for name in ("ffmpeg", "ffprobe"))
+
+
+async def ensure_tools(config_path, config, client):
+    """Fetch this computer's media tools and download app when it has none.
+
+    A computer set up before the server had tools for it (or whose tools were
+    removed) heals itself on its next start. Returns True when tools are there.
+    """
+    import io
+    import shutil
+    import tarfile
+
+    folder = config_path.parent / "tools"
+    if has_tools(folder):
+        os.environ.setdefault("SPARROW_TOOLS_DIR", str(folder))
+        return True
+    if os.getenv("SPARROW_TOOLS_DIR") and has_tools(os.environ["SPARROW_TOOLS_DIR"]):
+        return True
+    name = platform_name()
+    if not name:
+        return False
+    try:
+        response = await client.get(f"/api/v1/node/tools/{name}.tar.gz", timeout=600)
+    except httpx.HTTPError:
+        return False
+    if response.status_code != 200:
+        return False
+    fresh = folder.with_name("tools.new")
+    shutil.rmtree(fresh, ignore_errors=True)
+    fresh.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as archive:
+        try:
+            archive.extractall(fresh, filter="tar")
+        except TypeError:  # Python before 3.11.4; the archive is this server's own.
+            archive.extractall(fresh)
+    if not has_tools(fresh):
+        shutil.rmtree(fresh, ignore_errors=True)
+        return False
+    shutil.rmtree(folder, ignore_errors=True)
+    fresh.rename(folder)
+    os.environ["SPARROW_TOOLS_DIR"] = str(folder)
+    if not config.get("downloader") and (folder / "bin" / "transmission-daemon").is_file():
+        config["downloader"] = own_downloader()
+        atomic_config(config_path, config)
+    print("Installed media tools and the download app.", flush=True)
+    return True
 
 
 def fetcher(config):
@@ -240,6 +313,12 @@ async def run(config_path):
         on_folders=save_folders,
     )
     executor.jobs = dict(config.get("jobs") or {})
+    async with httpx.AsyncClient(
+        base_url=config["server"],
+        headers={"Authorization": "Bearer " + config["credential"]},
+    ) as setup:
+        if await ensure_tools(config_path, config, setup):
+            executor.downloader = config.get("downloader")
     await follow_downloads()
     jobs_hooks = []  # Called with (before, after) when the server changes this computer's jobs.
     executor.jobs_hooks = jobs_hooks
@@ -335,6 +414,19 @@ async def run(config_path):
                 await daemon.stop()
 
 
+async def run_until_stopped(config_path):
+    """Run until stopped; a service manager's stop also stops the download app."""
+    task = asyncio.current_task()
+    try:
+        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+    except (NotImplementedError, RuntimeError, ValueError):
+        pass  # Windows services stop the process their own way.
+    try:
+        await run(config_path)
+    except asyncio.CancelledError:
+        pass
+
+
 def main():
     default = (
         Path(os.getenv("LOCALAPPDATA", Path.home() / ".local/share"))
@@ -371,7 +463,7 @@ def main():
         if args.command == "configure":
             asyncio.run(configure(args))
         elif args.command == "run":
-            asyncio.run(run(args.config))
+            asyncio.run(run_until_stopped(args.config))
         else:
             config = json.loads(Path(args.config).read_text())
             executor = Executor(

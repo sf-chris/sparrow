@@ -66,16 +66,48 @@ def root_marker(path):
     return str(path), marker.read_text().strip()
 
 
+def tools_dir():
+    """The media tools and download app installed with this Sparrow Node, if any."""
+    folder = os.getenv("SPARROW_TOOLS_DIR")
+    return Path(folder) if folder and Path(folder, "bin").is_dir() else None
+
+
+def tools_manifest():
+    folder = tools_dir()
+    try:
+        return json.loads((folder / "manifest.json").read_text()) if folder else None
+    except (OSError, ValueError):
+        return None
+
+
 def executable(name):
+    """A media tool: configured, packaged with the installer, the node's own, else PATH."""
     import sys
 
-    bundled = (
-        Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
-        / "bin"
-        / (name + (".exe" if os.name == "nt" else ""))
-    )
+    suffix = ".exe" if os.name == "nt" else ""
+    bundled = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "bin" / (name + suffix)
     configured = os.getenv("SPARROW_" + name.upper())
-    return configured or (str(bundled) if bundled.is_file() else shutil.which(name))
+    if configured:
+        return configured
+    if bundled.is_file():
+        return str(bundled)
+    own = tools_dir()
+    if own and os.access(own / "bin" / (name + suffix), os.X_OK):
+        return str(own / "bin" / (name + suffix))
+    return shutil.which(name)
+
+
+def node_version():
+    """The Sparrow Node version this runs: stamped in a node's package, else this server's."""
+    stamped = os.getenv("SPARROW_NODE_VERSION")
+    if stamped:
+        return stamped
+    try:
+        from .node_package import version
+
+        return version()
+    except Exception:  # A frozen Windows node has no package of its own to read.
+        return None
 
 
 def canonical(value):
@@ -365,6 +397,9 @@ class Executor:
                 ).model_path(self.data_dir)
                 / "model.bin"
             ).is_file(),
+            # Which Sparrow Node this is, and which media tools it carries.
+            "version": node_version(),
+            "tools": tools_manifest(),
             "download": bool(self.downloader and self.downloader.get("type") != "none"),
             "downloader_state": self.downloader_state
             or ("running" if self.downloader and self.downloader.get("type") != "none" else "none"),

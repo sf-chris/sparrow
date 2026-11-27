@@ -141,24 +141,30 @@ What it sets up:
 - **Python:** the computer's own Python 3.11 or newer, otherwise a private copy
   downloaded with [uv](https://docs.astral.sh/uv/) into Sparrow Node's folder.
   Sparrow Node's code and its one library (httpx) come from your server.
+- **Media tools and a download app:** FFmpeg, ffprobe and Transmission built
+  for that computer (Linux x86_64 or aarch64) come from your server too, into
+  Sparrow Node's folder. They need nothing installed and nothing run as root:
+  no `sudo`, no package manager, no password. The computer runs its own
+  Transmission for Sparrow while its Downloads job is on, saving into its
+  incoming folder once that's chosen. A server built without the bundles (a
+  source install) still pairs computers; they fetch their tools by themselves
+  once the server has them. A Mac uses Homebrew's `ffmpeg` and
+  `transmission-cli` when they're installed.
 - **Linux:** a systemd user service that keeps running after you sign out
-  (`loginctl enable-linger`; the command says if that needs `sudo`). Run as
-  root (`| sudo sh`), it installs a system service for your user, and on Debian
-  or Ubuntu also installs ffmpeg and Transmission. Without systemd it starts now
-  and from cron at reboot.
+  where lingering is allowed. Otherwise it starts now and from cron at reboot.
+  Run as root (`| sudo sh`), it installs a system service for your user.
 - **Mac:** a LaunchAgent that starts when you sign in.
 - **Windows:** a scheduled task. From PowerShell run as administrator it starts
   with Windows; otherwise when you sign in.
-- **Downloads:** if Transmission is installed (`transmission-daemon`), the
-  computer runs its own copy for Sparrow, saving into its incoming folder once
-  that's chosen. Without it, the computer stores and plays media but doesn't
-  download. ffmpeg enables media checks. The command prints how to add either.
+
+Running the command again on a paired computer (**Reconnect**, or **Fix** on its
+card) updates Sparrow Node and its tools in place. It keeps the computer's
+folders, jobs and download app, so transfers carry on.
 
 Folders can only be chosen inside the computer's own places: its home, drives
 and mounted disks (in Docker, the mounted folders). For this server, set
 `SPARROW_FOLDER_ROOTS` (paths separated by `:`) to offer other places instead. Choose **Change folders** on
-its card to move them later; other library disks keep their place. Reconnect
-runs the same command with a fresh code and keeps the chosen folders.
+its card to move them later; other library disks keep their place.
 
 State lives in `~/.local/share/SparrowNode` (Linux), `~/Library/Application
 Support/SparrowNode` (Mac) or `%LOCALAPPDATA%\SparrowNode` (Windows), or

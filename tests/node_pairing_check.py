@@ -5,7 +5,11 @@ asks for a pairing command for this computer's system, runs it exactly as a
 person would (sh on Linux/macOS, PowerShell on Windows), waits for the node to
 connect, then makes and chooses its folders from Sparrow over the API.
 
-    python tests/node_pairing_check.py [--no-system-python]
+    python tests/node_pairing_check.py [--no-system-python] [--tools DIR]
+
+With --tools (a folder of tools-linux-<arch>.tar.gz archives, as built into
+/opt/sparrow/node-tools) it also checks the computer got its own media tools
+and a running download app.
 
 It installs a real background service for the current user and removes it
 afterwards. Run it on a disposable machine or CI runner.
@@ -108,12 +112,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-system-python", action="store_true",
                         help="Hide this computer's Python so setup fetches its own.")
+    parser.add_argument("--tools", help="Folder of node tool archives to serve and expect.")
     args = parser.parse_args()
     state = Path(tempfile.mkdtemp(prefix="sparrow-pairing-"))
     port = free_port()
     base = f"http://127.0.0.1:{port}"
     env = {**os.environ, "SPARROW_DATA_DIR": str(state / "server"),
            "ZAI_API_KEY": "", "TMDB_API_KEY": ""}
+    if args.tools:
+        env["SPARROW_NODE_TOOLS"] = str(Path(args.tools).resolve())
     log = open(state / "server.log", "w")
     server = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", str(port)],
@@ -189,6 +196,17 @@ def main():
         status, listing = client.call(
             "GET", f"/api/v1/admin/storage/browse?node_id={node_id}&path={urllib.request.quote(parent)}")
         assert [f["name"] for f in listing["folders"]] == ["Incoming", "Library"], listing
+        if args.tools:
+            step("Its own media tools and download app")
+            for _ in range(30):
+                status, nodes = client.call("GET", "/api/v1/nodes")
+                caps = next(n for n in nodes if n["id"] == node_id)["capabilities"]
+                if caps.get("downloader_state") == "running":
+                    break
+                time.sleep(2)
+            print("Tools:", caps.get("tools"), "download app:", caps.get("downloader_state"))
+            assert caps.get("probe") and caps.get("transcode"), caps
+            assert caps.get("download") and caps.get("downloader_state") == "running", caps
         ok = True
         step(f"Passed on {platform.system()} {platform.release()}")
     finally:
