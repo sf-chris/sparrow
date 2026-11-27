@@ -11,9 +11,9 @@ import {
   type Update as UpdateInfo,
 } from "./api";
 import { ago } from "./Collection";
-import JobsDialog, { folderSlots } from "./ComputerJobs";
+import JobsDialog from "./ComputerJobs";
 import { Tick } from "./Brand";
-import FolderSheet from "./FolderBrowser";
+import { FolderChooser, folderName, overlap, type Question } from "./FolderBrowser";
 import PairComputer from "./PairComputer";
 import Placement from "./Placement";
 import {
@@ -144,9 +144,13 @@ type Line = {
   label: string;
   path?: string;
   suggested?: boolean;
+  /** Choose another folder for this line, by clicking its path. */
+  change?: { onClick: () => void; label: string };
   end: ReactNode;
   action?: ReactNode;
 };
+/** Which folder of a computer is being chosen. */
+type Choosing = { node: NodeInfo; kind: "library" | "staging" | "extra" };
 
 /** How a job is doing, at the end of its dotted line. */
 function JobState({
@@ -309,9 +313,9 @@ export default function Storage({
   const cfg = useResource(() => api<Config>("/admin/config"));
   const [pairing, setPairing] = useState<{ node?: NodeInfo; fix?: boolean } | null>(null);
   const [jobsFor, setJobsFor] = useState<NodeInfo | null>(null);
-  const [sheet, setSheet] = useState<
-    { kind: "local" | "extra" } | { kind: "node"; node: NodeInfo } | null
-  >(null);
+  const [choosing, setChoosing] = useState<Choosing | null>(null);
+  // This server's folders while they're first chosen, saved together.
+  const [draft, setDraft] = useState<{ library?: string; staging?: string }>({});
   const [highlight, setHighlight] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -333,6 +337,7 @@ export default function Storage({
       (n) =>
         n.online &&
         (n.health?.rows.some((r) => r.state === "waiting") ||
+          Boolean(n.relocation) ||
           ["starting", "updating"].includes(n.health?.update?.state || "")),
     ),
   );
@@ -347,24 +352,54 @@ export default function Storage({
     await Promise.all([nodes.refresh(), onChanged?.()]);
     setHighlight(id);
   }
-  /** Saved folders this server can see, else the suggested ones. */
+  /** Folders chosen just now, else saved ones this server can see, else suggested ones. */
   function planFolders(node: NodeInfo) {
     const usable = (id: string) =>
       node.capabilities.roots.find((r) => r.id === id)?.available;
     return {
       library:
+        draft.library ||
         (usable("library") && cfg.data?.library_dir) ||
         suggested.data?.library ||
         "",
       staging:
+        draft.staging ||
         (usable("staging") && cfg.data?.staging_dir) ||
         suggested.data?.incoming ||
         "",
     };
   }
-  function chooseLocal() {
+  /** Whether this server's folders are still being chosen: they're saved together.
+   *  Folders already working change one at a time, asking about titles kept. */
+  function settingUp(node: NodeInfo) {
+    const root = (id: string) => node.capabilities.roots.find((r) => r.id === id);
+    return (
+      node.id === "local" &&
+      (!cfg.data?.library_dir ||
+        !cfg.data?.staging_dir ||
+        !root("library")?.available ||
+        !root("staging")?.available)
+    );
+  }
+  function choose(node: NodeInfo, kind: Choosing["kind"]) {
     setError("");
-    setSheet({ kind: "local" });
+    setChoosing({ node, kind });
+  }
+  /** Use a chosen folder. A sheet shows its own errors, so this throws. */
+  async function useFolder(node: NodeInfo, kind: Choosing["kind"], path: string, titles?: string) {
+    if (settingUp(node) && kind !== "extra") {
+      setDraft({ ...draft, [kind === "staging" ? "staging" : "library"]: path });
+      setChoosing(null);
+      return;
+    }
+    if (kind === "extra") await post(`/admin/nodes/${node.id}/libraries`, { path });
+    else
+      await api(`/admin/nodes/${node.id}/${kind === "staging" ? "incoming" : "library"}`, {
+        method: "PUT",
+        body: JSON.stringify(kind === "staging" ? { path } : { path, titles: titles || null }),
+      });
+    setChoosing(null);
+    await Promise.all([nodes.refresh(), cfg.refresh(), onChanged?.()]);
   }
   async function useSuggested(node: NodeInfo) {
     const plan = planFolders(node);
@@ -396,7 +431,7 @@ export default function Storage({
         library_dir: library,
         staging_dir: staging,
       });
-      setSheet(null);
+      setDraft({});
       await Promise.all([nodes.refresh(), cfg.refresh()]);
       await onChanged?.();
     } catch (e) {
@@ -411,7 +446,6 @@ export default function Storage({
     setError("");
     try {
       await patch("/admin/config", { extra_library_dirs: folders });
-      setSheet(null);
       await Promise.all([nodes.refresh(), cfg.refresh()]);
       await onChanged?.();
     } catch (e) {
@@ -420,14 +454,6 @@ export default function Storage({
     } finally {
       setBusy("");
     }
-  }
-  async function saveNodeFolders(node: NodeInfo, library: string, staging: string) {
-    await post(`/admin/nodes/${node.id}/folders`, {
-      libraries: library ? [library] : [],
-      staging,
-    });
-    setSheet(null);
-    await Promise.all([nodes.refresh(), onChanged?.()]);
   }
   async function preview(node: NodeInfo) {
     setBusy(node.id);
@@ -452,10 +478,9 @@ export default function Storage({
       setBusy("");
     }
   }
-  function fix(node: NodeInfo, what: Fix) {
+  function fix(node: NodeInfo, what: Fix, job: JobRow["job"]) {
     setError("");
-    if (what === "folders")
-      setSheet(node.id === "local" ? { kind: "local" } : { kind: "node", node });
+    if (what === "folders") choose(node, job === "downloads" ? "staging" : "library");
     else if (what === "repair") startPairing(node, true);
   }
   return (
@@ -472,7 +497,7 @@ export default function Storage({
       }
     >
       <ErrorNote
-        error={(!pairing && !sheet && !jobsFor && error) || nodes.error || cfg.error}
+        error={(!pairing && !choosing && !jobsFor && error) || nodes.error || cfg.error}
         retry={() => {
           void nodes.refresh();
           void cfg.refresh();
@@ -521,9 +546,14 @@ export default function Storage({
                 <JobState
                   row={rowOf(job)}
                   offline={offline}
-                  onFix={(what) => fix(node, what)}
+                  onFix={(what) => fix(node, what, job)}
                 />
               );
+              // A path is a way to choose another folder, where Sparrow can reach the computer.
+              const changeable =
+                local || Boolean(node.capabilities.folders && node.online && !node.disabled);
+              const who = local ? "this server" : node.name;
+              const moving = node.relocation;
               const library = local
                 ? cfg.data?.library_dir || ""
                 : rootOf("library")?.label || "";
@@ -531,23 +561,21 @@ export default function Storage({
                 ? cfg.data?.staging_dir || ""
                 : rootOf("staging")?.label || "";
               // While this server's folders are being chosen, rows show the folders themselves.
-              const choosing =
-                local &&
-                (onboarding ||
-                  !library ||
-                  !incoming ||
-                  !rootOf("library")?.available ||
-                  !rootOf("staging")?.available);
+              // During setup the lines say how each folder is, not each job.
+              const choosing = settingUp(node) || (local && onboarding);
+              const plan = choosing ? planFolders(node) : null;
               const extras = local
                 ? (cfg.data?.extra_library_dirs || []).map((path, n) => ({
                     path,
                     root: rootOf(`library-${n + 2}`),
+                    id: `library-${n + 2}`,
                     label: `Library ${n + 2}`,
                     extra: n as number | undefined,
                   }))
                 : disks.slice(1).map((root, n) => ({
                     path: root.label || "",
                     root,
+                    id: root.id,
                     label: `Library ${n + 2}`,
                     extra: undefined as number | undefined,
                   }));
@@ -555,14 +583,20 @@ export default function Storage({
                 {
                   key: "storage",
                   label: "Storage",
-                  path: library || (local ? suggested.data?.library || "" : ""),
-                  suggested: !library,
+                  path: plan?.library || library,
+                  suggested: choosing ? plan?.library !== library : false,
+                  change: changeable
+                    ? {
+                        onClick: () => choose(node, "library"),
+                        label: `Change where ${who} keeps titles`,
+                      }
+                    : undefined,
                   end: choosing ? (
                     <FolderState
-                      path={library}
+                      path={plan?.library === library ? library : ""}
                       root={rootOf("library")}
                       write={false}
-                      suggestion={suggested.data?.library || ""}
+                      suggestion={plan?.library || ""}
                     />
                   ) : (
                     state("storage")
@@ -570,18 +604,26 @@ export default function Storage({
                 },
                 ...extras.map((extra) => ({
                   key: extra.label,
-                  label: extra.label,
+                  label: moving?.from_root === extra.id ? "Moving from" : extra.label,
                   path: extra.path,
-                  end: (
-                    <FolderState
-                      path={extra.path}
-                      root={extra.root}
-                      write={false}
-                      suggestion=""
-                    />
-                  ),
+                  end:
+                    moving?.from_root === extra.id ? (
+                      <span
+                        className={`folder-state ${moving.problem ? "problem-text" : "working"}`}
+                        title={moving.problem || undefined}
+                      >
+                        {moving.done} of {moving.total} moved
+                      </span>
+                    ) : (
+                      <FolderState
+                        path={extra.path}
+                        root={extra.root}
+                        write={false}
+                        suggestion=""
+                      />
+                    ),
                   action:
-                    extra.extra !== undefined ? (
+                    extra.extra !== undefined && moving?.from_root !== extra.id ? (
                       <button
                         className="link"
                         disabled={!!busy}
@@ -600,17 +642,26 @@ export default function Storage({
               ];
               if (!onboarding && rowOf("playback"))
                 lines.push({ key: "playback", label: "Playback", end: state("playback") });
+              const downloading = Boolean(health?.jobs.downloads);
               lines.push({
                 key: "downloads",
                 label: "Downloads",
-                path: incoming || (local ? suggested.data?.incoming || "" : ""),
-                suggested: !incoming,
+                // Where downloads go matters only while something downloads here.
+                path: choosing ? plan?.staging : downloading ? incoming : "",
+                suggested: choosing ? plan?.staging !== incoming : false,
+                change:
+                  changeable && (choosing || (downloading && incoming))
+                    ? {
+                        onClick: () => choose(node, "staging"),
+                        label: `Change where ${who} downloads to`,
+                      }
+                    : undefined,
                 end: choosing ? (
                   <FolderState
-                    path={incoming}
+                    path={plan?.staging === incoming ? incoming : ""}
                     root={rootOf("staging")}
                     write
-                    suggestion={suggested.data?.incoming || ""}
+                    suggestion={plan?.staging || ""}
                   />
                 ) : (
                   state("downloads")
@@ -647,8 +698,6 @@ export default function Storage({
               const unset = local && (!library || !incoming);
               const seen = ago(node.last_seen);
               const keeps = Boolean(health?.jobs.storage);
-              const downloads = Boolean(health?.jobs.downloads);
-              const needsFolders = (keeps || downloads) && !disks.length;
               return (
                 <li
                   className={`device-card ${highlight === node.id ? "just-paired" : ""}`}
@@ -684,7 +733,15 @@ export default function Storage({
                       {lines.map((line) => (
                         <li key={line.key}>
                           <span className="folder-label">{line.label}</span>
-                          {line.path ? (
+                          {line.path && line.change ? (
+                            <button
+                              className={`path path-change ${line.suggested ? "suggested" : ""}`}
+                              onClick={line.change.onClick}
+                            >
+                              {line.path}
+                              <span className="sr-only">. {line.change.label}</span>
+                            </button>
+                          ) : line.path ? (
                             <span className={`path ${line.suggested ? "suggested" : ""}`}>
                               {line.path}
                             </span>
@@ -697,34 +754,22 @@ export default function Storage({
                     </ul>
                     <div className="actions">
                       {local ? (
-                        unset && !missing && suggested.data ? (
-                          <>
-                            <button
-                              className="btn primary"
-                              disabled={!!busy}
-                              onClick={() => void useSuggested(node)}
-                            >
-                              {busy === "suggested"
-                                ? "Creating folders…"
-                                : "Use these folders"}
-                            </button>
-                            <button className="btn quiet" onClick={chooseLocal}>
-                              Choose other folders
-                            </button>
-                          </>
+                        (unset || draft.library || draft.staging) && suggested.data ? (
+                          <button
+                            className="btn primary"
+                            disabled={!!busy}
+                            onClick={() => void useSuggested(node)}
+                          >
+                            {busy === "suggested" ? "Creating folders…" : "Use these folders"}
+                          </button>
                         ) : missing && !unset ? (
-                          <>
-                            <button
-                              className="btn primary"
-                              disabled={!!busy}
-                              onClick={() => void recreate()}
-                            >
-                              {busy === "recreate" ? "Creating folders…" : "Create folders"}
-                            </button>
-                            <button className="btn quiet" onClick={chooseLocal}>
-                              Choose other folders
-                            </button>
-                          </>
+                          <button
+                            className="btn primary"
+                            disabled={!!busy}
+                            onClick={() => void recreate()}
+                          >
+                            {busy === "recreate" ? "Creating folders…" : "Create folders"}
+                          </button>
                         ) : (
                           <>
                             {!onboarding && (
@@ -732,20 +777,8 @@ export default function Storage({
                                 Change jobs
                               </button>
                             )}
-                            <button
-                              className={`btn ${unset ? "primary" : "quiet"}`}
-                              onClick={chooseLocal}
-                            >
-                              {unset ? "Choose folders" : "Change folders"}
-                            </button>
-                            {!unset && (
-                              <button
-                                className="btn quiet"
-                                onClick={() => {
-                                  setError("");
-                                  setSheet({ kind: "extra" });
-                                }}
-                              >
+                            {!unset && !moving && (
+                              <button className="btn quiet" onClick={() => choose(node, "extra")}>
                                 <Plus size={16} strokeWidth={2.5} />
                                 Library folder
                               </button>
@@ -759,20 +792,12 @@ export default function Storage({
                               Change jobs
                             </button>
                           )}
-                          {node.capabilities.folders &&
-                            node.online &&
-                            !node.disabled &&
-                            (keeps || downloads || disks.length > 0 || incoming) && (
-                              <button
-                                className={`btn ${needsFolders ? "primary" : "quiet"}`}
-                                onClick={() => {
-                                  setError("");
-                                  setSheet({ kind: "node", node });
-                                }}
-                              >
-                                {disks.length || incoming ? "Change folders" : "Choose folders"}
-                              </button>
-                            )}
+                          {changeable && keeps && disks.length > 0 && !moving && !onboarding && (
+                            <button className="btn quiet" onClick={() => choose(node, "extra")}>
+                              <Plus size={16} strokeWidth={2.5} />
+                              Library folder
+                            </button>
+                          )}
                           <button
                             className="btn quiet"
                             onClick={() => startPairing(node, !node.disabled)}
@@ -858,52 +883,133 @@ export default function Storage({
           }}
         />
       )}
-      {sheet?.kind === "local" && (
-        <FolderSheet
-          title="Folders on this server"
-          nodeId="local"
-          slots={(() => {
-            const here = nodes.data?.find((n) => n.id === "local");
-            const plan = here
-              ? planFolders(here)
-              : { library: cfg.data?.library_dir || "", staging: cfg.data?.staging_dir || "" };
-            return [
-              { key: "library", label: "Library", value: plan.library },
-              { key: "staging", label: "Incoming", value: plan.staging, write: true },
-            ];
-          })()}
-          onSave={(v) => saveFolders(v.library, v.staging, "local", true)}
-          onClose={() => setSheet(null)}
-        />
-      )}
-      {sheet?.kind === "extra" && (
-        <FolderSheet
-          title="Another library folder"
-          nodeId="local"
-          slots={[
-            {
-              key: "extra",
-              label: `Library ${(cfg.data?.extra_library_dirs.length || 0) + 2}`,
-              value: "",
-            },
-          ]}
-          onSave={(v) =>
-            saveExtra([...(cfg.data?.extra_library_dirs || []), v.extra], true)
-          }
-          onClose={() => setSheet(null)}
-        />
-      )}
-      {sheet?.kind === "node" && (
-        <FolderSheet
-          title={`Folders on ${sheet.node.name}`}
-          nodeId={sheet.node.id}
-          slots={folderSlots(sheet.node)}
-          onSave={(v) => saveNodeFolders(sheet.node, v.library || "", v.staging || "")}
-          onClose={() => setSheet(null)}
+      {choosing && (
+        <Chooser
+          node={nodes.data?.find((n) => n.id === choosing.node.id) || choosing.node}
+          kind={choosing.kind}
+          plan={settingUp(choosing.node) ? planFolders(choosing.node) : null}
+          extras={cfg.data?.extra_library_dirs || []}
+          config={cfg.data}
+          onChoose={(path, titles) => useFolder(choosing.node, choosing.kind, path, titles)}
+          onClose={() => setChoosing(null)}
         />
       )}
       {scan && <ImportPreview scan={scan} onClose={() => setScan(null)} />}
     </Page>
+  );
+}
+
+const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
+
+/** Choose one of a computer's folders: where it keeps titles, another place
+ *  for them, or where it downloads to. */
+function Chooser({
+  node,
+  kind,
+  plan,
+  extras: localExtras,
+  config,
+  onChoose,
+  onClose,
+}: {
+  node: NodeInfo;
+  kind: Choosing["kind"];
+  /** This server's folders while they're first chosen. */
+  plan: { library: string; staging: string } | null;
+  extras: string[];
+  config: Config | null;
+  onChoose: (path: string, titles?: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const local = node.id === "local";
+  const roots = node.capabilities.roots;
+  const root = (id: string) => roots.find((r) => r.id === id);
+  const saved = {
+    library: local ? config?.library_dir || "" : root("library")?.label || "",
+    staging: local ? config?.staging_dir || "" : root("staging")?.label || "",
+  };
+  const library = plan?.library || saved.library;
+  const incoming = plan?.staging || saved.staging;
+  const extras = local
+    ? localExtras
+    : roots.filter((r) => /^library-\d+$/.test(r.id)).map((r) => r.label || "");
+  const folders = [
+    { label: "Library", value: library },
+    ...extras.map((value, n) => ({ label: `Library ${n + 2}`, value })),
+    { label: "Incoming", value: incoming },
+  ];
+  /** Whether a folder in this place works with the computer's other folders. */
+  const fits = (label: string) => (path: string) =>
+    overlap(
+      kind === "extra"
+        ? [...folders, { label: `Library ${extras.length + 2}`, value: path }]
+        : folders.map((f) => (f.label === label ? { ...f, value: path } : f)),
+    );
+  const who = local ? "this server" : node.name;
+  if (kind === "staging")
+    return (
+      <FolderChooser
+        nodeId={node.id}
+        title={`Where ${who} downloads to`}
+        intro="Downloads stay here until they’re checked, then move to the library."
+        current={saved.staging}
+        start={plan?.staging || library}
+        verb={(name) => `Download to ${name}`}
+        write
+        problem={fits("Incoming")}
+        onChoose={(path) => onChoose(path)}
+        onClose={onClose}
+      />
+    );
+  if (kind === "extra")
+    return (
+      <FolderChooser
+        nodeId={node.id}
+        title={`Where else ${who} keeps titles`}
+        intro="New titles go wherever there’s most room, as Automatic picks decides."
+        start={library}
+        verb={(name) => `Keep titles in ${name} too`}
+        problem={fits("")}
+        onChoose={(path) => onChoose(path)}
+        onClose={onClose}
+      />
+    );
+  const kept = root("library");
+  const moving = node.relocation;
+  const question = (path: string): Question | null => {
+    const count = kept?.library_titles || 0;
+    if (plan || !count || !kept?.available || moving) return null;
+    const from = folderName(saved.library);
+    return {
+      text: `${from} has ${plural(count, "title")} (${size(kept.library_bytes || 0)}).`,
+      choices: [
+        {
+          value: "move",
+          label: `Move them to ${folderName(path)}`,
+          hint: "They keep playing while they move. Files Sparrow doesn’t know stay where they are.",
+          button: `Move ${plural(count, "title")}`,
+        },
+        {
+          value: "both",
+          label: "Use both folders",
+          hint: `Titles stay in ${from}. New titles can go in either.`,
+          button: "Use both folders",
+        },
+      ],
+    };
+  };
+  return (
+    <FolderChooser
+      nodeId={node.id}
+      title={`Where ${who} keeps titles`}
+      current={plan ? "" : saved.library}
+      start={plan?.library || saved.library}
+      verb={(name) => `Keep titles in ${name}`}
+      problem={fits("Library")}
+      question={question}
+      onChoose={onChoose}
+      onClose={onClose}
+    />
   );
 }
 

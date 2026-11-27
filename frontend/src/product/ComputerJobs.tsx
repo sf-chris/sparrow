@@ -171,17 +171,3 @@ export default function JobsDialog({
     </Dialog>
   );
 }
-
-/** The folders a paired computer needs for its jobs: a library to keep
- *  titles in, an incoming folder to download into. */
-export function folderSlots(node: NodeInfo, jobs = node.health?.jobs) {
-  const label = (id: string) =>
-    node.capabilities.roots.find((r) => r.id === id)?.label || "";
-  // Every computer has a library: downloads land there before moving on.
-  const slots: { key: string; label: string; value: string; write?: boolean }[] = [
-    { key: "library", label: "Library", value: label("library") },
-  ];
-  if (!jobs || jobs.downloads || label("staging"))
-    slots.push({ key: "staging", label: "Incoming", value: label("staging"), write: true });
-  return slots;
-}

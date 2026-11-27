@@ -110,8 +110,9 @@ irm http://<server>/api/v1/node/setup/<code>.ps1 | iex       # Windows
 
 The command installs Sparrow Node, pairs it and keeps it running in the
 background. The dialog follows along and, once the computer connects, asks what
-it does and then for the folders those jobs need, browsed on that computer from
-Sparrow. The computer takes its own name. Each command works once and for ten
+it does and then where it keeps titles, browsed on that computer from Sparrow.
+A computer that downloads gets its incoming folder beside that one, or in
+Sparrow Node's own folder when it can't save there. The computer takes its own name. Each command works once and for ten
 minutes (longer once it has started); an old one says so and asks for a fresh
 one.
 
@@ -135,6 +136,26 @@ A NAS or any spare disk only needs Storage: add it, untick Downloads and
 Subtitles, and choose its library folder. **Change jobs** changes them later.
 **Set up again** gives the same one-line command, which updates Sparrow Node and
 adds anything missing without touching its folders or jobs.
+
+### Changing folders
+
+Each folder is on a line of the computer's card: click its path to choose
+another. The chooser opens beside the folder in use with it selected. Clicking a
+folder selects it, its arrow opens it, and the one button names what will
+happen ("Keep titles in Films"). **+ Library folder** adds another folder.
+
+When the library already holds titles, Sparrow asks what happens to them:
+
+- **Move them** makes the new folder the library straight away, so new titles go
+  there, and moves each title across while it stays playable. On the same disk a
+  title only gets a new name, so nothing is copied. On another disk each file is
+  copied and checked before the old one goes. Then Sparrow stops using the old
+  folder. Files it doesn't know stay where they are.
+- **Use both folders** leaves titles where they are and adds the new folder.
+
+A library that's empty or missing just points at the new folder, which is also
+how to tell Sparrow where a moved disk is now. Changing the incoming folder
+leaves downloads already running where they are.
 
 What it sets up:
 
@@ -187,8 +208,8 @@ Without them, cards show the date of the newest file instead.
 
 Folders can only be chosen inside the computer's own places: its home, drives
 and mounted disks (in Docker, the mounted folders). For this server, set
-`SPARROW_FOLDER_ROOTS` (paths separated by `:`) to offer other places instead. Choose **Change folders** on
-its card to move them later; other library disks keep their place.
+`SPARROW_FOLDER_ROOTS` (paths separated by `:`) to offer other places instead.
+Click a folder's path on the card to change it later (see Changing folders).
 
 State lives in `~/.local/share/SparrowNode` (Linux), `~/Library/Application
 Support/SparrowNode` (Mac) or `%LOCALAPPDATA%\SparrowNode` (Windows), or

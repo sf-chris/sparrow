@@ -77,6 +77,12 @@ EVENTS = {
         "Import match corrected. Watch progress kept.",
     ),
     "storage_online": ("storage", "success", "Storage back online."),
+    "library_moving": (
+        "storage",
+        "info",
+        "Library folder changed. Its titles are moving to the new one.",
+    ),
+    "library_moved": ("storage", "success", "Titles moved to the new library folder."),
     "storage_offline": (
         "storage",
         "warning",

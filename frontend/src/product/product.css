@@ -4000,6 +4000,33 @@ button.link:hover {
   color: var(--ink-2);
   font-weight: 500;
 }
+/* A folder's path is how to choose another: printed, underlined, biro on hover. */
+.folder-rows .path-change {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--ink-3);
+  text-underline-offset: 0.22em;
+  cursor: pointer;
+}
+.folder-rows .path-change.suggested {
+  font-weight: 500;
+}
+.folder-rows .path-change:hover {
+  color: var(--blue);
+  text-decoration-color: currentColor;
+}
+.folder-rows .path-change:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
 .folder-state {
   flex: none;
   display: inline-flex;
@@ -4101,43 +4128,13 @@ button.link:hover {
   margin-top: 1.25rem;
 }
 
-/* ─── Folder picker: chosen folders, then a listing to choose from ─── */
+/* ─── Folder chooser: one folder, selected in a listing, named on the button ─── */
 .picker {
   display: grid;
   gap: 0.85rem;
 }
 .picker-intro {
-  margin-bottom: 0.85rem;
-}
-.picker-slots {
-  margin-top: 0;
-}
-.picker-slots li {
-  padding: 0;
-}
-.picker-slot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.25rem 0.75rem;
-  width: 100%;
-  padding: 0.6rem 0.4rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.picker-slots li.active .picker-slot {
-  background: var(--reverse);
-  color: var(--on-reverse);
-}
-.picker-slots li.active .path.suggested {
-  color: inherit;
-  opacity: 0.75;
-}
-.picker-slots li.active .folder-state {
-  color: var(--reverse-accent);
+  margin: 0;
 }
 .crumbs {
   display: flex;
@@ -4168,6 +4165,10 @@ button.link:hover {
 .picker-list[aria-busy="true"] {
   opacity: 0.55;
 }
+.picker-list li {
+  display: flex;
+  align-items: stretch;
+}
 .picker-list li + li {
   border-top: 1px solid var(--rule);
 }
@@ -4197,6 +4198,33 @@ button.link:hover {
 }
 .picker-list svg {
   flex: none;
+}
+.picker-list .picker-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Opening a folder is its own target, so selecting never moves away. */
+.picker-list .picker-open {
+  flex: none;
+  justify-content: center;
+  width: 2.75rem;
+  padding: 0;
+  border-left: 1px solid var(--rule);
+}
+.picker-list li.selected .picker-row,
+.picker-list li.selected .picker-row:hover {
+  background: var(--reverse);
+  color: var(--on-reverse);
+}
+.picker-list li.selected .folder-state {
+  color: var(--reverse-accent);
+}
+.picker-list li.selected .tick path {
+  stroke: var(--reverse-accent);
+}
+.picker-list .tick {
+  width: 1.1rem;
+  height: 1.1rem;
 }
 .picker-list .leader {
   align-self: center;

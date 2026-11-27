@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Folder, FolderPlus, HardDrive } from "lucide-react";
 import { api, post } from "./api";
 import { Tick } from "./Brand";
@@ -20,13 +20,6 @@ type Listing = {
   readable?: boolean;
   writable?: boolean;
   free_bytes?: number;
-};
-export type Slot = {
-  key: string;
-  label: string;
-  value: string;
-  /** Incoming folders must be writable; libraries should be. */
-  write?: boolean;
 };
 
 const forbidden = /[\\/:*?"<>|\u0000-\u001f]/;
@@ -81,47 +74,86 @@ export function overlap(slots: { label: string; value: string }[]) {
   return "";
 }
 
-function parentOf(path: string) {
+export function parentOf(path: string) {
   const { sep } = parts(path);
   const cut = path.replace(/[\\/]+$/, "").lastIndexOf(sep);
   return cut > 0 ? path.slice(0, cut) : "";
 }
 
-function state(row: FolderRow) {
+/** A folder's own name: "Films" for /mnt/media/Films. */
+export function folderName(path: string) {
+  const clean = path.replace(/[\\/]+$/, "");
+  return clean.slice(clean.lastIndexOf(parts(clean).sep) + 1) || path;
+}
+
+const same = (a: string, b: string) => !!a && !!b && parts(a).key === parts(b).key;
+
+function state(row: FolderRow, current: string) {
+  if (same(row.path, current)) return "In use";
   if (!row.readable) return "Can’t open";
   if (!row.writable) return "Read only";
   return row.free_bytes !== undefined ? `${bytes(row.free_bytes)} free` : "";
 }
 
-/** Browse one computer's folders and choose a folder for each slot. */
-export function FolderPicker({
+/** Something to settle before a folder is used, such as what happens to the
+ *  titles already kept. The first choice is the usual one. */
+export type Question = {
+  text: string;
+  choices: { value: string; label: string; hint: string; button: string }[];
+};
+
+/** Choose one folder on one computer. Clicking a folder selects it and opening
+ *  it looks inside, so every click shows where it went. The one button names
+ *  what will happen to the selected folder, or the open one when none is. */
+export function FolderChooser({
   nodeId,
-  slots: initial,
-  onChange,
+  title,
+  intro,
+  current = "",
+  start = "",
+  verb,
+  write = false,
+  problem,
+  question,
+  onChoose,
+  onClose,
 }: {
   nodeId: string;
-  slots: Slot[];
-  onChange: (slots: Slot[]) => void;
+  title: string;
+  intro?: ReactNode;
+  /** The folder in use now: it opens beside its neighbours, selected. */
+  current?: string;
+  /** Where to begin when nothing is in use yet. */
+  start?: string;
+  /** The button, for a folder's name: “Keep titles in Films”. */
+  verb: (name: string) => string;
+  /** Downloads need a folder Sparrow can save into. */
+  write?: boolean;
+  /** Why a folder can't be used, given the computer's other folders. */
+  problem?: (path: string) => string;
+  question?: (path: string) => Question | null;
+  onChoose: (path: string, answer?: string) => Promise<void>;
+  onClose: () => void;
 }) {
-  const [slots, setSlots] = useState(initial);
-  const [active, setActive] = useState(
-    Math.max(
-      0,
-      initial.findIndex((s) => !s.value),
-    ),
-  );
   const [listing, setListing] = useState<Listing | null>(null);
+  const [selected, setSelected] = useState<FolderRow | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState<(Question & { path: string }) | null>(null);
+  const [answer, setAnswer] = useState("");
   // Docker shows one place (/media): open it, and don't offer a way above it.
   const [single, setSingle] = useState(false);
   const list = useRef<HTMLUListElement>(null);
   const request = useRef(0);
 
-  async function open(path: string, focus = false) {
+  async function open(
+    path: string,
+    { select = "", focus = false, retry = true }: { select?: string; focus?: boolean; retry?: boolean } = {},
+  ): Promise<void> {
     const current = ++request.current;
     setLoading(true);
     setError("");
@@ -131,22 +163,28 @@ export function FolderPicker({
       );
       if (current !== request.current) return;
       // One place only (Docker's /media): start inside it.
-      if (!path && next.folders.length === 1) {
+      if (!path && next.folders.length === 1 && !select) {
         setSingle(true);
-        return open(next.folders[0].path, focus);
+        return open(next.folders[0].path, { focus });
       }
+      const found = select ? next.folders.find((f) => same(f.path, select)) : undefined;
+      if (select && !found && retry) return open(select, { focus, retry: false });
       setListing(next);
+      setSelected(found || null);
       setNaming(false);
-      if (focus)
-        requestAnimationFrame(() =>
-          list.current?.querySelector<HTMLElement>("button")?.focus(),
-        );
+      requestAnimationFrame(() => {
+        const rows = list.current;
+        const row = rows?.querySelector<HTMLElement>(".selected .picker-row");
+        row?.scrollIntoView({ block: "nearest" });
+        if (focus) (row || rows?.querySelector<HTMLElement>(".picker-row"))?.focus();
+      });
     } catch (e) {
       if (current !== request.current) return;
       const message = (e as Error).message;
       // A folder that's gone: show its parent. One outside every place: the places.
-      if (path && /isn’t in a place/.test(message)) return open("", focus);
-      if (path && /isn’t there/.test(message)) return open(parentOf(path), focus);
+      if (path && /isn’t in a place/.test(message)) return open("", { focus });
+      if (path && /isn’t there/.test(message))
+        return open(parentOf(path), { select: retry ? select : "", focus, retry: false });
       setError(message);
     } finally {
       if (current === request.current) setLoading(false);
@@ -154,9 +192,9 @@ export function FolderPicker({
   }
 
   useEffect(() => {
-    const start = initial[active]?.value || initial.find((s) => s.value)?.value;
+    const begin = current || start;
     void (async () => {
-      if (start) {
+      if (begin) {
         // Know whether there's more than one place before opening a folder in it.
         try {
           const places = await api<Listing>(
@@ -166,26 +204,11 @@ export function FolderPicker({
         } catch {
           /* The folder itself will say what's wrong. */
         }
-      }
-      await open(start ? parentOf(start) : "");
+        await open(parentOf(begin), { select: begin });
+      } else await open("");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId]);
-
-  function choose() {
-    if (!listing?.path) return;
-    const next = slots.map((s, n) =>
-      n === active ? { ...s, value: listing.path } : s,
-    );
-    setSlots(next);
-    onChange(next);
-    const empty = next.findIndex((s, n) => n !== active && !s.value);
-    if (empty >= 0) {
-      setActive(empty);
-      // The next folder usually sits beside this one.
-      if (listing.parent) void open(listing.parent);
-    }
-  }
 
   async function create() {
     const clean = name.trim();
@@ -203,7 +226,8 @@ export function FolderPicker({
         name: clean,
       });
       setName("");
-      await open(made.path, true);
+      // The new folder, selected where it was made: one press uses it.
+      await open(listing.path, { select: made.path, focus: true });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -213,7 +237,7 @@ export function FolderPicker({
 
   function keys(event: KeyboardEvent<HTMLUListElement>) {
     const rows = Array.from(
-      list.current?.querySelectorAll<HTMLElement>("button") || [],
+      list.current?.querySelectorAll<HTMLElement>(".picker-row") || [],
     );
     const at = rows.indexOf(document.activeElement as HTMLElement);
     const go = (n: number) => {
@@ -224,251 +248,277 @@ export function FolderPicker({
     else if (event.key === "ArrowUp") go(at - 1);
     else if (event.key === "Home") go(0);
     else if (event.key === "End") go(rows.length - 1);
-    else if (
+    else if (event.key === "ArrowRight" && at >= 0 && listing?.folders[at]?.readable) {
+      event.preventDefault();
+      void open(listing.folders[at].path, { focus: true });
+    } else if (
       (event.key === "ArrowLeft" || event.key === "Backspace") &&
       listing?.parent !== null &&
       !(single && !listing?.parent)
     ) {
       event.preventDefault();
-      void open(listing?.parent || "", true);
+      const here = listing?.path || "";
+      void open(listing?.parent || "", { select: here, focus: true });
     }
   }
 
-  const slot = slots[active];
-  const blocked = !listing?.path
-    ? "Open a folder first."
-    : listing.readable === false
+  // The selected folder, else the open one.
+  const here = listing?.path
+    ? {
+        name: listing.crumbs[listing.crumbs.length - 1]?.name || folderName(listing.path),
+        path: listing.path,
+        readable: listing.readable !== false,
+        writable: listing.writable !== false,
+      }
+    : null;
+  const target = selected || here;
+  const unchanged = !!target && same(target.path, current);
+  const issue = !target
+    ? ""
+    : !target.readable
       ? "Sparrow can’t open this folder."
-      : slot?.write && listing.writable === false
+      : write && !target.writable
         ? "Sparrow can’t save here."
-        : "";
-  const typed = nameProblem(name.trim());
-  return (
-    <div className="picker">
-      <ul className="folder-rows picker-slots" aria-label="Chosen folders">
-        {slots.map((s, n) => (
-          <li key={s.key} className={n === active ? "active" : ""}>
-            <button
-              className="picker-slot"
-              aria-pressed={n === active}
-              onClick={() => {
-                setActive(n);
-                if (s.value) void open(parentOf(s.value));
-              }}
-            >
-              <span className="folder-label">{s.label}</span>
-              <span className={`path ${s.value ? "" : "suggested"}`}>
-                {s.value || "Not chosen"}
-              </span>
-              <span className="leader" aria-hidden="true" />
-              <span className="folder-state">
-                {n === active ? "Choosing" : s.value ? <Tick /> : ""}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <nav className="crumbs" aria-label="Folder">
-        {!single && (
-          <button
-            className="link"
-            disabled={!listing?.path}
-            onClick={() => void open("")}
-          >
-            Places
-          </button>
-        )}
-        {listing?.crumbs.map((crumb, n) => (
-          <span key={crumb.path}>
-            {(!single || n > 0) && (
-              <ChevronRight size={14} strokeWidth={2.5} aria-hidden="true" />
-            )}
-            {n === listing.crumbs.length - 1 ? (
-              <span aria-current="location">{crumb.name}</span>
-            ) : (
-              <button className="link" onClick={() => void open(crumb.path)}>
-                {crumb.name}
-              </button>
-            )}
-          </span>
-        ))}
-      </nav>
-      {error && (
-        <p className="picker-error problem-text" role="alert">
-          {error}
-        </p>
-      )}
-      <ul
-        className="picker-list"
-        ref={list}
-        aria-label={listing?.path ? "Folders inside" : "Places"}
-        aria-busy={loading}
-        onKeyDown={keys}
-      >
-        {listing?.folders.map((row) => (
-          <li key={row.path}>
-            <button
-              disabled={!row.readable}
-              onClick={() => void open(row.path, true)}
-            >
-              {listing.path ? (
-                <Folder size={18} strokeWidth={2} aria-hidden="true" />
-              ) : (
-                <HardDrive size={18} strokeWidth={2} aria-hidden="true" />
-              )}
-              <span className="picker-name">{row.name}</span>
-              {state(row) && (
-                <>
-                  <span className="leader" aria-hidden="true" />
-                  <span className="folder-state quiet num">{state(row)}</span>
-                </>
-              )}
-            </button>
-          </li>
-        ))}
-        {listing && !listing.folders.length && (
-          <li className="picker-empty muted">
-            {listing.path ? "No folders inside." : "No places to choose from."}
-          </li>
-        )}
-        {!!listing?.more && (
-          <li className="picker-empty muted">
-            {listing.more} more not shown. Make a folder, or open one above.
-          </li>
-        )}
-      </ul>
-      {naming ? (
-        <form
-          className="picker-new"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void create();
-          }}
-        >
-          <label className="sr-only" htmlFor="new-folder">
-            New folder name
-          </label>
-          <input
-            id="new-folder"
-            autoFocus
-            value={name}
-            maxLength={100}
-            placeholder="New folder"
-            aria-invalid={!!typed}
-            aria-describedby={typed ? "new-folder-problem" : undefined}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.stopPropagation();
-                e.preventDefault();
-                setNaming(false);
-              }
-            }}
-          />
-          <button
-            className="btn"
-            disabled={creating || !name.trim() || !!typed}
-          >
-            {creating ? "Creating…" : "Create"}
-          </button>
-          <button
-            type="button"
-            className="btn quiet"
-            onClick={() => setNaming(false)}
-          >
-            Cancel
-          </button>
-          {typed && (
-            <p id="new-folder-problem" className="problem-text">
-              {typed}
-            </p>
-          )}
-        </form>
-      ) : (
-        <div className="picker-actions">
-          <button
-            className="btn"
-            disabled={!!blocked || loading}
-            title={blocked || undefined}
-            onClick={choose}
-          >
-            Use this folder for {slot?.label}
-          </button>
-          <button
-            className="btn quiet"
-            disabled={!listing?.path || listing.writable === false || loading}
-            onClick={() => {
-              setName("");
-              setNaming(true);
-            }}
-          >
-            <FolderPlus size={17} strokeWidth={2.25} />
-            New folder
-          </button>
-          {listing?.path && listing.free_bytes !== undefined && (
-            <span className="meta num picker-free">
-              {bytes(listing.free_bytes)} free here
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+        : unchanged
+          ? ""
+          : problem?.(target.path) || "";
+  const chosen = asking?.choices.find((c) => c.value === answer) || asking?.choices[0];
 
-/** A sheet for choosing folders, saved together with one button. */
-export default function FolderSheet({
-  title,
-  nodeId,
-  slots,
-  onSave,
-  onClose,
-}: {
-  title: string;
-  nodeId: string;
-  slots: Slot[];
-  onSave: (values: Record<string, string>) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [chosen, setChosen] = useState(slots);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const problem = overlap(chosen);
-  const ready = chosen.every((s) => s.value) && !problem;
+  async function use() {
+    if (!target) return;
+    if (!asking) {
+      const ask = question?.(target.path);
+      if (ask) {
+        setAsking({ ...ask, path: target.path });
+        setAnswer(ask.choices[0].value);
+        return;
+      }
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await onChoose(asking?.path || target.path, asking ? chosen?.value : undefined);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Dialog
       title={title}
       onClose={onClose}
       footer={
         <>
-          {(problem || error) && (
+          {(issue || error) && (
             <p className="sheet-problem problem-text" role="alert">
-              {problem || error}
+              {issue || error}
             </p>
+          )}
+          {asking && (
+            <button className="btn quiet" disabled={busy} onClick={() => setAsking(null)}>
+              Back
+            </button>
           )}
           <button
             className="btn primary"
-            disabled={!ready || busy}
-            onClick={async () => {
-              setBusy(true);
-              setError("");
-              try {
-                await onSave(
-                  Object.fromEntries(chosen.map((s) => [s.key, s.value])),
-                );
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
+            disabled={!target || busy || loading || (!asking && (unchanged || !!issue))}
+            onClick={() => void use()}
           >
-            {busy ? "Saving…" : chosen.length > 1 ? "Save folders" : "Add folder"}
+            {busy
+              ? "Saving…"
+              : asking
+                ? chosen?.button
+                : target
+                  ? verb(target.name)
+                  : "Choose a folder"}
           </button>
         </>
       }
     >
-      <FolderPicker nodeId={nodeId} slots={slots} onChange={setChosen} />
+      {asking ? (
+        <div className="picker">
+          <p>{asking.text}</p>
+          <fieldset className="job-choices">
+            <legend className="sr-only">What happens to them</legend>
+            {asking.choices.map((choice) => (
+              <label className="check job-choice" key={choice.value}>
+                <input
+                  type="radio"
+                  name="folder-question"
+                  checked={chosen?.value === choice.value}
+                  onChange={() => setAnswer(choice.value)}
+                  aria-describedby={`choice-${choice.value}`}
+                />
+                <span>
+                  <strong>{choice.label}</strong>
+                  <span className="muted" id={`choice-${choice.value}`}>
+                    {choice.hint}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        </div>
+      ) : (
+        <div className="picker">
+          {intro && <p className="muted picker-intro">{intro}</p>}
+          <nav className="crumbs" aria-label="Folder">
+            {!single && (
+              <button
+                className="link"
+                disabled={!listing?.path}
+                onClick={() => void open("", { select: listing?.crumbs[0]?.path })}
+              >
+                Places
+              </button>
+            )}
+            {listing?.crumbs.map((crumb, n) => (
+              <span key={crumb.path}>
+                {(!single || n > 0) && (
+                  <ChevronRight size={14} strokeWidth={2.5} aria-hidden="true" />
+                )}
+                {n === listing.crumbs.length - 1 ? (
+                  <span aria-current="location">{crumb.name}</span>
+                ) : (
+                  <button
+                    className="link"
+                    onClick={() =>
+                      void open(crumb.path, { select: listing.crumbs[n + 1]?.path })
+                    }
+                  >
+                    {crumb.name}
+                  </button>
+                )}
+              </span>
+            ))}
+          </nav>
+          <ul
+            className="picker-list"
+            ref={list}
+            aria-label={listing?.path ? `Folders in ${here?.name}` : "Places"}
+            aria-busy={loading}
+            onKeyDown={keys}
+          >
+            {listing?.folders.map((row) => {
+              const on = !!selected && same(selected.path, row.path);
+              return (
+                <li key={row.path} className={on ? "selected" : ""}>
+                  <button
+                    className="picker-row"
+                    aria-pressed={on}
+                    disabled={!row.readable}
+                    onClick={() => setSelected(on ? null : row)}
+                    onDoubleClick={() => void open(row.path, { focus: true })}
+                  >
+                    {listing.path ? (
+                      <Folder size={18} strokeWidth={2} aria-hidden="true" />
+                    ) : (
+                      <HardDrive size={18} strokeWidth={2} aria-hidden="true" />
+                    )}
+                    <span className="picker-name">{row.name}</span>
+                    {state(row, current) && (
+                      <>
+                        <span className="leader" aria-hidden="true" />
+                        <span className="folder-state quiet num">{state(row, current)}</span>
+                      </>
+                    )}
+                    {on && <Tick />}
+                  </button>
+                  <button
+                    className="picker-open"
+                    disabled={!row.readable}
+                    aria-label={`Open ${row.name}`}
+                    title={`Open ${row.name}`}
+                    onClick={() => void open(row.path, { focus: true })}
+                  >
+                    <ChevronRight size={18} strokeWidth={2.5} aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            })}
+            {listing && !listing.folders.length && (
+              <li className="picker-empty muted">
+                {listing.path ? "No folders inside." : "No places to choose from."}
+              </li>
+            )}
+            {!!listing?.more && (
+              <li className="picker-empty muted">
+                {listing.more} more not shown. Make a folder, or open one above.
+              </li>
+            )}
+          </ul>
+          {naming ? (
+            <form
+              className="picker-new"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void create();
+              }}
+            >
+              <label className="sr-only" htmlFor="new-folder">
+                New folder name
+              </label>
+              <input
+                id="new-folder"
+                autoFocus
+                value={name}
+                maxLength={100}
+                placeholder="New folder"
+                aria-invalid={!!nameProblem(name.trim())}
+                aria-describedby={nameProblem(name.trim()) ? "new-folder-problem" : undefined}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setNaming(false);
+                  }
+                }}
+              />
+              <button
+                className="btn"
+                disabled={creating || !name.trim() || !!nameProblem(name.trim())}
+              >
+                {creating ? "Creating…" : "Create"}
+              </button>
+              <button type="button" className="btn quiet" onClick={() => setNaming(false)}>
+                Cancel
+              </button>
+              {nameProblem(name.trim()) && (
+                <p id="new-folder-problem" className="problem-text">
+                  {nameProblem(name.trim())}
+                </p>
+              )}
+            </form>
+          ) : (
+            <div className="picker-actions">
+              <button
+                className="btn quiet"
+                disabled={!listing?.path || listing.writable === false || loading}
+                onClick={() => {
+                  setName("");
+                  setNaming(true);
+                }}
+              >
+                <FolderPlus size={17} strokeWidth={2.25} />
+                {here ? `New folder in ${here.name}` : "New folder"}
+              </button>
+              {target && (target as FolderRow).free_bytes !== undefined ? (
+                <span className="meta num picker-free">
+                  {bytes((target as FolderRow).free_bytes!)} free
+                </span>
+              ) : (
+                listing?.path &&
+                listing.free_bytes !== undefined && (
+                  <span className="meta num picker-free">{bytes(listing.free_bytes)} free</span>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </Dialog>
   );
 }

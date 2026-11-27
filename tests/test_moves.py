@@ -18,7 +18,9 @@ from backend.models import LibraryItem, MediaType, SparrowConfig
 from backend.storage import Storage
 
 
-class MoveTests(unittest.IsolatedAsyncioTestCase):
+class MoveFixture(unittest.IsolatedAsyncioTestCase):
+    """This server with two library folders holding a two-episode show, and a paired computer."""
+
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
@@ -49,6 +51,8 @@ class MoveTests(unittest.IsolatedAsyncioTestCase):
             self.root / "node",
             {"library": str(self.root / "remote"), "staging": str(self.root / "remote-in")},
             fetcher=lambda token, offset: self.nodes.transfer_bytes(token, self.node_id, offset),
+            places=[str(self.root)],
+            on_folders=lambda roots, markers: None,
         )
         code = self.nodes.enroll("antivac")["code"]
         self.node_id = self.nodes.pair(
@@ -116,6 +120,8 @@ class MoveTests(unittest.IsolatedAsyncioTestCase):
                 break
         return self.moves.get(move["id"])
 
+
+class MoveTests(MoveFixture):
     async def test_a_finished_request_moves_to_where_it_is_kept(self):
         from backend.agents.models import JobStatus
 

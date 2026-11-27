@@ -295,13 +295,19 @@ class Executor:
                 key=lambda k: int(k.split("-")[1]),
             )
             libraries = libraries[:1] + [str(self.roots[k]) for k in extra]
-        if not staging and "staging" in self.roots:
+        if (not staging or staging == "auto") and "staging" in self.roots:
             staging = str(self.roots["staging"])  # Unchanged when only the library moves.
         if not libraries:
             raise NodeError("Choose a library folder.")
         points = self.starting_points()
+        own = ""
+        if staging == "auto":
+            staging = own = self._auto_staging(libraries[0], points)
         try:
-            chosen = [str(within(p, points)) for p in [*libraries, *([staging] if staging else [])]]
+            chosen = [
+                p if p == own else str(within(p, points))
+                for p in [*libraries, *([staging] if staging else [])]
+            ]
         except FolderError as exc:
             raise NodeError(str(exc)) from None
         # A computer that only keeps titles needs no incoming folder.
@@ -319,6 +325,30 @@ class Executor:
         self._set_roots(roots)
         self.markers = markers
         return self.capabilities()
+
+    def _auto_staging(self, library, points):
+        """An incoming folder nobody has to choose: beside the library, on its disk,
+        else in Sparrow Node's own folder."""
+        from .folders import FolderError, within
+
+        library = Path(library).expanduser().resolve(strict=False)
+        parent = library.parent
+        name = "Incoming" if parent.name.lower() == "sparrow" else "Sparrow Incoming"
+        beside = parent / name
+        # The library may not exist yet either: what matters is where it would be made.
+        anchor = parent
+        while not anchor.exists() and anchor != anchor.parent:
+            anchor = anchor.parent
+        try:
+            within(str(beside), points)
+            usable = (
+                beside.is_dir() and os.access(beside, os.W_OK)
+            ) or (not beside.exists() and anchor.is_dir() and os.access(anchor, os.W_OK))
+        except (FolderError, OSError):
+            usable = False
+        if usable and beside != library and library not in beside.parents:
+            return str(beside)
+        return str((self.data_dir / "Incoming").resolve())
 
     @contextmanager
     def db(self):
@@ -647,6 +677,8 @@ class Executor:
             return out
         if kind == "receive":
             return await self._receive(root_id, args, operation_id)
+        if kind == "link":
+            return await self._link(root_id, args)
         path = self.path(root_id, args.get("path", ""))
         if kind in ("checksum", "companions", "release"):
             return await self._library_file(kind, root_id, path, args)
@@ -905,6 +937,14 @@ class Executor:
         version = file_version(path)
         if args.get("version") and args["version"] != version:
             raise NodeError("This media copy has changed. Refresh it before continuing.")
+        if kind == "release" and isinstance(args.get("linked"), dict):
+            # Moved by a link: the other name must still be these very bytes.
+            other = self.path(args["linked"].get("root_id", ""), args["linked"].get("path", ""))
+            if not other.is_file() or other.is_symlink() or not os.path.samefile(path, other):
+                raise NodeError("This file changed after it was moved, so it was kept.")
+            async with self._mutation_lock:
+                path.unlink()
+            return {"removed": True}
         checksum = await asyncio.to_thread(sha256_file, path)
         if file_version(path) != version:
             raise NodeError("The file changed while it was being read.")
@@ -916,6 +956,48 @@ class Executor:
         async with self._mutation_lock:
             path.unlink()
         return {"removed": True}
+
+    async def _link(self, root_id, args):
+        """Move a library file to another library folder on the same disk by
+        giving it a second name: nothing is copied. The old name goes later."""
+        from_root = str(args.get("from_root") or "")
+        if not is_library(root_id) or not is_library(from_root) or from_root == root_id:
+            raise NodeError("Links go between two library folders.")
+        source = self.path(from_root, args.get("path", ""))
+        target = self.path(root_id, args.get("path", ""), write=True)
+        if (
+            source.suffix.lower() not in VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS
+            or not source.is_file()
+            or source.is_symlink()
+        ):
+            raise NodeError("Choose a media file.")
+        if args.get("version") != file_version(source):
+            raise NodeError("The original changed since it was checked.")
+
+        def result(placed):
+            return {
+                "path": args["path"],
+                "root_id": root_id,
+                "version": file_version(target),
+                "placed": placed,
+            }
+
+        if target.exists():
+            if target.is_file() and os.path.samefile(source, target):
+                return result(False)
+            raise NodeError("A different file already exists at the destination.")
+        if self.roots[root_id].stat().st_dev != source.stat().st_dev:
+            raise NodeError("These folders are on different disks.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(source, target)
+        except FileExistsError:
+            if not os.path.samefile(source, target):
+                raise NodeError("A different file already exists at the destination.") from None
+            return result(False)
+        except OSError:
+            raise NodeError("This disk can't give a file two names.") from None
+        return result(True)
 
     async def _receive(self, root_id, args, operation_id):
         """A resumable, verified copy into a library folder from another disk

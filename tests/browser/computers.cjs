@@ -132,6 +132,40 @@ const disk = (id, label, free, total, key) => ({ id, available: true, writable: 
       await p.getByRole('button', { name: 'Add a computer' }).click();
       await p.locator('dialog[open]').waitFor();
     });
+    // A folder's path chooses another: the chooser opens with the one in use selected.
+    const keepsTitles = (p) =>
+      p.locator('#device-local').getByRole('button', { name: /Change where this server keeps titles/ });
+    await shoot('choose-library', async (p) => {
+      await keepsTitles(p).click();
+      await p.locator('dialog[open] .picker-list li.selected').filter({ hasText: /^library/ }).waitFor();
+      assert(await p.getByRole('button', { name: 'Keep titles in library', exact: true }).isDisabled());
+    });
+    // Another folder for a library that holds titles: what happens to them is asked first.
+    fs.mkdirSync(path.join(state, 'Films'), { recursive: true });
+    const question = async (p) => {
+      await keepsTitles(p).click();
+      const sheet = p.locator('dialog[open]');
+      await sheet.locator('.picker-row').filter({ hasText: /^Films/ }).click();
+      await sheet.getByRole('button', { name: 'Keep titles in Films', exact: true }).click();
+      await sheet.getByText(/^library has \d+ titles/).waitFor();
+    };
+    await shoot('library-question', question);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(base + '/settings/computers');
+    await page.getByRole('heading', { name: 'antivac' }).waitFor();
+    await question(page);
+    const sheet = page.locator('dialog[open]');
+    assert(await sheet.getByRole('radio', { name: /Move them to Films/ }).isChecked());
+    await sheet.getByRole('button', { name: /^Move \d+ titles$/ }).waitFor();
+    await sheet.getByRole('radio', { name: /Use both folders/ }).check();
+    await sheet.getByRole('button', { name: 'Use both folders', exact: true }).click();
+    await sheet.waitFor({ state: 'hidden' });
+    const card = page.locator('#device-local');
+    await card.getByText(path.join(state, 'Films')).waitFor();
+    // Back as it was, for the other checks.
+    await card.getByRole('button', { name: 'Stop using' }).click();
+    await card.getByText(path.join(state, 'Films')).waitFor({ state: 'hidden' });
+
     // Storage can't be turned off on every computer at once.
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(base + '/settings/computers');
