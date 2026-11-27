@@ -48,6 +48,7 @@ class FakeClient:
 
 class UpdaterTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        self.cwd = os.getcwd()  # An update leaves its folder before swapping it.
         self.temp = tempfile.TemporaryDirectory()
         self.home = Path(self.temp.name)
         self.package = node_package.package("tar.gz")
@@ -59,6 +60,7 @@ class UpdaterTests(unittest.IsolatedAsyncioTestCase):
         self.restarts = []
 
     def tearDown(self):
+        os.chdir(self.cwd)
         self.temp.cleanup()
 
     def updater(self, own="old", client=None):

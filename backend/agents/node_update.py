@@ -119,6 +119,7 @@ class Updater:
             return
         failed = self.home / "app.failed"
         shutil.rmtree(failed, ignore_errors=True)
+        os.chdir(self.home)
         os.replace(self.app, failed)
         os.replace(previous, self.app)
         self._save(state="failed", target=bad, error=reason)
@@ -164,6 +165,7 @@ class Updater:
             self._save(state="restarting", target=version, to=version, began=time.time(), **{"from": self.own_version})
             previous = self.home / "app.previous"
             shutil.rmtree(previous, ignore_errors=True)
+            os.chdir(self.home)  # Windows won't rename a folder a process is working in.
             os.replace(self.app, previous)
             os.replace(nxt, self.app)
         except Exception as exc:  # The row says why; the running version carries on.
