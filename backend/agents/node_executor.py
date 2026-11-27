@@ -200,6 +200,11 @@ class Executor:
         self._hls_cache = None
         self.markers = markers or {}
         self.downloader = downloader
+        # How this computer's download app is doing, when something supervises
+        # it: running, starting, missing, failed or off. None means unknown.
+        self.downloader_state = None
+        # The jobs the household wants this computer to do (see computers.py).
+        self.jobs = {}
         self._mutation_lock = asyncio.Lock()
         self._operation_locks = WeakValueDictionary()
         self._last_prune = 0
@@ -356,6 +361,8 @@ class Executor:
                 / "model.bin"
             ).is_file(),
             "download": bool(self.downloader and self.downloader.get("type") != "none"),
+            "downloader_state": self.downloader_state
+            or ("running" if self.downloader and self.downloader.get("type") != "none" else "none"),
         }
 
     def pending_results(self):

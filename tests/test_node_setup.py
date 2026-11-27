@@ -175,7 +175,7 @@ class NewComputerDownloadTests(unittest.IsolatedAsyncioTestCase):
             config = {"roots": {}, "downloader": {"type": "transmission", "managed": True,
                       "username": "sparrow", "password": "x", "port": 0}}
             # A newly paired computer has no folders yet: nothing starts, nothing fails.
-            self.assertIsNone(await managed_downloader(Path(temp) / "node.json", config))
+            self.assertEqual(await managed_downloader(Path(temp) / "node.json", config), (None, None))
 
 
 class PairingCommandTests(unittest.IsolatedAsyncioTestCase):

@@ -154,35 +154,68 @@ def fetcher(config):
 
 
 async def managed_downloader(config_path, config):
-    """Start this node's own Transmission, saving the port it listens on."""
+    """Start this node's own Transmission, saving the port it listens on.
+
+    Returns (daemon, state): state is how the download app is doing, for the
+    computer's Downloads row (None when it is someone else's download app).
+    """
     downloader = config.get("downloader") or {}
+    if not downloader or downloader.get("type") == "none":
+        return None, "none"
+    if not downloader.get("managed"):
+        return None, None
     staging = (config.get("roots") or {}).get("staging")
-    if not downloader.get("managed") or not staging:
-        return None  # Starts once this computer's folders are chosen.
+    if not staging:
+        return None, None  # Starts once this computer's folders are chosen.
     from ..services.managed_transmission import ManagedTransmission
 
     daemon = ManagedTransmission(config_path.parent)
     if not daemon.available:
         print("transmission-daemon is missing; this node can't download.", flush=True)
-        return None
-    port = await daemon.start(
-        download_dir=staging,
-        username=downloader["username"],
-        password=downloader["password"],
-        rpc_port=downloader.get("port") or None,
-    )
+        return None, "missing"
+    try:
+        port = await daemon.start(
+            download_dir=staging,
+            username=downloader["username"],
+            password=downloader["password"],
+            rpc_port=downloader.get("port") or None,
+        )
+    except Exception as exc:  # The row says it stopped; the next check retries.
+        print(f"Sparrow's Transmission didn't start: {type(exc).__name__}.", flush=True)
+        return None, "failed"
     if port != downloader.get("port"):
         downloader["port"] = port
         atomic_config(config_path, config)
     await daemon.wait_ready()
-    return daemon
+    return daemon, "running"
+
+
+def wants(config, job):
+    """Jobs not heard from the server yet start on, as they did before jobs existed."""
+    return (config.get("jobs") or {}).get(job, job != "subtitles")
 
 
 async def run(config_path):
     config_path = Path(config_path)
     config = json.loads(config_path.read_text())
+    daemon = None
+    downloads_lock = asyncio.Lock()
 
-    daemon = await managed_downloader(config_path, config)
+    async def follow_downloads():
+        """Run the download app while Downloads is on, and stop it when it's off."""
+        nonlocal daemon
+        async with downloads_lock:
+            if not wants(config, "downloads"):
+                if daemon:
+                    await daemon.stop()
+                    daemon = None
+                executor.downloader_state = "off"
+                return
+            if daemon:
+                executor.downloader_state = "running" if daemon.running else "failed"
+                return
+            executor.downloader_state = "starting"
+            daemon, executor.downloader_state = await managed_downloader(config_path, config)
 
     async def save_folders(roots, markers):
         nonlocal daemon
@@ -191,9 +224,11 @@ async def run(config_path):
         atomic_config(config_path, config)
         if moved:
             # Downloads land in the incoming folder, so Transmission follows it.
-            if daemon:
-                await daemon.stop()
-            daemon = await managed_downloader(config_path, config)
+            async with downloads_lock:
+                if daemon:
+                    await daemon.stop()
+                    daemon = None
+            await follow_downloads()
 
     executor = Executor(
         config_path.parent,
@@ -204,6 +239,25 @@ async def run(config_path):
         places=config.get("places"),
         on_folders=save_folders,
     )
+    executor.jobs = dict(config.get("jobs") or {})
+    await follow_downloads()
+    jobs_hooks = []  # Called with (before, after) when the server changes this computer's jobs.
+    executor.jobs_hooks = jobs_hooks
+
+    async def apply_jobs(jobs):
+        if not isinstance(jobs, dict) or jobs == config.get("jobs"):
+            return
+        before = dict(config.get("jobs") or {})
+        config["jobs"] = executor.jobs = {k: bool(v) for k, v in jobs.items()}
+        atomic_config(config_path, config)
+        if before.get("downloads", True) != config["jobs"].get("downloads", True):
+            await follow_downloads()
+        for hook in list(jobs_hooks):
+            try:
+                await hook(before, config["jobs"])
+            except Exception as exc:  # One job's setup never stops the others.
+                print(f"Couldn't follow a job change: {type(exc).__name__}.", flush=True)
+
     async with httpx.AsyncClient(
         base_url=config["server"],
         timeout=httpx.Timeout(35),
@@ -231,6 +285,8 @@ async def run(config_path):
                         else:
                             response.raise_for_status()
                             executor.delivered(receipt["id"])
+                    if daemon and executor.downloader_state in ("running", "failed"):
+                        executor.downloader_state = "running" if daemon.running else "failed"
                     response = await client.post(
                         "/api/v1/node/poll",
                         json={
@@ -243,7 +299,9 @@ async def run(config_path):
                             "Node access was revoked. Pair again from Storage settings."
                         )
                     response.raise_for_status()
-                    command = response.json().get("command")
+                    answer = response.json()
+                    await apply_jobs(answer.get("jobs"))
+                    command = answer.get("command")
                     if command:
                         running.add(command["id"])
                         try:
