@@ -131,7 +131,7 @@ async function playFrame(page) {
     await capture(household, 'logs', '/settings/logs');
     await capture(household, 'people', '/settings/people');
     await capture(household, 'invite', '/settings/people', open(/^Invite/));
-    await capture(household, 'storage', '/settings/storage');
+    await capture(household, 'computers', '/settings/computers');
     await capture(household, 'defaults', '/settings/defaults');
     await capture(household, 'server', '/settings/server');
     await capture(household, 'connect', '/settings/connect');

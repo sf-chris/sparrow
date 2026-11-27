@@ -286,7 +286,7 @@ export default function Title({ user }: { user: User }) {
             (user.role === "viewer"
               ? "Ask someone who can request it."
               : user.role === "admin"
-                ? "Request it, or import your own copy in Storage."
+                ? "Request it, or import your own copy in Computers."
                 : undefined)}
         </Empty>
       )}

@@ -72,7 +72,7 @@ English. Apple TV, BBC iPlayer and printed TV guides are the reference.
 - No rhetorical rhythm: no lists of three for effect, no paired fragments, no
   semicolons, no em dashes.
 - The household's words: film, series, season, episode, collection, storage,
-  download app. Not media, content, assets, transfers, staging or reasoning.
+  computer, download app. Not media, content, assets, transfers, staging or reasoning.
 - Digits for numbers: “7 days”, “24 min left”, “S1 E3”, “Airs 5 Oct”.
 
 Request flags are Stuck (needs a retry), Stopped (cancelled or given up),
@@ -117,12 +117,19 @@ between titles, rows and covers anywhere they are listed.
   title/episode also opens those controls. Available tracks are distinguished
   from sync-checked tracks; paid checking is optional in shared preferences.
 - **Settings:** a left index grouped You (Preferences, Account, Logs),
-  Household (People, Defaults) and Server (Storage, Connections, Sparrow
+  Household (People, Defaults) and Server (Computers, Connections, Sparrow
   Connect, Setup), with Sign out beneath. On phones the index becomes a
-  scrolling strip with Sign out beside it. People is a cast list; Storage lists
-  devices, each disk drawn as a bar (Sparrow in teal, other files hatched, free
-  as paper) with "Nearly full" flagged; Sparrow Connect is one device card in Storage's grammar (Address and
-  Port lines with ticks), its only page action Turn on. Add a phone (Account ›
+  scrolling strip with Sign out beside it. People is a cast list; Computers
+  lists every computer, this server first (marked Runs Sparrow), each with one
+  card design: its disks drawn as bars (Sparrow in teal, other files hatched,
+  free as paper) with "Nearly full" flagged, then a dotted line per job
+  (Storage, Playback, Downloads, Subtitles) ending in a biro tick and Ready,
+  a quiet Off, or the problem in red with a Fix pill. Change jobs is a
+  checklist with a consequence under each job; Add a computer pairs, asks what
+  it does, then asks only for the folders those jobs need; Set up again shows
+  the same command, which repairs without touching folders or jobs. Sparrow
+  Connect is one device card in the Computers grammar (Address and Port lines
+  with ticks), its only page action Turn on. Add a phone (Account ›
   Devices) shows the code beside three numbered steps and confirms by itself
   when the phone signs in. The same code is Open on phone: a round phone beside
   the account's initial in the masthead (not on phones), named on hover, that

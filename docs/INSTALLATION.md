@@ -96,11 +96,12 @@ not Linux settings. A download app outside the container must save to the
 incoming folder at the same path Sparrow sees, so Sparrow's own Transmission is
 simpler in Docker.
 
-## Pair a computer
+## Add a computer
 
-Another computer can hold part of the collection. In **Settings → Storage**,
-choose **Pair a computer**, pick its system and paste the one line shown into
-Terminal (Mac, Linux) or PowerShell (Windows) on that computer:
+Another computer can keep part of the collection, download for it, or make
+subtitles. In **Settings → Computers**, choose **Add a computer**, pick its
+system and paste the one line shown into Terminal (Mac, Linux) or PowerShell
+(Windows) on that computer:
 
 ```sh
 curl -fsSL http://<server>/api/v1/node/setup/<code>.sh | sh   # Mac and Linux
@@ -108,11 +109,32 @@ irm http://<server>/api/v1/node/setup/<code>.ps1 | iex       # Windows
 ```
 
 The command installs Sparrow Node, pairs it and keeps it running in the
-background. The dialog follows along and, once the computer connects, asks for
-its library folder and a separate incoming folder, browsed on that computer from
+background. The dialog follows along and, once the computer connects, asks what
+it does and then for the folders those jobs need, browsed on that computer from
 Sparrow. The computer takes its own name. Each command works once and for ten
 minutes (longer once it has started); an old one says so and asks for a fresh
 one.
+
+### What a computer does
+
+Each computer, this server included, has jobs. Its card in **Settings →
+Computers** shows a line for each, with a tick when it works and **Fix** when it
+doesn't.
+
+- **Storage** keeps films and series. Off, it keeps what it has and takes
+  nothing new.
+- **Playback** follows Storage: a computer plays what it keeps.
+- **Downloads** fetches new titles with the computer's own download app. A title
+  kept on a computer that can't download (a NAS, say) is downloaded by another
+  computer and moved there when its request is done.
+- **Subtitles** listens to soundtracks to time and write subtitles. It is on for
+  this server and for a computer with a graphics card, and sets itself up the
+  first time it's turned on.
+
+A NAS or any spare disk only needs Storage: add it, untick Downloads and
+Subtitles, and choose its library folder. **Change jobs** changes them later.
+**Set up again** gives the same one-line command, which updates Sparrow Node and
+adds anything missing without touching its folders or jobs.
 
 What it sets up:
 
@@ -157,7 +179,7 @@ physical Windows hardware has passed validation.
 The one-line command above is simpler. The installer is the alternative for a
 machine that should run as a Windows service with its own account.
 
-1. In the web app, open **Settings → Storage → Pair a computer** and choose
+1. In the web app, open **Settings → Computers → Add a computer** and choose
    Windows. The code is the last part of the command, before `.ps1`.
 2. Run `SparrowNode-Setup-x64.exe` on Windows. Open **Connect Sparrow storage**.
    Windows requests administrator access once for service installation.
@@ -189,7 +211,7 @@ and administrators. Do not share `node.json`, which contains its pairing credent
 
 A Linux computer with Docker can also run Sparrow Node from this repository's
 image. Set `SPARROW_MEDIA_DIR` (and `SPARROW_MEDIA_GID`) in `.env` as for the
-server, take the code from **Pair a computer** (the part before `.sh`), then:
+server, take the code from **Add a computer** (the part before `.sh`), then:
 
 ```sh
 docker compose -f compose.node.yaml run --rm node configure \
@@ -207,12 +229,19 @@ download.
 
 Each request is placed once, when it starts, and stays there. **Automatic** keeps
 a show on the disk it already uses, skips storage that is offline, nearly full or
-has no download app, then picks by the household's rule (most free space, fill in
-order, or take turns) in **Settings → Storage**. A pool does the same within the
-disks it lists. Each person can choose their own default in Preferences, and any
-request can choose its own. A sleeping destination makes the request wait; it is
-never downloaded again elsewhere. Administrators can move a title from its page:
-every file is copied and checked before the original is removed.
+has Storage turned off, then picks by the household's rule (most free space,
+fill in order, or take turns) in **Settings → Computers**. A pool does the same
+within the disks it lists. Each person can choose their own default in
+Preferences, and any request can choose its own.
+
+Where a title is kept and where it downloads are chosen separately. If the
+computer keeping it can download, it downloads there. Otherwise the roomiest
+computer with Downloads on fetches it, and when the request is done the title
+moves to where it's kept: every file is copied and checked before the original
+is removed. A sleeping destination never gets a second copy elsewhere: the
+download waits for it, or happens on another computer and moves once it's back.
+The request's first note says where it went and who downloads it, and names any
+computer it passed over. Administrators can also move a title from its page.
 
 ## Checks and local development
 

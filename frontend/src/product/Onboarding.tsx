@@ -58,7 +58,7 @@ export default function Onboarding({
       if (finish) await post("/admin/onboarding/finish");
       else await patch("/admin/onboarding", { deferred: true });
       await onChanged();
-      navigate(finish ? (library ? "/settings/storage" : "/discover") : "/", {
+      navigate(finish ? (library ? "/settings/computers" : "/discover") : "/", {
         replace: true,
       });
     } catch (e) {

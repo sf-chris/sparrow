@@ -270,9 +270,9 @@ const out =
       .getByRole("button", { name: "Finish and import", exact: true })
       .click();
     await page
-      .getByRole("heading", { name: "Storage", exact: true })
+      .getByRole("heading", { name: "Computers", exact: true })
       .waitFor();
-    assert.equal(new URL(page.url()).pathname, "/settings/storage");
+    assert.equal(new URL(page.url()).pathname, "/settings/computers");
     assert.equal((await state()).complete, true);
     // Restore only the catalogue fixture setting for the remaining browser journeys.
     await context.request.patch(base + "/api/v1/admin/config", {

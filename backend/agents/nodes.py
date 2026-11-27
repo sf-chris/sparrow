@@ -217,7 +217,7 @@ class Nodes:
             ).fetchone()
             if not row:
                 raise NodeError(
-                    "This pairing command expired or was already used. In Sparrow, open Settings > Storage > Pair a computer for a fresh one."
+                    "This pairing command expired or was already used. In Sparrow, open Settings > Computers > Add a computer for a fresh one."
                 )
             if row["used"]:
                 paired = db.execute(
@@ -227,7 +227,7 @@ class Nodes:
                 if paired:
                     return {"node_id": row["node_id"], "protocol": PROTOCOL}
                 raise NodeError(
-                    "This pairing command was already used. In Sparrow, open Settings > Storage > Pair a computer for a fresh one."
+                    "This pairing command was already used. In Sparrow, open Settings > Computers > Add a computer for a fresh one."
                 )
             # Client generates and persists its credential before pairing, so a
             # lost response cannot leave the node with an unknown server-side secret.
@@ -505,7 +505,8 @@ def install_nodes(app, storage, get_service):
 
     class Folders(Input):
         libraries: list[str] = Field(min_length=1, max_length=8)
-        staging: str = Field(min_length=1, max_length=1000)
+        # Empty keeps the incoming folder it has; a storage-only computer has none.
+        staging: str = Field(default="", max_length=1000)
 
     class NewFolder(Input):
         node_id: str = "local"

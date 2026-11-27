@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Copy } from "lucide-react";
-import { post, api, type NodeInfo } from "./api";
+import { post, api, type Jobs, type NodeInfo } from "./api";
+import { JobChoices, defaultJobs, folderSlots, jobsProblem, saveJobs } from "./ComputerJobs";
 import { FolderPicker, overlap, type Slot } from "./FolderBrowser";
 import { Dialog } from "./ui";
 
@@ -61,17 +62,20 @@ async function copy(text: string, field: HTMLTextAreaElement | null) {
   }
 }
 
-function libraries(node: NodeInfo) {
-  return node.capabilities.roots.filter((r) => /^library(-\d+)?$/.test(r.id));
-}
-
-/** Pair a computer from one pasted command, then choose its folders. */
+/** Add a computer from one pasted command, then choose its jobs and the
+ *  folders those jobs need. With `fix`, the same command sets a paired
+ *  computer up again: it updates and adds what's missing, keeping its folders
+ *  and jobs. */
 export default function PairComputer({
   node,
+  fix = false,
+  all = [],
   onClose,
   onPaired,
 }: {
   node?: NodeInfo;
+  fix?: boolean;
+  all?: NodeInfo[];
   onClose: () => void;
   onPaired: (id: string) => void;
 }) {
@@ -87,6 +91,7 @@ export default function PairComputer({
   const [error, setError] = useState("");
   const [paired, setPaired] = useState<NodeInfo | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [jobs, setJobs] = useState<Jobs | null>(null);
   const [saving, setSaving] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const started = useRef(false);
@@ -127,12 +132,9 @@ export default function PairComputer({
         const running = !next.scripted || next.stage === "running";
         if (next.paired && next.node?.online && running) {
           setPaired(next.node);
-          if (!libraries(next.node).length && next.node.capabilities.folders) {
-            setSlots([
-              { key: "library", label: "Library", value: "" },
-              { key: "staging", label: "Incoming", value: "", write: true },
-            ]);
-          } else onPaired(next.node.id);
+          // A new computer chooses what it's for; one set up again keeps its jobs.
+          if (!node) setJobs(defaultJobs(next.node));
+          else onPaired(next.node.id);
         } else if (!next.paired && !next.stage && next.expires_in_seconds <= 0) {
           void enroll(true);
         }
@@ -150,6 +152,49 @@ export default function PairComputer({
   }, [nodeId, code, paired]);
 
   const name = paired?.name || node?.name || "the computer";
+  if (paired && jobs && !slots.length) {
+    const problem = jobsProblem(jobs, paired, all);
+    return (
+      <Dialog
+        title={`What ${paired.name} does`}
+        onClose={onClose}
+        footer={
+          <>
+            {(problem || error) && (
+              <p className="sheet-problem problem-text" role="alert">
+                {problem || error}
+              </p>
+            )}
+            <button
+              className="btn primary"
+              disabled={saving || !!problem}
+              onClick={async () => {
+                setSaving(true);
+                setError("");
+                try {
+                  const saved = await saveJobs(paired, jobs);
+                  const needed = paired.capabilities.folders
+                    ? folderSlots(saved, jobs).filter((s) => !s.value)
+                    : [];
+                  if (needed.length) setSlots(folderSlots(saved, jobs));
+                  else onPaired(paired.id);
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "Saving…" : "Next"}
+            </button>
+          </>
+        }
+      >
+        <p className="muted picker-intro">Added. Choose what it does.</p>
+        <JobChoices node={paired} jobs={jobs} onChange={setJobs} all={all} />
+      </Dialog>
+    );
+  }
   if (paired && slots.length) {
     const problem = overlap(slots);
     return (
@@ -170,9 +215,11 @@ export default function PairComputer({
                 setSaving(true);
                 setError("");
                 try {
+                  const value = (key: string) =>
+                    slots.find((s) => s.key === key)?.value || "";
                   await post(`/admin/nodes/${paired.id}/folders`, {
-                    libraries: [slots[0].value],
-                    staging: slots[1].value,
+                    libraries: [value("library")],
+                    staging: value("staging"),
                   });
                   onPaired(paired.id);
                 } catch (e) {
@@ -188,8 +235,9 @@ export default function PairComputer({
         }
       >
         <p className="muted picker-intro">
-          Paired. Choose where its films and series go, and a separate folder
-          for downloads.
+          {slots.some((s) => s.key === "staging")
+            ? "Choose where its films and series go, and a separate folder for downloads."
+            : "Choose where its films and series go."}
         </p>
         <FolderPicker nodeId={paired.id} slots={slots} onChange={setSlots} />
       </Dialog>
@@ -204,7 +252,16 @@ export default function PairComputer({
   const line = code ? command(system, server.replace(/\/+$/, ""), code) : "";
   const minutes = Math.ceil((status?.expires_in_seconds ?? 600) / 60);
   return (
-    <Dialog title={node ? `Reconnect ${node.name}` : "Pair a computer"} onClose={onClose}>
+    <Dialog
+      title={
+        !node
+          ? "Add a computer"
+          : fix
+            ? `Set up ${node.name} again`
+            : `Reconnect ${node.name}`
+      }
+      onClose={onClose}
+    >
       <div className="form pair">
         <fieldset className="segmented">
           <legend className="sr-only">Its system</legend>
@@ -226,6 +283,7 @@ export default function PairComputer({
         </fieldset>
         <p>
           On {node ? node.name : "that computer"}, paste this into {shell}.
+          {fix && " It updates Sparrow Node and adds anything missing. Its folders and jobs stay as they are."}
         </p>
         <div className="pair-command">
           <textarea

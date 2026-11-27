@@ -158,7 +158,7 @@ def health(node: dict, jobs: dict) -> dict:
             row("storage", False, "off", f"Off. {size(kept)} stays here." if kept else "Off")
         )
     elif not online:
-        rows.append(row("storage", True, "waiting", "Back when it's online"))
+        rows.append(row("storage", True, "waiting", "Offline"))
     elif not libraries:
         rows.append(row("storage", True, "attention", "Choose a library folder", "folders"))
     elif not all(r.get("available") for r in libraries):
@@ -171,7 +171,7 @@ def health(node: dict, jobs: dict) -> dict:
         rows.append(row("storage", True, "ready", f"{size(free)} free of {size(total)}" if total else "Ready"))
     if jobs.get("storage") or libraries:
         if not online:
-            rows.append(row("playback", True, "waiting", "Back when it's online"))
+            rows.append(row("playback", True, "waiting", "Offline"))
         elif not caps.get("transcode") or not caps.get("probe"):
             rows.append(
                 row("playback", True, "attention", "Some files won't play here. Media tools missing", repair if not local else None)
@@ -185,7 +185,7 @@ def health(node: dict, jobs: dict) -> dict:
     if not jobs.get("downloads"):
         rows.append(row("downloads", False, "off", "Off"))
     elif not online:
-        rows.append(row("downloads", True, "waiting", "Back when it's online"))
+        rows.append(row("downloads", True, "waiting", "Offline"))
     elif downloader in ("none", "missing"):
         rows.append(row("downloads", True, "attention", "No download app", repair))
     elif downloader == "starting":
@@ -207,7 +207,7 @@ def health(node: dict, jobs: dict) -> dict:
     if not jobs.get("subtitles"):
         rows.append(row("subtitles", False, "off", "Off"))
     elif not online:
-        rows.append(row("subtitles", True, "waiting", "Back when it's online"))
+        rows.append(row("subtitles", True, "waiting", "Offline"))
     elif speech.get("installing"):
         progress = speech.get("progress")
         rows.append(

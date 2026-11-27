@@ -397,7 +397,7 @@ class Placement:
         if not candidates:
             names = " and ".join(sorted({d["computer"] for d in resting}))
             raise PlacementError(
-                f"Storage is off on {names}. Turn it on in Storage, or choose another place."
+                f"Storage is off on {names}. Turn it on in Computers, or choose another place."
             )
         if needed is None:
             needed = expected_bytes(values or {}, media_type, count)

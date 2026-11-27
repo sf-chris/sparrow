@@ -109,7 +109,7 @@ fs.mkdirSync(out, { recursive: true });
     "Sign out must be visible without scrolling preferences",
   );
   for (const name of [
-    "Storage",
+    "Computers",
     "People",
     "Connections",
     "Sparrow Connect",

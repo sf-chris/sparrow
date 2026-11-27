@@ -243,18 +243,23 @@ class Executor:
                 key=lambda k: int(k.split("-")[1]),
             )
             libraries = libraries[:1] + [str(self.roots[k]) for k in extra]
-        if not libraries or not staging:
-            raise NodeError("Choose a library folder and an incoming folder.")
+        if not staging and "staging" in self.roots:
+            staging = str(self.roots["staging"])  # Unchanged when only the library moves.
+        if not libraries:
+            raise NodeError("Choose a library folder.")
         points = self.starting_points()
         try:
-            chosen = [str(within(p, points)) for p in [*libraries, staging]]
+            chosen = [str(within(p, points)) for p in [*libraries, *([staging] if staging else [])]]
         except FolderError as exc:
             raise NodeError(str(exc)) from None
-        problem = overlap(labelled(chosen[:-1], chosen[-1]))
+        # A computer that only keeps titles needs no incoming folder.
+        problem = overlap(labelled(chosen[: len(libraries)], staging and chosen[-1]))
         if problem:
             raise NodeError(problem)
         marked = [root_marker(p) for p in chosen]
-        roots = {**library_roots([p for p, _ in marked[:-1]]), "staging": marked[-1][0]}
+        roots = library_roots([p for p, _ in marked[: len(libraries)]])
+        if staging:
+            roots["staging"] = marked[-1][0]
         markers = dict(zip(roots, [m for _, m in marked]))
         saved = self.on_folders(roots, markers)
         if asyncio.iscoroutine(saved):
