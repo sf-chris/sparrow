@@ -31,10 +31,10 @@ storage and physical phones is the next focus; see [what still needs work](#what
 
 - **One guide.** Tonight's resumes, what's coming up and your whole collection
   on one page, as an A–Z listing or covers. Arrow keys work from the couch.
-- **One box.** Type a title, or describe a mood and ask Sparrow. Review the
+- **One box.** Type a title and matches appear as you type. Review the
   film, season or individual episodes before requesting.
 - **Ask once, follow along.** Persistent agents inspect sources, verify media
-  and organise the result. Requests shows progress and recovery actions; Logs
+  and organise the result. Coming up shows progress and recovery actions; Logs
   keeps readable operational history with filters and expandable details.
 - **A player that belongs here.** Watch in the browser with seeking, audio and
   caption choices, personal progress and an optional compatible playback format.
@@ -47,11 +47,11 @@ storage and physical phones is the next focus; see [what still needs work](#what
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/discover-desktop.png" alt="Find: one box for a title or a mood, with ideas" /></td>
+    <td width="50%"><img src="docs/screenshots/discover-desktop.png" alt="Find: one box for a film or series" /></td>
     <td width="50%"><img src="docs/screenshots/title-desktop.png" alt="A series page with Resume, Request episodes and the episode listing" /></td>
   </tr>
   <tr>
-    <td align="center"><strong>A title, or a mood.</strong></td>
+    <td align="center"><strong>Type a title.</strong></td>
     <td align="center"><strong>Exactly the episodes you want.</strong></td>
   </tr>
 </table>

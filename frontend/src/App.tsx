@@ -15,7 +15,8 @@ import Landing from "./product/Landing";
 import Shell from "./product/Shell";
 import Collection from "./product/Collection";
 import Title from "./product/Title";
-import Activity, { RequestDetail } from "./product/Activity";
+import { RequestDetail } from "./product/Request";
+import { Following } from "./product/CollectionCare";
 import Preferences from "./product/Preferences";
 import Security from "./product/Security";
 import SparrowConnect from "./product/SparrowConnect";
@@ -199,8 +200,7 @@ export default function App() {
                 element={<Title user={user} />}
               />
               <Route path="/items/:itemId" element={<Title user={user} />} />
-              <Route path="/activity" element={<Activity user={user} />} />
-              <Route path="/activity/:jobId" element={<RequestDetail />} />
+              <Route path="/request/:jobId" element={<RequestDetail />} />
               <Route path="/discover" element={<Discover />} />
               <Route
                 path="/settings"
@@ -211,6 +211,9 @@ export default function App() {
                 element={<Security admin={user.role === "admin"} />}
               />
               <Route path="/settings/logs" element={<Logs user={user} />} />
+              {user.role !== "viewer" && (
+                <Route path="/settings/following" element={<Following />} />
+              )}
               {user.role === "admin" && (
                 <>
                   <Route

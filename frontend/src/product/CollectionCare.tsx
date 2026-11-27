@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell, BellRing } from "lucide-react";
 import { api, post, type NodeInfo } from "./api";
-import { Bar, Dialog, ErrorNote, Field, Loading, useResource } from "./ui";
+import { Dialog, ErrorNote, Field, Loading, Page, useResource } from "./ui";
 type Subscription = {
   id: string;
   media_type: "tv" | "movie";
@@ -29,17 +29,24 @@ const reach = (row: Subscription) =>
         ? `Seasons ${row.data.mandate.seasons.join(", ")}`
         : "Only what you requested";
 
+/** Settings › Following: every title you follow, with its controls. */
+export function Following() {
+  return (
+    <Page title="Following" className="following-page">
+      <CollectionCare />
+    </Page>
+  );
+}
+
 /** Following: what Sparrow may keep up to date for a title. */
 export default function CollectionCare({
   mediaType,
   tmdbId,
   title,
-  titles = {},
 }: {
   mediaType?: "tv" | "movie";
   tmdbId?: number;
   title?: string;
-  titles?: Record<string, string>;
 }) {
   const resource = useResource(() => api<Subscription[]>("/subscriptions"));
   const nodes = useResource(() => api<NodeInfo[]>("/nodes"));
@@ -63,7 +70,6 @@ export default function CollectionCare({
     ) || [];
   const name = (row: Subscription | null) =>
     row?.data.title ||
-    (row && titles[`${row.media_type}:${row.tmdb_id}`]) ||
     title ||
     "this title";
   function edit(row: Subscription | null) {
@@ -209,14 +215,9 @@ export default function CollectionCare({
           Upgrade to my preferred quality
         </label>
         <p className="muted">
-          {enabled ? (
-            "A copy is only replaced once a better one has been checked."
-          ) : (
-            <>
-              Open requests keep going. Cancel them in{" "}
-              <Link to="/activity">Requests</Link>.
-            </>
-          )}
+          {enabled
+            ? "A copy is only replaced once a better one has been checked."
+            : "Open requests keep going. Cancel one from its title."}
         </p>
       </div>
     </Dialog>
@@ -252,8 +253,7 @@ export default function CollectionCare({
     );
   }
   return (
-    <section className="following" aria-labelledby="following">
-      <Bar id="following" title="Following" />
+    <section className="following">
       <ErrorNote error={error || resource.error} retry={resource.refresh} />
       {!resource.data ? (
         resource.loading && <Loading label="Loading" />

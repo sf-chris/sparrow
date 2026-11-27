@@ -224,25 +224,20 @@ export default function Collection({ user }: { user: User }) {
     .slice(0, 12);
   const coming = (requests.data || [])
     .filter((job) => job.status !== "complete")
-    .sort((a, b) => b.updated_at - a.updated_at)
-    .slice(0, 6);
+    .sort((a, b) => b.updated_at - a.updated_at);
   const today = new Date();
   const from = { from: location.pathname + location.search };
   const filtered = !!(query || type || state);
   const comingUp = coming.length > 0 && (
     <section aria-labelledby="coming-up">
-      <Bar id="coming-up" title="Coming up">
-        <Link to="/activity">
-          See all<span className="sr-only"> requests</span>
-        </Link>
-      </Bar>
+      <Bar id="coming-up" title="Coming up" />
       <ol className="slots">
         {coming.map((job) => (
           <li key={job.id}>
             <Link
               className="slot"
               data-nav
-              to={`/activity/${job.id}`}
+              to={`/request/${job.id}`}
               state={from}
             >
               <Age seconds={job.updated_at} />

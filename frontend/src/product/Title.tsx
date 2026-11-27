@@ -223,7 +223,7 @@ export default function Title({ user }: { user: User }) {
                     {active.status === "paused" ? "Paused" : "Coming up"}
                   </strong>{" "}
                   {tv && scope(active)}
-                  <Link className="link" to={`/activity/${active.id}`} state={from}>
+                  <Link className="link" to={`/request/${active.id}`} state={from}>
                     Details
                   </Link>
                 </p>
@@ -276,7 +276,7 @@ export default function Title({ user }: { user: User }) {
           title={active ? "Coming up." : "Not in your collection."}
           action={
             active ? (
-              <Link className="btn" to={`/activity/${active.id}`} state={from}>
+              <Link className="btn" to={`/request/${active.id}`} state={from}>
                 Details
               </Link>
             ) : undefined

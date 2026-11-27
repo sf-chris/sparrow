@@ -73,7 +73,7 @@ function SpendingAlerts() {
             {alert.job_id && (
               <Link
                 className="btn quiet"
-                to={`/activity/${alert.job_id}`}
+                to={`/request/${alert.job_id}`}
                 state={{ from: "/settings/logs" }}
               >
                 Open request

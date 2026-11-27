@@ -48,18 +48,21 @@ const path = require('node:path');
   } else {
     const login = await context.request.post(base + '/api/v1/auth/login', { headers: { 'X-Sparrow-Request': '1' }, data: { username: 'owner', password: 'fixture-password-123' } });
     if (login.status() !== 200) throw new Error('Fixture login failed');
+    // Find is a title search. Text that names no title gets one plain line and
+    // is never handed to the Sparrow agent.
+    const asked = [];
+    page.on('request', request => { if (request.url().includes('/api/v1/discovery')) asked.push(request.url()); });
     await page.goto(base + '/discover');
-    await page.getByRole('button', { name: /A mystery we can finish tonight/ }).click();
-    const prompt = page.getByRole('searchbox', { name: 'Find a title or describe a mood', exact: true });
-    if (await prompt.inputValue() !== 'A mystery we can finish tonight') throw new Error('Discovery suggestion did not fill the prompt');
-    if (!new URL(page.url()).searchParams.get('q')) throw new Error('Discovery draft not preserved in URL');
-    // An idea is a description, so it goes straight to Sparrow (the fixture has no
-    // Z.ai key, so that ends in a plain error and the draft stays).
-    await page.getByRole('alert').filter({ hasText: 'Z.ai key' }).waitFor();
-    if (await page.getByRole('button', { name: 'Ask Sparrow', exact: true }).isDisabled()) throw new Error('A filled draft should offer Ask Sparrow');
-    await audit('discovery-prompt', [390, 1440]);
+    const prompt = page.getByRole('searchbox', { name: 'Find a film or series', exact: true });
+    await prompt.fill('quiet plnet');
+    await page.getByRole('status').filter({ hasText: 'No film or series called' }).waitFor();
+    await page.waitForTimeout(1000);
+    if (asked.length) throw new Error('Find handed a search to the agent: ' + asked.join(', '));
+    if (await page.getByRole('button', { name: 'Ask Sparrow' }).count()) throw new Error('Find should not offer Ask Sparrow');
+    if (new URL(page.url()).searchParams.get('q') !== 'quiet plnet') throw new Error('Search draft not preserved in URL');
+    await audit('find-nothing', [390, 1440]);
     await page.reload(); await prompt.waitFor();
-    if (await prompt.inputValue() !== 'A mystery we can finish tonight') throw new Error('Discovery prompt lost after reload');
+    if (await prompt.inputValue() !== 'quiet plnet') throw new Error('Search draft lost after reload');
     // Controlled UI states only; the server's collection stays intact.
     await page.route('**/api/v1/catalogue', route => route.fulfill({ json: [] }));
     await page.goto(base + '/library'); await page.getByRole('heading', { name: 'Nothing listed yet.' }).waitFor();

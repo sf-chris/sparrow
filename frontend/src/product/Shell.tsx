@@ -6,7 +6,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { Tv, Search, Clock3, CircleUser, LogOut } from "lucide-react";
+import { Tv, Search, CircleUser, LogOut } from "lucide-react";
 import { post, type User } from "./api";
 import { ErrorNote, useSpatialNavigation } from "./ui";
 import { Logotype } from "./Brand";
@@ -15,14 +15,19 @@ import AddPhone from "./PhoneSignIn";
 const navigation = [
   { to: "/", label: "Guide", icon: Tv },
   { to: "/discover", label: "Find", icon: Search },
-  { to: "/activity", label: "Requests", icon: Clock3 },
 ];
-const settingsGroups = [
+/** `requests`: only for people who can request (viewers don't follow titles). */
+const settingsGroups: {
+  label: string;
+  admin: boolean;
+  items: { to: string; label: string; requests?: boolean }[];
+}[] = [
   {
     label: "You",
     admin: false,
     items: [
       { to: "/settings", label: "Preferences" },
+      { to: "/settings/following", label: "Following", requests: true },
       { to: "/settings/security", label: "Account" },
       { to: "/settings/logs", label: "Logs" },
     ],
@@ -49,7 +54,6 @@ const settingsGroups = [
 const titles: Record<string, string> = {
   "/": "Guide",
   "/discover": "Find",
-  "/activity": "Requests",
   ...Object.fromEntries(
     settingsGroups.flatMap((group) => group.items.map((i) => [i.to, i.label])),
   ),
@@ -182,11 +186,13 @@ export default function Shell({
                 .map((group) => (
                   <div className="settings-group" key={group.label}>
                     <span className="settings-group-label">{group.label}</span>
-                    {group.items.map(({ to, label }) => (
-                      <NavLink key={to} to={to} end>
-                        {label}
-                      </NavLink>
-                    ))}
+                    {group.items
+                      .filter((item) => !item.requests || user.role !== "viewer")
+                      .map(({ to, label }) => (
+                        <NavLink key={to} to={to} end>
+                          {label}
+                        </NavLink>
+                      ))}
                   </div>
                 ))}
             </nav>

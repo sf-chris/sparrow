@@ -59,7 +59,7 @@ await page.mouse.move(40,40);await page.getByRole('button',{name:'Back to title'
 const saved=await page.request.get(url+'/api/v1/catalogue');const items=await saved.json();
 const watching=items.find(i=>i.title==='The Quiet Planet').assets[0].watch;
 if(!watching||watching.position<10)throw new Error('Resume progress was not saved: '+JSON.stringify(watching));
-for(const [route,name] of [['/?view=covers','library'],['/activity','activity'],['/settings','preferences'],['/settings/computers','computers'],['/settings/people','people'],['/settings/server','server'],['/settings/connect','connect'],['/settings/defaults','defaults'],['/discover','discover']]){
+for(const [route,name] of [['/?view=covers','library'],['/settings/following','following'],['/settings','preferences'],['/settings/computers','computers'],['/settings/people','people'],['/settings/server','server'],['/settings/connect','connect'],['/settings/defaults','defaults'],['/discover','discover']]){
  await page.goto(url+route);await page.locator('h1').waitFor();await page.waitForTimeout(150);
  await page.screenshot({path:path.join(out,name+'-desktop.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,name+'-mobile.png'),fullPage:true});
@@ -70,8 +70,8 @@ await page.goto(url+'/title/tv/101');await page.getByRole('button',{name:/Reques
 await page.getByRole('checkbox',{disabled:false}).first().check();await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'request-episodes-mobile.png'),fullPage:true});
 await page.getByRole('button',{name:'Request 1 episode',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
 const jobs=await (await page.request.get(url+'/api/v1/jobs')).json();if(JSON.stringify(jobs[0].wanted_episodes)!=='{"1":[2]}')throw new Error('Incorrect exact scope: '+JSON.stringify(jobs[0].wanted_episodes));
-await page.goto(url+'/activity');await page.getByRole('heading',{name:'Requests',exact:true}).waitFor();await page.waitForTimeout(250);if(await page.getByRole('button',{name:'Resume',exact:true}).first().isVisible())await page.getByRole('button',{name:'Resume',exact:true}).first().click();await page.getByRole('button',{name:'Pause',exact:true}).first().click();await page.getByRole('button',{name:'Resume',exact:true}).first().waitFor();
-await page.screenshot({path:path.join(out,'activity-paused-mobile.png'),fullPage:true});
+await page.goto(url+'/request/'+encodeURIComponent(jobs[0].id));await page.getByRole('heading',{name:jobs[0].title,exact:true}).waitFor();await page.waitForTimeout(250);if(await page.getByRole('button',{name:'Resume',exact:true}).first().isVisible())await page.getByRole('button',{name:'Resume',exact:true}).first().click();await page.getByRole('button',{name:'Pause',exact:true}).first().click();await page.getByRole('button',{name:'Resume',exact:true}).first().waitFor();
+await page.screenshot({path:path.join(out,'request-paused-mobile.png'),fullPage:true});
 fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify({passed:true,errors,responses,watching,exact_scope:jobs[0].wanted_episodes},null,2));
 if(errors.length||responses.length)throw new Error(JSON.stringify({errors,responses}));
 console.log(JSON.stringify({passed:true,screenshots:fs.readdirSync(out).filter(p=>p.endsWith('.png')).length,responses}));

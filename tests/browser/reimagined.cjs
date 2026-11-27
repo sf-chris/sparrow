@@ -145,7 +145,7 @@ fs.mkdirSync(out, { recursive: true });
     ["/", "home"],
     ["/library", "library"],
     ["/discover", "discover"],
-    ["/activity", "activity"],
+    ["/settings/following", "following"],
     ["/title/movie/102", "movie"],
     ["/title/tv/101", "series"],
     ["/settings", "preferences"],
@@ -217,18 +217,17 @@ fs.mkdirSync(out, { recursive: true });
 
   await page.keyboard.press("Control+k");
   const finder = page.getByRole("searchbox", {
-    name: "Find a title or describe a mood",
+    name: "Find a film or series",
     exact: true,
   });
   await finder.waitFor();
   await finder.fill("A funny film under two hours");
   await page.reload();
   assert.equal(await finder.inputValue(), "A funny film under two hours");
-  assert.equal(
-    await page.getByRole("button", { name: "Ask Sparrow", exact: true }).isDisabled(),
-    false,
-  );
-  await snapshot("assisted-search", true);
+  // Find is a title search only: no Ask Sparrow, and a description is never
+  // handed to the agent while typing.
+  await expect(page.getByRole("button", { name: "Ask Sparrow" })).toHaveCount(0);
+  await snapshot("search-draft", true);
   await finder.fill("quiet");
   await page.locator(".results .entry").first().waitFor();
   await page.getByRole("heading", { name: "Titles", exact: true }).waitFor();
