@@ -189,6 +189,11 @@ class Job:
     root_id: str = ""
     # Where it is stored and why, in one plain line.
     placement: str = ""
+    # Kept on another computer than the one downloading it: where it moves once
+    # the request is done ("local" is this server), and the move doing it.
+    keep_node_id: str = ""
+    keep_root_id: str = ""
+    keep_move_id: str = ""
     preferences: dict = field(default_factory=dict)
     revision: int = 1  # invalidates already-running tool contexts
     original_language: str = ""

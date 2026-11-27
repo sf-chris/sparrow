@@ -398,7 +398,7 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_managed_needs_an_incoming_folder_and_the_program(self):
         response = await self.client.post("/api/v1/admin/downloader/managed")
-        self.assertEqual((response.status_code, response.json()["detail"]), (422, "Choose an incoming folder in Storage first."))
+        self.assertEqual((response.status_code, response.json()["detail"]), (422, "Choose an incoming folder in Computers first."))
         incoming = Path(self.temp.name) / "incoming"
         incoming.mkdir()
         config = self.storage.get_config()

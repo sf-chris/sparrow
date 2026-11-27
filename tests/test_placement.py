@@ -120,9 +120,15 @@ class PlacementTests(unittest.TestCase):
         choice = self.choose()
         self.assertEqual((choice["node_id"], choice["root_id"]), ("anti", "library"))
 
-    def test_a_sleeping_home_is_waited_for_not_split(self):
+    def test_a_sleeping_home_downloads_elsewhere_and_moves_home_when_back(self):
         self.owns(7, "local", "library")
         self.nodes.computers[0]["online"] = False
+        choice = self.choose()
+        self.assertEqual(choice["node_id"], "anti")
+        self.assertEqual((choice["keep_node_id"], choice["keep_root_id"]), ("local", "library"))
+        self.assertIn("moves it there when it's back", choice["reason"])
+        # With nowhere else to download, it waits for home instead.
+        self.nodes.computers[1]["capabilities"]["download"] = False
         choice = self.choose()
         self.assertEqual(choice["node_id"], "local")
         self.assertIn("starts when it's back", choice["reason"])
@@ -132,7 +138,7 @@ class PlacementTests(unittest.TestCase):
         self.nodes.computers[0]["capabilities"]["roots"][0]["free_bytes"] = 2 * GB
         choice = self.choose()
         self.assertEqual(choice["node_id"], "anti")
-        self.assertIn("— medivac is nearly full (2 GB free)", choice["reason"])
+        self.assertIn("medivac is nearly full (2 GB free).", choice["reason"])
 
     def test_fill_in_order_skips_full_and_offline_disks(self):
         self.placement.set_rule("fill")
@@ -156,15 +162,51 @@ class PlacementTests(unittest.TestCase):
         )
         self.assertIn("next in turn", self.choose(tmdb_id=20)["reason"])
 
-    def test_storage_without_a_download_app_is_skipped_for_new_downloads(self):
+    def test_storage_without_a_download_app_is_kept_there_and_downloaded_elsewhere(self):
         self.nodes.computers[1]["capabilities"]["download"] = False
-        self.assertEqual(self.choose()["node_id"], "local")
-        self.assertEqual(self.choose(acquire=False)["node_id"], "anti")
-        self.assertIn("no download app yet", self.choose("anti/library-2")["reason"])
+        choice = self.choose()
+        # antivac has the most room, so it keeps it; medivac downloads it first.
+        self.assertEqual((choice["keep_node_id"], choice["keep_root_id"]), ("anti", "library-2"))
+        self.assertEqual((choice["node_id"], choice["root_id"]), ("local", "library"))
+        self.assertEqual(
+            choice["reason"],
+            "On antivac · library-2, which has the most free space. medivac downloads it and then moves it there.",
+        )
+        self.assertNotIn("keep_node_id", self.choose(acquire=False))
+        self.assertIn("medivac downloads it", self.choose("anti/library-2")["reason"])
         self.nodes.computers[0]["capabilities"]["download"] = False
         nowhere = self.choose()
         self.assertEqual(nowhere["root_id"], "library-2")
-        self.assertIn("no storage here has a download app yet", nowhere["reason"])
+        self.assertIn("Nothing here can download yet", nowhere["reason"])
+
+    def test_storage_off_takes_nothing_new_but_can_still_download(self):
+        from backend.agents import computers
+
+        computers.set_wanted(self.accounts, "anti", {"storage": False})
+        choice = self.choose()
+        self.assertEqual((choice["node_id"], choice["root_id"]), ("local", "library"))
+        self.assertNotIn("keep_node_id", choice)
+        with self.assertRaisesRegex(PlacementError, "Storage is off on antivac"):
+            self.choose("anti/library-2")
+        self.assertEqual([c["value"] for c in self.placement.destinations(self.owner)["computers"]], ["local"])
+        # A storage-only computer (the NAS case) keeps titles another computer downloads.
+        computers.set_wanted(self.accounts, "anti", {"storage": True, "downloads": False})
+        computers.set_wanted(self.accounts, "local", {"storage": False})
+        choice = self.choose()
+        self.assertEqual(choice["keep_node_id"], "anti")
+        self.assertEqual(choice["node_id"], "local")
+
+    def test_downloads_off_on_the_server_fetches_on_another_computer(self):
+        from backend.agents import computers
+
+        computers.set_wanted(self.accounts, "local", {"downloads": False})
+        landing = self.placement.landing(
+            self.owner, "local", "library", tmdb_id=7, media_type="tv", values={}
+        )
+        self.assertEqual((landing["node_id"], landing["keep_node_id"]), ("anti", "local"))
+        self.assertIsNone(
+            self.placement.landing(self.owner, "anti", "library", tmdb_id=7, media_type="tv", values={})
+        )
 
     def test_a_person_only_gets_storage_they_may_use(self):
         limited = self.accounts.create_user(
@@ -185,9 +227,9 @@ class PlacementTests(unittest.TestCase):
     def test_one_chosen_place_waits_when_asleep_and_refuses_when_full(self):
         self.nodes.computers[1]["online"] = False
         choice = self.choose("anti/library-2", source="personal")
-        self.assertEqual(choice["root_id"], "library-2")
+        self.assertEqual(choice["keep_root_id"], "library-2")
         self.assertIn("your storage", choice["reason"])
-        self.assertIn("offline", choice["reason"])
+        self.assertIn("when it's back", choice["reason"])
         self.nodes.computers[1]["online"] = True
         self.nodes.computers[1]["capabilities"]["roots"][1]["free_bytes"] = GB
         with self.assertRaisesRegex(PlacementError, "nearly full"):

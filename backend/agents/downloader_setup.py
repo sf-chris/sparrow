@@ -160,7 +160,7 @@ def install_downloader_setup(app, storage):
             config = SparrowConfig.from_dict(storage.get_config().to_dict())
             staging = Path(config.staging_dir) if config.staging_dir else None
             if not staging or not staging.is_dir() or not os.access(staging, os.W_OK):
-                raise HTTPException(422, "Choose an incoming folder in Storage first.")
+                raise HTTPException(422, "Choose an incoming folder in Computers first.")
             transmission = daemon()
             if not transmission.available:
                 raise HTTPException(

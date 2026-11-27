@@ -29,6 +29,10 @@ READY_TIMEOUT = 15.0
 
 
 def find_executable() -> Optional[str]:
+    # A Sparrow Node's own download app, installed with it, comes first.
+    tools = os.getenv("SPARROW_TOOLS_DIR")
+    if tools and os.access(os.path.join(tools, "bin", EXECUTABLE), os.X_OK):
+        return os.path.join(tools, "bin", EXECUTABLE)
     found = shutil.which(EXECUTABLE)
     if found:
         return found

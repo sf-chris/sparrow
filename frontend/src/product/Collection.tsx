@@ -288,7 +288,7 @@ export default function Collection({ user }: { user: User }) {
           action={
             user.role === "admin" ? (
               <>
-                <Link className="btn primary" to="/settings/storage">
+                <Link className="btn primary" to="/settings/computers">
                   Import your files
                 </Link>
                 <Link className="btn" to="/discover">

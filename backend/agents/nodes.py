@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .accounts import Accounts, digest
 from .account_api import administrator
-from . import node_package
+from . import computers, node_package
 from .node_executor import (
     Executor, NodeError, PROTOCOL, TRANSIENT_KINDS, canonical, is_library, library_roots,
 )
@@ -130,6 +130,33 @@ class Nodes:
     def info(self, node_id):
         return next((n for n in self.list() if n["id"] == node_id), None)
 
+    def jobs(self, node_id, capabilities=None):
+        """The jobs the household wants a computer to do."""
+        if capabilities is None:
+            node = self.info(node_id)
+            capabilities = node["capabilities"] if node else {}
+        return computers.wanted(self.accounts, node_id, capabilities)
+
+    def computer(self, node, used=None):
+        """A computer as the Storage page shows it: jobs, health and usage."""
+        if used is None:
+            used = self.library_usage()
+        kept = sum(v for (n, _), v in used.items() if n == node["id"])
+        for root in node["capabilities"].get("roots", []):
+            if isinstance(root, dict) and is_library(root.get("id")):
+                root["library_bytes"] = used.get((node["id"], root["id"]), 0)
+        jobs = self.jobs(node["id"], node["capabilities"])
+        node["library_bytes"] = kept
+        node["health"] = computers.health(node, jobs)
+        return node
+
+    def able(self, node_id, job):
+        """Whether a computer is on for a job and can do it right now."""
+        node = self.info(node_id)
+        if not node or node["disabled"]:
+            return False
+        return computers.can(node, self.jobs(node_id, node["capabilities"]), job)
+
     def enroll(self, name="", node_id=None):
         token = secrets.token_urlsafe(24)
         while token[0] == "-":  # A leading dash reads as an option on a command line.
@@ -190,7 +217,7 @@ class Nodes:
             ).fetchone()
             if not row:
                 raise NodeError(
-                    "This pairing command expired or was already used. In Sparrow, open Settings > Storage > Pair a computer for a fresh one."
+                    "This pairing command expired or was already used. In Sparrow, open Settings > Computers > Add a computer for a fresh one."
                 )
             if row["used"]:
                 paired = db.execute(
@@ -200,7 +227,7 @@ class Nodes:
                 if paired:
                     return {"node_id": row["node_id"], "protocol": PROTOCOL}
                 raise NodeError(
-                    "This pairing command was already used. In Sparrow, open Settings > Storage > Pair a computer for a fresh one."
+                    "This pairing command was already used. In Sparrow, open Settings > Computers > Add a computer for a fresh one."
                 )
             # Client generates and persists its credential before pairing, so a
             # lost response cannot leave the node with an unknown server-side secret.
@@ -478,7 +505,8 @@ def install_nodes(app, storage, get_service):
 
     class Folders(Input):
         libraries: list[str] = Field(min_length=1, max_length=8)
-        staging: str = Field(min_length=1, max_length=1000)
+        # Empty keeps the incoming folder it has; a storage-only computer has none.
+        staging: str = Field(default="", max_length=1000)
 
     class NewFolder(Input):
         node_id: str = "local"
@@ -511,16 +539,32 @@ def install_nodes(app, storage, get_service):
             raise HTTPException(401, "Node credentials are invalid or revoked.")
         return node_id
 
+    class Jobs(Input):
+        storage: bool | None = None
+        downloads: bool | None = None
+        subtitles: bool | None = None
+
     @router.get("/nodes")
     def list_nodes(request: Request):
         user = request.state.user
         used = nodes.library_usage()
         visible = [n for n in nodes.list() if nodes.accounts.can_access(user, n["id"])]
-        for node in visible:
-            for root in node["capabilities"].get("roots", []):
-                if isinstance(root, dict) and is_library(root.get("id")):
-                    root["library_bytes"] = used.get((node["id"], root["id"]), 0)
-        return visible
+        return [nodes.computer(node, used) for node in visible]
+
+    @router.put("/admin/nodes/{node_id}/jobs")
+    def set_jobs(node_id: str, body: Jobs, request: Request):
+        """Turn a computer's jobs on or off; the computer follows on its next check."""
+        administrator(request)
+        node = nodes.info(node_id)
+        if not node or node["disabled"]:
+            raise HTTPException(404, "This computer isn’t paired.")
+        changes = {k: v for k, v in body.model_dump().items() if v is not None}
+        try:
+            computers.set_wanted(nodes.accounts, node_id, changes, node["capabilities"])
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        nodes._signals.setdefault(node_id, asyncio.Event()).set()
+        return nodes.computer(nodes.info(node_id))
 
     @router.post("/admin/nodes/enroll")
     def enroll(body: Enrollment, request: Request):
@@ -627,6 +671,27 @@ def install_nodes(app, storage, get_service):
             headers={"Cache-Control": "no-store"},
         )
 
+    def tools_response(platform):
+        from fastapi.responses import FileResponse
+
+        path = node_package.tools(platform)
+        if not path:
+            raise HTTPException(404, "This server has no media tools for this kind of computer.")
+        return FileResponse(path, media_type="application/gzip", headers={"Cache-Control": "no-store"})
+
+    @router.get("/node/setup/{code}/tools-{platform}.tar.gz")
+    def setup_tools(code: str, platform: str):
+        """Media tools and the download app for the computer running a setup command."""
+        if not node_package.CODE.fullmatch(code) or not nodes.enrollment(code):
+            raise HTTPException(404, "This setup command expired. Get a fresh one in Sparrow.")
+        return tools_response(platform)
+
+    @router.get("/node/tools/{platform}.tar.gz")
+    def node_tools(platform: str, request: Request):
+        """The same tools for a paired computer that is missing them."""
+        identity(request)
+        return tools_response(platform)
+
     @router.post("/node/setup/{code}/progress")
     def setup_progress(code: str, body: Progress):
         if node_package.CODE.fullmatch(code):
@@ -660,10 +725,14 @@ def install_nodes(app, storage, get_service):
             nodes.heartbeat(node_id, body.capabilities)
         except NodeError as exc:
             raise HTTPException(409, str(exc)) from exc
+        # Every answer says which jobs this computer should be doing.
+        jobs = nodes.jobs(node_id, body.capabilities)
         for _ in range(2):
             command = nodes.next_command(node_id)
             if command:
-                return {"command": command}
+                return {"command": command, "jobs": jobs}
+            if nodes.jobs(node_id, body.capabilities) != jobs:
+                return {"command": None, "jobs": nodes.jobs(node_id, body.capabilities)}
             signal = nodes._signals.setdefault(node_id, asyncio.Event())
             signal.clear()
             try:
@@ -671,7 +740,7 @@ def install_nodes(app, storage, get_service):
             except asyncio.TimeoutError:
                 pass
             identity(request)  # Recheck revocation after waiting.
-        return {"command": None}
+        return {"command": None, "jobs": nodes.jobs(node_id, body.capabilities)}
 
     @router.get("/node/transfers/{token}")
     async def transfer(token: str, request: Request, offset: int = 0):
@@ -690,6 +759,38 @@ def install_nodes(app, storage, get_service):
                 yield chunk
 
         return StreamingResponse(body(), media_type="application/octet-stream")
+
+    @router.get("/node/models")
+    async def node_models(request: Request):
+        """Speech models this server shares with a computer setting up Subtitles."""
+        from .speech_setup import shared_models
+
+        identity(request)
+        models = await asyncio.to_thread(shared_models, nodes.local().data_dir)
+        return [{k: m[k] for k in ("name", "files")} for m in models]
+
+    @router.get("/node/models/{name}/{file}")
+    async def node_model_file(name: str, file: str, request: Request, offset: int = 0):
+        from fastapi.responses import StreamingResponse
+        from .speech_setup import shared_file
+
+        identity(request)
+        path = await asyncio.to_thread(shared_file, nodes.local().data_dir, name, file)
+        if not path:
+            raise HTTPException(404, "This server doesn't share that model file.")
+        size = path.stat().st_size
+        offset = max(0, min(int(offset), size))
+
+        async def body():
+            with path.open("rb") as source:
+                source.seek(offset)
+                while chunk := await asyncio.to_thread(source.read, 1024 * 1024):
+                    yield chunk
+
+        return StreamingResponse(
+            body(), media_type="application/octet-stream",
+            headers={"Content-Length": str(size - offset)},
+        )
 
     @router.post("/node/results/{operation_id}")
     def result(operation_id: str, body: Result, request: Request):

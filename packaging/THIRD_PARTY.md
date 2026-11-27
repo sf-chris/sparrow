@@ -20,6 +20,15 @@ licences and notices continue to apply; Sparrow does not claim ownership of them
   the owner asks Sparrow to set up downloads. Its copyright notice is at
   `/usr/share/doc/transmission-daemon/copyright`; Debian publishes the source.
   https://transmissionbt.com/
+- Sparrow Node media tools (`/opt/sparrow/node-tools`, one archive per Linux
+  architecture, downloaded by paired computers): FFmpeg and x264 as above,
+  built statically from the same pinned sources; Transmission 4 and the
+  libraries it loads (musl, OpenSSL, curl, libevent and others, each under its
+  own licence) unchanged from the signed Alpine Linux packages listed in each
+  archive's `transmission/packages.txt`. Each archive carries the FFmpeg, x264
+  and zlib licences under `licences`. Alpine publishes every package's source
+  and licence: https://gitlab.alpinelinux.org/alpine/aports and
+  https://pkgs.alpinelinux.org
 
 Python wheel metadata includes licences for the bundled Python dependencies.
 `collect_licenses.py` copies their notices into each packaged distribution.

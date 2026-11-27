@@ -4,6 +4,23 @@ All notable changes to Sparrow are documented here.
 
 ## Unreleased — the household guide and product foundation
 
+- Computers with jobs. Settings > Storage becomes Settings > Computers, where
+  every computer, this server included, has one card: its disks, then a line
+  per job (Storage, Playback, Downloads, Subtitles) ending in a tick, Off, or
+  the problem with Fix. Change jobs turns them on and off; a computer follows
+  on its next check-in. Add a computer asks what it does and only for the
+  folders those jobs need, so a NAS that only keeps titles needs one folder.
+- A title can be kept on one computer and downloaded on another: a computer
+  that can't download (a NAS, or one paired without a download app) still
+  takes new titles, and the finished request moves there. The placement line
+  names who downloads and any computer it passed over.
+- Sparrow Node brings its own Transmission, FFmpeg and ffprobe on Linux (x86_64
+  and aarch64): no sudo, no package manager, no password. Running the setup
+  command again repairs a computer and keeps its folders, jobs and download app.
+- Subtitle listening runs on whichever computer has Subtitles on, on an NVIDIA
+  graphics card when it works and the processor otherwise. A paired computer
+  sets up its own speech engine and model the first time Subtitles is on;
+  another computer's titles reach it as a small audio-only copy.
 - The cost ledger tells a pick from an escalation and a stall, follows each
   reviewed pick to what came of it, and is readable by administrators at
   `GET /api/ledger`. Requests shows administrators when finding or subtitling

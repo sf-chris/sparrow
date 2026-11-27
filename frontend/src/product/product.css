@@ -4140,6 +4140,56 @@ button.link:hover {
   background: var(--blue-wash);
   transition: background 1.2s ease-out;
 }
+/* What a computer is for: one line per job, read like the folder rows. */
+.device-role {
+  font-family: var(--font-label);
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-stretch: 112%;
+  letter-spacing: 0.06em;
+  text-transform: var(--case-label);
+  color: var(--ink-2);
+}
+.job-rows .folder-state.problem-text {
+  gap: 0.6rem;
+}
+.btn.fix {
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  border-color: currentColor;
+  color: var(--red);
+  font-size: var(--t-small);
+}
+.btn.fix:hover {
+  background: var(--red-wash);
+}
+.job-choices {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1.5px solid var(--ink);
+}
+.job-choice {
+  padding: 0.85rem 0.25rem;
+  border-bottom: 1px solid var(--rule);
+}
+.job-choice > span {
+  display: grid;
+  gap: 0.2rem;
+}
+.job-choice strong {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.job-choice .muted {
+  font-size: var(--t-small);
+  font-weight: 500;
+}
+.job-note {
+  margin-top: 0.75rem;
+}
 
 /* ─── Folder picker: chosen folders, then a listing to choose from ─── */
 .picker {

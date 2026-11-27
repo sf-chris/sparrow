@@ -90,20 +90,15 @@ async def configure(args):
         "downloader": (
             json.loads(Path(args.downloader_config).read_text())
             if args.downloader_config
-            else {
-                # Sparrow Node runs its own Transmission, like the server can.
-                "type": "transmission",
-                "managed": True,
-                "host": "127.0.0.1",
-                "port": 0,
-                "username": "sparrow",
-                "password": secrets.token_urlsafe(24),
-            }
+            else own_downloader(previous.get("downloader"))
             if getattr(args, "managed_downloader", False)
             else previous.get("downloader")
         ),
         "node_id": args.node_id or previous.get("node_id"),
     }
+    if previous.get("jobs"):
+        # Setting up again keeps the jobs Sparrow gave this computer.
+        config["jobs"] = previous["jobs"]
     atomic_config(path, config)
     executor = Executor(
         path.parent, config["roots"], config["markers"], config["downloader"],
@@ -130,6 +125,84 @@ async def configure(args):
     print("Paired with Sparrow.")
 
 
+def own_downloader(previous=None):
+    """Sparrow Node runs its own Transmission, like the server can.
+
+    Setting up again keeps the one it already has, so its transfers carry on.
+    """
+    if isinstance(previous, dict) and previous.get("managed"):
+        return previous
+    return {
+        "type": "transmission",
+        "managed": True,
+        "host": "127.0.0.1",
+        "port": 0,
+        "username": "sparrow",
+        "password": secrets.token_urlsafe(24),
+    }
+
+
+def platform_name():
+    """This computer as the server names its tools archives, or None."""
+    import platform
+
+    if not sys.platform.startswith("linux"):
+        return None
+    machine = platform.machine().lower()
+    return {"x86_64": "linux-x86_64", "amd64": "linux-x86_64", "aarch64": "linux-aarch64",
+            "arm64": "linux-aarch64"}.get(machine)
+
+
+def has_tools(folder):
+    return all(os.access(Path(folder) / "bin" / name, os.X_OK) for name in ("ffmpeg", "ffprobe"))
+
+
+async def ensure_tools(config_path, config, client):
+    """Fetch this computer's media tools and download app when it has none.
+
+    A computer set up before the server had tools for it (or whose tools were
+    removed) heals itself on its next start. Returns True when tools are there.
+    """
+    import io
+    import shutil
+    import tarfile
+
+    folder = config_path.parent / "tools"
+    if has_tools(folder):
+        os.environ.setdefault("SPARROW_TOOLS_DIR", str(folder))
+        return True
+    if os.getenv("SPARROW_TOOLS_DIR") and has_tools(os.environ["SPARROW_TOOLS_DIR"]):
+        return True
+    name = platform_name()
+    if not name:
+        return False
+    try:
+        response = await client.get(f"/api/v1/node/tools/{name}.tar.gz", timeout=600)
+    except httpx.HTTPError:
+        return False
+    if response.status_code != 200:
+        return False
+    fresh = folder.with_name("tools.new")
+    shutil.rmtree(fresh, ignore_errors=True)
+    fresh.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as archive:
+        try:
+            archive.extractall(fresh, filter="tar")
+        except TypeError:  # Python before 3.11.4; the archive is this server's own.
+            archive.extractall(fresh)
+    if not has_tools(fresh):
+        shutil.rmtree(fresh, ignore_errors=True)
+        return False
+    shutil.rmtree(folder, ignore_errors=True)
+    fresh.rename(folder)
+    os.environ["SPARROW_TOOLS_DIR"] = str(folder)
+    if not config.get("downloader") and (folder / "bin" / "transmission-daemon").is_file():
+        config["downloader"] = own_downloader()
+        atomic_config(config_path, config)
+    print("Installed media tools and the download app.", flush=True)
+    return True
+
+
 def fetcher(config):
     """Copies arriving from other storage, read through the server."""
 
@@ -153,36 +226,93 @@ def fetcher(config):
     return fetch
 
 
+def speech_fetchers(config):
+    """Read this server's shared speech models with the node's own credential."""
+    headers = {"Authorization": "Bearer " + config["credential"]}
+
+    async def models():
+        async with httpx.AsyncClient(base_url=config["server"], timeout=60, headers=headers) as client:
+            response = await client.get("/api/v1/node/models")
+            response.raise_for_status()
+            return response.json()
+
+    async def model_file(name, file, offset):
+        async with httpx.AsyncClient(
+            base_url=config["server"], timeout=httpx.Timeout(120), headers=headers
+        ) as client:
+            async with client.stream(
+                "GET", f"/api/v1/node/models/{name}/{file}", params={"offset": offset}
+            ) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes(1024 * 1024):
+                    yield chunk
+
+    return models, model_file
+
+
 async def managed_downloader(config_path, config):
-    """Start this node's own Transmission, saving the port it listens on."""
+    """Start this node's own Transmission, saving the port it listens on.
+
+    Returns (daemon, state): state is how the download app is doing, for the
+    computer's Downloads row (None when it is someone else's download app).
+    """
     downloader = config.get("downloader") or {}
+    if not downloader or downloader.get("type") == "none":
+        return None, "none"
+    if not downloader.get("managed"):
+        return None, None
     staging = (config.get("roots") or {}).get("staging")
-    if not downloader.get("managed") or not staging:
-        return None  # Starts once this computer's folders are chosen.
+    if not staging:
+        return None, None  # Starts once this computer's folders are chosen.
     from ..services.managed_transmission import ManagedTransmission
 
     daemon = ManagedTransmission(config_path.parent)
     if not daemon.available:
         print("transmission-daemon is missing; this node can't download.", flush=True)
-        return None
-    port = await daemon.start(
-        download_dir=staging,
-        username=downloader["username"],
-        password=downloader["password"],
-        rpc_port=downloader.get("port") or None,
-    )
+        return None, "missing"
+    try:
+        port = await daemon.start(
+            download_dir=staging,
+            username=downloader["username"],
+            password=downloader["password"],
+            rpc_port=downloader.get("port") or None,
+        )
+    except Exception as exc:  # The row says it stopped; the next check retries.
+        print(f"Sparrow's Transmission didn't start: {type(exc).__name__}.", flush=True)
+        return None, "failed"
     if port != downloader.get("port"):
         downloader["port"] = port
         atomic_config(config_path, config)
     await daemon.wait_ready()
-    return daemon
+    return daemon, "running"
+
+
+def wants(config, job):
+    """Jobs not heard from the server yet start on, as they did before jobs existed."""
+    return (config.get("jobs") or {}).get(job, job != "subtitles")
 
 
 async def run(config_path):
     config_path = Path(config_path)
     config = json.loads(config_path.read_text())
+    daemon = None
+    downloads_lock = asyncio.Lock()
 
-    daemon = await managed_downloader(config_path, config)
+    async def follow_downloads():
+        """Run the download app while Downloads is on, and stop it when it's off."""
+        nonlocal daemon
+        async with downloads_lock:
+            if not wants(config, "downloads"):
+                if daemon:
+                    await daemon.stop()
+                    daemon = None
+                executor.downloader_state = "off"
+                return
+            if daemon:
+                executor.downloader_state = "running" if daemon.running else "failed"
+                return
+            executor.downloader_state = "starting"
+            daemon, executor.downloader_state = await managed_downloader(config_path, config)
 
     async def save_folders(roots, markers):
         nonlocal daemon
@@ -191,9 +321,11 @@ async def run(config_path):
         atomic_config(config_path, config)
         if moved:
             # Downloads land in the incoming folder, so Transmission follows it.
-            if daemon:
-                await daemon.stop()
-            daemon = await managed_downloader(config_path, config)
+            async with downloads_lock:
+                if daemon:
+                    await daemon.stop()
+                    daemon = None
+            await follow_downloads()
 
     executor = Executor(
         config_path.parent,
@@ -204,6 +336,53 @@ async def run(config_path):
         places=config.get("places"),
         on_folders=save_folders,
     )
+    executor.jobs = dict(config.get("jobs") or {})
+    async with httpx.AsyncClient(
+        base_url=config["server"],
+        headers={"Authorization": "Bearer " + config["credential"]},
+    ) as setup:
+        if await ensure_tools(config_path, config, setup):
+            executor.downloader = config.get("downloader")
+    await follow_downloads()
+    jobs_hooks = []  # Called with (before, after) when the server changes this computer's jobs.
+    executor.jobs_hooks = jobs_hooks
+
+    # Subtitles: the speech engine sets itself up while the job is on.
+    from .speech_setup import NodeSpeech
+
+    speech = NodeSpeech(config_path.parent, *speech_fetchers(config))
+
+    async def follow_subtitles(before, after):
+        if after.get("subtitles"):
+            speech.ensure()
+        elif before.get("subtitles"):
+            await speech.stop()
+
+    jobs_hooks.append(follow_subtitles)
+    if wants(config, "subtitles"):
+        speech.ensure()
+
+    async def keep_speech():
+        """Retry a stopped setup now and then while Subtitles stays on."""
+        while True:
+            await asyncio.sleep(1800)
+            if wants(config, "subtitles"):
+                speech.ensure()
+
+    async def apply_jobs(jobs):
+        if not isinstance(jobs, dict) or jobs == config.get("jobs"):
+            return
+        before = dict(config.get("jobs") or {})
+        config["jobs"] = executor.jobs = {k: bool(v) for k, v in jobs.items()}
+        atomic_config(config_path, config)
+        if before.get("downloads", True) != config["jobs"].get("downloads", True):
+            await follow_downloads()
+        for hook in list(jobs_hooks):
+            try:
+                await hook(before, config["jobs"])
+            except Exception as exc:  # One job's setup never stops the others.
+                print(f"Couldn't follow a job change: {type(exc).__name__}.", flush=True)
+
     async with httpx.AsyncClient(
         base_url=config["server"],
         timeout=httpx.Timeout(35),
@@ -231,6 +410,8 @@ async def run(config_path):
                         else:
                             response.raise_for_status()
                             executor.delivered(receipt["id"])
+                    if daemon and executor.downloader_state in ("running", "failed"):
+                        executor.downloader_state = "running" if daemon.running else "failed"
                     response = await client.post(
                         "/api/v1/node/poll",
                         json={
@@ -243,7 +424,9 @@ async def run(config_path):
                             "Node access was revoked. Pair again from Storage settings."
                         )
                     response.raise_for_status()
-                    command = response.json().get("command")
+                    answer = response.json()
+                    await apply_jobs(answer.get("jobs"))
+                    command = answer.get("command")
                     if command:
                         running.add(command["id"])
                         try:
@@ -268,13 +451,28 @@ async def run(config_path):
                 async with asyncio.TaskGroup() as group:
                     for number in range(4):
                         group.create_task(worker(number))
+                    group.create_task(keep_speech())
             except* PermissionError:
                 await executor.stop_owned_downloads()
                 raise
         finally:
+            await speech.stop()
             await executor.shutdown()
             if daemon:
                 await daemon.stop()
+
+
+async def run_until_stopped(config_path):
+    """Run until stopped; a service manager's stop also stops the download app."""
+    task = asyncio.current_task()
+    try:
+        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+    except (NotImplementedError, RuntimeError, ValueError):
+        pass  # Windows services stop the process their own way.
+    try:
+        await run(config_path)
+    except asyncio.CancelledError:
+        pass
 
 
 def main():
@@ -313,7 +511,7 @@ def main():
         if args.command == "configure":
             asyncio.run(configure(args))
         elif args.command == "run":
-            asyncio.run(run(args.config))
+            asyncio.run(run_until_stopped(args.config))
         else:
             config = json.loads(Path(args.config).read_text())
             executor = Executor(

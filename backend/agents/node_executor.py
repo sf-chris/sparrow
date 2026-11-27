@@ -66,16 +66,48 @@ def root_marker(path):
     return str(path), marker.read_text().strip()
 
 
+def tools_dir():
+    """The media tools and download app installed with this Sparrow Node, if any."""
+    folder = os.getenv("SPARROW_TOOLS_DIR")
+    return Path(folder) if folder and Path(folder, "bin").is_dir() else None
+
+
+def tools_manifest():
+    folder = tools_dir()
+    try:
+        return json.loads((folder / "manifest.json").read_text()) if folder else None
+    except (OSError, ValueError):
+        return None
+
+
 def executable(name):
+    """A media tool: configured, packaged with the installer, the node's own, else PATH."""
     import sys
 
-    bundled = (
-        Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
-        / "bin"
-        / (name + (".exe" if os.name == "nt" else ""))
-    )
+    suffix = ".exe" if os.name == "nt" else ""
+    bundled = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "bin" / (name + suffix)
     configured = os.getenv("SPARROW_" + name.upper())
-    return configured or (str(bundled) if bundled.is_file() else shutil.which(name))
+    if configured:
+        return configured
+    if bundled.is_file():
+        return str(bundled)
+    own = tools_dir()
+    if own and os.access(own / "bin" / (name + suffix), os.X_OK):
+        return str(own / "bin" / (name + suffix))
+    return shutil.which(name)
+
+
+def node_version():
+    """The Sparrow Node version this runs: stamped in a node's package, else this server's."""
+    stamped = os.getenv("SPARROW_NODE_VERSION")
+    if stamped:
+        return stamped
+    try:
+        from .node_package import version
+
+        return version()
+    except Exception:  # A frozen Windows node has no package of its own to read.
+        return None
 
 
 def canonical(value):
@@ -200,6 +232,11 @@ class Executor:
         self._hls_cache = None
         self.markers = markers or {}
         self.downloader = downloader
+        # How this computer's download app is doing, when something supervises
+        # it: running, starting, missing, failed or off. None means unknown.
+        self.downloader_state = None
+        # The jobs the household wants this computer to do (see computers.py).
+        self.jobs = {}
         self._mutation_lock = asyncio.Lock()
         self._operation_locks = WeakValueDictionary()
         self._last_prune = 0
@@ -238,18 +275,23 @@ class Executor:
                 key=lambda k: int(k.split("-")[1]),
             )
             libraries = libraries[:1] + [str(self.roots[k]) for k in extra]
-        if not libraries or not staging:
-            raise NodeError("Choose a library folder and an incoming folder.")
+        if not staging and "staging" in self.roots:
+            staging = str(self.roots["staging"])  # Unchanged when only the library moves.
+        if not libraries:
+            raise NodeError("Choose a library folder.")
         points = self.starting_points()
         try:
-            chosen = [str(within(p, points)) for p in [*libraries, staging]]
+            chosen = [str(within(p, points)) for p in [*libraries, *([staging] if staging else [])]]
         except FolderError as exc:
             raise NodeError(str(exc)) from None
-        problem = overlap(labelled(chosen[:-1], chosen[-1]))
+        # A computer that only keeps titles needs no incoming folder.
+        problem = overlap(labelled(chosen[: len(libraries)], staging and chosen[-1]))
         if problem:
             raise NodeError(problem)
         marked = [root_marker(p) for p in chosen]
-        roots = {**library_roots([p for p, _ in marked[:-1]]), "staging": marked[-1][0]}
+        roots = library_roots([p for p, _ in marked[: len(libraries)]])
+        if staging:
+            roots["staging"] = marked[-1][0]
         markers = dict(zip(roots, [m for _, m in marked]))
         saved = self.on_folders(roots, markers)
         if asyncio.iscoroutine(saved):
@@ -355,8 +397,23 @@ class Executor:
                 ).model_path(self.data_dir)
                 / "model.bin"
             ).is_file(),
+            # Which Sparrow Node this is, and which media tools it carries.
+            "version": node_version(),
+            "tools": tools_manifest(),
             "download": bool(self.downloader and self.downloader.get("type") != "none"),
+            "downloader_state": self.downloader_state
+            or ("running" if self.downloader and self.downloader.get("type") != "none" else "none"),
+            "speech": self.speech_status(),
         }
+
+    def speech_status(self):
+        """Whether this computer can listen to soundtracks, and on what (see speech_setup)."""
+        try:
+            from .speech_setup import status
+
+            return status(self.data_dir)
+        except Exception as exc:  # Never let a speech check stop a heartbeat.
+            return {"ready": False, "device": "cpu", "gpu": None, "error": f"Subtitle check failed: {type(exc).__name__}"}
 
     def pending_results(self):
         with self.db() as db:
@@ -593,6 +650,10 @@ class Executor:
             from .subtitle_node import listen
 
             return await listen(self, path, args)
+        if kind == "subtitle_audio":
+            from .subtitle_node import audio_copy
+
+            return await audio_copy(self, path, args)
         if kind == "hls_segment":
             if self._hls_cache is None:
                 from .hls_cache import HLSCache
@@ -645,8 +706,9 @@ class Executor:
         if kind in ("stat", "read"):
             # Saved dialogue evidence is the one non-media document readable,
             # and only at its exact cache location.
+            # So is a soundtrack decoded for another computer to listen to.
             evidence = root_id == "cache" and re.fullmatch(
-                r"subtitle-evidence/[a-f0-9]{32}/evidence\.json",
+                r"subtitle-evidence/[a-f0-9]{32}/evidence\.json|subtitle-audio/[a-f0-9]{32}/audio\.wav",
                 str(args.get("path", "")),
             )
             if not path.is_file() or (

@@ -175,7 +175,7 @@ class NewComputerDownloadTests(unittest.IsolatedAsyncioTestCase):
             config = {"roots": {}, "downloader": {"type": "transmission", "managed": True,
                       "username": "sparrow", "password": "x", "port": 0}}
             # A newly paired computer has no folders yet: nothing starts, nothing fails.
-            self.assertIsNone(await managed_downloader(Path(temp) / "node.json", config))
+            self.assertEqual(await managed_downloader(Path(temp) / "node.json", config), (None, None))
 
 
 class PairingCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -251,7 +251,7 @@ class PairingCommandTests(unittest.IsolatedAsyncioTestCase):
         unknown = secrets.token_urlsafe(24)
         for kind in ("sh", "ps1"):
             text = self.client.get(f"/api/v1/node/setup/{unknown}.{kind}").text
-            self.assertIn("Pair a computer for a fresh one", text)
+            self.assertIn("Add a computer for a fresh one", text)
         self.assertIn("exit 1", self.client.get(f"/api/v1/node/setup/{unknown}.sh").text)
         self.assertEqual(self.client.get(f"/api/v1/node/setup/{unknown}/package.tar.gz").status_code, 404)
         self.assertEqual(self.client.get("/api/v1/node/setup/x;rm.sh").status_code, 404)

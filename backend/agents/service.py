@@ -744,6 +744,7 @@ class AgentService:
             wanted_episodes = normalized
 
         placement = ""
+        keep_node_id = keep_root_id = ""
         if library_id is None:
             # Chosen once, before any authority is recorded, then pinned.
             user = self.accounts.user(user_id) if user_id else None
@@ -759,8 +760,27 @@ class AgentService:
             library_id = choice["node_id"]
             node_id = "" if library_id == "local" else library_id
             root_id, placement = choice["root_id"], choice["reason"]
-        elif not root_id:
-            root_id = self.placement.root_on(library_id, tmdb_id, media_type)
+            keep_node_id = choice.get("keep_node_id", "")
+            keep_root_id = choice.get("keep_root_id", "")
+        else:
+            if not root_id:
+                root_id = self.placement.root_on(library_id, tmdb_id, media_type)
+            # Pinned to a computer that can't download: fetch elsewhere, then move it there.
+            user = self.accounts.user(user_id) if user_id else None
+            landing = self.placement.landing(
+                user,
+                library_id,
+                root_id,
+                tmdb_id=tmdb_id,
+                media_type=media_type,
+                count=sum(len(e) for e in (wanted_episodes or {}).values()) or 1,
+                values=contract.get("values", {}),
+            )
+            if landing:
+                keep_node_id, keep_root_id = landing["keep_node_id"], landing["keep_root_id"]
+                library_id = landing["node_id"]
+                node_id = "" if library_id == "local" else library_id
+                root_id, placement = landing["root_id"], landing["reason"]
 
         def check_requester():
             if authority_check:
@@ -859,6 +879,8 @@ class AgentService:
             node_id=node_id,
             root_id="" if root_id == "library" else root_id,
             placement=placement,
+            keep_node_id=keep_node_id,
+            keep_root_id="" if keep_root_id == "library" else keep_root_id,
             preferences=contract,
             year=int(year_raw) if year_raw.isdigit() else None,
             poster_path=details.get("poster_path") or "",
@@ -885,7 +907,7 @@ class AgentService:
         job.session_id = session.id
         self.store.save_session(session)
         self.store.save_job(job)
-        if placement and len(self.placement.disks()) > 1:
+        if placement and (keep_node_id or len(self.placement.disks()) > 1):
             entry = self.store.add_journal(
                 JournalEntry(job_id=job.id, session_id=session.id, agent="fetch", text=placement)
             )

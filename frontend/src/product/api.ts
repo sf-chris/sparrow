@@ -181,12 +181,35 @@ export type Title = {
   preferences?: Effective;
   runtime?: number;
 };
+/** A computer's jobs: what the household wants it to do. */
+export type JobKey = "storage" | "downloads" | "subtitles";
+export type Jobs = Record<JobKey, boolean>;
+/** One line of a computer's card: a job, whether it works, and what fixes it. */
+export type JobRow = {
+  job: JobKey | "playback";
+  on: boolean;
+  state: "ready" | "attention" | "waiting" | "off";
+  line: string;
+  fix: "folders" | "repair" | "download_app" | null;
+};
+export type Health = {
+  state: "online" | "offline" | "revoked";
+  line: string;
+  last_seen?: number;
+  runs_sparrow: boolean;
+  jobs: Jobs;
+  rows: JobRow[];
+  attention: number;
+};
 export type NodeInfo = {
   id: string;
   name: string;
   online: boolean;
   disabled: boolean;
   last_seen: number;
+  /** Sparrow's verified library files on this computer. */
+  library_bytes?: number;
+  health?: Health;
   capabilities: {
     platform: string;
     hostname?: string;
@@ -195,6 +218,15 @@ export type NodeInfo = {
     probe: boolean;
     transcode: boolean;
     download: boolean;
+    downloader_state?: string;
+    speech?: {
+      ready?: boolean;
+      device?: string;
+      gpu?: string | null;
+      installing?: boolean;
+      progress?: number;
+      error?: string | null;
+    };
     roots: {
       id: string;
       available: boolean;

@@ -116,6 +116,30 @@ class MoveTests(unittest.IsolatedAsyncioTestCase):
                 break
         return self.moves.get(move["id"])
 
+    async def test_a_finished_request_moves_to_where_it_is_kept(self):
+        from backend.agents.models import JobStatus
+
+        store = self.moves.get_service().store
+        saved = []
+        store.save_job = saved.append
+        job = Job(
+            tmdb_id=42, media_type="tv", library_id="local", status=JobStatus.ACTIVE,
+            keep_node_id=self.node_id, keep_root_id="",
+        )
+        self.jobs.append(job)
+        self.moves.keep_finished()
+        self.assertEqual(job.keep_move_id, "")  # Still downloading: nothing moves yet.
+        job.status = JobStatus.COMPLETE
+        self.moves.keep_finished()
+        self.assertTrue(job.keep_move_id)
+        self.assertIs(saved[-1], job)
+        done = await self.finish(self.moves.get(job.keep_move_id))
+        self.assertEqual(done["state"], "done")
+        self.assertTrue((self.root / "remote" / "Fixture show/Season 01/S01E01.mkv").is_file())
+        self.assertFalse((self.root / "one" / "Fixture show/Season 01/S01E01.mkv").exists())
+        self.moves.keep_finished()  # Once is enough.
+        self.assertEqual(len([m for m in self.moves.list() if m["state"] == "done"]), 1)
+
     async def test_a_move_between_disks_keeps_progress_and_removes_the_old_copy(self):
         move = self.moves.start(self.owner, self.item.id, "local/library-2")
         self.assertEqual(move["to"], "This server · two")

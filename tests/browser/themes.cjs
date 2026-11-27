@@ -10,7 +10,7 @@ const out = process.env.SPARROW_VISUAL_OUT || 'tests/browser/artifacts/themes';
 const base = process.env.SPARROW_BROWSER_URL || 'http://127.0.0.1:8891';
 const headers = { 'X-Sparrow-Request': '1' };
 const themes = ['', 'cinema', 'clear', 'saturday'];
-const routes = ['/', '/discover', '/activity', '/settings', '/settings/people', '/settings/storage', '/title/tv/101'];
+const routes = ['/', '/discover', '/activity', '/settings', '/settings/people', '/settings/computers', '/title/tv/101'];
 fs.mkdirSync(out, { recursive: true });
 
 const summarise = audit => audit.violations.map(v => ({ id: v.id, impact: v.impact, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) }));

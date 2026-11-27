@@ -217,7 +217,11 @@ export default function App() {
                     path="/setup"
                     element={<Onboarding onChanged={auth.refresh} />}
                   />
-                  <Route path="/settings/storage" element={<Storage />} />
+                  <Route path="/settings/computers" element={<Storage />} />
+                  <Route
+                    path="/settings/storage"
+                    element={<Navigate to="/settings/computers" replace />}
+                  />
                   <Route path="/settings/server" element={<ServerSettings />} />
                   <Route path="/settings/connect" element={<SparrowConnect />} />
                   <Route

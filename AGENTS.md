@@ -76,9 +76,15 @@ Everything new lives in `backend/agents/`:
   verifies it before pointing the name here. Off forgets it everywhere. The
   shared service itself is `connect/` (FastAPI + Caddy), deployed separately;
   no video passes through it. Homes that can't open a port: issue #37.
-- `placement.py`, `moves.py` — where a request is stored (Automatic, pools, a
-  person's storage or one disk), pinned when it starts with a plain reason; and
-  verified copy-then-remove moves of a title between disks and computers.
+- `computers.py` — each computer's jobs (Storage, Downloads, Subtitles; Playback
+  follows Storage), remembered per computer and sent to it on every check-in,
+  and their health in plain words with a fix. Placement and the Computers page
+  read the same answer.
+- `placement.py`, `moves.py` — where a request is kept (Automatic, pools, a
+  person's storage or one disk) and, separately, which computer downloads it,
+  pinned when it starts with a plain reason; verified copy-then-remove moves of
+  a title between disks and computers, including moving a finished request from
+  the computer that downloaded it to where it's kept.
 - `folders.py`, `node_package.py`, `node_install/` — browsing and making folders
   inside a computer's own places (server or paired computer); the one-line
   setup command that installs, pairs and starts Sparrow Node, whose package is
@@ -87,6 +93,15 @@ Everything new lives in `backend/agents/`:
   track; `subtitle_evidence.py` (whole-soundtrack speech evidence on the storage
   node), `subtitle_sync.py` (measured timing and correction) and
   `subtitle_review.py` (page-by-page reviewer tools and approval gate).
+- `speech_setup.py`, `speech_device.py` — the Subtitles job's speech engine. Speech
+  work runs on the best computer with Subtitles on and ready (a working NVIDIA
+  card first, then the one holding the file, then this server); another computer
+  gets the soundtrack decoded where the file is (`subtitle_audio`) over the
+  transfer path. A paired computer sets the engine up itself when the job is on
+  (uv environment pinned from `speech_requirements.txt`, CUDA libraries with a
+  card, the model copied from this server via `/api/v1/node/models`). CUDA is
+  used when it works and set aside for a week when it fails; the Windows
+  installer stays on its bundled processor engine.
 
 ### The agents
 

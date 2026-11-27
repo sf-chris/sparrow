@@ -149,7 +149,7 @@ fs.mkdirSync(out, { recursive: true });
     ["/title/movie/102", "movie"],
     ["/title/tv/101", "series"],
     ["/settings", "preferences"],
-    ["/settings/storage", "storage"],
+    ["/settings/computers", "computers"],
     ["/settings/people", "people"],
     ["/settings/defaults", "defaults"],
     ["/settings/server", "server"],
@@ -260,8 +260,8 @@ fs.mkdirSync(out, { recursive: true });
     true,
   );
 
-  await go("/settings/storage");
-  await page.getByRole("button", { name: "Pair a computer", exact: true }).click();
+  await go("/settings/computers");
+  await page.getByRole("button", { name: "Add a computer", exact: true }).click();
   await snapshot("storage-pair", true);
   await closeDialog();
   await page
