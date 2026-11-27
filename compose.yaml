@@ -1,6 +1,11 @@
 services:
   sparrow:
-    build: .
+    build:
+      context: .
+      # The commit and date each computer shows as its version (optional).
+      args:
+        SPARROW_COMMIT: ${SPARROW_COMMIT:-}
+        SPARROW_COMMIT_DATE: ${SPARROW_COMMIT_DATE:-}
     image: sparrow:local
     restart: unless-stopped
     init: true

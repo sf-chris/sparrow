@@ -85,6 +85,13 @@ Everything new lives in `backend/agents/`:
   pinned when it starts with a plain reason; verified copy-then-remove moves of
   a title between disks and computers, including moving a finished request from
   the computer that downloaded it to where it's kept.
+- `node_update.py`, `release.py` — Sparrow Node updating itself, like spawnd: each
+  check-in carries the current version and whether to take it (Update by itself,
+  on by default, or Update); the node fetches `/api/v1/node/package.tar.gz`,
+  proves it starts, swaps `app/` keeping `app.previous/`, restarts in place and
+  rolls back when the new one can't start or reach the server within five
+  minutes (`update.json` records where it is). `release.py` labels a version with
+  its commit and date (`SPARROW_COMMIT`, `SPARROW_COMMIT_DATE` at image build).
 - `folders.py`, `node_package.py`, `node_install/` — browsing and making folders
   inside a computer's own places (server or paired computer); the one-line
   setup command that installs, pairs and starts Sparrow Node, whose package is

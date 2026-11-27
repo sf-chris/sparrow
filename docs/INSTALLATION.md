@@ -161,6 +161,30 @@ Running the command again on a paired computer (**Set up again**, or **Fix** on 
 card) updates Sparrow Node and its tools in place. It keeps the computer's
 folders, jobs and download app, so transfers carry on.
 
+### Updates
+
+Each computer's card has a **Version** line: the date and commit of the Sparrow
+Node it runs, and whether that's the latest. With **Update by itself** on (the
+default, in **Change jobs**), a computer takes each new version when this
+server gets one: it downloads it from the server, checks it starts, waits for
+work in progress to finish, swaps it in and restarts. The version before stays
+beside it. If the new one can't start, or doesn't reach the server within five
+minutes, the computer goes back to the version before and its card says the
+update didn't work, with **Try again**. With Update by itself off, the line
+shows the latest version and an **Update** button.
+
+A computer set up before updates existed, a Windows installer or a computer
+running Sparrow Node in Docker can't replace itself: its card says to set it
+up again, which updates it in place.
+
+Build the server with its commit and date so cards show them:
+
+```sh
+SPARROW_COMMIT=$(git rev-parse --short HEAD) SPARROW_COMMIT_DATE=$(git log -1 --format=%cI) docker compose build
+```
+
+Without them, cards show the date of the newest file instead.
+
 Folders can only be chosen inside the computer's own places: its home, drives
 and mounted disks (in Docker, the mounted folders). For this server, set
 `SPARROW_FOLDER_ROOTS` (paths separated by `:`) to offer other places instead. Choose **Change folders** on

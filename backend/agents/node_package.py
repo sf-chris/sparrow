@@ -24,22 +24,51 @@ LIBRARIES = (
     "httpx", "httpcore", "h11", "anyio", "idna", "certifi", "sniffio", "typing_extensions",
 )
 LAUNCHER = '''"""Start Sparrow Node from this folder, with its own copy of its libraries."""
+import json
 import os
 import runpy
 import sys
+import time
 
 here = os.path.dirname(os.path.abspath(__file__))
+home = os.path.dirname(here)
+arguments = sys.argv[1:]
 sys.path[:0] = [here, os.path.join(here, "vendor")]
 # The media tools and download app installed beside this folder come first.
-tools = os.path.join(os.path.dirname(here), "tools")
+tools = os.path.join(home, "tools")
 if os.path.isdir(tools):
     os.environ.setdefault("SPARROW_TOOLS_DIR", tools)
+for stamp, key in (("VERSION", "SPARROW_NODE_VERSION"), ("RELEASE", "SPARROW_NODE_RELEASE")):
+    try:
+        with open(os.path.join(here, stamp)) as handle:
+            os.environ[key] = handle.read().strip()  # This folder's own, never inherited.
+    except OSError:
+        pass
 try:
-    with open(os.path.join(here, "VERSION")) as stamp:
-        os.environ.setdefault("SPARROW_NODE_VERSION", stamp.read().strip())
-except OSError:
-    pass
-runpy.run_module("backend.agents.node_client", run_name="__main__", alter_sys=True)
+    runpy.run_module("backend.agents.node_client", run_name="__main__", alter_sys=True)
+except (ImportError, SyntaxError) as error:
+    # A new version that can't even start goes back to the one before it.
+    state_path = os.path.join(home, "update.json")
+    previous = os.path.join(home, "app.previous")
+    try:
+        with open(state_path) as handle:
+            state = json.load(handle)
+    except (OSError, ValueError):
+        state = {}
+    if os.path.basename(here) != "app" or state.get("state") not in ("restarting", "probation") or not os.path.isdir(previous):
+        raise
+    failed = os.path.join(home, "app.failed")
+    if os.path.isdir(failed):
+        import shutil
+        shutil.rmtree(failed, ignore_errors=True)
+    os.replace(here, failed)
+    os.replace(previous, here)
+    with open(state_path, "w") as handle:
+        json.dump({"state": "failed", "target": state.get("to", ""), "at": time.time(),
+                   "error": "The new version didn't start, so the one before is back."}, handle)
+    for key in ("SPARROW_NODE_VERSION", "SPARROW_NODE_RELEASE"):
+        os.environ.pop(key, None)  # The version before stamps its own.
+    os.execv(sys.executable, [sys.executable, os.path.join(here, "sparrow-node.py"), *arguments])
 '''
 # Media tools and the download app, one self-contained archive per platform,
 # made when the server image is built (packaging/node_tools).
@@ -122,7 +151,11 @@ def tools_manifest(platform: str) -> dict | None:
 @functools.lru_cache(maxsize=4)
 def package(kind: str = "tar.gz") -> bytes:
     stamp = time.time()
-    entries = [*contents(), ("VERSION", version().encode())]
+    from .release import current
+
+    release = current()
+    label = {"version": release["version"], "commit": release["commit"], "date": release["date"]}
+    entries = [*contents(), ("VERSION", version().encode()), ("RELEASE", json.dumps(label).encode())]
     buffer = io.BytesIO()
     if kind == "zip":
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:

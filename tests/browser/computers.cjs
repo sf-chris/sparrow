@@ -20,11 +20,13 @@ async function call(context, method, route, data, extra = {}) {
   return response.json();
 }
 
-function capabilities(name, { download, roots, speech }) {
+function capabilities(name, { download, roots, speech, release }) {
   return {
     protocol: 1, platform: 'Linux', hostname: name, folders: true, probe: true, transcode: true,
     subtitle_model: false, download, downloader_state: download ? 'running' : 'none', roots,
     ...(speech ? { speech } : {}),
+    // Set up before updates existed: no version. Otherwise it updates itself.
+    ...(release ? { version: release.version, release: { commit: release.commit, date: release.date }, self_update: true, update: { state: 'idle' } } : {}),
   };
 }
 
@@ -53,7 +55,10 @@ const disk = (id, label, free, total, key) => ({ id, available: true, writable: 
     await call(owner, 'PATCH', '/admin/onboarding', { mode: 'library', step: 'review' }).catch(() => {});
     await call(owner, 'PATCH', '/admin/onboarding', { deferred: true }).catch(() => {});
 
-    // Two paired computers, kept online by checking in like Sparrow Node does.
+    // The server's own version: computers that run it are up to date.
+    const latest = (await call(owner, 'GET', '/nodes')).find((n) => n.id === 'local').health.update.latest;
+    const older = { version: 'older1', commit: '7cda240', date: '2026-11-20T10:17:08+13:00' };
+    // Paired computers, kept online by checking in like Sparrow Node does.
     const computers = [
       ['antivac', capabilities('antivac', {
         download: false,
@@ -62,10 +67,12 @@ const disk = (id, label, free, total, key) => ({ id, available: true, writable: 
       ['nas', capabilities('nas', {
         download: false,
         roots: [disk('library', '/volume1/Films and series', 5.1e12, 8e12, '2')],
+        release: older,
       })],
       ['gaming-pc', capabilities('gaming-pc', {
         download: false, roots: [],
         speech: { ready: true, device: 'cuda', gpu: 'GeForce RTX 4080' },
+        release: latest,
       })],
     ];
     const ids = {};
@@ -86,10 +93,13 @@ const disk = (id, label, free, total, key) => ({ id, available: true, writable: 
     }
     await call(owner, 'PUT', `/admin/nodes/${ids.nas}/jobs`, { storage: true, downloads: false, subtitles: false });
     await call(owner, 'PUT', `/admin/nodes/${ids['gaming-pc']}/jobs`, { storage: false, downloads: false, subtitles: true });
+    await call(owner, 'PUT', `/admin/nodes/${ids.nas}/settings`, { auto_update: false });
     const listed = await call(owner, 'GET', '/nodes');
     const anti = listed.find((n) => n.name === 'antivac');
     assert.equal(anti.health.rows.find((r) => r.job === 'downloads').line, 'No download app');
     assert.equal(listed.find((n) => n.name === 'nas').health.attention, 0);
+    const updates = Object.fromEntries(listed.map((n) => [n.name, n.health.update.state]));
+    assert.deepEqual(updates, { 'This server': 'current', antivac: 'unsupported', nas: 'available', 'gaming-pc': 'current' });
 
     const page = await owner.newPage();
     const errors = [];

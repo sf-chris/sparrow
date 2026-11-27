@@ -147,7 +147,12 @@ class Nodes:
                 root["library_bytes"] = used.get((node["id"], root["id"]), 0)
         jobs = self.jobs(node["id"], node["capabilities"])
         node["library_bytes"] = kept
-        node["health"] = computers.health(node, jobs)
+        from .release import current
+
+        update = computers.update_status(
+            node, current(), computers.settings(self.accounts, node["id"])
+        )
+        node["health"] = computers.health(node, jobs, update)
         return node
 
     def able(self, node_id, job):
@@ -551,6 +556,44 @@ def install_nodes(app, storage, get_service):
         visible = [n for n in nodes.list() if nodes.accounts.can_access(user, n["id"])]
         return [nodes.computer(node, used) for node in visible]
 
+    class Settings(Input):
+        auto_update: bool
+
+    @router.put("/admin/nodes/{node_id}/settings")
+    def set_settings(node_id: str, body: Settings, request: Request):
+        """Whether a computer updates itself when this server has a new version."""
+        administrator(request)
+        node = nodes.info(node_id)
+        if not node or node["disabled"] or node_id == "local":
+            raise HTTPException(404, "This computer isn’t paired.")
+        computers.set_settings(nodes.accounts, node_id, auto_update=body.auto_update)
+        nodes._signals.setdefault(node_id, asyncio.Event()).set()
+        return nodes.computer(nodes.info(node_id))
+
+    @router.post("/admin/nodes/{node_id}/update")
+    def update_now(node_id: str, request: Request):
+        """Ask a computer to take this server's version now and restart itself."""
+        administrator(request)
+        node = nodes.info(node_id)
+        if not node or node["disabled"] or node_id == "local":
+            raise HTTPException(404, "This computer isn’t paired.")
+        computers.set_settings(nodes.accounts, node_id, update_requested=time.time())
+        nodes._signals.setdefault(node_id, asyncio.Event()).set()
+        return nodes.computer(nodes.info(node_id))
+
+    @router.get("/node/package.tar.gz")
+    async def node_package_download(request: Request):
+        """This server's Sparrow Node, for a paired computer updating itself."""
+        from fastapi.responses import Response
+
+        identity(request)
+        data = await asyncio.to_thread(node_package.package, "tar.gz")
+        return Response(
+            data,
+            media_type="application/gzip",
+            headers={"Cache-Control": "no-store", "X-Sparrow-Node-Version": node_package.version()},
+        )
+
     @router.put("/admin/nodes/{node_id}/jobs")
     def set_jobs(node_id: str, body: Jobs, request: Request):
         """Turn a computer's jobs on or off; the computer follows on its next check."""
@@ -725,14 +768,29 @@ def install_nodes(app, storage, get_service):
             nodes.heartbeat(node_id, body.capabilities)
         except NodeError as exc:
             raise HTTPException(409, str(exc)) from exc
-        # Every answer says which jobs this computer should be doing.
+        # Every answer says which jobs this computer should be doing, and
+        # which version of Sparrow Node is current.
+        from .release import current
+
         jobs = nodes.jobs(node_id, body.capabilities)
+        offer = computers.update_offer(nodes.accounts, node_id, current())
+
+        def answer(command):
+            return {
+                "command": command,
+                "jobs": nodes.jobs(node_id, body.capabilities),
+                "update": computers.update_offer(nodes.accounts, node_id, current()),
+            }
+
         for _ in range(2):
             command = nodes.next_command(node_id)
             if command:
-                return {"command": command, "jobs": jobs}
-            if nodes.jobs(node_id, body.capabilities) != jobs:
-                return {"command": None, "jobs": nodes.jobs(node_id, body.capabilities)}
+                return answer(command)
+            if (
+                nodes.jobs(node_id, body.capabilities) != jobs
+                or computers.update_offer(nodes.accounts, node_id, current()) != offer
+            ):
+                return answer(None)
             signal = nodes._signals.setdefault(node_id, asyncio.Event())
             signal.clear()
             try:
@@ -740,7 +798,7 @@ def install_nodes(app, storage, get_service):
             except asyncio.TimeoutError:
                 pass
             identity(request)  # Recheck revocation after waiting.
-        return {"command": None, "jobs": nodes.jobs(node_id, body.capabilities)}
+        return answer(None)
 
     @router.get("/node/transfers/{token}")
     async def transfer(token: str, request: Request, offset: int = 0):

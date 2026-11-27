@@ -1,7 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { HardDrive, Plus, RefreshCw, FolderOpen, Check } from "lucide-react";
-import { api, patch, post, type JobRow, type NodeInfo } from "./api";
+import {
+  api,
+  patch,
+  post,
+  type JobRow,
+  type NodeInfo,
+  type Release,
+  type Update as UpdateInfo,
+} from "./api";
 import { ago } from "./Collection";
 import JobsDialog, { folderSlots } from "./ComputerJobs";
 import { Tick } from "./Brand";
@@ -181,6 +189,86 @@ function JobState({
   );
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A release as people recognise it: its date, then its commit. */
+export function releaseLabel(release?: Release) {
+  if (!release) return "";
+  const when = release.date ? new Date(release.date) : null;
+  const date =
+    when && !Number.isNaN(when.getTime())
+      ? `${when.getDate()} ${MONTHS[when.getMonth()]}${when.getFullYear() !== new Date().getFullYear() ? ` ${when.getFullYear()}` : ""}`
+      : "";
+  return [date, release.commit].filter(Boolean).join(" · ") || "Unknown";
+}
+
+const STEPS: Record<NonNullable<UpdateInfo["step"]>, string> = {
+  downloading: "Downloading…",
+  checking: "Checking…",
+  waiting: "Waiting for work to finish…",
+  restarting: "Restarting…",
+};
+
+/** Where a computer is on updates, at the end of its Version line. */
+function UpdateState({
+  update,
+  offline,
+  busy,
+  onUpdate,
+  onFix,
+}: {
+  update: UpdateInfo;
+  offline?: boolean;
+  busy: boolean;
+  onUpdate: () => void;
+  onFix: () => void;
+}) {
+  if (update.state === "current")
+    return (
+      <span className="folder-state">
+        <Tick /> Up to date
+      </span>
+    );
+  if (offline)
+    return (
+      <span className="folder-state quiet">
+        Latest is {releaseLabel(update.latest)}
+      </span>
+    );
+  if (update.state === "starting" || update.state === "updating")
+    return (
+      <span className="folder-state working" role="status">
+        {update.step ? STEPS[update.step] : "Updating…"}
+      </span>
+    );
+  if (update.state === "available")
+    return (
+      <span className="folder-state">
+        Latest is {releaseLabel(update.latest)}
+        <button className="btn fix update" disabled={busy} onClick={onUpdate}>
+          {busy ? "Updating…" : "Update"}
+        </button>
+      </span>
+    );
+  if (update.state === "failed")
+    return (
+      <span className="folder-state problem-text" title={update.error || undefined}>
+        Update didn’t work
+        <button className="btn fix" disabled={busy} onClick={onUpdate}>
+          Try again
+        </button>
+      </span>
+    );
+  return (
+    <span className="folder-state problem-text">
+      Set up again to update
+      <button className="btn fix" onClick={onFix}>
+        Fix
+      </button>
+    </span>
+  );
+}
+
 /** A folder's own readiness, while it is still being set up. */
 function FolderState({
   path,
@@ -239,10 +327,13 @@ export default function Storage({
     const timer = window.setTimeout(() => setHighlight(""), 4000);
     return () => window.clearTimeout(timer);
   }, [highlight, nodes.data]);
-  // A computer setting itself up reports back every few seconds.
+  // A computer setting itself up or updating reports back every few seconds.
   const settling = Boolean(
     nodes.data?.some(
-      (n) => n.online && n.health?.rows.some((r) => r.state === "waiting"),
+      (n) =>
+        n.online &&
+        (n.health?.rows.some((r) => r.state === "waiting") ||
+          ["starting", "updating"].includes(n.health?.update?.state || "")),
     ),
   );
   useEffect(() => {
@@ -343,6 +434,18 @@ export default function Storage({
     setError("");
     try {
       setScan(await post<Scan>("/admin/imports/preview", { node_id: node.id }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
+  async function updateNow(node: NodeInfo) {
+    setBusy(`update-${node.id}`);
+    setError("");
+    try {
+      await post(`/admin/nodes/${node.id}/update`);
+      await nodes.refresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -520,6 +623,22 @@ export default function Storage({
                   label: "Subtitles",
                   path: subtitles.state === "ready" ? subtitles.line : "",
                   end: state("subtitles"),
+                });
+              const update = health?.update;
+              if (!onboarding && update)
+                lines.push({
+                  key: "version",
+                  label: "Version",
+                  path: releaseLabel(update.running),
+                  end: (
+                    <UpdateState
+                      update={update}
+                      offline={offline}
+                      busy={busy === `update-${node.id}`}
+                      onUpdate={() => void updateNow(node)}
+                      onFix={() => startPairing(node, true)}
+                    />
+                  ),
                 });
               const missing =
                 local &&

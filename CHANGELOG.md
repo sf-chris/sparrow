@@ -4,6 +4,11 @@ All notable changes to Sparrow are documented here.
 
 ## Unreleased — the household guide and product foundation
 
+- Sparrow Node updates itself. Each computer's card shows the date and commit
+  it runs; with Update by itself on (the default) it takes each new version
+  when the server gets one, checks it starts, swaps it in and restarts, going
+  back to the version before if it can't reach the server. With it off, the
+  card offers Update.
 - Computers with jobs. Settings > Storage becomes Settings > Computers, where
   every computer, this server included, has one card: its disks, then a line
   per job (Storage, Playback, Downloads, Subtitles) ending in a tick, Off, or

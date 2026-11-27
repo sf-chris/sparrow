@@ -127,7 +127,7 @@ def row(job, on, state, line, fix=None):
     return {"job": job, "on": on, "state": state, "line": line, "fix": fix}
 
 
-def health(node: dict, jobs: dict) -> dict:
+def health(node: dict, jobs: dict, update: dict | None = None) -> dict:
     """A computer and each of its jobs in plain words.
 
     States: ready (working), attention (on but not working, with a fix),
@@ -226,12 +226,14 @@ def health(node: dict, jobs: dict) -> dict:
         rows.append(row("subtitles", True, "ready", "Uses the processor"))
 
     attention = [r for r in rows if r["state"] == "attention"]
+    stuck = bool(update and update.get("state") in ("failed", "unsupported") and not local)
     return {
         **status,
         "runs_sparrow": local,
         "jobs": jobs,
         "rows": rows,
-        "attention": len(attention),
+        "update": update,
+        "attention": len(attention) + int(stuck),
     }
 
 
@@ -252,3 +254,95 @@ def seen_ago(last_seen: float, now: float | None = None) -> str:
     if seconds < 86400:
         return f"{int(seconds // 3600)}h"
     return f"{int(seconds // 86400)} days"
+
+
+# ─── Updates ─────────────────────────────────────────────────────────
+# Like spawnd: each computer reports the version it runs, this server knows the
+# latest, and a computer updates itself when it's allowed to (Update by itself,
+# on by default) or asked to (Update). It keeps the version before and goes
+# back to it if the new one can't reach the server.
+
+UPDATING = ("downloading", "checking", "waiting", "restarting")
+RETRY_FAILED_AFTER = 6 * 3600
+
+
+def _settings_table(db):
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS computer_settings(node_id TEXT PRIMARY KEY, data TEXT NOT NULL)"
+    )
+
+
+def settings(accounts, node_id: str) -> dict:
+    with accounts.connect() as db:
+        _settings_table(db)
+        row = db.execute(
+            "SELECT data FROM computer_settings WHERE node_id=?", (node_id,)
+        ).fetchone()
+    saved = json.loads(row["data"]) if row else {}
+    return {
+        "auto_update": bool(saved.get("auto_update", True)),
+        "update_requested": float(saved.get("update_requested") or 0),
+    }
+
+
+def set_settings(accounts, node_id: str, **changes) -> dict:
+    current = {**settings(accounts, node_id), **changes}
+    with accounts.connect() as db:
+        _settings_table(db)
+        db.execute(
+            "INSERT INTO computer_settings VALUES (?, ?) ON CONFLICT(node_id) DO UPDATE SET data=excluded.data",
+            (node_id, json.dumps(current, sort_keys=True)),
+        )
+    return current
+
+
+def update_offer(accounts, node_id: str, latest: dict) -> dict:
+    """What a computer hears on every check-in: the latest version and whether to take it."""
+    wanted = settings(accounts, node_id)
+    return {
+        "version": latest["version"],
+        "auto": wanted["auto_update"],
+        "requested": wanted["update_requested"],
+    }
+
+
+def running_release(caps: dict) -> dict:
+    release = caps.get("release") if isinstance(caps.get("release"), dict) else {}
+    return {
+        "version": caps.get("version") or "",
+        "commit": str(release.get("commit") or "")[:12],
+        "date": str(release.get("date") or ""),
+    }
+
+
+def update_status(node: dict, latest: dict, wanted: dict | None = None) -> dict:
+    """Where a computer is on updates, for its Version line.
+
+    States: current, available (waiting for Update), starting (asked, not begun
+    yet), updating (with its step), failed (with why) and unsupported (needs its
+    setup command run again, as for computers set up before updates existed).
+    """
+    caps = node.get("capabilities") or {}
+    if node.get("id") == "local":
+        return {"state": "current", "running": latest, "latest": latest, "auto": None}
+    wanted = wanted or {"auto_update": True, "update_requested": 0}
+    running = running_release(caps)
+    report = caps.get("update") if isinstance(caps.get("update"), dict) else {}
+    base = {"running": running, "latest": latest, "auto": wanted["auto_update"]}
+    if not running["version"]:
+        return {**base, "state": "unsupported"}
+    if running["version"] == latest["version"]:
+        return {**base, "state": "current"}
+    if report.get("state") in UPDATING:
+        return {**base, "state": "updating", "step": report["state"]}
+    if report.get("state") == "failed" and report.get("target") == latest["version"]:
+        retry = wanted["update_requested"] > float(report.get("at") or 0) or (
+            wanted["auto_update"] and time.time() - float(report.get("at") or 0) > RETRY_FAILED_AFTER
+        )
+        if not retry:
+            return {**base, "state": "failed", "error": str(report.get("error") or "")[:200]}
+    if not caps.get("self_update"):
+        return {**base, "state": "unsupported"}
+    if wanted["auto_update"] or wanted["update_requested"] > float(report.get("at") or 0):
+        return {**base, "state": "starting"}
+    return {**base, "state": "available"}

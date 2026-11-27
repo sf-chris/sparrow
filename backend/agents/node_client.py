@@ -383,12 +383,31 @@ async def run(config_path):
             except Exception as exc:  # One job's setup never stops the others.
                 print(f"Couldn't follow a job change: {type(exc).__name__}.", flush=True)
 
+    # Updates: take the server's version of Sparrow Node when allowed, like spawnd.
+    from .node_update import Updater
+
+    updater = Updater(config_path)
+    executor.extra = updater.capabilities
+
+    async def stop_for_restart():
+        nonlocal daemon
+        async with downloads_lock:
+            if daemon:
+                await daemon.stop()
+                daemon = None
+        await executor.shutdown()
+
+    updater.before_restart = stop_for_restart
+    await updater.started()
+
     async with httpx.AsyncClient(
         base_url=config["server"],
         timeout=httpx.Timeout(35),
         headers={"Authorization": "Bearer " + config["credential"]},
     ) as client:
         running = set()
+        updater.client = client
+        updater.busy = lambda: bool(running)
 
         async def worker(number):
             delay = 1
@@ -425,7 +444,9 @@ async def run(config_path):
                         )
                     response.raise_for_status()
                     answer = response.json()
+                    updater.reached_server()
                     await apply_jobs(answer.get("jobs"))
+                    updater.consider(answer.get("update"))
                     command = answer.get("command")
                     if command:
                         running.add(command["id"])
@@ -506,8 +527,15 @@ def main():
     setup.add_argument("--allow-private-http", action="store_true")
     sub.add_parser("run")
     sub.add_parser("check")
+    # Which version this folder is; an update runs it to prove it starts.
+    sub.add_parser("version")
     args = parser.parse_args()
     try:
+        if args.command == "version":
+            from .node_executor import node_release, node_version
+
+            print(json.dumps({"version": node_version(), "release": node_release()}))
+            return
         if args.command == "configure":
             asyncio.run(configure(args))
         elif args.command == "run":

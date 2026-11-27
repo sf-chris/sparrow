@@ -192,7 +192,19 @@ export type JobRow = {
   line: string;
   fix: "folders" | "repair" | "download_app" | null;
 };
+/** Which Sparrow a computer runs: the version identifies the code; commit and date label it. */
+export type Release = { version: string; commit: string; date: string };
+export type Update = {
+  state: "current" | "available" | "starting" | "updating" | "failed" | "unsupported";
+  running: Release;
+  latest: Release;
+  /** Update by itself; null for this server, which updates with its image. */
+  auto: boolean | null;
+  step?: "downloading" | "checking" | "waiting" | "restarting";
+  error?: string;
+};
 export type Health = {
+  update?: Update | null;
   state: "online" | "offline" | "revoked";
   line: string;
   last_seen?: number;

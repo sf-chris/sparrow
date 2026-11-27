@@ -127,7 +127,9 @@ between titles, rows and covers anywhere they are listed.
   card design: its disks drawn as bars (Sparrow in teal, other files hatched,
   free as paper) with "Nearly full" flagged, then a dotted line per job
   (Storage, Playback, Downloads, Subtitles) ending in a biro tick and Ready,
-  a quiet Off, or the problem in red with a Fix pill. Change jobs is a
+  a quiet Off, or the problem in red with a Fix pill, then a Version line
+  (date · commit) ending in Up to date, Latest is … with an Update pill in
+  print black, Updating…, or Update didn't work with Try again. Change jobs is a
   checklist with a consequence under each job; Add a computer pairs, asks what
   it does, then asks only for the folders those jobs need; Set up again shows
   the same command, which repairs without touching folders or jobs. Sparrow
