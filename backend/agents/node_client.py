@@ -414,6 +414,19 @@ async def run(config_path):
                 await daemon.stop()
 
 
+async def run_until_stopped(config_path):
+    """Run until stopped; a service manager's stop also stops the download app."""
+    task = asyncio.current_task()
+    try:
+        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+    except (NotImplementedError, RuntimeError, ValueError):
+        pass  # Windows services stop the process their own way.
+    try:
+        await run(config_path)
+    except asyncio.CancelledError:
+        pass
+
+
 def main():
     default = (
         Path(os.getenv("LOCALAPPDATA", Path.home() / ".local/share"))
@@ -450,7 +463,7 @@ def main():
         if args.command == "configure":
             asyncio.run(configure(args))
         elif args.command == "run":
-            asyncio.run(run(args.config))
+            asyncio.run(run_until_stopped(args.config))
         else:
             config = json.loads(Path(args.config).read_text())
             executor = Executor(

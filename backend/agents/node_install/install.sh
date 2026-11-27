@@ -65,6 +65,12 @@ else
   systemctl --user stop sparrow-node >/dev/null 2>&1 || true
   pkill -f "$dir/app/sparrow-node.py" >/dev/null 2>&1 || true
 fi
+# Its download app too, so the new copy doesn't start a second one beside it.
+pkill -f "config-dir $dir/downloader/transmission" >/dev/null 2>&1 || true
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  pgrep -f "config-dir $dir/downloader/transmission" >/dev/null 2>&1 || break
+  sleep 1
+done
 
 # Media tools and the download app come from the server, built for this kind
 # of computer. Without a bundle (a Mac, or a server without one) the computer
