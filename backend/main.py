@@ -276,9 +276,15 @@ async def lifespan(app: FastAPI):
     migration_task=asyncio.create_task(catalogue.migrate_verified_legacy(broadcast))
     moves_task = asyncio.create_task(moves.loop())
     found_task = asyncio.create_task(found.loop())
+    from .agents import title_index
+    titles = title_index.current()
+    if titles:
+        titles.start()  # builds and refreshes itself from TMDB
     await connect.start()
     yield
     await connect.stop()
+    if titles:
+        await titles.stop()
     await subtitles.stop()
     migration_task.cancel()
     moves_task.cancel()

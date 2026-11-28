@@ -4,6 +4,15 @@ All notable changes to Sparrow are documented here.
 
 ## Unreleased — the household guide and product foundation
 
+- Find is instant and forgives typos. Titles appear from the first letter and
+  change with every keystroke; "gladiater", "brekaing bad" and "spiderman"
+  find what was meant, and "the" lists the best-known titles. The rest of the
+  best match's name follows the typing; Tab takes it. Sparrow keeps its own
+  copy of the catalogue's well-known films and series, builds it by itself
+  once TMDB is connected, adds new and upcoming titles daily and refreshes
+  everything weekly. A title it doesn't hold yet is found through TMDB's own
+  search and remembered.
+
 - Found replaces Import files. Sparrow looks in every library folder by itself
   and adds a title when its name, year, TMDB and measured length agree. Each
   computer's card has a Found line: when it last looked, a refresh button to

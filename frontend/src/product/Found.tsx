@@ -295,7 +295,11 @@ function FindTitle({
   async function search() {
     setBusy(true);
     try {
-      setResults(await api<Card[]>(`/suggest?q=${encodeURIComponent(query)}`));
+      // One search, so the wider catalogue answers too when few titles match.
+      const answer = await api<{ titles: Card[] }>(
+        `/suggest?q=${encodeURIComponent(query)}&wide=1`,
+      );
+      setResults(answer.titles);
       setError("");
     } catch (e) {
       setError((e as Error).message);

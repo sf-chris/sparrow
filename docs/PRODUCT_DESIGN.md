@@ -100,8 +100,9 @@ between titles, rows and covers anywhere they are listed.
   **Collection** is an A–Z listing with cover thumbnails, or a covers view.
   Search, type, sort, availability and view persist in the URL. `/library`
   redirects here with its filters.
-- **Find (`/discover`):** a title search. Matches appear as you type and are
-  marked when already in your collection. Text that names no title gets one
+- **Find (`/discover`):** a title search. Matches appear from the first letter,
+  typos and all, and are marked when already in your collection. The rest of
+  the best match's name follows the typing, faded; Tab or → takes it. Text that names no title gets one
   line (“No film or series called …”) and is never sent to an agent. The draft
   persists in the URL. Describing a mood is not part of Find.
 - **Title:** a feature spread. Big condensed title, facts line, synopsis, one

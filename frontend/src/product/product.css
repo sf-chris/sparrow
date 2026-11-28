@@ -1994,15 +1994,48 @@ a.tonight-art:hover .still img {
   outline: 3px solid var(--blue);
   outline-offset: 2px;
 }
+.finder-input {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-self: stretch;
+  min-width: 0;
+}
+.finder-field input,
+.finder-rest {
+  font-size: 1.35rem;
+  font-weight: 650;
+}
 .finder-field input {
   flex: 1;
   min-width: 0;
   height: 100%;
+  padding: 0;
   border: 0;
   outline: 0;
   background: transparent;
-  font-size: 1.35rem;
-  font-weight: 650;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* The rest of the best match's name, after the typed text (which it repeats
+   invisibly to line up). Tab or → takes it; touch screens don't show it. */
+.finder-rest {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: pre;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.finder-rest > span {
+  color: transparent;
+}
+@media (pointer: coarse) {
+  .finder-rest {
+    display: none;
+  }
 }
 .finder-field input::placeholder {
   color: var(--ink-3);
@@ -4752,7 +4785,8 @@ button.link:hover {
   .finder-field {
     min-height: 3.4rem;
   }
-  .finder-field input {
+  .finder-field input,
+  .finder-rest {
     font-size: 1.15rem;
   }
   .hero {

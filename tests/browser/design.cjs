@@ -48,21 +48,28 @@ const path = require('node:path');
   } else {
     const login = await context.request.post(base + '/api/v1/auth/login', { headers: { 'X-Sparrow-Request': '1' }, data: { username: 'owner', password: 'fixture-password-123' } });
     if (login.status() !== 200) throw new Error('Fixture login failed');
-    // Find is a title search. Text that names no title gets one plain line and
-    // is never handed to the Sparrow agent.
+    // Find is a title search. A typo still finds the title meant; text that
+    // names no title gets one plain line and is never handed to the agent.
     const asked = [];
     page.on('request', request => { if (request.url().includes('/api/v1/discovery')) asked.push(request.url()); });
     await page.goto(base + '/discover');
     const prompt = page.getByRole('searchbox', { name: 'Find a film or series', exact: true });
     await prompt.fill('quiet plnet');
+    await page.locator('.find .results .entry-title').filter({ hasText: 'The Quiet Planet' }).waitFor();
+    // The rest of the best match's name follows the typing; Tab takes it.
+    await prompt.fill('harb');
+    await page.locator('.finder-rest').filter({ hasText: 'our Lights' }).waitFor();
+    await prompt.press('Tab');
+    if (await prompt.inputValue() !== 'Harbour Lights') throw new Error('Tab did not complete the title');
+    await prompt.fill('zzqx vrrb');
     await page.getByRole('status').filter({ hasText: 'No film or series called' }).waitFor();
     await page.waitForTimeout(1000);
     if (asked.length) throw new Error('Find handed a search to the agent: ' + asked.join(', '));
     if (await page.getByRole('button', { name: 'Ask Sparrow' }).count()) throw new Error('Find should not offer Ask Sparrow');
-    if (new URL(page.url()).searchParams.get('q') !== 'quiet plnet') throw new Error('Search draft not preserved in URL');
+    if (new URL(page.url()).searchParams.get('q') !== 'zzqx vrrb') throw new Error('Search draft not preserved in URL');
     await audit('find-nothing', [390, 1440]);
     await page.reload(); await prompt.waitFor();
-    if (await prompt.inputValue() !== 'quiet plnet') throw new Error('Search draft lost after reload');
+    if (await prompt.inputValue() !== 'zzqx vrrb') throw new Error('Search draft lost after reload');
     // Controlled UI states only; the server's collection stays intact.
     await page.route('**/api/v1/catalogue', route => route.fulfill({ json: [] }));
     await page.goto(base + '/library'); await page.getByRole('heading', { name: 'Nothing listed yet.' }).waitFor();
