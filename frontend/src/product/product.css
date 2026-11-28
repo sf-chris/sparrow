@@ -4135,8 +4135,28 @@ button.link:hover {
   font-size: var(--t-small);
   font-weight: 500;
 }
-.found-path .link {
-  font-weight: 650;
+.found-refresh {
+  width: 2rem;
+  height: 2rem;
+  margin: -0.35rem -0.4rem -0.35rem 0;
+  color: var(--ink-2);
+}
+.found-refresh:disabled {
+  background: transparent;
+  cursor: default;
+}
+.found-refresh .spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .found-refresh .spin {
+    animation: none;
+  }
 }
 .found-rows {
   border-top: 1.5px solid var(--ink);

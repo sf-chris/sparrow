@@ -135,9 +135,10 @@ between titles, rows and covers anywhere they are listed.
   a folder with its arrow, and names the result on its one button ("Keep titles
   in Films"). A library holding titles then asks whether they move (shown on the
   card as "Moving from" with a count) or both folders stay. A Found line under
-  Storage says when Sparrow last looked in its folders, with Look again, and
-  ends in a tick and "Added 23", a quiet Nothing new, or "3 need a name" with a
-  Review pill (print black: a question, not a problem). Review lists each file
+  Storage says when Sparrow last looked in its folders and ends in a round
+  refresh button that looks again (it turns while looking). Before it sits a
+  tick and "Added 23", or "3 need a name" with a Review pill (print black: a
+  question, not a problem). Nothing new says nothing. Review lists each file
   with Sparrow's reason, "Which title is this?" and Not a title. Change jobs is a
   checklist with a consequence under each job; Add a computer pairs, asks what
   it does, then asks only for the folders those jobs need; Set up again shows

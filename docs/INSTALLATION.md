@@ -140,8 +140,8 @@ adds anything missing without touching its folders or jobs.
 ### Titles already on a computer
 
 Sparrow looks in every library folder by itself: when a folder is chosen, when a
-computer is first seen, every six hours, and when someone presses **Look again**
-on the computer's **Found** line. A file counts once it has looked the same on
+computer is first seen, every six hours, and when someone presses the refresh
+button at the end of the computer's **Found** line. A file counts once it has looked the same on
 two looks at least ten minutes apart, so a copy still arriving is left alone.
 
 Sparrow names each file from its name and folders, TMDB, and the length ffprobe
