@@ -4030,8 +4030,11 @@ button.link:hover {
 .folder-state {
   flex: none;
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 0.3rem;
+  max-width: 100%;
   font-size: var(--t-small);
   font-weight: 750;
 }
@@ -4138,7 +4141,7 @@ button.link:hover {
 .found-refresh {
   width: 2rem;
   height: 2rem;
-  margin: -0.35rem -0.4rem -0.35rem 0;
+  margin: -0.35rem 0;
   color: var(--ink-2);
 }
 .found-refresh:disabled {
