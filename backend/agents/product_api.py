@@ -71,6 +71,12 @@ def install_product(app, storage, accounts, nodes, get_service):
 
     install_downloader_setup(app, storage)
     catalogue = Catalogue(storage, nodes)
+    from . import title_index
+    from ..configuration import effective_tmdb_key
+
+    titles = title_index.install(
+        title_index.TitleSearch(storage.data_dir, lambda: effective_tmdb_key(storage.get_config()))
+    )
     router = APIRouter(prefix="/api/v1")
     job_lock = asyncio.Lock()
 
@@ -202,16 +208,17 @@ def install_product(app, storage, accounts, nodes, get_service):
         }
 
     @router.get("/suggest")
-    async def suggest(request: Request, q: str = Query(min_length=2, max_length=500)):
-        service = get_service()
-        if not service or not service.toolbox.tmdb_key():
+    async def suggest(
+        request: Request, q: str = Query(min_length=1, max_length=500), wide: bool = False
+    ):
+        """Find's titles: the title index at every keystroke; ``more`` asks for
+        a ``wide`` follow-up that adds the live catalogue's matches."""
+        if not titles.tmdb_key():
             raise HTTPException(
                 503, "Connect TMDB in Server settings to search for titles."
             )
-        from ..services.metadata_service import tmdb_quick_suggest
-
         try:
-            return await tmdb_quick_suggest(q, service.toolbox.tmdb_key(), strict=True)
+            return await titles.suggest(q, wide=wide)
         except Exception as exc:
             raise HTTPException(
                 503,

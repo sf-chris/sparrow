@@ -58,8 +58,13 @@ Everything new lives in `backend/agents/`:
 - `scout.py`, `acquisition_review.py`, `release_match.py` — code search, judging
   and ranking of releases; the smart model's review of the cheap model's pick.
 - `discovery.py` — persistent, scoped Discovery tool loop with inspected title
-  proposals. Fast direct TMDB suggestions remain alongside it; descriptions go
+  proposals. Fast title suggestions remain alongside it; descriptions go
   to Discovery, never to a one-shot model call.
+- `title_index.py` — Find's instant, typo-tolerant title search: an in-memory
+  index of the catalogue's well-known titles kept in `titles.sqlite3`, built by
+  itself once a TMDB key is set, refreshed daily (new, upcoming, trending) and
+  weekly (everything). `/api/v1/suggest` answers from it; `more` asks the page
+  for a `wide` follow-up through TMDB's search, whose titles it remembers.
 - `curation.py` — personal subscriptions, versioned authority and changed-fact
   checks that wake the Librarian only for eligible work.
 - `accounts.py`, `nodes.py`, `node_executor.py`, `catalogue.py`, `playback.py` —

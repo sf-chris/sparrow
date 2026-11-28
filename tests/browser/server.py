@@ -135,6 +135,11 @@ async def suggest(query, *args, **kwargs):
 
 
 m.meta_svc.tmdb_quick_suggest = suggest
+# Find searches the title index; the fixture's titles are the whole catalogue,
+# with their covers served locally and no live catalogue search.
+from backend.agents import title_index
+
+title_index.POSTER = ""
 
 
 @asynccontextmanager
@@ -192,6 +197,13 @@ async def lifespan(app):
         art_dir.mkdir(exist_ok=True)
         (art_dir / f"{identity}.svg").write_text(fixture_art(identity, title))
         (art_dir / f"{identity}-backdrop.svg").write_text(fixture_art(identity, title, wide=True))
+    titles = title_index.current()
+    titles.store(
+        (kind, identity, title, "", "2024", 10.0 - identity / 100, 100, 7.0, f"/art/{identity}.svg")
+        for identity, (title, kind) in TITLES.items()
+    )
+    titles.rebuild()
+    titles.live = AsyncMock(return_value=[])
     yield
     found_task.cancel()
     if m.nodes.local()._hls_cache:

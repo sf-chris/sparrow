@@ -31,7 +31,7 @@ storage and physical phones is the next focus; see [what still needs work](#what
 
 - **One guide.** Tonight's resumes, what's coming up and your whole collection
   on one page, as an A–Z listing or covers. Arrow keys work from the couch.
-- **One box.** Type a title and matches appear as you type. Review the
+- **One box.** Type a title and matches appear as you type, typos and all. Review the
   film, season or individual episodes before requesting.
 - **Ask once, follow along.** Persistent agents inspect sources, verify media
   and organise the result. Coming up shows progress and recovery actions; Logs

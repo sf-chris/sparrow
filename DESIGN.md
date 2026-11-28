@@ -112,8 +112,17 @@ language and monitoring intent. Explicit user action or existing authority
 creates a job; search content cannot authorise acquisition. Keep fast direct
 title suggestions alongside the richer agent flow.
 
-`discovery.py` implements the new flow on the existing persistent tool runtime;
-fast suggestions are a direct TMDB lookup with no model call. The current
+`discovery.py` implements the new flow on the existing persistent tool runtime.
+Fast suggestions come from `title_index.py`, with no model call: an in-memory
+index of the catalogue's well-known titles (films with 10+ votes, series with
+5+, and the year's new, upcoming and trending titles), stored in the data
+folder as `titles.sqlite3`. It builds itself once a TMDB key is set, refreshes
+new titles daily and everything weekly, and answers every keystroke in
+milliseconds. Each query word must match a title word exactly, as the start of
+the word being typed, or within a small typo allowance (none under four
+letters, one to seven, two from eight); ranking is how well known the title is,
+less a step per typo. When nothing matches cleanly, the page follows up with
+TMDB's own search, and the titles it finds are remembered in the index. The current
 runtime enforces cancellation, persistence, cost and tool-access contracts.
 The SDK migration decision and remaining live evaluation are recorded in
 `docs/IMPLEMENTATION.md`; a package change is conditional on demonstrated parity.
