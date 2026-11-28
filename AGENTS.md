@@ -88,7 +88,7 @@ Everything new lives in `backend/agents/`:
   disk a move is a hard link (`link`, then a release that checks it's the same
   file), so nothing is copied.
 - `found.py` — Found: every library folder is looked in by itself (on a change,
-  first sight, every six hours, or Look again); a file seen unchanged on two
+  first sight, every six hours, or the card's refresh button); a file seen unchanged on two
   looks ten minutes apart is named from its name, folders, TMDB and ffprobe's
   length, and added only when they agree on one title. The rest wait on the
   card's Found line for a person (Review). It replaces Import files; the

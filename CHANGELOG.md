@@ -6,8 +6,8 @@ All notable changes to Sparrow are documented here.
 
 - Found replaces Import files. Sparrow looks in every library folder by itself
   and adds a title when its name, year, TMDB and measured length agree. Each
-  computer's card has a Found line: when it last looked, Look again, what it
-  added, and how many files need a name, with Review to name them or set them
+  computer's card has a Found line: when it last looked, a refresh button to
+  look again, what it added, and how many files need a name, with Review to name them or set them
   aside. Files never move, and a copy still arriving is left until it settles.
 
 - Folders change from the computer's card: click a folder's path. The chooser

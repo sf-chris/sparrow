@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
 import { api, post, type NodeInfo } from "./api";
 import { Tick } from "./Brand";
 import { ago } from "./Collection";
@@ -45,35 +45,44 @@ export function foundLine(
 ) {
   const found = node.found;
   if (!found) return null;
-  const look = !found.looking && node.online && (
-    <button className="link found-look" onClick={onLook}>
-      Look again
-    </button>
-  );
   const when = found.checked ? `Checked ${since(found.checked)}` : "Not looked yet";
   const path = (
     <span className="path found-path">
       {found.error ? found.error : found.added && found.unsure ? `Added ${found.added} this week` : when}
-      {look && <> · {look}</>}
     </span>
   );
-  const end = found.looking ? (
-    <span className="folder-state working" role="status">
-      Looking…
-    </span>
-  ) : found.unsure ? (
+  // One round refresh button looks again. While looking, it turns and can't be pressed.
+  const refresh = (found.looking || node.online) && (
+    <button
+      className="icon-btn found-refresh"
+      aria-label={found.looking ? "Looking" : "Look again"}
+      title={found.looking ? "Looking" : "Look again"}
+      disabled={found.looking}
+      onClick={onLook}
+    >
+      <RefreshCw size={15} strokeWidth={2.5} className={found.looking ? "spin" : undefined} />
+    </button>
+  );
+  const end = (
     <span className="folder-state">
-      {found.unsure} need{found.unsure === 1 ? "s" : ""} a name
-      <button className="btn fix update" onClick={onReview}>
-        Review
-      </button>
+      {found.looking ? (
+        <span className="sr-only" role="status">
+          Looking…
+        </span>
+      ) : found.unsure ? (
+        <>
+          {found.unsure} need{found.unsure === 1 ? "s" : ""} a name
+          <button className="btn fix update" onClick={onReview}>
+            Review
+          </button>
+        </>
+      ) : found.added ? (
+        <>
+          <Tick /> Added {found.added}
+        </>
+      ) : null}
+      {refresh}
     </span>
-  ) : found.added ? (
-    <span className="folder-state">
-      <Tick /> Added {found.added}
-    </span>
-  ) : (
-    <span className="folder-state quiet">Nothing new</span>
   );
   return { path, end };
 }
